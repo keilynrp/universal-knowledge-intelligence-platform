@@ -639,11 +639,11 @@ export default function AnalyticsPage() {
                                 {
                                     phase: "Phase 3",
                                     label: "Premium APIs (BYOK)",
-                                    status: "future",
-                                    badge: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
-                                    dot: "bg-gray-400",
+                                    status: "active",
+                                    badge: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
+                                    dot: "bg-blue-500",
                                     sources: ["Web of Science (Clarivate)", "Scopus (Elsevier)"],
-                                    desc: "Institutional subscriptions required. Bring Your Own API Key model.",
+                                    desc: "Integrated BYOK architecture. Activate by exporting WOS_API_KEY.",
                                 },
                             ].map((phase) => (
                                 <div

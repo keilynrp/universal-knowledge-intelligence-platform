@@ -5,21 +5,25 @@ from sqlalchemy import func
 from typing import Optional
 
 import logging
+import os
 
 from backend import models
 from backend.adapters.enrichment.openalex import OpenAlexAdapter
 from backend.adapters.enrichment.scholar import ScholarAdapter
+from backend.adapters.enrichment.wos import WebOfScienceAdapter
 
 logger = logging.getLogger(__name__)
 
-# Initialize our Phase 1 & Phase 2 adapters
-adapter_openalex = OpenAlexAdapter()
-adapter_scholar = ScholarAdapter(use_free_proxies=True)
+# Initialize our Phase 1, 2, and 3 adapters
+adapter_wos = WebOfScienceAdapter(api_key=os.environ.get("WOS_API_KEY")) # Phase 3 (Premium)
+adapter_openalex = OpenAlexAdapter() # Phase 1 (Free & Fast)
+adapter_scholar = ScholarAdapter(use_free_proxies=True) # Phase 2 (Restricted Scraping)
 
 def enrich_single_record(db: Session, product: models.RawProduct) -> models.RawProduct:
     """
     Synchronously enriches a single record by title or DOI.
-    Uses a fallback strategy: OpenAlex (Phase 1) -> Google Scholar (Phase 2).
+    Uses a cascade fallback strategy prioritizing Premium Data: 
+    Web of Science (BYOK) -> OpenAlex (Free API) -> Google Scholar (Scraping).
     """
     if not product.product_name and not product.model:
         return product
@@ -32,18 +36,26 @@ def enrich_single_record(db: Session, product: models.RawProduct) -> models.RawP
     source = "Unknown"
     
     try:
-        # Phase 1: Try OpenAlex first
-        results = adapter_openalex.search_by_title(query, limit=1)
-        if results and len(results) > 0:
-            enriched_data = results[0]
-            source = "OpenAlex"
-        else:
-            # Phase 2 Fallback: Try Google Scholar
-            logger.info(f"OpenAlex failed to find data for '{query}'. Falling back to Google Scholar...")
-            results_scholar = adapter_scholar.search_by_title(query, limit=1)
-            if results_scholar and len(results_scholar) > 0:
-                enriched_data = results_scholar[0]
-                source = "Google Scholar"
+        # Phase 3: Premium BYOK Priority
+        if adapter_wos.is_active:
+            results_wos = adapter_wos.search_by_title(query, limit=1)
+            if results_wos and len(results_wos) > 0:
+                enriched_data = results_wos[0]
+                source = "Web of Science"
+                
+        # Phase 1: Free Open API
+        if not enriched_data:
+            results = adapter_openalex.search_by_title(query, limit=1)
+            if results and len(results) > 0:
+                enriched_data = results[0]
+                source = "OpenAlex"
+            else:
+                # Phase 2: Scraping Fallback
+                logger.info(f"OpenAlex failed to find data for '{query}'. Falling back to Google Scholar...")
+                results_scholar = adapter_scholar.search_by_title(query, limit=1)
+                if results_scholar and len(results_scholar) > 0:
+                    enriched_data = results_scholar[0]
+                    source = "Google Scholar"
             
         if enriched_data:
             # Populate our Generalized NDO fields
