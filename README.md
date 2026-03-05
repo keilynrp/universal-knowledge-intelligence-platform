@@ -14,7 +14,7 @@
 
 *From raw catalog chaos to a self-enriching, AI-queryable research intelligence engine — in 5 evolutionary phases.*
 
-[Features](#-features) • [Quick Start](#-quick-start) • [Architecture](#-workflow-architecture) • [API](#-api-overview) • [Roadmap](#%EF%B8%8F-roadmap)
+[Features](#-features) • [Quick Start](#-quick-start) • [Architecture](#-workflow-architecture) • [API](#-api-overview) • [Roadmap](#%EF%B8%8F-roadmap) • [Strategic Vision](docs/EVOLUTION_STRATEGY.md)
 
 </div>
 
@@ -281,7 +281,7 @@ The backend exposes a fully documented REST API. Explore it interactively at `/d
 | `POST` | `/ai-integrations/{id}/activate` | Set as the active RAG provider |
 | `DELETE` | `/ai-integrations/{id}` | Remove a provider |
 
-*For the full reference, see [docs/API.md](docs/API.md). For the enrichment strategy, see [SCIENTOMETRICS.md](docs/SCIENTOMETRICS.md).*
+*For the full reference, see [docs/API.md](docs/API.md). For the enrichment strategy, see [SCIENTOMETRICS.md](docs/SCIENTOMETRICS.md). For the long-term platform evolution plan, see [EVOLUTION_STRATEGY.md](docs/EVOLUTION_STRATEGY.md).*
 
 ---
 
