@@ -521,6 +521,35 @@ def get_domains(_: models.User = Depends(get_current_user)):
     """Returns all available domain schemas in the registry."""
     return registry.get_all_domains()
 
+@app.post("/domains", response_model=DomainSchema, status_code=201)
+def create_domain(
+    schema: DomainSchema,
+    _: models.User = Depends(require_role("super_admin", "admin")),
+):
+    """Create a new custom domain schema. Persists as YAML in backend/domains/."""
+    if registry.get_domain(schema.id):
+        raise HTTPException(status_code=409, detail="A domain with this ID already exists")
+    if not schema.attributes:
+        raise HTTPException(status_code=422, detail="Domain must have at least one attribute")
+    try:
+        registry.save_domain(schema)
+    except Exception as exc:
+        logger.exception("Failed to save domain schema '%s'", schema.id)
+        raise HTTPException(status_code=500, detail="Failed to persist domain schema") from exc
+    return schema
+
+@app.delete("/domains/{domain_id}")
+def delete_domain(
+    domain_id: str,
+    _: models.User = Depends(require_role("super_admin", "admin")),
+):
+    """Delete a custom domain schema. Built-in domains (default, science, healthcare) are protected."""
+    if registry.is_builtin(domain_id):
+        raise HTTPException(status_code=403, detail="Built-in domains cannot be deleted")
+    if not registry.delete_domain(domain_id):
+        raise HTTPException(status_code=404, detail="Domain schema not found")
+    return {"deleted": domain_id}
+
 @app.get("/domains/{domain_id}", response_model=DomainSchema)
 def get_domain(domain_id: str, _: models.User = Depends(get_current_user)):
     domain = registry.get_domain(domain_id)

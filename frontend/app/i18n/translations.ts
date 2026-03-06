@@ -10,6 +10,7 @@ export const translations = {
         'nav.import_export': 'Entity Sync',
         'nav.harmonization': 'Harmonization',
         'nav.rag': 'Semantic AI',
+        'nav.domains': 'Domain Registry',
         'nav.integrations': 'Connectors',
         'nav.settings': 'Settings',
 
@@ -44,6 +45,7 @@ export const translations = {
         'nav.import_export': 'Sincronización de Entidades',
         'nav.harmonization': 'Armonización',
         'nav.rag': 'IA Semántica',
+        'nav.domains': 'Registro de Dominios',
         'nav.integrations': 'Conectores',
         'nav.settings': 'Configuración',
 

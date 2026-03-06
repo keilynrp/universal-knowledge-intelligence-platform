@@ -26,6 +26,7 @@ interface DomainContextType {
     activeDomain: DomainSchema | null;
     setActiveDomainId: (id: string) => void;
     isLoading: boolean;
+    refreshDomains: () => Promise<void>;
 }
 
 const DomainContext = createContext<DomainContextType | undefined>(undefined);
@@ -35,32 +36,30 @@ export function DomainProvider({ children }: { children: React.ReactNode }) {
     const [activeDomainId, setActiveDomainId] = useState<string>("default");
     const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        async function fetchDomains() {
-            try {
-                const res = await apiFetch("/domains");
-                if (res.ok) {
-                    const data = await res.json();
-                    setDomains(data);
+    const fetchDomains = async () => {
+        try {
+            const res = await apiFetch("/domains");
+            if (res.ok) {
+                const data = await res.json();
+                setDomains(data);
 
-                    // Retrieve saved domain from localStorage, or use 'default', or first available
-                    const savedDomain = localStorage.getItem("ukip_active_domain");
-                    if (savedDomain && data.some((d: DomainSchema) => d.id === savedDomain)) {
-                        setActiveDomainId(savedDomain);
-                    } else if (data.length > 0) {
-                        // fallback if 'default' doesn't exist
-                        const defaultDomain = data.find((d: DomainSchema) => d.id === "default");
-                        setActiveDomainId(defaultDomain ? defaultDomain.id : data[0].id);
-                    }
+                // Retrieve saved domain from localStorage, or use 'default', or first available
+                const savedDomain = localStorage.getItem("ukip_active_domain");
+                if (savedDomain && data.some((d: DomainSchema) => d.id === savedDomain)) {
+                    setActiveDomainId(savedDomain);
+                } else if (data.length > 0) {
+                    const defaultDomain = data.find((d: DomainSchema) => d.id === "default");
+                    setActiveDomainId(defaultDomain ? defaultDomain.id : data[0].id);
                 }
-            } catch (error) {
-                console.error("Failed to load domains", error);
-            } finally {
-                setIsLoading(false);
             }
+        } catch (error) {
+            console.error("Failed to load domains", error);
+        } finally {
+            setIsLoading(false);
         }
-        fetchDomains();
-    }, []);
+    };
+
+    useEffect(() => { fetchDomains(); }, []);
 
     const handleSetActiveDomain = (id: string) => {
         setActiveDomainId(id);
@@ -75,7 +74,8 @@ export function DomainProvider({ children }: { children: React.ReactNode }) {
             activeDomainId,
             activeDomain,
             setActiveDomainId: handleSetActiveDomain,
-            isLoading
+            isLoading,
+            refreshDomains: fetchDomains,
         }}>
             {children}
         </DomainContext.Provider>
