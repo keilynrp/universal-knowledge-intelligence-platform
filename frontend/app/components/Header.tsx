@@ -15,6 +15,7 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   "/rag": { title: "Semantic RAG", subtitle: "AI-powered retrieval and semantic analysis" },
   "/domains": { title: "Domain Registry", subtitle: "Manage workspace schemas and entity type definitions" },
   "/analytics/olap": { title: "OLAP Cube Explorer", subtitle: "Multi-dimensional analysis and drill-down across your data" },
+  "/analytics/topics": { title: "Topic Modeling", subtitle: "Concept frequency, co-occurrence, clusters, and field correlations" },
 };
 
 export default function Header() {

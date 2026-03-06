@@ -39,8 +39,13 @@ from backend.authority.base import ResolveContext as _AuthorityContext
 from backend.datasource_analyzer import DataSourceAnalyzer
 from backend.encryption import encrypt, decrypt
 from backend.llm_agent import resolve_canonical_name
+from backend.analyzers.topic_modeling import TopicAnalyzer
+from backend.analyzers.correlation import CorrelationAnalyzer
 from backend.olap import olap_engine
 from backend.schema_registry import registry, DomainSchema
+
+_topic_analyzer = TopicAnalyzer()
+_correlation_analyzer = CorrelationAnalyzer()
 
 logger = logging.getLogger(__name__)
 
@@ -633,6 +638,72 @@ def cube_export(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="cube_{domain_id}_{dimension}.xlsx"'},
     )
+
+# ── Topic Modeling & Correlation endpoints ───────────────────────────────────
+
+@app.get("/analyzers/topics/{domain_id}")
+def analyzer_topics(
+    domain_id: str,
+    top_n: int = Query(default=30, ge=1, le=100),
+    _: models.User = Depends(get_current_user),
+):
+    """Top concepts by frequency across enriched entities in a domain."""
+    try:
+        return _topic_analyzer.top_topics(domain_id, top_n=top_n)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception:
+        logger.exception("analyzer_topics error for domain '%s'", domain_id)
+        raise HTTPException(status_code=500, detail="Analysis error")
+
+
+@app.get("/analyzers/cooccurrence/{domain_id}")
+def analyzer_cooccurrence(
+    domain_id: str,
+    top_n: int = Query(default=20, ge=1, le=100),
+    _: models.User = Depends(get_current_user),
+):
+    """Concept co-occurrence pairs with PMI score."""
+    try:
+        return _topic_analyzer.cooccurrence(domain_id, top_n=top_n)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception:
+        logger.exception("analyzer_cooccurrence error for domain '%s'", domain_id)
+        raise HTTPException(status_code=500, detail="Analysis error")
+
+
+@app.get("/analyzers/clusters/{domain_id}")
+def analyzer_clusters(
+    domain_id: str,
+    n_clusters: int = Query(default=6, ge=2, le=20),
+    _: models.User = Depends(get_current_user),
+):
+    """Greedy concept clusters seeded by top concepts."""
+    try:
+        return _topic_analyzer.topic_clusters(domain_id, n_clusters=n_clusters)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception:
+        logger.exception("analyzer_clusters error for domain '%s'", domain_id)
+        raise HTTPException(status_code=500, detail="Analysis error")
+
+
+@app.get("/analyzers/correlation/{domain_id}")
+def analyzer_correlation(
+    domain_id: str,
+    top_n: int = Query(default=20, ge=1, le=50),
+    _: models.User = Depends(get_current_user),
+):
+    """Cramér's V pairwise field correlations for categorical columns in a domain."""
+    try:
+        return _correlation_analyzer.top_correlations(domain_id, top_n=top_n)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception:
+        logger.exception("analyzer_correlation error for domain '%s'", domain_id)
+        raise HTTPException(status_code=500, detail="Analysis error")
+
 
 @app.get("/entities", response_model=List[schemas.Entity])
 def get_entities(
