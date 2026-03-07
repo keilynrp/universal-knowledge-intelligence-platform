@@ -807,6 +807,18 @@ def get_entities_grouped(
     ]
 
 
+@app.get("/entities/{entity_id}", response_model=schemas.Entity)
+def get_entity(
+    entity_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    _: models.User = Depends(get_current_user),
+):
+    entity = db.query(models.RawEntity).filter(models.RawEntity.id == entity_id).first()
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    return entity
+
+
 @app.put("/entities/{entity_id}", response_model=schemas.Entity)
 def update_entity(entity_id: int = Path(..., ge=1), payload: schemas.EntityBase = ..., db: Session = Depends(get_db), _: models.User = Depends(require_role("super_admin", "admin", "editor"))):
     entity = db.query(models.RawEntity).filter(models.RawEntity.id == entity_id).first()
