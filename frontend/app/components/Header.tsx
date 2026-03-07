@@ -32,7 +32,7 @@ export default function Header() {
   const page = pageTitles[pathname] || { title: "Dashboard", subtitle: "" };
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center border-b border-gray-200 bg-white/80 backdrop-blur-sm dark:border-gray-800 dark:bg-gray-900/80">
+    <header className="sticky top-0 z-40 flex h-16 items-center border-b border-gray-200 bg-white/80 shadow-sm backdrop-blur-sm dark:border-gray-800 dark:bg-gray-900/80">
       <div className="flex w-full items-center justify-between px-6">
         <div>
           <h1 className="text-lg font-semibold text-gray-900 dark:text-white">

@@ -3,8 +3,10 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #f8fafc;
+  --background: #f9fafb;
   --foreground: #1e293b;
+  --card-bg: #ffffff;
+  --card-border: #e5e7eb;
   --sidebar-width: 16rem;
   --sidebar-collapsed-width: 5rem;
 }
@@ -17,8 +19,10 @@
 }
 
 .dark {
-  --background: #111827;
+  --background: #030712;
   --foreground: #f1f5f9;
+  --card-bg: #111827;
+  --card-border: #1f2937;
 }
 
 body {

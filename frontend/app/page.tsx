@@ -1,56 +1,174 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import EntityTable from "./components/EntityTable";
 import EntityVariantView from "./components/EntityVariantView";
-import { useSidebar } from "./components/SidebarProvider";
+import { PageHeader, StatCard } from "./components/ui";
+import { useDomain } from "./contexts/DomainContext";
+import { apiFetch } from "../lib/api";
+import { useAuth } from "./contexts/AuthContext";
+
+interface DashboardStats {
+  total: number;
+  brands: number;
+  models: number;
+  enriched: number;
+}
 
 export default function Home() {
   const [viewMode, setViewMode] = useState<"table" | "variants">("table");
-  const { collapsed } = useSidebar();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [enrichPct, setEnrichPct] = useState<number>(0);
+  const [domainCount, setDomainCount] = useState<number>(0);
+  const { activeDomainId } = useDomain();
+  const { token } = useAuth();
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const [statsRes, enrichRes, domainsRes] = await Promise.all([
+        apiFetch("/stats"),
+        apiFetch("/enrich/stats").catch(() => null),
+        apiFetch("/domains").catch(() => null),
+      ]);
+      const s = await statsRes.json();
+      setStats(s);
+      if (enrichRes && enrichRes.ok) {
+        const e = await enrichRes.json();
+        setEnrichPct(e.coverage_percent ?? 0);
+      }
+      if (domainsRes && domainsRes.ok) {
+        const d = await domainsRes.json();
+        setDomainCount(Array.isArray(d) ? d.length : 0);
+      }
+    } catch {
+      // stats are non-critical
+    }
+  }, []);
+
+  useEffect(() => {
+    if (token) fetchStats();
+  }, [token, fetchStats]);
+
+  const viewToggle = (
+    <div className="inline-flex rounded-lg border border-gray-200 p-1 bg-white dark:border-gray-700 dark:bg-gray-900">
+      <button
+        onClick={() => setViewMode("table")}
+        className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+          viewMode === "table"
+            ? "bg-blue-600 text-white"
+            : "text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+        }`}
+      >
+        Table View
+      </button>
+      <button
+        onClick={() => setViewMode("variants")}
+        className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+          viewMode === "variants"
+            ? "bg-blue-600 text-white"
+            : "text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+        }`}
+      >
+        Variant Groups
+      </button>
+    </div>
+  );
 
   return (
-    <main className="min-h-screen bg-zinc-50 dark:bg-black p-8">
-      <div className="space-y-8">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-zinc-900 dark:text-white">
-              Universal Data Hub
-            </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Centralized entity management and harmonization tools
-            </p>
-          </div>
-          <div className="flex items-center gap-4">
-            {/* View toggle */}
-            <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-1 bg-white dark:bg-gray-900">
-              <button
-                onClick={() => setViewMode("table")}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${viewMode === "table"
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-                  }`}
-              >
-                Table View
-              </button>
-              <button
-                onClick={() => setViewMode("variants")}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${viewMode === "variants"
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-                  }`}
-              >
-                Variant Groups
-              </button>
-            </div>
-            <a href="/disambiguation" className="text-blue-600 hover:underline text-sm font-medium">
-              Go to Disambiguation Tool →
-            </a>
-          </div>
-        </div>
+    <div className="space-y-6">
+      <PageHeader
+        breadcrumbs={[{ label: "Home" }]}
+        title="Knowledge Dashboard"
+        description="Centralized entity management and harmonization tools"
+        actions={viewToggle}
+      />
 
-        {viewMode === "table" ? <EntityTable /> : <EntityVariantView />}
+      {/* Metric cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          icon={
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            </svg>
+          }
+          iconColor="blue"
+          label="Total Entities"
+          value={stats?.total?.toLocaleString() ?? "—"}
+        />
+        <StatCard
+          icon={
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          }
+          iconColor="emerald"
+          label="Enrichment Coverage"
+          value={`${Math.round(enrichPct)}%`}
+          trend={enrichPct > 0 ? { value: `${Math.round(enrichPct)}%`, direction: "up", positive: true } : undefined}
+        />
+        <StatCard
+          icon={
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 6h.008v.008H6V6z" />
+            </svg>
+          }
+          iconColor="amber"
+          label="Unique Brands"
+          value={stats?.brands?.toLocaleString() ?? "—"}
+        />
+        <StatCard
+          icon={
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375" />
+            </svg>
+          }
+          iconColor="violet"
+          label="Active Domains"
+          value={domainCount || "—"}
+        />
       </div>
-    </main>
+
+      {/* Quick action cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Link href="/import-export" className="group rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-500 p-5 text-white shadow-sm transition-shadow hover:shadow-md">
+          <div className="flex items-center gap-3">
+            <svg className="h-8 w-8 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+            </svg>
+            <div>
+              <p className="font-semibold">Import Data</p>
+              <p className="text-sm text-white/70">Upload Excel, CSV, JSON-LD</p>
+            </div>
+          </div>
+        </Link>
+        <Link href="/authority" className="group rounded-2xl bg-gradient-to-br from-violet-600 to-purple-500 p-5 text-white shadow-sm transition-shadow hover:shadow-md">
+          <div className="flex items-center gap-3">
+            <svg className="h-8 w-8 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+            <div>
+              <p className="font-semibold">Authority Resolution</p>
+              <p className="text-sm text-white/70">Wikidata, VIAF, ORCID, DBpedia</p>
+            </div>
+          </div>
+        </Link>
+        <Link href="/analytics/olap" className="group rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-500 p-5 text-white shadow-sm transition-shadow hover:shadow-md">
+          <div className="flex items-center gap-3">
+            <svg className="h-8 w-8 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+            </svg>
+            <div>
+              <p className="font-semibold">OLAP Explorer</p>
+              <p className="text-sm text-white/70">Multi-dimensional analysis</p>
+            </div>
+          </div>
+        </Link>
+      </div>
+
+      {/* Entity browser */}
+      {viewMode === "table" ? <EntityTable /> : <EntityVariantView />}
+    </div>
   );
 }

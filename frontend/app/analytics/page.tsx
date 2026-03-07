@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import MetricCard from "../components/MetricCard";
+import { PageHeader, StatCard, Badge } from "../components/ui";
 import { useDomain } from "../contexts/DomainContext";
 import { apiFetch } from "@/lib/api";
 
@@ -55,20 +55,20 @@ function SectionDivider({ label }: { label: string }) {
     );
 }
 
-// Enrichment status pill with animated dot
+// Status badge variant mapping
+const STATUS_VARIANT: Record<string, "success" | "warning" | "error" | "default"> = {
+    completed: "success",
+    pending: "warning",
+    failed: "error",
+    none: "default",
+};
+
 function StatusBadge({ status, count }: { status: string; count: number }) {
-    const cfg: Record<string, { dot: string; text: string; bg: string }> = {
-        completed: { dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10" },
-        pending: { dot: "bg-amber-400 animate-pulse", text: "text-amber-700 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-500/10" },
-        failed: { dot: "bg-red-500", text: "text-red-700 dark:text-red-400", bg: "bg-red-50 dark:bg-red-500/10" },
-        none: { dot: "bg-gray-400", text: "text-gray-600 dark:text-gray-400", bg: "bg-gray-100 dark:bg-gray-800" },
-    };
-    const c = cfg[status] ?? cfg.none;
+    const variant = STATUS_VARIANT[status] ?? "default";
     return (
-        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${c.bg} ${c.text}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />
+        <Badge variant={variant} dot dotPulse={status === "pending"} size="md">
             {status.charAt(0).toUpperCase() + status.slice(1)} · {count.toLocaleString()}
-        </span>
+        </Badge>
     );
 }
 
@@ -239,51 +239,60 @@ export default function AnalyticsPage() {
     return (
         <div className="space-y-8">
 
+            <PageHeader
+                breadcrumbs={[{ label: "Home", href: "/" }, { label: "Analytics" }]}
+                title="Intelligence Dashboard"
+                description="Key metrics, enrichment pipeline, and data quality insights"
+            />
+
             {/* ═══ SECTION 1: Data Hub Overview ════════════════════════════════ */}
             <SectionDivider label="Data Hub Overview" />
 
             {/* Metric cards */}
             {stats && (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    <MetricCard
+                    <StatCard
                         label="Total Entities"
                         value={totalCount.toLocaleString()}
+                        iconColor="blue"
                         icon={
-                            <svg className="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                             </svg>
                         }
                         subtitle="Records in repository"
                     />
-                    <MetricCard
+                    <StatCard
                         label="Active Domain"
                         value={stats.domain_name || "Catalog"}
+                        iconColor="violet"
                         icon={
-                            <svg className="h-5 w-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" />
                             </svg>
                         }
                         subtitle="Current OLAP Cube Context"
                     />
-                    <MetricCard
+                    <StatCard
                         label="Analytical Dimensions"
                         value={Object.keys(stats.distributions || {}).length.toLocaleString()}
+                        iconColor="amber"
                         icon={
-                            <svg className="h-5 w-5 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                             </svg>
                         }
                         subtitle="DuckDB Extracted Dimensions"
                     />
-                    <MetricCard
+                    <StatCard
                         label="OLAP Engine"
                         value="DuckDB"
+                        iconColor="emerald"
                         icon={
-                            <svg className="h-5 w-5 text-cyan-600 dark:text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                             </svg>
                         }
-                        trend={{ value: "Vectorized slice execution", positive: true }}
                         subtitle="Powered by Embedded DB"
                     />
                 </div>
@@ -293,7 +302,7 @@ export default function AnalyticsPage() {
             {stats && (
                 <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
                     {Object.entries(stats.distributions || {}).map(([dimName, items]) => (
-                        <div key={dimName} className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+                        <div key={dimName} className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
                             <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-800">
                                 <div>
                                     <h3 className="text-base font-semibold text-gray-900 dark:text-white">{dimName}</h3>
@@ -448,7 +457,7 @@ export default function AnalyticsPage() {
                     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
 
                         {/* Coverage & Status */}
-                        <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900 xl:col-span-1">
+                        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900 xl:col-span-1">
                             <h3 className="mb-1 text-base font-semibold text-gray-900 dark:text-white">Knowledge Hub Coverage</h3>
                             <p className="mb-5 text-xs text-gray-500 dark:text-gray-400">Percentage of repository mapped to global intelligence sources</p>
                             <div className="flex items-center gap-6">
@@ -470,7 +479,7 @@ export default function AnalyticsPage() {
                         </div>
 
                         {/* Citation Distribution */}
-                        <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900 xl:col-span-2">
+                        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900 xl:col-span-2">
                             <h3 className="mb-1 text-base font-semibold text-gray-900 dark:text-white">Scientific Connectivity</h3>
                             <p className="mb-6 text-xs text-gray-500 dark:text-gray-400">
                                 Distribution of intellectual connectivity / citations across the platform
@@ -490,7 +499,7 @@ export default function AnalyticsPage() {
                     </div>
 
                     {/* Concept Cloud */}
-                    <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+                    <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                         <div className="mb-4 flex items-start justify-between">
                             <div>
                                 <h3 className="text-base font-semibold text-gray-900 dark:text-white">Ontological Concept Map</h3>
@@ -506,7 +515,7 @@ export default function AnalyticsPage() {
                     </div>
 
                     {/* Phase Roadmap */}
-                    <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+                    <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                         <h3 className="mb-1 text-base font-semibold text-gray-900 dark:text-white">UKIP Integration Roadmap</h3>
                         <p className="mb-5 text-xs text-gray-500 dark:text-gray-400">
                             Multi-source intelligence gathering strategy

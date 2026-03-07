@@ -2,7 +2,13 @@ export type Language = 'en' | 'es';
 
 export const translations = {
     en: {
-        // Sidebar
+        // Sidebar sections
+        'nav.section.overview': 'Overview',
+        'nav.section.data': 'Data',
+        'nav.section.analytics': 'Analytics',
+        'nav.section.platform': 'Platform',
+
+        // Sidebar items
         'nav.home': 'Knowledge Explorer',
         'nav.disambiguation': 'Disambiguation',
         'nav.analytics': 'Intelligence Dashboard',
@@ -37,7 +43,13 @@ export const translations = {
         'common.view_all': 'View All',
     },
     es: {
-        // Sidebar
+        // Sidebar sections
+        'nav.section.overview': 'General',
+        'nav.section.data': 'Datos',
+        'nav.section.analytics': 'Análisis',
+        'nav.section.platform': 'Plataforma',
+
+        // Sidebar items
         'nav.home': 'Explorador de Conocimiento',
         'nav.disambiguation': 'Desambiguación',
         'nav.analytics': 'Panel de Inteligencia',

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { PageHeader, TabNav, Badge } from "../components/ui";
 import { useDomain } from "../contexts/DomainContext";
 import { apiFetch } from "@/lib/api";
 
@@ -209,15 +210,15 @@ function ReviewQueueTab({ activeDomain }: { activeDomain: any }) {
             {/* Summary cards */}
             {summary && (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+                    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                         <p className="text-sm text-gray-500 dark:text-gray-400">Pending Review</p>
                         <p className="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">{summary.total_pending}</p>
                     </div>
-                    <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+                    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                         <p className="text-sm text-gray-500 dark:text-gray-400">Confirmed</p>
                         <p className="mt-1 text-2xl font-bold text-green-600 dark:text-green-400">{summary.total_confirmed}</p>
                     </div>
-                    <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+                    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                         <p className="text-sm text-gray-500 dark:text-gray-400">Rejected</p>
                         <p className="mt-1 text-2xl font-bold text-red-600 dark:text-red-400">{summary.total_rejected}</p>
                     </div>
@@ -226,7 +227,7 @@ function ReviewQueueTab({ activeDomain }: { activeDomain: any }) {
 
             {/* Per-field breakdown */}
             {summary && summary.by_field.length > 0 && (
-                <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+                <div className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
                     <div className="border-b border-gray-200 px-5 py-3 dark:border-gray-800">
                         <h3 className="text-sm font-medium text-gray-900 dark:text-white">By Field</h3>
                     </div>
@@ -247,7 +248,7 @@ function ReviewQueueTab({ activeDomain }: { activeDomain: any }) {
             )}
 
             {/* Batch resolve panel */}
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                 <h3 className="mb-3 text-sm font-medium text-gray-900 dark:text-white">Batch Resolve</h3>
                 <div className="flex flex-wrap items-end gap-4">
                     <div className="min-w-[160px]">
@@ -315,7 +316,7 @@ function ReviewQueueTab({ activeDomain }: { activeDomain: any }) {
             </div>
 
             {/* Records filter + bulk actions */}
-            <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-5 py-3 dark:border-gray-800">
                     <div className="flex items-center gap-3">
                         <select
@@ -452,15 +453,9 @@ function ReviewQueueTab({ activeDomain }: { activeDomain: any }) {
                                         </td>
                                         <td className="px-4 py-2.5 font-mono text-xs text-gray-500">{rec.field_name}</td>
                                         <td className="px-4 py-2.5">
-                                            <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                                                rec.status === "confirmed"
-                                                    ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400"
-                                                    : rec.status === "rejected"
-                                                    ? "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400"
-                                                    : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
-                                            }`}>
+                                            <Badge variant={rec.status === "confirmed" ? "success" : rec.status === "rejected" ? "error" : "warning"}>
                                                 {rec.status}
-                                            </span>
+                                            </Badge>
                                         </td>
                                     </tr>
                                 ))}
@@ -577,7 +572,7 @@ function DisambiguationTab({ activeDomain }: { activeDomain: any }) {
     return (
         <div className="space-y-6">
             {/* Controls */}
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                 <div className="flex flex-wrap items-end gap-4">
                     <div className="min-w-[200px] flex-1">
                         <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -627,15 +622,15 @@ function DisambiguationTab({ activeDomain }: { activeDomain: any }) {
             {/* Stats summary */}
             {data && (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+                    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                         <p className="text-sm text-gray-500 dark:text-gray-400">Variation Groups</p>
                         <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{data.total_groups}</p>
                     </div>
-                    <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+                    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                         <p className="text-sm text-gray-500 dark:text-gray-400">Existing Rules</p>
                         <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{data.total_rules}</p>
                     </div>
-                    <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+                    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                         <p className="text-sm text-gray-500 dark:text-gray-400">Pending Review</p>
                         <p className="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">{data.pending_groups}</p>
                     </div>
@@ -653,9 +648,9 @@ function DisambiguationTab({ activeDomain }: { activeDomain: any }) {
                             <div key={originalIdx} className={`rounded-2xl border bg-white p-5 transition-shadow hover:shadow-md dark:bg-gray-900 ${state.saved ? "border-green-200 dark:border-green-800" : "border-gray-200 dark:border-gray-800"}`}>
                                 <div className="mb-4 flex items-center justify-between">
                                     <div className="flex items-center gap-3">
-                                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${state.saved ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400" : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"}`}>
+                                        <Badge variant={state.saved ? "success" : "warning"} dot>
                                             {state.saved ? "Resolved" : "Pending"}
-                                        </span>
+                                        </Badge>
                                         <span className="text-xs text-gray-400 dark:text-gray-500">{group.count} variations</span>
                                     </div>
                                     <button
@@ -822,24 +817,17 @@ export default function AuthorityPage() {
 
     return (
         <div className="space-y-6">
-            {/* Tab navigation */}
-            <div className="border-b border-gray-200 dark:border-gray-800">
-                <nav className="-mb-px flex gap-6">
-                    {tabs.map(t => (
-                        <button
-                            key={t.id}
-                            onClick={() => setTab(t.id)}
-                            className={`border-b-2 pb-3 text-sm font-medium transition-colors ${
-                                tab === t.id
-                                    ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
-                                    : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-                            }`}
-                        >
-                            {t.label}
-                        </button>
-                    ))}
-                </nav>
-            </div>
+            <PageHeader
+                breadcrumbs={[{ label: "Home", href: "/" }, { label: "Authority Control" }]}
+                title="Authority Control"
+                description="Normalize and harmonize field values with canonical rules"
+            />
+
+            <TabNav
+                tabs={tabs}
+                activeTab={tab}
+                onTabChange={(id) => setTab(id as "disambiguation" | "review")}
+            />
 
             {tab === "disambiguation" && <DisambiguationTab activeDomain={activeDomain} />}
             {tab === "review" && <ReviewQueueTab activeDomain={activeDomain} />}

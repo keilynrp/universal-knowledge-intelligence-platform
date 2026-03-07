@@ -40,7 +40,7 @@ export default function LayoutContent({ children }: { children: React.ReactNode 
         }`}
       >
         <Header />
-        <main className="flex-1 p-6 transition-all duration-300">
+        <main className="flex-1 bg-gray-50 p-6 transition-all duration-300 dark:bg-gray-950">
           <div
             className={`mx-auto transition-all duration-300 ${
               collapsed ? "max-w-none px-4" : "max-w-7xl"
