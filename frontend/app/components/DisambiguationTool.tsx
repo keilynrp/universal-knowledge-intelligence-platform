@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useDomain } from "../contexts/DomainContext";
 import { apiFetch } from "@/lib/api";
-import { Badge } from "./ui";
+import { Badge, useToast } from "./ui";
 
 interface VariationGroup {
     main: string;
@@ -48,6 +48,7 @@ const ENTITY_TYPES = [
 
 export default function DisambiguationTool() {
     const { activeDomain } = useDomain();
+    const { toast } = useToast();
     const [field, setField] = useState("");
     const [entityType, setEntityType] = useState("general");
 
@@ -83,7 +84,7 @@ export default function DisambiguationTool() {
             setAuthorityCandidates({});
         } catch (error) {
             console.error(error);
-            alert("Error analyzing data");
+            toast("Error analyzing data", "error");
         } finally {
             setLoading(false);
         }
@@ -102,7 +103,7 @@ export default function DisambiguationTool() {
             setResolutions(prev => ({ ...prev, [idx]: data }));
         } catch (error) {
             console.error(error);
-            alert("Error from AI resolution endpoint");
+            toast("Error from AI resolution endpoint", "error");
         } finally {
             setResolvingIdx(null);
         }
@@ -121,7 +122,7 @@ export default function DisambiguationTool() {
             analyze();
         } catch (error) {
             console.error(error);
-            alert("Error applying rules");
+            toast("Error applying rules", "error");
         } finally {
             setProcessingRule(null);
         }
@@ -144,7 +145,7 @@ export default function DisambiguationTool() {
             setAuthorityCandidates(prev => ({ ...prev, [idx]: records }));
         } catch (error) {
             console.error(error);
-            alert("Error querying authority sources");
+            toast("Error querying authority sources", "error");
         } finally {
             setAuthorityLoading(prev => ({ ...prev, [idx]: false }));
         }
@@ -164,9 +165,10 @@ export default function DisambiguationTool() {
                 ...prev,
                 [groupIdx]: (prev[groupIdx] || []).map(r => r.id === recordId ? { ...r, status: updated.status } : r),
             }));
+            toast("Candidate confirmed", "success");
         } catch (error) {
             console.error(error);
-            alert("Error confirming candidate");
+            toast("Error confirming candidate", "error");
         } finally {
             setAuthorityAction(prev => ({ ...prev, [groupIdx]: null }));
         }
@@ -183,9 +185,10 @@ export default function DisambiguationTool() {
                 ...prev,
                 [groupIdx]: (prev[groupIdx] || []).map(r => r.id === recordId ? { ...r, status: "rejected" } : r),
             }));
+            toast("Candidate rejected", "warning");
         } catch (error) {
             console.error(error);
-            alert("Error rejecting candidate");
+            toast("Error rejecting candidate", "error");
         } finally {
             setAuthorityAction(prev => ({ ...prev, [groupIdx]: null }));
         }

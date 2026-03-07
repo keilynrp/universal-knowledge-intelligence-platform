@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { PageHeader, TabNav, Badge } from "../../components/ui";
+import { PageHeader, TabNav, Badge, useToast } from "../../components/ui";
 import MonteCarloChart from "../../components/MonteCarloChart";
 
 interface Entity {
@@ -94,6 +94,7 @@ const Spinner = () => (
 export default function EntityDetailPage() {
     const params = useParams();
     const entityId = params.id as string;
+    const { toast } = useToast();
 
     const [entity, setEntity] = useState<Entity | null>(null);
     const [loading, setLoading] = useState(true);
@@ -178,8 +179,9 @@ export default function EntityDetailPage() {
             setEntity(await res.json());
             setIsEditing(false);
             setEditData({});
+            toast("Entity saved", "success");
         } catch {
-            alert("Error saving entity");
+            toast("Error saving entity", "error");
         } finally {
             setSaving(false);
         }

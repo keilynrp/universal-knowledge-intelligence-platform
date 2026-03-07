@@ -5,7 +5,7 @@ import Link from "next/link";
 import MonteCarloChart from "./MonteCarloChart";
 import { useDomain } from "../contexts/DomainContext";
 import { apiFetch } from "@/lib/api";
-import { Badge } from "./ui";
+import { Badge, useToast } from "./ui";
 
 interface Entity {
     id: number;
@@ -28,6 +28,7 @@ type EditableFields = Pick<Entity, "entity_name" | "brand_capitalized" | "model"
 
 export default function EntityTable() {
     const { activeDomain, activeDomainId } = useDomain();
+    const { toast } = useToast();
     const [entities, setEntities] = useState<Entity[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
@@ -121,7 +122,7 @@ export default function EntityTable() {
             setEditingId(null);
         } catch (error) {
             console.error(error);
-            alert("Error updating entity");
+            toast("Error updating entity", "error");
         } finally {
             setSaving(false);
         }
@@ -133,9 +134,10 @@ export default function EntityTable() {
             const res = await apiFetch(`/entities/${id}`, { method: "DELETE" });
             if (!res.ok) throw new Error("Failed to delete");
             setEntities((prev) => prev.filter((e) => e.id !== id));
+            toast("Entity deleted", "success");
         } catch (error) {
             console.error(error);
-            alert("Error deleting entity");
+            toast("Error deleting entity", "error");
         } finally {
             setDeletingId(null);
         }
@@ -148,9 +150,10 @@ export default function EntityTable() {
             if (!res.ok) throw new Error("Failed to enrich");
             const enriched = await res.json();
             setEntities((prev) => prev.map((e) => (e.id === id ? { ...e, ...enriched } : e)));
+            toast("Enrichment complete", "success");
         } catch (error) {
             console.error(error);
-            alert("Error enriching entity");
+            toast("Error enriching entity", "error");
         } finally {
             setEnrichingId(null);
         }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { PageHeader } from "../components/ui";
+import { PageHeader, useToast } from "../components/ui";
 import DataSourceSchemaAnalyzer from "../components/DataSourceSchemaAnalyzer";
 import { useDomain } from "../contexts/DomainContext";
 import { apiFetch } from "@/lib/api";
@@ -20,6 +20,7 @@ interface PurgeResult {
 
 export default function ImportExportPage() {
     const { activeDomain } = useDomain();
+    const { toast } = useToast();
     const [dragOver, setDragOver] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
@@ -113,7 +114,7 @@ export default function ImportExportPage() {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         } catch (error) {
-            alert(error instanceof Error ? error.message : "Export failed");
+            toast(error instanceof Error ? error.message : "Export failed", "error");
         } finally {
             setExporting(false);
         }
@@ -133,7 +134,7 @@ export default function ImportExportPage() {
             setPurgeConfirm(false);
             setUploadResult(null);
         } catch (error) {
-            alert(error instanceof Error ? error.message : "Purge failed");
+            toast(error instanceof Error ? error.message : "Purge failed", "error");
         } finally {
             setPurging(false);
         }

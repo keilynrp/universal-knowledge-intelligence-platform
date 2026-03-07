@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PageHeader, Badge } from "../components/ui";
+import { PageHeader, Badge, useToast } from "../components/ui";
 import { apiFetch } from "@/lib/api";
 
 interface HarmonizationChange {
@@ -98,6 +98,7 @@ function Spinner({ className = "h-4 w-4" }: { className?: string }) {
 }
 
 export default function HarmonizationPage() {
+    const { toast } = useToast();
     const [pipeline, setPipeline] = useState<PipelineStatus | null>(null);
     const [loading, setLoading] = useState(false);
     const [previewing, setPreviewing] = useState<string | null>(null);
@@ -121,7 +122,7 @@ export default function HarmonizationPage() {
             setPipeline(data);
         } catch (error) {
             console.error(error);
-            alert("Error loading pipeline status");
+            toast("Error loading pipeline status", "error");
         } finally {
             setLoading(false);
         }
@@ -137,7 +138,7 @@ export default function HarmonizationPage() {
             setExpandedStep(stepId);
         } catch (error) {
             console.error(error);
-            alert("Error previewing step");
+            toast("Error previewing step", "error");
         } finally {
             setPreviewing(null);
         }
@@ -161,7 +162,7 @@ export default function HarmonizationPage() {
             fetchPipeline();
         } catch (error) {
             console.error(error);
-            alert("Error applying step");
+            toast("Error applying step", "error");
         } finally {
             setApplying(null);
         }
@@ -185,7 +186,7 @@ export default function HarmonizationPage() {
             fetchPipeline();
         } catch (error) {
             console.error(error);
-            alert("Error running pipeline");
+            toast("Error running pipeline", "error");
         } finally {
             setRunningAll(false);
         }
@@ -211,12 +212,12 @@ export default function HarmonizationPage() {
                 throw new Error(err.detail || "Undo failed");
             }
             const data: UndoRedoResult = await res.json();
-            alert(`Undo successful: ${data.records_restored} records restored for "${data.step_name}"`);
+            toast(`Undo: ${data.records_restored} records restored for "${data.step_name}"`, "success");
             fetchLogs();
             fetchPipeline();
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : "Error undoing operation";
-            alert(message);
+            toast(message, "error");
         } finally {
             setUndoingId(null);
         }
@@ -231,12 +232,12 @@ export default function HarmonizationPage() {
                 throw new Error(err.detail || "Redo failed");
             }
             const data: UndoRedoResult = await res.json();
-            alert(`Redo successful: ${data.records_restored} records re-applied for "${data.step_name}"`);
+            toast(`Redo: ${data.records_restored} records re-applied for "${data.step_name}"`, "success");
             fetchLogs();
             fetchPipeline();
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : "Error redoing operation";
-            alert(message);
+            toast(message, "error");
         } finally {
             setRedoingId(null);
         }

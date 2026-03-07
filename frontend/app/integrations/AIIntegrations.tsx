@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { apiFetch } from "@/lib/api";
+import { useToast } from "../components/ui";
 
 interface AIIntegration {
     id: number;
@@ -22,6 +23,7 @@ const AI_PROVIDERS: Record<string, { label: string; color: string; bgColor: stri
 };
 
 export default function AIIntegrations() {
+    const { toast } = useToast();
     const [integrations, setIntegrations] = useState<AIIntegration[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -83,7 +85,7 @@ export default function AIIntegrations() {
 
             if (!res.ok) {
                 const err = await res.json();
-                alert(err.detail || "Error saving integration");
+                toast(err.detail || "Error saving integration", "error");
                 return;
             }
 

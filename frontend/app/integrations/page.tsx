@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import AIIntegrations from "./AIIntegrations";
 import { apiFetch } from "@/lib/api";
-import { PageHeader, TabNav, Badge } from "../components/ui";
+import { PageHeader, TabNav, Badge, useToast } from "../components/ui";
 
 interface StoreConnection {
     id: number;
@@ -33,6 +33,7 @@ const DIRECTION_LABELS: Record<string, string> = {
 };
 
 export default function IntegrationsPage() {
+    const { toast } = useToast();
     const [activeTab, setActiveTab] = useState<"stores" | "ai">("stores");
     const [stores, setStores] = useState<StoreConnection[]>([]);
     const [loading, setLoading] = useState(true);
@@ -111,7 +112,7 @@ export default function IntegrationsPage() {
 
             if (!res.ok) {
                 const err = await res.json();
-                alert(err.detail || "Error saving store");
+                toast(err.detail || "Error saving store", "error");
                 return;
             }
 

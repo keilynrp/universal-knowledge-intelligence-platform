@@ -7,6 +7,7 @@ import { LanguageProvider } from "./contexts/LanguageContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { DomainProvider } from "./contexts/DomainContext";
 import { AuthProvider } from "./contexts/AuthContext";
+import { ToastProvider } from "./components/ui/Toast";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -54,7 +55,9 @@ export default function RootLayout({
             <LanguageProvider>
               <DomainProvider>
                 <SidebarProvider>
-                  <LayoutContent>{children}</LayoutContent>
+                  <ToastProvider>
+                    <LayoutContent>{children}</LayoutContent>
+                  </ToastProvider>
                 </SidebarProvider>
               </DomainProvider>
             </LanguageProvider>

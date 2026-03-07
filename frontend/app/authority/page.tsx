@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { PageHeader, TabNav, Badge } from "../components/ui";
+import { PageHeader, TabNav, Badge, useToast } from "../components/ui";
 import { useDomain } from "../contexts/DomainContext";
 import { apiFetch } from "@/lib/api";
 
@@ -473,6 +473,7 @@ function ReviewQueueTab({ activeDomain }: { activeDomain: any }) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 function DisambiguationTab({ activeDomain }: { activeDomain: any }) {
+    const { toast } = useToast();
     const [field, setField] = useState("");
 
     useEffect(() => {
@@ -512,7 +513,7 @@ function DisambiguationTab({ activeDomain }: { activeDomain: any }) {
             setGroupStates(states);
         } catch (error) {
             console.error(error);
-            alert("Error fetching authority data");
+            toast("Error fetching authority data", "error");
         } finally {
             setLoading(false);
         }
@@ -546,7 +547,7 @@ function DisambiguationTab({ activeDomain }: { activeDomain: any }) {
             setGroupStates(prev => ({ ...prev, [idx]: { ...prev[idx], saved: true } }));
         } catch (error) {
             console.error(error);
-            alert("Error saving rules");
+            toast("Error saving rules", "error");
         } finally {
             setSavingGroup(null);
         }
@@ -561,7 +562,7 @@ function DisambiguationTab({ activeDomain }: { activeDomain: any }) {
             setApplyResult(await res.json());
         } catch (error) {
             console.error(error);
-            alert("Error applying rules");
+            toast("Error applying rules", "error");
         } finally {
             setApplying(false);
         }
