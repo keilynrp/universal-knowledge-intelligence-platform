@@ -836,6 +836,24 @@ def update_entity(entity_id: int = Path(..., ge=1), payload: schemas.EntityBase 
 
 
 
+class _BulkIdsPayload(BaseModel):
+    ids: List[int] = Field(..., min_length=1, max_length=500)
+
+
+@app.delete("/entities/bulk", status_code=200)
+def delete_entities_bulk(
+    payload: _BulkIdsPayload,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_role("super_admin", "admin", "editor")),
+):
+    """Delete a specific list of entities by id."""
+    if not payload.ids:
+        raise HTTPException(status_code=422, detail="ids list is empty")
+    deleted = db.query(models.RawEntity).filter(models.RawEntity.id.in_(payload.ids)).delete(synchronize_session=False)
+    db.commit()
+    return {"deleted": deleted}
+
+
 @app.delete("/entities/all")
 def purge_all_entities(include_rules: bool = Query(False), db: Session = Depends(get_db), _: models.User = Depends(require_role("super_admin", "admin", "editor"))):
     entity_count = db.query(func.count(models.RawEntity.id)).scalar() or 0
@@ -880,6 +898,22 @@ def enrich_bulk_queue(skip: int = 0, limit: int = 100, db: Session = Depends(get
     """Queues missing records for background enrichment"""
     count = enrichment_worker.trigger_enrichment_bulk(db, skip=skip, limit=limit)
     return {"message": "Bulk queue triggered", "queued_records": count}
+
+
+@app.post("/enrich/bulk-ids", status_code=200)
+def enrich_bulk_by_ids(
+    payload: _BulkIdsPayload,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_role("super_admin", "admin", "editor")),
+):
+    """Queue a specific list of entities for background enrichment."""
+    updated = (
+        db.query(models.RawEntity)
+        .filter(models.RawEntity.id.in_(payload.ids))
+        .update({"enrichment_status": "pending"}, synchronize_session=False)
+    )
+    db.commit()
+    return {"queued": updated}
 
 
 @app.get("/enrich/stats")

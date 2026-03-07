@@ -58,6 +58,11 @@ export default function EntityTable() {
     // Delete state
     const [deletingId, setDeletingId] = useState<number | null>(null);
 
+    // Bulk selection
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+    const [bulkDeleting, setBulkDeleting] = useState(false);
+    const [bulkEnriching, setBulkEnriching] = useState(false);
+
     useEffect(() => {
         const handler = setTimeout(() => {
             setDebouncedSearch(search);
@@ -68,6 +73,7 @@ export default function EntityTable() {
 
     const fetchEntities = useCallback(async () => {
         setLoading(true);
+        setSelectedIds(new Set());
         try {
             const queryParams = new URLSearchParams({
                 skip: (page * limit).toString(),
@@ -159,6 +165,84 @@ export default function EntityTable() {
         }
     }
 
+    // ── Bulk actions ────────────────────────────────────────────────────────────
+
+    function toggleSelect(id: number) {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    }
+
+    function toggleSelectAll() {
+        if (selectedIds.size === entities.length) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(entities.map(e => e.id)));
+        }
+    }
+
+    async function handleBulkDelete() {
+        if (!confirm(`Delete ${selectedIds.size} selected entities?`)) return;
+        setBulkDeleting(true);
+        try {
+            const res = await apiFetch("/entities/bulk", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ids: Array.from(selectedIds) }),
+            });
+            if (!res.ok) throw new Error("Bulk delete failed");
+            const data = await res.json();
+            setEntities(prev => prev.filter(e => !selectedIds.has(e.id)));
+            setSelectedIds(new Set());
+            toast(`${data.deleted} entities deleted`, "success");
+        } catch {
+            toast("Bulk delete failed", "error");
+        } finally {
+            setBulkDeleting(false);
+        }
+    }
+
+    async function handleBulkEnrich() {
+        setBulkEnriching(true);
+        try {
+            const res = await apiFetch("/enrich/bulk-ids", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ids: Array.from(selectedIds) }),
+            });
+            if (!res.ok) throw new Error("Bulk enrich failed");
+            const data = await res.json();
+            toast(`${data.queued} entities queued for enrichment`, "success");
+            setSelectedIds(new Set());
+        } catch {
+            toast("Bulk enrich failed", "error");
+        } finally {
+            setBulkEnriching(false);
+        }
+    }
+
+    function handleBulkExport() {
+        const selected = entities.filter(e => selectedIds.has(e.id));
+        const headers = ["id", "entity_name", "brand_capitalized", "model", "sku", "classification", "entity_type", "variant", "gtin", "barcode", "status", "validation_status", "enrichment_status"];
+        const rows = selected.map(e => headers.map(h => {
+            const v = (e as any)[h];
+            return v == null ? "" : `"${String(v).replace(/"/g, '""')}"`;
+        }).join(","));
+        const csv = [headers.join(","), ...rows].join("\n");
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `entities_selection_${selected.length}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast(`${selected.length} entities exported as CSV`, "success");
+    }
+
     const thClass = "px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400";
     const inputClass = "h-8 w-full rounded border border-gray-200 bg-white px-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white";
 
@@ -189,6 +273,16 @@ export default function EntityTable() {
                     <table className="w-full min-w-[1200px] text-left text-sm">
                         <thead>
                             <tr className="border-b border-gray-200 dark:border-gray-800">
+                                <th className="w-10 px-4 py-3.5">
+                                    <input
+                                        type="checkbox"
+                                        className="h-4 w-4 rounded border-gray-300 accent-blue-600"
+                                        checked={entities.length > 0 && selectedIds.size === entities.length}
+                                        ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < entities.length; }}
+                                        onChange={toggleSelectAll}
+                                        aria-label="Select all"
+                                    />
+                                </th>
                                 <th className={`${thClass} no-wrap w-16`}>ID</th>
                                 {activeDomain ? (
                                     activeDomain.attributes.map(attr => (
@@ -237,6 +331,7 @@ export default function EntityTable() {
                                     if (isEditing) {
                                         return (
                                             <tr key={entity.id} className="bg-blue-50/50 dark:bg-blue-500/5">
+                                                <td className="w-10 px-4 py-2.5" />
                                                 <td className="px-5 py-2.5 text-gray-500 dark:text-gray-400">{entity.id}</td>
                                                 {activeDomain ? (
                                                     activeDomain.attributes.map(attr => {
@@ -307,7 +402,16 @@ export default function EntityTable() {
                                     }
 
                                     return (
-                                        <tr key={entity.id} className="group transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                        <tr key={entity.id} className={`group transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50 ${selectedIds.has(entity.id) ? "bg-blue-50/60 dark:bg-blue-500/5" : ""}`}>
+                                            <td className="w-10 px-4 py-3.5">
+                                                <input
+                                                    type="checkbox"
+                                                    className="h-4 w-4 rounded border-gray-300 accent-blue-600"
+                                                    checked={selectedIds.has(entity.id)}
+                                                    onChange={() => toggleSelect(entity.id)}
+                                                    aria-label={`Select entity ${entity.id}`}
+                                                />
+                                            </td>
                                             <td className="px-5 py-3.5 text-gray-500 dark:text-gray-400">{entity.id}</td>
                                             {activeDomain ? (
                                                 activeDomain.attributes.map(attr => {
@@ -513,6 +617,74 @@ export default function EntityTable() {
                     </div>
                 </div>
             </div>
+
+            {/* Floating Bulk Action Bar */}
+            {selectedIds.size > 0 && (
+                <div className="toast-enter fixed bottom-6 left-1/2 z-[150] -translate-x-1/2">
+                    <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white px-5 py-3 shadow-xl dark:border-gray-700 dark:bg-gray-900">
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
+                            {selectedIds.size}
+                        </span>
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 pr-1">
+                            {selectedIds.size === 1 ? "entity" : "entities"} selected
+                        </span>
+                        <div className="h-4 w-px bg-gray-200 dark:bg-gray-700" />
+                        <button
+                            onClick={handleBulkEnrich}
+                            disabled={bulkEnriching}
+                            className="flex items-center gap-1.5 rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100 disabled:opacity-60 dark:bg-purple-500/10 dark:text-purple-400 dark:hover:bg-purple-500/20"
+                        >
+                            {bulkEnriching ? (
+                                <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                            ) : (
+                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                                </svg>
+                            )}
+                            Enrich
+                        </button>
+                        <button
+                            onClick={handleBulkExport}
+                            className="flex items-center gap-1.5 rounded-lg bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 transition-colors hover:bg-green-100 dark:bg-green-500/10 dark:text-green-400 dark:hover:bg-green-500/20"
+                        >
+                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                            </svg>
+                            Export CSV
+                        </button>
+                        <button
+                            onClick={handleBulkDelete}
+                            disabled={bulkDeleting}
+                            className="flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-60 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
+                        >
+                            {bulkDeleting ? (
+                                <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                            ) : (
+                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                </svg>
+                            )}
+                            Delete
+                        </button>
+                        <div className="h-4 w-px bg-gray-200 dark:bg-gray-700" />
+                        <button
+                            onClick={() => setSelectedIds(new Set())}
+                            className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800"
+                            title="Clear selection"
+                        >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
