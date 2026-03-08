@@ -64,6 +64,9 @@ class RawEntity(Base):
     enrichment_source = Column(String, nullable=True)
     enrichment_status = Column(String, default="none", index=True) # none, pending, completed, failed
 
+    # Data provenance
+    source = Column(String, default="user")  # "user" | "demo" | adapter name
+
 class NormalizationRule(Base):
     __tablename__ = "normalization_rules"
     

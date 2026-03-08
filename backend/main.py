@@ -25,6 +25,7 @@ from backend.routers import (
     analytics,
     auth_users,
     authority,
+    demo,
     disambiguation,
     domains,
     entities,
@@ -75,6 +76,12 @@ with database.engine.connect() as _conn:
             _conn.execute(text("ALTER TABLE authority_records ADD COLUMN score_breakdown TEXT"))
             _conn.execute(text("ALTER TABLE authority_records ADD COLUMN evidence TEXT"))
             _conn.execute(text("ALTER TABLE authority_records ADD COLUMN merged_sources TEXT"))
+            _conn.commit()
+
+    if "raw_entities" in _inspector.get_table_names():
+        _cols = [c["name"] for c in _inspector.get_columns("raw_entities")]
+        if "source" not in _cols:
+            _conn.execute(text("ALTER TABLE raw_entities ADD COLUMN source VARCHAR DEFAULT 'user'"))
             _conn.commit()
 
 
@@ -148,3 +155,4 @@ app.include_router(stores.router)
 app.include_router(ai_rag.router)
 app.include_router(reports.router)
 app.include_router(webhooks.router)
+app.include_router(demo.router)

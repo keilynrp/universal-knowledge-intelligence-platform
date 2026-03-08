@@ -17,13 +17,27 @@ interface DashboardStats {
   enriched: number;
 }
 
+interface DemoStatus {
+  demo_seeded: boolean;
+  demo_entity_count: number;
+}
+
 export default function Home() {
   const [viewMode, setViewMode] = useState<"table" | "variants">("table");
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [enrichPct, setEnrichPct] = useState<number>(0);
   const [domainCount, setDomainCount] = useState<number>(0);
+  const [demoStatus, setDemoStatus] = useState<DemoStatus | null>(null);
+  const [demoLoading, setDemoLoading] = useState(false);
   const { activeDomainId } = useDomain();
   const { token } = useAuth();
+
+  const fetchDemoStatus = useCallback(async () => {
+    try {
+      const res = await apiFetch("/demo/status");
+      if (res.ok) setDemoStatus(await res.json());
+    } catch { /* non-critical */ }
+  }, []);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -48,8 +62,37 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (token) fetchStats();
-  }, [token, fetchStats]);
+    if (token) {
+      fetchStats();
+      fetchDemoStatus();
+    }
+  }, [token, fetchStats, fetchDemoStatus]);
+
+  const handleLaunchDemo = async () => {
+    setDemoLoading(true);
+    try {
+      const res = await apiFetch("/demo/seed", { method: "POST" });
+      if (res.ok) {
+        await fetchDemoStatus();
+        await fetchStats();
+      }
+    } catch { /* non-critical */ } finally {
+      setDemoLoading(false);
+    }
+  };
+
+  const handleClearDemo = async () => {
+    setDemoLoading(true);
+    try {
+      const res = await apiFetch("/demo/reset", { method: "DELETE" });
+      if (res.ok) {
+        await fetchDemoStatus();
+        await fetchStats();
+      }
+    } catch { /* non-critical */ } finally {
+      setDemoLoading(false);
+    }
+  };
 
   const viewToggle = (
     <div className="inline-flex rounded-lg border border-gray-200 p-1 bg-white dark:border-gray-700 dark:bg-gray-900">
@@ -130,6 +173,54 @@ export default function Home() {
           value={domainCount || "—"}
         />
       </div>
+
+      {/* Demo mode banner */}
+      {demoStatus !== null && (
+        !demoStatus.demo_seeded ? (
+          <div className="flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-4 dark:border-indigo-900/40 dark:bg-indigo-900/10">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-indigo-900 dark:text-indigo-200">Try UKIP Demo</p>
+                <p className="text-xs text-indigo-600 dark:text-indigo-400">Load 1,000 pre-generated entities across Technology, Healthcare, Science and Engineering to explore all platform features.</p>
+              </div>
+            </div>
+            <button
+              onClick={handleLaunchDemo}
+              disabled={demoLoading}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors disabled:opacity-50"
+            >
+              {demoLoading ? (
+                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : "Launch Demo"}
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-5 py-3.5 dark:border-amber-900/40 dark:bg-amber-900/10">
+            <div className="flex items-center gap-3">
+              <span className="text-lg">demo</span>
+              <div>
+                <p className="text-sm font-medium text-amber-900 dark:text-amber-200">Demo mode active</p>
+                <p className="text-xs text-amber-600 dark:text-amber-400">{demoStatus.demo_entity_count.toLocaleString()} demo entities loaded. Clear them when you are ready to import your own data.</p>
+              </div>
+            </div>
+            <button
+              onClick={handleClearDemo}
+              disabled={demoLoading}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-50 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+            >
+              {demoLoading ? "Clearing..." : "Clear Demo"}
+            </button>
+          </div>
+        )
+      )}
 
       {/* Quick action cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
