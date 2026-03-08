@@ -22,6 +22,7 @@ const ACTION_LABELS: Record<string, string> = {
   "harmonization.apply": "Harmonization applied",
   "authority.confirm":   "Authority record confirmed",
   "authority.reject":    "Authority record rejected",
+  "entity.merge":        "Entities merged",
 };
 
 const ACTION_COLOR: Record<string, string> = {

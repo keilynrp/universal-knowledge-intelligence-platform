@@ -21,7 +21,8 @@ const ACTION_LABELS: Record<string, string> = {
   "entity.bulk_delete": "Entities bulk-deleted",
   "harmonization.apply": "Harmonization applied",
   "authority.confirm": "Authority record confirmed",
-  "authority.reject": "Authority record rejected",
+  "authority.reject":  "Authority record rejected",
+  "entity.merge":      "Entities merged",
 };
 
 function timeAgo(isoString: string): string {

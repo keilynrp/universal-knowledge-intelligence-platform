@@ -249,6 +249,16 @@ class Webhook(Base):
     last_status       = Column(Integer, nullable=True)         # HTTP status of last delivery
 
 
+class LinkDismissal(Base):
+    """Stores entity pairs the user has explicitly marked as 'not a duplicate'."""
+    __tablename__ = "link_dismissals"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    entity_a_id = Column(Integer, index=True, nullable=False)   # always the smaller ID
+    entity_b_id = Column(Integer, index=True, nullable=False)   # always the larger ID
+    created_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 

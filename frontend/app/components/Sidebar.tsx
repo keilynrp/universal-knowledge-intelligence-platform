@@ -71,6 +71,16 @@ const navSections: NavSection[] = [
         translationKey: "nav.disambiguation",
       },
       {
+        label: "Entity Linker",
+        href: "/entities/link",
+        icon: (
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l-1.757 1.757a4.5 4.5 0 01-6.364-6.364l4.5-4.5a4.5 4.5 0 011.242 7.244" />
+          </svg>
+        ),
+        translationKey: "nav.entity_linker",
+      },
+      {
         label: "Authority Control",
         href: "/authority",
         icon: (

@@ -45,6 +45,7 @@ from backend.analyzers.roi_calculator import ROIParams, simulate as _roi_simulat
 from backend.olap import olap_engine
 from backend.schema_registry import registry, DomainSchema
 from backend import report_builder as _report_builder
+from backend import entity_linker as _entity_linker
 
 _topic_analyzer = TopicAnalyzer()
 _correlation_analyzer = CorrelationAnalyzer()
@@ -887,6 +888,110 @@ def get_entity(
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
     return entity
+
+
+# ── Entity Linker ─────────────────────────────────────────────────────────────
+
+class _LinkFindRequest(BaseModel):
+    threshold: float = Field(0.82, ge=0.50, le=0.99)
+    limit:     int   = Field(500,  ge=50,   le=2000)
+
+class _LinkMergeRequest(BaseModel):
+    primary_id:    int       = Field(..., ge=1)
+    secondary_ids: List[int] = Field(..., min_length=1)
+    strategy:      str       = Field("keep_non_empty")  # keep_primary | keep_non_empty | keep_longest
+
+class _LinkDismissRequest(BaseModel):
+    entity_a_id: int = Field(..., ge=1)
+    entity_b_id: int = Field(..., ge=1)
+
+
+@app.post("/entities/link/find", tags=["entity-linker"])
+def link_find(
+    payload: _LinkFindRequest,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(get_current_user),
+):
+    dismissed_rows = db.query(models.LinkDismissal).all()
+    dismissed_pairs = {
+        (d.entity_a_id, d.entity_b_id) for d in dismissed_rows
+    }
+    candidates = _entity_linker.find_candidates(
+        db, payload.threshold, payload.limit, dismissed_pairs
+    )
+    return {
+        "candidates": [
+            {
+                "entity_a":      c.entity_a,
+                "entity_b":      c.entity_b,
+                "similarity":    c.similarity,
+                "common_tokens": c.common_tokens,
+            }
+            for c in candidates
+        ],
+        "total":     len(candidates),
+        "threshold": payload.threshold,
+        "scanned":   payload.limit,
+    }
+
+
+@app.post("/entities/link/merge", tags=["entity-linker"])
+def link_merge(
+    payload: _LinkMergeRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
+):
+    if payload.primary_id in payload.secondary_ids:
+        raise HTTPException(status_code=400, detail="primary_id cannot also appear in secondary_ids")
+    try:
+        merged = _entity_linker.merge_entities(
+            db, payload.primary_id, payload.secondary_ids, payload.strategy
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    _audit(
+        db, "entity.merge",
+        user_id=current_user.id,
+        entity_type="entity",
+        entity_id=payload.primary_id,
+        details={
+            "secondary_ids": payload.secondary_ids,
+            "strategy":      payload.strategy,
+            "deleted":       len(payload.secondary_ids),
+        },
+    )
+    db.commit()
+    _dispatch_webhook("entity.merge", {"primary_id": payload.primary_id, "deleted": len(payload.secondary_ids)}, database.SessionLocal)
+    return {
+        "merged": {
+            "id":               merged.id,
+            "entity_name":      merged.entity_name,
+            "brand_capitalized": merged.brand_capitalized,
+            "model":            merged.model,
+            "sku":              merged.sku,
+        },
+        "deleted_count": len(payload.secondary_ids),
+        "strategy":      payload.strategy,
+    }
+
+
+@app.post("/entities/link/dismiss", tags=["entity-linker"])
+def link_dismiss(
+    payload: _LinkDismissRequest,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(get_current_user),
+):
+    a_id = min(payload.entity_a_id, payload.entity_b_id)
+    b_id = max(payload.entity_a_id, payload.entity_b_id)
+    exists = db.query(models.LinkDismissal).filter(
+        models.LinkDismissal.entity_a_id == a_id,
+        models.LinkDismissal.entity_b_id == b_id,
+    ).first()
+    if not exists:
+        db.add(models.LinkDismissal(entity_a_id=a_id, entity_b_id=b_id))
+        db.commit()
+    return {"ok": True, "pair": [a_id, b_id]}
 
 
 @app.put("/entities/{entity_id}", response_model=schemas.Entity)
