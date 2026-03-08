@@ -1,6 +1,7 @@
 """
 Analytics, stats, and lookup endpoints.
   POST /analytics/roi
+  GET  /dashboard/summary
   GET  /analyzers/topics/{domain_id}
   GET  /analyzers/cooccurrence/{domain_id}
   GET  /analyzers/clusters/{domain_id}
@@ -12,6 +13,8 @@ Analytics, stats, and lookup endpoints.
   GET  /health
 """
 import logging
+import re
+from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -151,6 +154,132 @@ def analyzer_correlation(
     except Exception:
         logger.exception("analyzer_correlation error for domain '%s'", domain_id)
         raise HTTPException(status_code=500, detail="Analysis error")
+
+
+# ── Executive Dashboard ───────────────────────────────────────────────────────
+
+_YEAR_RE = re.compile(r"\b(20\d{2}|19\d{2})\b")
+_TOP_BRANDS_N = 5
+_TOP_YEARS_N  = 6
+
+
+@router.get("/dashboard/summary", tags=["analytics"])
+def dashboard_summary(
+    domain_id: str = Query(default="default", min_length=1, max_length=64),
+    db: Session = Depends(get_db),
+    _: models.User = Depends(get_current_user),
+):
+    """Aggregated KPIs + timeline + heatmap + concepts for the Executive Dashboard."""
+    # ── Hero KPIs ─────────────────────────────────────────────────────────────
+    total_entities = db.query(func.count(models.RawEntity.id)).scalar() or 0
+    enriched_count = (
+        db.query(func.count(models.RawEntity.id))
+        .filter(models.RawEntity.enrichment_status == "completed")
+        .scalar() or 0
+    )
+    enrichment_pct = round(enriched_count / total_entities * 100, 1) if total_entities else 0.0
+    avg_citations_raw = (
+        db.query(func.avg(models.RawEntity.enrichment_citation_count))
+        .filter(models.RawEntity.enrichment_status == "completed")
+        .scalar()
+    )
+    avg_citations = round(float(avg_citations_raw), 1) if avg_citations_raw else 0.0
+
+    # ── Timeline: entities grouped by year extracted from creation_date ────────
+    date_rows = (
+        db.query(models.RawEntity.creation_date)
+        .filter(models.RawEntity.creation_date != None, models.RawEntity.creation_date != "")
+        .all()
+    )
+    year_counts: dict[int, int] = defaultdict(int)
+    for (raw_date,) in date_rows:
+        m = _YEAR_RE.search(str(raw_date))
+        if m:
+            year_counts[int(m.group(1))] += 1
+    entities_by_year = [
+        {"year": yr, "count": year_counts[yr]}
+        for yr in sorted(year_counts)
+    ]
+
+    # ── Brand × Year heatmap (top 5 brands × last _TOP_YEARS_N years) ─────────
+    brand_date_rows = (
+        db.query(models.RawEntity.brand_capitalized, models.RawEntity.creation_date)
+        .filter(
+            models.RawEntity.brand_capitalized != None,
+            models.RawEntity.brand_capitalized != "",
+        )
+        .all()
+    )
+    # Count total per brand (for ranking)
+    brand_totals: dict[str, int] = defaultdict(int)
+    brand_year_raw: dict[str, dict[int, int]] = defaultdict(lambda: defaultdict(int))
+    for (brand, raw_date) in brand_date_rows:
+        brand_totals[brand] += 1
+        m = _YEAR_RE.search(str(raw_date or ""))
+        if m:
+            brand_year_raw[brand][int(m.group(1))] += 1
+
+    top_brands = sorted(brand_totals, key=lambda b: brand_totals[b], reverse=True)[:_TOP_BRANDS_N]
+    all_years_in_data = sorted(year_counts.keys())
+    heatmap_years = all_years_in_data[-_TOP_YEARS_N:] if all_years_in_data else []
+    brand_year_matrix = {
+        "brands": top_brands,
+        "years": heatmap_years,
+        "matrix": [
+            [brand_year_raw[b].get(yr, 0) for yr in heatmap_years]
+            for b in top_brands
+        ],
+    }
+
+    # ── Top concepts via TopicAnalyzer ────────────────────────────────────────
+    top_concepts: list[dict] = []
+    try:
+        result = _topic_analyzer.top_topics(domain_id, top_n=30)
+        top_concepts = result.get("topics", [])
+    except Exception:
+        pass  # no concepts if domain has no enriched data
+
+    total_concepts = len(top_concepts)
+
+    # ── Top entities by citation count ────────────────────────────────────────
+    top_entity_rows = (
+        db.query(
+            models.RawEntity.id,
+            models.RawEntity.entity_name,
+            models.RawEntity.brand_capitalized,
+            models.RawEntity.enrichment_citation_count,
+            models.RawEntity.enrichment_source,
+        )
+        .filter(models.RawEntity.enrichment_status == "completed")
+        .order_by(models.RawEntity.enrichment_citation_count.desc())
+        .limit(10)
+        .all()
+    )
+    top_entities = [
+        {
+            "id": r.id,
+            "entity_name": r.entity_name,
+            "brand": r.brand_capitalized,
+            "citation_count": r.enrichment_citation_count or 0,
+            "source": r.enrichment_source,
+        }
+        for r in top_entity_rows
+    ]
+
+    return {
+        "domain_id": domain_id,
+        "kpis": {
+            "total_entities":  total_entities,
+            "enriched_count":  enriched_count,
+            "enrichment_pct":  enrichment_pct,
+            "avg_citations":   avg_citations,
+            "total_concepts":  total_concepts,
+        },
+        "entities_by_year":   entities_by_year,
+        "brand_year_matrix":  brand_year_matrix,
+        "top_concepts":       top_concepts,
+        "top_entities":       top_entities,
+    }
 
 
 # ── Global stats and lookup endpoints ────────────────────────────────────────

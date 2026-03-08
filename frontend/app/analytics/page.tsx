@@ -5,6 +5,7 @@ import Link from "next/link";
 import { PageHeader, StatCard, Badge } from "../components/ui";
 import { useDomain } from "../contexts/DomainContext";
 import { apiFetch } from "@/lib/api";
+import ConceptCloud from "../components/ConceptCloud";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -93,46 +94,6 @@ function CitationBar({ label, value, max }: { label: string; value: number; max:
                 />
             </div>
             <span className="w-8 shrink-0 text-xs font-semibold text-gray-700 dark:text-gray-300">{value}</span>
-        </div>
-    );
-}
-
-// ─── Concept Cloud ─────────────────────────────────────────────────────────────
-
-function ConceptCloud({ concepts }: { concepts: { concept: string; count: number }[] }) {
-    if (!concepts.length) return (
-        <div className="flex h-32 items-center justify-center text-sm text-gray-400 dark:text-gray-500">
-            No concepts extracted yet. Run enrichment to populate this view.
-        </div>
-    );
-
-    const maxCount = Math.max(...concepts.map((c) => c.count));
-    const palette = [
-        "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20",
-        "text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10 hover:bg-violet-100 dark:hover:bg-violet-500/20",
-        "text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-50 dark:bg-fuchsia-500/10 hover:bg-fuchsia-100 dark:hover:bg-fuchsia-500/20",
-        "text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-500/10 hover:bg-cyan-100 dark:hover:bg-cyan-500/20",
-        "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20",
-        "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20",
-    ];
-
-    return (
-        <div className="flex flex-wrap gap-2">
-            {concepts.map((c, i) => {
-                const ratio = c.count / maxCount;
-                const size = ratio > 0.75 ? "text-base px-3 py-1.5" : ratio > 0.4 ? "text-sm px-2.5 py-1" : "text-xs px-2 py-0.5";
-                const colorClass = palette[i % palette.length];
-                return (
-                    <span
-                        key={c.concept}
-                        className={`inline-flex cursor-default items-center gap-1 rounded-full font-medium transition-colors ${size} ${colorClass}`}
-                        title={`${c.count} record${c.count !== 1 ? "s" : ""}`}
-                    >
-                        {c.concept}
-                        <span className="opacity-60">·{c.count}</span>
-                    </span>
-                );
-            })}
         </div>
     );
 }
@@ -398,6 +359,30 @@ export default function AnalyticsPage() {
                     className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 transition-colors flex-shrink-0"
                 >
                     Open Calculator
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                </Link>
+            </div>
+
+            {/* Executive Dashboard CTA */}
+            <div className="flex items-center justify-between rounded-xl border border-purple-200 bg-purple-50 px-5 py-3.5 dark:border-purple-900/40 dark:bg-purple-900/10">
+                <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400">
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6" />
+                        </svg>
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium text-purple-900 dark:text-purple-200">Executive Dashboard</p>
+                        <p className="text-xs text-purple-600 dark:text-purple-400">KPI heatmap, impact timeline, concept cloud and top entities — full knowledge portfolio at a glance</p>
+                    </div>
+                </div>
+                <Link
+                    href="/analytics/dashboard"
+                    className="flex items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 transition-colors flex-shrink-0"
+                >
+                    Open Dashboard
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
