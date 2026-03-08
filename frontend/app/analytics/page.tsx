@@ -380,6 +380,30 @@ export default function AnalyticsPage() {
                 </Link>
             </div>
 
+            {/* ROI Calculator CTA */}
+            <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-3.5 dark:border-emerald-900/40 dark:bg-emerald-900/10">
+                <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
+                        </svg>
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium text-emerald-900 dark:text-emerald-200">ROI Calculator</p>
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400">Monte Carlo I+D projection — adoption uncertainty, break-even probability and year-by-year ROI trajectory</p>
+                    </div>
+                </div>
+                <Link
+                    href="/analytics/roi"
+                    className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 transition-colors flex-shrink-0"
+                >
+                    Open Calculator
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                </Link>
+            </div>
+
             {/* ═══ SECTION 2: AI Knowledge Hub — Predictive Enrichment ═══════════ */}
             <SectionDivider label="UKIP Knowledge Hub — Semantic Enrichment" />
 

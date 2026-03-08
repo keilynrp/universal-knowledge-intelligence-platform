@@ -41,6 +41,7 @@ from backend.encryption import encrypt, decrypt
 from backend.llm_agent import resolve_canonical_name
 from backend.analyzers.topic_modeling import TopicAnalyzer
 from backend.analyzers.correlation import CorrelationAnalyzer
+from backend.analyzers.roi_calculator import ROIParams, simulate as _roi_simulate
 from backend.olap import olap_engine
 from backend.schema_registry import registry, DomainSchema
 from backend import report_builder as _report_builder
@@ -661,6 +662,52 @@ def cube_export(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="cube_{domain_id}_{dimension}.xlsx"'},
     )
+
+# ── ROI Calculator ───────────────────────────────────────────────────────────
+
+class _ROIRequest(BaseModel):
+    investment:         float = Field(..., gt=0, description="Initial investment amount")
+    horizon_years:      int   = Field(5, ge=1, le=20, description="Projection years")
+    base_adoption_rate: float = Field(0.15, ge=0.0, le=1.0, description="Expected annual adoption rate")
+    adoption_volatility:float = Field(0.05, ge=0.0, le=1.0, description="Adoption rate std-dev (uncertainty)")
+    revenue_per_unit:   float = Field(..., gt=0, description="Revenue per adopted unit per year")
+    market_size:        int   = Field(..., ge=1, description="Total addressable market (units)")
+    annual_cost:        float = Field(0.0, ge=0.0, description="Annual operating cost")
+    n_simulations:      int   = Field(2000, ge=100, le=10_000)
+
+
+@app.post("/analytics/roi", tags=["analytics"])
+def run_roi_simulation(
+    payload: _ROIRequest,
+    _: models.User = Depends(get_current_user),
+):
+    """Run a Monte Carlo ROI projection for an R&D investment scenario."""
+    params = ROIParams(
+        investment=payload.investment,
+        horizon_years=payload.horizon_years,
+        base_adoption_rate=payload.base_adoption_rate,
+        adoption_volatility=payload.adoption_volatility,
+        revenue_per_unit=payload.revenue_per_unit,
+        market_size=payload.market_size,
+        annual_cost=payload.annual_cost,
+        n_simulations=payload.n_simulations,
+    )
+    result = _roi_simulate(params)
+    return {
+        "p5":  result.p5,  "p10": result.p10, "p25": result.p25,
+        "p50": result.p50, "p75": result.p75, "p90": result.p90, "p95": result.p95,
+        "net_p10": result.net_p10, "net_p50": result.net_p50, "net_p90": result.net_p90,
+        "pessimistic_roi":  result.pessimistic_roi,
+        "base_roi":         result.base_roi,
+        "optimistic_roi":   result.optimistic_roi,
+        "breakeven_prob":   result.breakeven_prob,
+        "breakeven_year":   result.breakeven_year,
+        "trajectory":       [{"year": t.year, "optimistic": t.optimistic, "median": t.median, "pessimistic": t.pessimistic} for t in result.trajectory],
+        "histogram":        result.histogram,
+        "n_simulations":    result.n_simulations,
+        "params":           result.params,
+    }
+
 
 # ── Topic Modeling & Correlation endpoints ───────────────────────────────────
 
