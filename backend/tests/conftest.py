@@ -142,6 +142,9 @@ _TABLES_TO_CLEAN = [
     "harmonization_logs",
     "harmonization_change_records",
     "authority_records",
+    "annotations",
+    "notification_settings",
+    "branding_settings",
     # Note: "users" is intentionally excluded — the super_admin/editor/viewer
     # test accounts must persist across the entire test session.
 ]

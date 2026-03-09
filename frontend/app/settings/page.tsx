@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useLanguage } from "../contexts/LanguageContext";
 import { useTheme } from "../contexts/ThemeContext";
+import { useBranding } from "../contexts/BrandingContext";
 import type { Language } from "../i18n/translations";
 type Theme = "light" | "dark";
 import { useAuth } from "../contexts/AuthContext";
@@ -11,7 +12,7 @@ import { apiFetch } from "@/lib/api";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-type Tab = "preferences" | "account" | "users" | "webhooks";
+type Tab = "preferences" | "account" | "users" | "webhooks" | "notifications" | "branding";
 
 type UserRole = "super_admin" | "admin" | "editor" | "viewer";
 
@@ -56,7 +57,9 @@ export default function SettingsPage() {
         { id: "preferences", label: "Preferences" },
         { id: "account",     label: "Account" },
         ...(isSuperAdmin ? [{ id: "users", label: "User Management" }] : []),
-        ...(isAdmin ? [{ id: "webhooks", label: "Webhooks" }] : []),
+        ...(isAdmin ? [{ id: "webhooks",      label: "Webhooks" }] : []),
+        ...(isAdmin ? [{ id: "notifications", label: "Notifications" }] : []),
+        ...(isAdmin ? [{ id: "branding",      label: "Branding" }] : []),
     ];
 
     const [tab, setTab] = useState<Tab>("preferences");
@@ -84,9 +87,11 @@ export default function SettingsPage() {
                     t={t}
                 />
             )}
-            {tab === "account"   && <AccountTab user={user} toast={toast} />}
-            {tab === "users"     && isSuperAdmin && <UsersTab currentUserId={user?.id ?? 0} toast={toast} />}
-            {tab === "webhooks"  && isAdmin && <WebhooksTab toast={toast} />}
+            {tab === "account"        && <AccountTab user={user} toast={toast} />}
+            {tab === "users"          && isSuperAdmin && <UsersTab currentUserId={user?.id ?? 0} toast={toast} />}
+            {tab === "webhooks"       && isAdmin && <WebhooksTab toast={toast} />}
+            {tab === "notifications"  && isAdmin && <NotificationsTab toast={toast} />}
+            {tab === "branding"       && isAdmin && <BrandingTab toast={toast} />}
         </div>
     );
 }
@@ -822,3 +827,241 @@ function WebhooksTab({ toast }: { toast: (msg: string, v?: "success" | "error" |
         </div>
     );
 }
+
+// ── Tab: Notifications ────────────────────────────────────────────────────────
+
+function NotificationsTab({ toast }: { toast: (msg: string, v?: any) => void }) {
+    const inputClass = "h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white";
+
+    const [form, setForm] = useState({
+        smtp_host: "", smtp_port: 587, smtp_user: "", smtp_password: "",
+        from_email: "", recipient_email: "", enabled: false,
+        notify_on_enrichment_batch: true, notify_on_authority_confirm: true,
+    });
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [testing, setTesting] = useState(false);
+
+    useEffect(() => {
+        apiFetch("/notifications/settings").then(async r => {
+            if (r.ok) {
+                const d = await r.json();
+                setForm(f => ({ ...f, ...d, smtp_password: "" }));
+            }
+        }).finally(() => setLoading(false));
+    }, []);
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const payload: Record<string, any> = { ...form };
+            if (!payload.smtp_password) delete payload.smtp_password;
+            const r = await apiFetch("/notifications/settings", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            if (!r.ok) throw new Error((await r.json()).detail);
+            toast("Notification settings saved", "success");
+        } catch (e: any) {
+            toast(e.message || "Save failed", "error");
+        } finally { setSaving(false); }
+    };
+
+    const handleTest = async () => {
+        setTesting(true);
+        try {
+            const r = await apiFetch("/notifications/test", { method: "POST" });
+            const d = await r.json();
+            if (d.sent) toast("Test email sent successfully", "success");
+            else toast("Email not sent — check settings and ensure alerts are enabled", "warning");
+        } catch { toast("Test failed", "error"); }
+        finally { setTesting(false); }
+    };
+
+    const setField = (k: keyof typeof form, v: any) => setForm(prev => ({ ...prev, [k]: v }));
+
+    if (loading) return <div className="py-10 text-center text-sm text-gray-400">Loading…</div>;
+
+    return (
+        <div className="space-y-4">
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+                <h3 className="mb-4 text-base font-semibold text-gray-900 dark:text-white">SMTP Configuration</h3>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {([
+                        { label: "SMTP Host", key: "smtp_host", type: "text", placeholder: "smtp.gmail.com" },
+                        { label: "SMTP Port", key: "smtp_port", type: "number", placeholder: "587" },
+                        { label: "SMTP User", key: "smtp_user", type: "text", placeholder: "user@example.com" },
+                        { label: "SMTP Password", key: "smtp_password", type: "password", placeholder: "Leave blank to keep existing" },
+                        { label: "From Email", key: "from_email", type: "email", placeholder: "noreply@example.com" },
+                        { label: "Recipient Email", key: "recipient_email", type: "email", placeholder: "admin@example.com" },
+                    ] as const).map(({ label, key, type, placeholder }) => (
+                        <div key={key}>
+                            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">{label}</label>
+                            <input
+                                type={type}
+                                className={inputClass}
+                                value={String(form[key])}
+                                onChange={e => setField(key, type === "number" ? Number(e.target.value) : e.target.value)}
+                                placeholder={placeholder}
+                            />
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+                <h3 className="mb-4 text-base font-semibold text-gray-900 dark:text-white">Alert Preferences</h3>
+                <div className="space-y-3">
+                    {([
+                        { label: "Enable email alerts", key: "enabled" },
+                        { label: "Notify on enrichment batch complete", key: "notify_on_enrichment_batch" },
+                        { label: "Notify on authority record confirmed", key: "notify_on_authority_confirm" },
+                    ] as const).map(({ label, key }) => (
+                        <label key={key} className="flex cursor-pointer items-center gap-3">
+                            <div
+                                onClick={() => setField(key, !form[key])}
+                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${form[key] ? "bg-indigo-600" : "bg-gray-300 dark:bg-gray-600"}`}
+                            >
+                                <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${form[key] ? "translate-x-4" : "translate-x-1"}`} />
+                            </div>
+                            <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
+                        </label>
+                    ))}
+                </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+                <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                    {saving ? "Saving…" : "Save Settings"}
+                </button>
+                <button
+                    onClick={handleTest}
+                    disabled={testing}
+                    className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                >
+                    {testing ? "Sending…" : "Send Test Email"}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// ── Tab: Branding ─────────────────────────────────────────────────────────────
+
+function BrandingTab({ toast }: { toast: (msg: string, v?: any) => void }) {
+    const { branding, refreshBranding } = useBranding();
+    const inputClass = "h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white";
+
+    const [form, setForm] = useState({
+        platform_name: branding.platform_name,
+        logo_url:      branding.logo_url,
+        accent_color:  branding.accent_color,
+        footer_text:   branding.footer_text,
+    });
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        setForm({
+            platform_name: branding.platform_name,
+            logo_url:      branding.logo_url,
+            accent_color:  branding.accent_color,
+            footer_text:   branding.footer_text,
+        });
+    }, [branding]);
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const r = await apiFetch("/branding/settings", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(form),
+            });
+            if (!r.ok) {
+                const err = await r.json();
+                throw new Error(err.detail || "Save failed");
+            }
+            await refreshBranding();
+            toast("Branding updated", "success");
+        } catch (e: any) {
+            toast(e.message || "Save failed", "error");
+        } finally { setSaving(false); }
+    };
+
+    const fld = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+        setForm(prev => ({ ...prev, [k]: e.target.value }));
+
+    return (
+        <div className="space-y-4">
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+                <h3 className="mb-4 text-base font-semibold text-gray-900 dark:text-white">Platform Identity</h3>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                        <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">Platform Name</label>
+                        <input className={inputClass} value={form.platform_name} onChange={fld("platform_name")} placeholder="UKIP" />
+                    </div>
+                    <div>
+                        <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">Accent Color</label>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="color"
+                                value={form.accent_color}
+                                onChange={fld("accent_color")}
+                                className="h-10 w-12 cursor-pointer rounded-lg border border-gray-200 bg-white p-1 dark:border-gray-700 dark:bg-gray-800"
+                            />
+                            <input className={inputClass} value={form.accent_color} onChange={fld("accent_color")} placeholder="#6366f1" />
+                        </div>
+                    </div>
+                    <div className="sm:col-span-2">
+                        <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">Logo URL <span className="font-normal text-gray-400">(optional)</span></label>
+                        <input className={inputClass} value={form.logo_url} onChange={fld("logo_url")} placeholder="https://example.com/logo.png" />
+                        {form.logo_url && (
+                            <img src={form.logo_url} alt="Logo preview" className="mt-2 h-10 w-auto rounded object-contain" onError={e => (e.currentTarget.hidden = true)} />
+                        )}
+                    </div>
+                    <div className="sm:col-span-2">
+                        <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">Footer Text</label>
+                        <input className={inputClass} value={form.footer_text} onChange={fld("footer_text")} placeholder="Universal Knowledge Intelligence Platform" />
+                    </div>
+                </div>
+            </div>
+
+            {/* Live preview */}
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+                <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Preview</h3>
+                <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-800/50">
+                    <div
+                        className="flex h-8 w-8 items-center justify-center rounded-lg"
+                        style={{ backgroundColor: form.accent_color }}
+                    >
+                        {form.logo_url ? (
+                            <img src={form.logo_url} alt="" className="h-5 w-5 object-contain" onError={e => (e.currentTarget.hidden = true)} />
+                        ) : (
+                            <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                            </svg>
+                        )}
+                    </div>
+                    <div>
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">{form.platform_name || "UKIP"}</p>
+                        <p className="text-xs text-gray-400">{form.footer_text}</p>
+                    </div>
+                </div>
+            </div>
+
+            <button
+                onClick={handleSave}
+                disabled={saving}
+                className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+                {saving ? "Saving…" : "Save Branding"}
+            </button>
+        </div>
+    );
+}
+

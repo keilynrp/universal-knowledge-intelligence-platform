@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useSidebar } from "./SidebarProvider";
 import { useLanguage } from "../contexts/LanguageContext";
+import { useBranding } from "../contexts/BrandingContext";
 
 interface NavItem {
   label: string;
@@ -192,6 +193,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { collapsed, toggle, mobileOpen, closeMobile } = useSidebar();
   const { t } = useLanguage();
+  const { branding } = useBranding();
 
   // On desktop: fixed sidebar, collapsed or expanded
   // On mobile: full-width drawer, hidden until mobileOpen
@@ -221,7 +223,7 @@ export default function Sidebar() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
                 </svg>
               </div>
-              <span className="text-base font-semibold text-gray-900 dark:text-white">UKIP</span>
+              <span className="text-base font-semibold text-gray-900 dark:text-white">{branding.platform_name}</span>
             </Link>
           )}
           {/* Desktop collapse toggle — hidden on mobile */}

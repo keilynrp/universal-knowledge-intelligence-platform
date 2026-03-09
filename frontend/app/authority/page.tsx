@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Fragment } from "react";
 import { PageHeader, TabNav, Badge, useToast } from "../components/ui";
 import { useDomain } from "../contexts/DomainContext";
 import { apiFetch } from "@/lib/api";
+import AnnotationThread from "../components/AnnotationThread";
 
 // ── Shared types ────────────────────────────────────────────────────────────
 
@@ -93,6 +94,7 @@ function ReviewQueueTab({ activeDomain }: { activeDomain: any }) {
     const [batchLimit, setBatchLimit] = useState(20);
     const [resolving, setResolving] = useState(false);
     const [resolveResult, setResolveResult] = useState<string | null>(null);
+    const [expandedId, setExpandedId] = useState<number | null>(null);
 
     // Auto-select first string field for batch resolve
     useEffect(() => {
@@ -394,11 +396,13 @@ function ReviewQueueTab({ activeDomain }: { activeDomain: any }) {
                                     <th className="px-4 py-2">Confidence</th>
                                     <th className="px-4 py-2">Field</th>
                                     <th className="px-4 py-2">Status</th>
+                                    <th className="px-4 py-2 w-10"></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                                 {records.map(rec => (
-                                    <tr key={rec.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                    <Fragment key={rec.id}>
+                                    <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                                         {statusFilter === "pending" && (
                                             <td className="px-4 py-2.5">
                                                 <input
@@ -457,7 +461,26 @@ function ReviewQueueTab({ activeDomain }: { activeDomain: any }) {
                                                 {rec.status}
                                             </Badge>
                                         </td>
+                                        <td className="px-4 py-2.5">
+                                            <button
+                                                onClick={() => setExpandedId(expandedId === rec.id ? null : rec.id)}
+                                                className={`rounded p-1 transition-colors ${expandedId === rec.id ? "text-indigo-600 dark:text-indigo-400" : "text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400"}`}
+                                                title="Toggle comments"
+                                            >
+                                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                                </svg>
+                                            </button>
+                                        </td>
                                     </tr>
+                                    {expandedId === rec.id && (
+                                        <tr>
+                                            <td colSpan={statusFilter === "pending" ? 8 : 7} className="px-6 py-4 bg-gray-50 dark:bg-gray-800/30 border-t border-gray-100 dark:border-gray-800">
+                                                <AnnotationThread authorityId={rec.id} />
+                                            </td>
+                                        </tr>
+                                    )}
+                                    </Fragment>
                                 ))}
                             </tbody>
                         </table>

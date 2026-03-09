@@ -272,3 +272,54 @@ class AuditLog(Base):
     user_id     = Column(Integer, nullable=True)
     details     = Column(Text, nullable=True)         # JSON blob with extra context
     created_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+
+# ── Sprint 42: Collaborative Annotations ────────────────────────────────────
+
+class Annotation(Base):
+    """
+    Threaded comment attached to a RawEntity or AuthorityRecord.
+    parent_id enables one-level reply threading.
+    author_name is denormalized for display without a JOIN.
+    """
+    __tablename__ = "annotations"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    entity_id    = Column(Integer, nullable=True, index=True)    # FK raw_entities.id
+    authority_id = Column(Integer, nullable=True, index=True)    # FK authority_records.id
+    parent_id    = Column(Integer, nullable=True)                # FK annotations.id (replies)
+    author_id    = Column(Integer, nullable=False)               # FK users.id
+    author_name  = Column(String, nullable=False)               # denormalized
+    content      = Column(Text, nullable=False)
+    created_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                          onupdate=lambda: datetime.now(timezone.utc))
+
+
+# ── Sprint 43: Email Notification Settings (singleton, id=1) ────────────────
+
+class NotificationSettings(Base):
+    __tablename__ = "notification_settings"
+
+    id                         = Column(Integer, primary_key=True, default=1)
+    smtp_host                  = Column(String, default="")
+    smtp_port                  = Column(Integer, default=587)
+    smtp_user                  = Column(String, default="")
+    smtp_password              = Column(String, default="")  # stored encrypted via Fernet
+    from_email                 = Column(String, default="")
+    recipient_email            = Column(String, default="")
+    enabled                    = Column(Boolean, default=False)
+    notify_on_enrichment_batch = Column(Boolean, default=True)
+    notify_on_authority_confirm= Column(Boolean, default=True)
+
+
+# ── Sprint 44: Custom Branding Settings (singleton, id=1) ───────────────────
+
+class BrandingSettings(Base):
+    __tablename__ = "branding_settings"
+
+    id            = Column(Integer, primary_key=True, default=1)
+    platform_name = Column(String, default="UKIP")
+    logo_url      = Column(String, default="")
+    accent_color  = Column(String, default="#6366f1")   # indigo-500
+    footer_text   = Column(String, default="Universal Knowledge Intelligence Platform")

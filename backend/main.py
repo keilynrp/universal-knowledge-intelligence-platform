@@ -23,14 +23,17 @@ from backend.routers.limiter import limiter
 from backend.routers import (
     ai_rag,
     analytics,
+    annotations,
     auth_users,
     authority,
+    branding,
     demo,
     disambiguation,
     domains,
     entities,
     harmonization,
     ingest,
+    notifications,
     reports,
     stores,
     webhooks,
@@ -156,3 +159,6 @@ app.include_router(ai_rag.router)
 app.include_router(reports.router)
 app.include_router(webhooks.router)
 app.include_router(demo.router)
+app.include_router(annotations.router)
+app.include_router(notifications.router)
+app.include_router(branding.router)

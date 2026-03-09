@@ -7,6 +7,7 @@ import { LanguageProvider } from "./contexts/LanguageContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { DomainProvider } from "./contexts/DomainContext";
 import { AuthProvider } from "./contexts/AuthContext";
+import { BrandingProvider } from "./contexts/BrandingContext";
 import { ToastProvider } from "./components/ui/Toast";
 
 const geistSans = Geist({
@@ -52,15 +53,17 @@ export default function RootLayout({
       >
         <ThemeProvider>
           <AuthProvider>
-            <LanguageProvider>
-              <DomainProvider>
-                <SidebarProvider>
-                  <ToastProvider>
-                    <LayoutContent>{children}</LayoutContent>
-                  </ToastProvider>
-                </SidebarProvider>
-              </DomainProvider>
-            </LanguageProvider>
+            <BrandingProvider>
+              <LanguageProvider>
+                <DomainProvider>
+                  <SidebarProvider>
+                    <ToastProvider>
+                      <LayoutContent>{children}</LayoutContent>
+                    </ToastProvider>
+                  </SidebarProvider>
+                </DomainProvider>
+              </LanguageProvider>
+            </BrandingProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useTheme } from "../contexts/ThemeContext";
 import { useDomain } from "../contexts/DomainContext";
+import { useBranding } from "../contexts/BrandingContext";
 import { useSidebar } from "./SidebarProvider";
 import NotificationBell from "./NotificationBell";
 import UserMenu from "./UserMenu";
@@ -24,6 +25,7 @@ export default function Header() {
   const pathname = usePathname();
   const { theme, toggleTheme } = useTheme();
   const { domains, activeDomainId, setActiveDomainId, isLoading } = useDomain();
+  const { branding } = useBranding();
   const { toggleMobile } = useSidebar();
 
   const page = pageTitles[pathname] || { title: "Dashboard", subtitle: "" };
@@ -47,7 +49,7 @@ export default function Header() {
               {page.title}
             </h1>
             <p className="hidden text-xs text-gray-500 dark:text-gray-400 sm:block">
-              {page.subtitle}
+              {page.subtitle || branding.platform_name}
             </p>
           </div>
         </div>

@@ -1,3 +1,4 @@
+from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -276,3 +277,76 @@ class WebhookResponse(BaseModel):
     last_status:       Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ── Sprint 42: Annotations ────────────────────────────────────────────────────
+
+class AnnotationCreate(BaseModel):
+    entity_id:    Optional[int] = None
+    authority_id: Optional[int] = None
+    parent_id:    Optional[int] = None
+    content:      str = Field(min_length=1, max_length=5000)
+
+
+class AnnotationUpdate(BaseModel):
+    content: str = Field(min_length=1, max_length=5000)
+
+
+class AnnotationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id:           int
+    entity_id:    Optional[int] = None
+    authority_id: Optional[int] = None
+    parent_id:    Optional[int] = None
+    author_id:    int
+    author_name:  str
+    content:      str
+    created_at:   datetime
+    updated_at:   datetime
+
+
+# ── Sprint 43: Notification Settings ─────────────────────────────────────────
+
+class NotificationSettingsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    smtp_host:                  str
+    smtp_port:                  int
+    smtp_user:                  str
+    from_email:                 str
+    recipient_email:            str
+    enabled:                    bool
+    notify_on_enrichment_batch: bool
+    notify_on_authority_confirm: bool
+    # smtp_password intentionally omitted
+
+
+class NotificationSettingsUpdate(BaseModel):
+    smtp_host:                   Optional[str]  = None
+    smtp_port:                   Optional[int]  = Field(None, ge=1, le=65535)
+    smtp_user:                   Optional[str]  = None
+    smtp_password:               Optional[str]  = None   # plain; encrypted before storage
+    from_email:                  Optional[str]  = None
+    recipient_email:             Optional[str]  = None
+    enabled:                     Optional[bool] = None
+    notify_on_enrichment_batch:  Optional[bool] = None
+    notify_on_authority_confirm: Optional[bool] = None
+
+
+# ── Sprint 44: Branding Settings ─────────────────────────────────────────────
+
+class BrandingSettingsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    platform_name: str
+    logo_url:      str
+    accent_color:  str
+    footer_text:   str
+
+
+class BrandingSettingsUpdate(BaseModel):
+    platform_name: Optional[str] = Field(None, min_length=1, max_length=80)
+    logo_url:      Optional[str] = Field(None, max_length=500)
+    accent_color:  Optional[str] = Field(None, pattern=r"^#[0-9a-fA-F]{6}$")
+    footer_text:   Optional[str] = Field(None, max_length=200)
