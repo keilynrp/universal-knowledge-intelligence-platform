@@ -266,11 +266,17 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id          = Column(Integer, primary_key=True, index=True)
-    action      = Column(String, index=True)          # e.g. "upload", "entity.delete", "harmonization.apply"
+    action      = Column(String, index=True)          # CREATE | UPDATE | DELETE (Sprint 51+)
     entity_type = Column(String, nullable=True)       # "entity", "authority_record", "rule", …
     entity_id   = Column(Integer, nullable=True)
     user_id     = Column(Integer, nullable=True)
     details     = Column(Text, nullable=True)         # JSON blob with extra context
+    # Sprint 51 — HTTP-level columns added via migration
+    username    = Column(String, nullable=True, index=True)  # JWT "sub" claim
+    endpoint    = Column(String, nullable=True)              # /entities/42
+    method      = Column(String, nullable=True)              # POST | PUT | DELETE
+    status_code = Column(Integer, nullable=True)
+    ip_address  = Column(String, nullable=True)
     created_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
 

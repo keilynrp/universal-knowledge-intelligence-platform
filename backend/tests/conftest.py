@@ -49,6 +49,11 @@ models.Base.metadata.create_all(bind=test_engine)
 from backend.database import get_db  # noqa: E402
 app.dependency_overrides[get_db] = override_get_db
 
+# Override the session factory used by AuditMiddleware so it writes to the
+# same in-memory DB that tests read from via override_get_db.
+import backend.audit as _audit_module  # noqa: E402
+_audit_module.SessionLocal = TestingSessionLocal
+
 # Seed the super_admin in the in-memory test DB so the login fixture works.
 # (The lifespan bootstrap uses database.SessionLocal which hits the real DB;
 #  this seeds the in-memory DB that test requests use via override_get_db.)
@@ -147,6 +152,7 @@ _TABLES_TO_CLEAN = [
     "branding_settings",
     "artifact_templates",
     "analysis_contexts",
+    "audit_logs",
     # Note: "users" is intentionally excluded — the super_admin/editor/viewer
     # test accounts must persist across the entire test session.
 ]

@@ -25,6 +25,7 @@ from backend.routers import (
     analytics,
     annotations,
     artifacts,
+    audit_log,
     auth_users,
     authority,
     branding,
@@ -87,6 +88,16 @@ with database.engine.connect() as _conn:
         _cols = [c["name"] for c in _inspector.get_columns("raw_entities")]
         if "source" not in _cols:
             _conn.execute(text("ALTER TABLE raw_entities ADD COLUMN source VARCHAR DEFAULT 'user'"))
+            _conn.commit()
+
+    if "audit_logs" in _inspector.get_table_names():
+        _cols = [c["name"] for c in _inspector.get_columns("audit_logs")]
+        if "username" not in _cols:
+            _conn.execute(text("ALTER TABLE audit_logs ADD COLUMN username VARCHAR"))
+            _conn.execute(text("ALTER TABLE audit_logs ADD COLUMN endpoint VARCHAR"))
+            _conn.execute(text("ALTER TABLE audit_logs ADD COLUMN method VARCHAR"))
+            _conn.execute(text("ALTER TABLE audit_logs ADD COLUMN status_code INTEGER"))
+            _conn.execute(text("ALTER TABLE audit_logs ADD COLUMN ip_address VARCHAR"))
             _conn.commit()
 
 
@@ -176,6 +187,9 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
+from backend.audit import AuditMiddleware  # noqa: E402 — after app init
+app.add_middleware(AuditMiddleware)
+
 _cors_origins_env = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3004,http://localhost:3000")
 ALLOWED_ORIGINS = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
 
@@ -208,3 +222,4 @@ app.include_router(notifications.router)
 app.include_router(branding.router)
 app.include_router(artifacts.router)
 app.include_router(context.router)
+app.include_router(audit_log.router)
