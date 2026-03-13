@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  # The core backend application
+  backend:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile  # You will need to create a Dockerfile for production
+    ports:
+      - "8000:8000"
+    environment:
+      # Switch to PostgreSQL backend defined below (Sprint 64)
+      - DATABASE_URL=postgresql+psycopg2://ukip:ukip_password@db:5432/ukip
+      - DB_POOL_SIZE=20
+      - DB_MAX_OVERFLOW=10
+    depends_on:
+      - db
+    volumes:
+      - ./backend:/app
+
+  # Production-grade PostgreSQL Database (Sprint 64)
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ukip
+      POSTGRES_PASSWORD: ukip_password
+      POSTGRES_DB: ukip
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
