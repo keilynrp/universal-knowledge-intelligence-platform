@@ -51,6 +51,28 @@ def get_my_profile(current_user: models.User = Depends(get_current_user)):
     return current_user
 
 
+@router.patch("/users/me/profile", response_model=schemas.UserResponse, tags=["users"])
+def update_my_profile(
+    payload: schemas.ProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Update the current user's email, display name, and/or bio."""
+    update_data = payload.model_dump(exclude_unset=True)
+    if "email" in update_data and update_data["email"] is not None:
+        conflict = db.query(models.User).filter(
+            models.User.email == update_data["email"],
+            models.User.id != current_user.id,
+        ).first()
+        if conflict:
+            raise HTTPException(status_code=409, detail="Email already in use")
+    for field, value in update_data.items():
+        setattr(current_user, field, value)
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
 @router.post("/users/me/password", tags=["users"])
 def change_my_password(
     payload: schemas.PasswordChange,

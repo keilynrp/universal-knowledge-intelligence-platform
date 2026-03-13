@@ -10,6 +10,8 @@ interface User {
   email: string | null;
   is_active: boolean;
   avatar_url?: string | null;
+  display_name?: string | null;
+  bio?: string | null;
 }
 
 interface AuthContextType {

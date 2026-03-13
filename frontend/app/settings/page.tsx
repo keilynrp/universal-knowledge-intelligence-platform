@@ -180,10 +180,55 @@ function PreferencesTab({
 // ── Tab: Account ─────────────────────────────────────────────────────────────
 
 function AccountTab({ user, updateAvatarUrl, toast }: { user: any; updateAvatarUrl: (url: string | null) => void; toast: (msg: string, v?: any) => void }) {
+    // ── Profile edit state ────────────────────────────────────────────────────
+    const { refreshUser } = useAuth();
+    const [displayName, setDisplayName] = useState(user?.display_name ?? "");
+    const [email, setEmail]             = useState(user?.email ?? "");
+    const [bio, setBio]                 = useState(user?.bio ?? "");
+    const [profileSaving, setProfileSaving] = useState(false);
+
+    // Keep form in sync if user object updates (e.g. after avatar upload refreshes user)
+    useEffect(() => {
+        setDisplayName(user?.display_name ?? "");
+        setEmail(user?.email ?? "");
+        setBio(user?.bio ?? "");
+    }, [user?.display_name, user?.email, user?.bio]);
+
+    async function handleSaveProfile(e: React.FormEvent) {
+        e.preventDefault();
+        setProfileSaving(true);
+        try {
+            const body: Record<string, string> = {};
+            if (displayName !== (user?.display_name ?? "")) body.display_name = displayName;
+            if (email !== (user?.email ?? ""))               body.email        = email;
+            if (bio !== (user?.bio ?? ""))                   body.bio          = bio;
+            if (Object.keys(body).length === 0) {
+                toast("No changes to save", "info");
+                return;
+            }
+            const res = await apiFetch("/users/me/profile", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || "Failed to save profile");
+            }
+            await refreshUser();
+            toast("Profile updated successfully", "success");
+        } catch (err: any) {
+            toast(err.message || "Error saving profile", "error");
+        } finally {
+            setProfileSaving(false);
+        }
+    }
+
+    // ── Password change state ─────────────────────────────────────────────────
     const [currentPw, setCurrentPw] = useState("");
     const [newPw, setNewPw] = useState("");
     const [confirmPw, setConfirmPw] = useState("");
-    const [saving, setSaving] = useState(false);
+    const [pwSaving, setPwSaving] = useState(false);
 
     async function handleChangePassword(e: React.FormEvent) {
         e.preventDefault();
@@ -195,7 +240,7 @@ function AccountTab({ user, updateAvatarUrl, toast }: { user: any; updateAvatarU
             toast("Passwords do not match", "error");
             return;
         }
-        setSaving(true);
+        setPwSaving(true);
         try {
             const res = await apiFetch("/users/me/password", {
                 method: "POST",
@@ -213,7 +258,7 @@ function AccountTab({ user, updateAvatarUrl, toast }: { user: any; updateAvatarU
         } catch (err: any) {
             toast(err.message || "Error changing password", "error");
         } finally {
-            setSaving(false);
+            setPwSaving(false);
         }
     }
 
@@ -233,27 +278,83 @@ function AccountTab({ user, updateAvatarUrl, toast }: { user: any; updateAvatarU
                 />
             </div>
 
-            {/* Profile info */}
+            {/* Profile info — editable */}
             <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                <h3 className="mb-4 text-base font-semibold text-gray-900 dark:text-white">Profile</h3>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    {[
-                        { label: "Username", value: user?.username },
-                        { label: "Email", value: user?.email || "—" },
-                        { label: "Role", value: user?.role },
-                    ].map(({ label, value }) => (
-                        <div key={label} className="flex flex-col gap-1 rounded-xl border border-gray-100 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-800/50">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{label}</span>
-                            {label === "Role" ? (
-                                <Badge variant={ROLE_VARIANTS[value as UserRole] ?? "default"}>
-                                    {ROLE_LABELS[value as UserRole] ?? value}
-                                </Badge>
-                            ) : (
-                                <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{value}</span>
-                            )}
-                        </div>
-                    ))}
+                <h3 className="mb-1 text-base font-semibold text-gray-900 dark:text-white">Profile</h3>
+                <p className="mb-5 text-sm text-gray-500 dark:text-gray-400">Update your display name, email address, and bio.</p>
+
+                {/* Read-only fields */}
+                <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1 rounded-xl border border-gray-100 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-800/50">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Username</span>
+                        <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{user?.username}</span>
+                    </div>
+                    <div className="flex flex-col gap-1 rounded-xl border border-gray-100 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-800/50">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Role</span>
+                        <Badge variant={ROLE_VARIANTS[user?.role as UserRole] ?? "default"}>
+                            {ROLE_LABELS[user?.role as UserRole] ?? user?.role}
+                        </Badge>
+                    </div>
                 </div>
+
+                {/* Editable fields */}
+                <form onSubmit={handleSaveProfile} className="space-y-4 max-w-lg">
+                    <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Display name <span className="text-gray-400 font-normal">(optional)</span>
+                        </label>
+                        <input
+                            type="text"
+                            className={inputClass}
+                            value={displayName}
+                            onChange={e => setDisplayName(e.target.value)}
+                            maxLength={100}
+                            placeholder="Your full name or nickname"
+                            autoComplete="name"
+                        />
+                    </div>
+                    <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Email address
+                        </label>
+                        <input
+                            type="email"
+                            className={inputClass}
+                            value={email}
+                            onChange={e => setEmail(e.target.value)}
+                            maxLength={255}
+                            placeholder="you@example.com"
+                            autoComplete="email"
+                        />
+                    </div>
+                    <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Bio <span className="text-gray-400 font-normal">(max 500 chars)</span>
+                        </label>
+                        <textarea
+                            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white resize-none"
+                            rows={3}
+                            value={bio}
+                            onChange={e => setBio(e.target.value)}
+                            maxLength={500}
+                            placeholder="A short description about yourself…"
+                        />
+                        <p className="mt-1 text-right text-xs text-gray-400">{bio.length}/500</p>
+                    </div>
+                    <button
+                        type="submit"
+                        disabled={profileSaving}
+                        className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                    >
+                        {profileSaving && (
+                            <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                        )}
+                        {profileSaving ? "Saving…" : "Save Profile"}
+                    </button>
+                </form>
             </div>
 
             {/* Change password */}
@@ -305,16 +406,16 @@ function AccountTab({ user, updateAvatarUrl, toast }: { user: any; updateAvatarU
                     </div>
                     <button
                         type="submit"
-                        disabled={saving || !currentPw || !newPw || newPw !== confirmPw}
+                        disabled={pwSaving || !currentPw || !newPw || newPw !== confirmPw}
                         className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                     >
-                        {saving && (
+                        {pwSaving && (
                             <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                             </svg>
                         )}
-                        {saving ? "Saving…" : "Update Password"}
+                        {pwSaving ? "Saving…" : "Update Password"}
                     </button>
                 </form>
             </div>

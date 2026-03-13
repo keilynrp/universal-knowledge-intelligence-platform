@@ -202,6 +202,8 @@ class User(Base):
     failed_attempts = Column(Integer, default=0)
     locked_until    = Column(String, nullable=True)  # ISO datetime string; None = not locked
     avatar_url      = Column(Text, nullable=True)       # data URL (base64), Sprint 58
+    display_name    = Column(String(100), nullable=True)  # optional full name, Sprint 59
+    bio             = Column(Text, nullable=True)          # short bio, Sprint 59
 
 
 # ── Authority Resolution Layer ──────────────────────────────────────────────

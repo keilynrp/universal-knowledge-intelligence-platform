@@ -83,6 +83,13 @@ with database.engine.connect() as _conn:
             _conn.execute(text("ALTER TABLE users ADD COLUMN avatar_url TEXT"))
             _conn.commit()
 
+    if "users" in _inspector.get_table_names():
+        _cols = [c["name"] for c in _inspector.get_columns("users")]
+        if "display_name" not in _cols:
+            _conn.execute(text("ALTER TABLE users ADD COLUMN display_name VARCHAR(100)"))
+            _conn.execute(text("ALTER TABLE users ADD COLUMN bio TEXT"))
+            _conn.commit()
+
     if "authority_records" in _inspector.get_table_names():
         _cols = [c["name"] for c in _inspector.get_columns("authority_records")]
         if "resolution_status" not in _cols:

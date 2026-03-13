@@ -169,15 +169,24 @@ class UserUpdate(BaseModel):
 
 
 class UserResponse(BaseModel):
-    id:         int
-    username:   str
-    email:      Optional[str] = None
-    role:       str
-    is_active:  bool
-    avatar_url: Optional[str] = None
-    created_at: Optional[str] = None
+    id:           int
+    username:     str
+    email:        Optional[str] = None
+    role:         str
+    is_active:    bool
+    avatar_url:   Optional[str] = None
+    display_name: Optional[str] = None
+    bio:          Optional[str] = None
+    created_at:   Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ProfileUpdate(BaseModel):
+    """Self-service profile update — any authenticated user."""
+    email:        Optional[str] = Field(default=None, max_length=255)
+    display_name: Optional[str] = Field(default=None, max_length=100)
+    bio:          Optional[str] = Field(default=None, max_length=500)
 
 
 class PasswordChange(BaseModel):

@@ -50,7 +50,7 @@ export default function UserMenu() {
         {/* Name + role — hidden on small screens */}
         <div className="hidden flex-col items-start leading-tight sm:flex">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-            {user?.username ?? "…"}
+            {user?.display_name || user?.username || "…"}
           </span>
           <span className="text-[11px] font-medium capitalize text-gray-400 dark:text-gray-500">
             {role.replace("_", " ")}
@@ -73,8 +73,11 @@ export default function UserMenu() {
             <UserAvatar username={user?.username ?? "?"} role={role} avatarUrl={user?.avatar_url} size="lg" />
             <div className="text-center">
               <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                {user?.username ?? "—"}
+                {user?.display_name || user?.username || "—"}
               </p>
+              {user?.display_name && (
+                <p className="text-xs text-gray-400 dark:text-gray-500">@{user.username}</p>
+              )}
               {user?.email && (
                 <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
                   {user.email}
