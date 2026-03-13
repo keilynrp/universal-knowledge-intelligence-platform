@@ -34,6 +34,7 @@ from backend.routers import (
     disambiguation,
     domains,
     entities,
+    entity_linker,
     harmonization,
     ingest,
     notifications,
@@ -238,3 +239,4 @@ app.include_router(artifacts.router)
 app.include_router(context.router)
 app.include_router(audit_log.router)
 app.include_router(search.router)
+app.include_router(entity_linker.router)

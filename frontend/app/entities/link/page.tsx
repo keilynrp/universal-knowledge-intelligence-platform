@@ -1,144 +1,128 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { apiFetch } from "@/lib/api";
 import { PageHeader, Badge } from "../../components/ui";
-import { apiFetch } from "../../../lib/api";
-import { useToast } from "../../components/ui";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-interface EntitySummary {
-  id: number;
+interface EntitySnap {
+  id:                number;
   entity_name:       string | null;
   brand_capitalized: string | null;
   model:             string | null;
   sku:               string | null;
-  gtin:              string | null;
-  barcode:           string | null;
-  classification:    string | null;
-  variant:           string | null;
-  unit_of_measure:   string | null;
-  enrichment_status: string | null;
-  validation_status: string | null;
+  enrichment_status: string;
+  validation_status: string;
 }
 
-interface Candidate {
-  entity_a:      EntitySummary;
-  entity_b:      EntitySummary;
-  similarity:    number;
-  common_tokens: string[];
+interface LinkCandidate {
+  entity_a:       EntitySnap;
+  entity_b:       EntitySnap;
+  score:          number;       // 0.0 – 1.0
+  matched_fields: string[];
 }
 
-interface ScanResult {
-  candidates: Candidate[];
-  total:      number;
-  threshold:  number;
-  scanned:    number;
+interface Dismissal {
+  id:          number;
+  entity_a_id: number;
+  entity_b_id: number;
 }
-
-type Strategy = "keep_non_empty" | "keep_primary" | "keep_longest";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function simLabel(s: number): { label: string; variant: "error" | "warning" | "info" | "default" } {
-  if (s >= 0.95) return { label: "Identical",  variant: "error" };
+  if (s >= 0.95) return { label: "Identical",  variant: "error"   };
   if (s >= 0.88) return { label: "Very High",  variant: "warning" };
-  if (s >= 0.80) return { label: "High",       variant: "info" };
+  if (s >= 0.80) return { label: "High",       variant: "info"    };
   return               { label: "Moderate",    variant: "default" };
 }
 
-const DISPLAY_FIELDS: Array<{ key: keyof EntitySummary; label: string }> = [
-  { key: "entity_name",       label: "Name" },
-  { key: "brand_capitalized", label: "Brand" },
-  { key: "model",             label: "Model" },
-  { key: "sku",               label: "SKU" },
-  { key: "gtin",              label: "GTIN" },
-  { key: "classification",    label: "Classification" },
-  { key: "variant",           label: "Variant" },
-  { key: "unit_of_measure",   label: "UOM" },
+const DISPLAY_FIELDS: Array<{ key: keyof EntitySnap; label: string }> = [
+  { key: "entity_name",       label: "Name"   },
+  { key: "brand_capitalized", label: "Brand"  },
+  { key: "model",             label: "Model"  },
+  { key: "sku",               label: "SKU"    },
 ];
 
-const STRATEGY_LABELS: Record<Strategy, string> = {
-  keep_non_empty: "Keep non-empty (fill blanks from secondary)",
-  keep_primary:   "Keep primary (ignore all secondary values)",
-  keep_longest:   "Keep longest (prefer more complete text)",
-};
-
-// ── Sub-components ─────────────────────────────────────────────────────────────
-
-function FieldRow({
-  label, valA, valB,
-}: { label: string; valA: string | null; valB: string | null }) {
+function FieldRow({ label, valA, valB }: { label: string; valA: string | null; valB: string | null }) {
   const diff = (valA || "") !== (valB || "");
   return (
     <tr className={diff ? "bg-amber-50/40 dark:bg-amber-500/5" : ""}>
-      <td className="py-1.5 pl-3 pr-2 text-xs font-medium text-gray-500 dark:text-gray-400 w-24 shrink-0">
-        {label}
-      </td>
-      <td className="py-1.5 pr-2 text-xs text-gray-900 dark:text-white max-w-[180px] truncate">
+      <td className="w-20 shrink-0 py-1.5 pl-3 pr-2 text-xs font-medium text-gray-500 dark:text-gray-400">{label}</td>
+      <td className="max-w-[180px] truncate py-1.5 pr-2 text-xs text-gray-900 dark:text-white">
         {valA || <span className="italic text-gray-300 dark:text-gray-600">—</span>}
       </td>
-      <td className="py-1.5 pr-3 text-xs text-gray-900 dark:text-white max-w-[180px] truncate">
+      <td className="max-w-[180px] truncate py-1.5 pr-3 text-xs text-gray-900 dark:text-white">
         {valB || <span className="italic text-gray-300 dark:text-gray-600">—</span>}
       </td>
     </tr>
   );
 }
 
+// ── CandidateCard ─────────────────────────────────────────────────────────────
+
 function CandidateCard({
-  candidate, onMerge, onDismiss,
+  candidate,
+  onMerge,
+  onDismiss,
 }: {
-  candidate: Candidate;
-  onMerge: (primary: EntitySummary, secondary: EntitySummary, strategy: Strategy) => Promise<void>;
-  onDismiss: (a: EntitySummary, b: EntitySummary) => Promise<void>;
+  candidate: LinkCandidate;
+  onMerge:   (winnerId: number, loserId: number) => Promise<void>;
+  onDismiss: (aId: number, bId: number) => Promise<void>;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [primary, setPrimary] = useState<"a" | "b">("a");
-  const [strategy, setStrategy] = useState<Strategy>("keep_non_empty");
-  const [merging, setMerging] = useState(false);
+  const [expanded,   setExpanded]  = useState(false);
+  const [primary,    setPrimary]   = useState<"a" | "b">("a");
+  const [merging,    setMerging]   = useState(false);
   const [dismissing, setDismissing] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [resolved,   setResolved]  = useState(false);
 
-  const { entity_a, entity_b, similarity, common_tokens } = candidate;
-  const sim = simLabel(similarity);
+  const { entity_a, entity_b, score, matched_fields } = candidate;
+  const sim = simLabel(score);
 
-  if (dismissed) return null;
+  if (resolved) return null;
 
   async function handleMerge() {
     setMerging(true);
-    const [prim, sec] = primary === "a" ? [entity_a, entity_b] : [entity_b, entity_a];
-    await onMerge(prim, sec, strategy);
+    const [wId, lId] = primary === "a"
+      ? [entity_a.id, entity_b.id]
+      : [entity_b.id, entity_a.id];
+    await onMerge(wId, lId);
     setMerging(false);
-    setDismissed(true);
+    setResolved(true);
   }
 
   async function handleDismiss() {
     setDismissing(true);
-    await onDismiss(entity_a, entity_b);
+    await onDismiss(entity_a.id, entity_b.id);
     setDismissed(true);
+    setResolved(true);
   }
+
+  function setDismissed(_v: boolean) {}   // local state already tracked by resolved
 
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-      {/* Header row */}
+      {/* Header */}
       <div className="flex items-center justify-between gap-4 border-b border-gray-100 px-4 py-3 dark:border-gray-800">
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex min-w-0 items-center gap-3">
           <Badge variant={sim.variant} size="md">
-            {(similarity * 100).toFixed(1)}% — {sim.label}
+            {Math.round(score * 100)}% — {sim.label}
           </Badge>
-          {common_tokens.length > 0 && (
+          {matched_fields.length > 0 && (
             <span className="hidden truncate text-xs text-gray-400 dark:text-gray-500 sm:block">
-              Common: {common_tokens.slice(0, 6).join(" · ")}
+              Matched: {matched_fields.join(" · ")}
             </span>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <button
             onClick={() => setExpanded((v) => !v)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-400 dark:hover:bg-blue-500/20"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-400"
           >
             <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l-1.757 1.757a4.5 4.5 0 01-6.364-6.364l4.5-4.5a4.5 4.5 0 011.242 7.244" />
             </svg>
             Merge
           </button>
@@ -160,12 +144,16 @@ function CandidateCard({
         <table className="w-full">
           <thead>
             <tr className="border-b border-gray-100 dark:border-gray-800">
-              <th className="pb-2 pl-3 pt-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400 w-24" />
+              <th className="w-20 pb-2 pl-3 pt-2.5" />
               <th className="pb-2 pt-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                Entity #{entity_a.id}
+                <Link href={`/entities/${entity_a.id}`} className="hover:text-blue-600 hover:underline">
+                  Entity #{entity_a.id}
+                </Link>
               </th>
               <th className="pb-2 pr-3 pt-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                Entity #{entity_b.id}
+                <Link href={`/entities/${entity_b.id}`} className="hover:text-blue-600 hover:underline">
+                  Entity #{entity_b.id}
+                </Link>
               </th>
             </tr>
           </thead>
@@ -182,58 +170,33 @@ function CandidateCard({
         </table>
       </div>
 
-      {/* Merge panel (inline expand) */}
+      {/* Merge panel */}
       {expanded && (
         <div className="border-t border-blue-100 bg-blue-50/50 px-4 py-4 dark:border-blue-500/20 dark:bg-blue-500/5">
           <p className="mb-3 text-xs font-semibold text-blue-800 dark:text-blue-300">
-            Configure merge
+            Choose which entity to keep (winner absorbs the other's empty fields)
           </p>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {/* Primary selector */}
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
-                Keep as primary (survives merge)
-              </label>
-              <div className="flex gap-2">
-                {(["a", "b"] as const).map((side) => {
-                  const entity = side === "a" ? entity_a : entity_b;
-                  return (
-                    <button
-                      key={side}
-                      onClick={() => setPrimary(side)}
-                      className={`flex-1 rounded-xl border py-2 px-3 text-left text-xs transition-colors ${
-                        primary === side
-                          ? "border-blue-400 bg-blue-600 text-white"
-                          : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-                      }`}
-                    >
-                      <span className="font-semibold">#{entity.id}</span>
-                      <span className="ml-1 opacity-80 truncate">
-                        {entity.entity_name?.slice(0, 20) ?? "—"}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Strategy selector */}
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
-                Field merge strategy
-              </label>
-              <select
-                value={strategy}
-                onChange={(e) => setStrategy(e.target.value as Strategy)}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-white"
-              >
-                {(Object.entries(STRATEGY_LABELS) as [Strategy, string][]).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
-            </div>
+          <div className="flex gap-2">
+            {(["a", "b"] as const).map((side) => {
+              const entity = side === "a" ? entity_a : entity_b;
+              return (
+                <button
+                  key={side}
+                  onClick={() => setPrimary(side)}
+                  className={`flex-1 rounded-xl border py-2 px-3 text-left text-xs transition-colors ${
+                    primary === side
+                      ? "border-blue-400 bg-blue-600 text-white"
+                      : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                  }`}
+                >
+                  <span className="font-semibold">#{entity.id}</span>
+                  <span className="ml-1 truncate opacity-80">
+                    {entity.entity_name?.slice(0, 22) ?? "—"}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-
           <div className="mt-4 flex gap-2">
             <button
               onClick={handleMerge}
@@ -247,7 +210,7 @@ function CandidateCard({
                 </svg>
               ) : (
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l-1.757 1.757a4.5 4.5 0 01-6.364-6.364l4.5-4.5a4.5 4.5 0 011.242 7.244" />
                 </svg>
               )}
               Confirm Merge
@@ -268,85 +231,56 @@ function CandidateCard({
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function EntityLinkerPage() {
-  const { toast } = useToast();
-  const [threshold, setThreshold] = useState(0.82);
-  const [limit, setLimit]         = useState(500);
-  const [scanning, setScanning]   = useState(false);
-  const [result, setResult]       = useState<ScanResult | null>(null);
-  const [merged, setMerged]       = useState(0);
-  const [dismissed, setDismissed] = useState(0);
+  const [threshold,     setThreshold]     = useState(0.82);
+  const [scanning,      setScanning]      = useState(false);
+  const [candidates,    setCandidates]    = useState<LinkCandidate[] | null>(null);
+  const [error,         setError]         = useState<string | null>(null);
+  const [dismissals,    setDismissals]    = useState<Dismissal[]>([]);
+  const [showDismissed, setShowDismissed] = useState(false);
 
-  const handleScan = useCallback(async () => {
+  const fetchDismissals = useCallback(async () => {
+    const r = await apiFetch("/linker/dismissals");
+    if (r.ok) setDismissals(await r.json());
+  }, []);
+
+  useEffect(() => { fetchDismissals(); }, [fetchDismissals]);
+
+  async function handleScan() {
     setScanning(true);
+    setError(null);
     try {
-      const res = await apiFetch("/entities/link/find", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threshold, limit }),
-      });
-      if (!res.ok) {
-        toast(`Scan failed: ${await res.text()}`, "error");
-        return;
-      }
-      const data: ScanResult = await res.json();
-      setResult(data);
-      setMerged(0);
-      setDismissed(0);
-      if (data.total === 0) {
-        toast("No duplicate candidates found above threshold", "success");
-      } else {
-        toast(`Found ${data.total} candidate pair${data.total === 1 ? "" : "s"}`, "success");
-      }
-    } catch {
-      toast("Failed to reach backend", "error");
+      const r = await apiFetch(`/linker/candidates?threshold=${threshold}&limit=20`);
+      if (!r.ok) { setError(await r.text()); return; }
+      setCandidates(await r.json());
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Scan failed");
     } finally {
       setScanning(false);
     }
-  }, [threshold, limit, toast]);
+  }
 
-  const handleMerge = useCallback(async (
-    primary: EntitySummary,
-    secondary: EntitySummary,
-    strategy: Strategy,
-  ) => {
-    try {
-      const res = await apiFetch("/entities/link/merge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          primary_id:    primary.id,
-          secondary_ids: [secondary.id],
-          strategy,
-        }),
-      });
-      if (!res.ok) {
-        toast(`Merge failed: ${await res.text()}`, "error");
-        return;
-      }
-      setMerged((n) => n + 1);
-      toast(`Entity #${secondary.id} merged into #${primary.id}`, "success");
-    } catch {
-      toast("Merge request failed", "error");
+  const handleMerge = useCallback(async (winnerId: number, loserId: number) => {
+    const r = await apiFetch("/linker/merge", {
+      method: "POST",
+      body: JSON.stringify({ winner_id: winnerId, loser_id: loserId }),
+    });
+    if (!r.ok) setError(await r.text());
+  }, []);
+
+  const handleDismiss = useCallback(async (aId: number, bId: number) => {
+    await apiFetch("/linker/dismiss", {
+      method: "POST",
+      body: JSON.stringify({ entity_a_id: aId, entity_b_id: bId }),
+    });
+    fetchDismissals();
+  }, [fetchDismissals]);
+
+  async function undoDismissal(id: number) {
+    const r = await apiFetch(`/linker/dismissals/${id}`, { method: "DELETE" });
+    if (r.ok || r.status === 204) {
+      setDismissals(prev => prev.filter(d => d.id !== id));
     }
-  }, [toast]);
-
-  const handleDismiss = useCallback(async (
-    a: EntitySummary,
-    b: EntitySummary,
-  ) => {
-    try {
-      await apiFetch("/entities/link/dismiss", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entity_a_id: a.id, entity_b_id: b.id }),
-      });
-      setDismissed((n) => n + 1);
-    } catch {
-      toast("Dismiss request failed", "error");
-    }
-  }, [toast]);
-
-  const limitOptions = [250, 500, 1000, 2000];
+  }
 
   return (
     <div className="space-y-6">
@@ -357,7 +291,7 @@ export default function EntityLinkerPage() {
           { label: "Entity Linker" },
         ]}
         title="Entity Linker"
-        description="Find and merge near-duplicate entities using TF-IDF cosine similarity"
+        description="Find and merge near-duplicate entities using fuzzy field matching"
         actions={
           <button
             onClick={handleScan}
@@ -386,120 +320,123 @@ export default function EntityLinkerPage() {
 
       {/* Config panel */}
       <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          {/* Threshold */}
-          <div>
+        <div className="flex items-center gap-6">
+          <div className="flex-1">
             <div className="mb-1 flex items-center justify-between">
               <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
                 Similarity Threshold
               </label>
               <span className="rounded-lg bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-500/20 dark:text-blue-400">
-                {(threshold * 100).toFixed(0)}%
+                {Math.round(threshold * 100)}%
               </span>
             </div>
             <input
-              type="range"
-              min={0.50} max={0.99} step={0.01}
-              value={threshold}
-              onChange={(e) => setThreshold(Number(e.target.value))}
-              className="w-full h-1.5 accent-blue-600"
+              type="range" min={50} max={99} step={1}
+              value={Math.round(threshold * 100)}
+              onChange={(e) => setThreshold(Number(e.target.value) / 100)}
+              className="h-1.5 w-full accent-blue-600"
             />
             <div className="mt-0.5 flex justify-between text-[10px] text-gray-400">
               <span>50% — broader</span>
               <span>99% — stricter</span>
             </div>
-            <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">
-              {threshold >= 0.95
-                ? "Only virtually identical entities"
-                : threshold >= 0.88
-                ? "Very likely duplicates (recommended for merging)"
-                : threshold >= 0.80
-                ? "Likely duplicates — some false positives expected"
-                : "Broad scan — many false positives, review carefully"}
-            </p>
           </div>
-
-          {/* Limit */}
-          <div>
-            <label className="mb-2 block text-xs font-medium text-gray-600 dark:text-gray-400">
-              Entities to scan
-            </label>
-            <div className="flex gap-2">
-              {limitOptions.map((n) => (
-                <button
-                  key={n}
-                  onClick={() => setLimit(n)}
-                  className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${
-                    limit === n
-                      ? "bg-blue-600 text-white"
-                      : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-                  }`}
-                >
-                  {n >= 1000 ? `${n / 1000}K` : n}
-                </button>
-              ))}
-            </div>
-            <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">
-              Higher limits increase scan time. 500 is recommended for most catalogs.
-            </p>
-          </div>
+          <p className="max-w-xs text-xs text-gray-400 dark:text-gray-500">
+            {threshold >= 0.95
+              ? "Only virtually identical entities"
+              : threshold >= 0.88
+              ? "Very likely duplicates — recommended for merging"
+              : threshold >= 0.80
+              ? "Likely duplicates — some false positives expected"
+              : "Broad scan — review carefully"}
+          </p>
         </div>
       </div>
 
-      {/* Results area */}
-      {!result ? (
-        <div className="flex min-h-[280px] items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700">
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+
+      {/* Results */}
+      {candidates === null ? (
+        <div className="flex min-h-[260px] items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700">
           <div className="text-center">
             <svg className="mx-auto h-12 w-12 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l-1.757 1.757a4.5 4.5 0 01-6.364-6.364l4.5-4.5a4.5 4.5 0 011.242 7.244" />
             </svg>
             <p className="mt-3 text-sm font-medium text-gray-500 dark:text-gray-400">
               Configure threshold and run a scan
             </p>
-            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-              Candidate pairs will appear here
-            </p>
           </div>
+        </div>
+      ) : candidates.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-200 bg-white py-16 dark:border-gray-700 dark:bg-gray-900">
+          <svg className="h-10 w-10 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="mt-3 text-sm font-medium text-gray-600 dark:text-gray-400">
+            No duplicates found above {Math.round(threshold * 100)}% similarity
+          </p>
+          <p className="mt-1 text-xs text-gray-400">Try lowering the threshold</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Summary bar */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-3">
             <span className="text-sm font-semibold text-gray-900 dark:text-white">
-              {result.total} candidate pair{result.total !== 1 ? "s" : ""} found
+              {candidates.length} candidate pair{candidates.length !== 1 ? "s" : ""}
             </span>
-            <Badge variant="default" size="sm">
-              {(result.threshold * 100).toFixed(0)}% threshold
-            </Badge>
-            <Badge variant="default" size="sm">
-              {result.scanned} entities scanned
-            </Badge>
-            {merged > 0 && <Badge variant="success" size="sm">{merged} merged</Badge>}
-            {dismissed > 0 && <Badge variant="warning" size="sm">{dismissed} dismissed</Badge>}
+            <Badge variant="default" size="sm">{Math.round(threshold * 100)}% threshold</Badge>
           </div>
+          <div className="space-y-3">
+            {candidates.map((c) => (
+              <CandidateCard
+                key={`${c.entity_a.id}-${c.entity_b.id}`}
+                candidate={c}
+                onMerge={handleMerge}
+                onDismiss={handleDismiss}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
-          {result.total === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-200 bg-white py-16 dark:border-gray-700 dark:bg-gray-900">
-              <svg className="h-10 w-10 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p className="mt-3 text-sm font-medium text-gray-600 dark:text-gray-400">
-                No duplicates detected above {(result.threshold * 100).toFixed(0)}% similarity
-              </p>
-              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                Try lowering the threshold for a broader scan
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {result.candidates.map((c, i) => (
-                <CandidateCard
-                  key={`${c.entity_a.id}-${c.entity_b.id}-${i}`}
-                  candidate={c}
-                  onMerge={handleMerge}
-                  onDismiss={handleDismiss}
-                />
-              ))}
+      {/* Dismissed pairs */}
+      {dismissals.length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+          <button
+            onClick={() => setShowDismissed(!showDismissed)}
+            className="flex w-full items-center justify-between px-5 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+          >
+            <span>Dismissed pairs ({dismissals.length})</span>
+            <svg
+              className={`h-4 w-4 transition-transform ${showDismissed ? "rotate-180" : ""}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {showDismissed && (
+            <div className="border-t border-gray-100 px-5 py-3 dark:border-gray-800">
+              <ul className="space-y-2">
+                {dismissals.map((d) => (
+                  <li key={d.id} className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                    <span>
+                      Entity{" "}
+                      <Link href={`/entities/${d.entity_a_id}`} className="text-blue-500 hover:underline">
+                        #{d.entity_a_id}
+                      </Link>
+                      {" "}+{" "}
+                      <Link href={`/entities/${d.entity_b_id}`} className="text-blue-500 hover:underline">
+                        #{d.entity_b_id}
+                      </Link>
+                    </span>
+                    <button
+                      onClick={() => undoDismissal(d.id)}
+                      className="text-xs text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      Undo
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>

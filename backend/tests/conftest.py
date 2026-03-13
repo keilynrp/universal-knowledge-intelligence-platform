@@ -168,6 +168,7 @@ _TABLES_TO_CLEAN = [
     "analysis_contexts",
     "audit_logs",
     "search_index",
+    "link_dismissals",
     # Note: "users" is intentionally excluded — the super_admin/editor/viewer
     # test accounts must persist across the entire test session.
 ]

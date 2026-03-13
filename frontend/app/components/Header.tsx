@@ -28,7 +28,8 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   "/artifacts/gaps": { title: "Knowledge Gap Detector", subtitle: "Identify and prioritize data quality issues in your domain" },
   "/context":   { title: "Context Engineering", subtitle: "Domain context snapshots, sessions, and tool invocations" },
   "/audit-log": { title: "Audit Log", subtitle: "Complete history of all platform mutations and user activity" },
-  "/search":    { title: "Search", subtitle: "Full-text search across entities, authority records, and annotations" },
+  "/search":        { title: "Search", subtitle: "Full-text search across entities, authority records, and annotations" },
+  "/entities/link": { title: "Entity Linker", subtitle: "Detect and resolve near-duplicate entities" },
 };
 
 // ── Search result type ─────────────────────────────────────────────────────────

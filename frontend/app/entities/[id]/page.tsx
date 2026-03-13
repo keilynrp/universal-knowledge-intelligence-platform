@@ -6,6 +6,7 @@ import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { PageHeader, TabNav, Badge, useToast } from "../../components/ui";
 import MonteCarloChart from "../../components/MonteCarloChart";
+import AnnotationThread from "../../components/AnnotationThread";
 
 interface Entity {
     id: number;
@@ -49,7 +50,7 @@ interface AuthorityRecord {
     resolution_status: string;
 }
 
-type Tab = "overview" | "enrichment" | "authority";
+type Tab = "overview" | "enrichment" | "authority" | "comments";
 
 const CORE_FIELDS: (keyof Entity)[] = [
     "entity_name", "brand_capitalized", "model", "sku", "variant",
@@ -113,6 +114,9 @@ export default function EntityDetailPage() {
     const [authorityLoading, setAuthorityLoading] = useState(false);
     const [authorityAction, setAuthorityAction] = useState<number | null>(null);
 
+    // Comments tab
+    const [commentCount, setCommentCount] = useState<number>(0);
+
     const fetchEntity = useCallback(async () => {
         setLoading(true);
         try {
@@ -127,6 +131,14 @@ export default function EntityDetailPage() {
     }, [entityId]);
 
     useEffect(() => { fetchEntity(); }, [fetchEntity]);
+
+    useEffect(() => {
+        if (!entity) return;
+        apiFetch(`/annotations?entity_id=${entity.id}&limit=200`)
+            .then((r) => r.ok ? r.json() : [])
+            .then((data: unknown[]) => setCommentCount(Array.isArray(data) ? data.length : 0))
+            .catch(() => {});
+    }, [entity]);
 
     useEffect(() => {
         if (tab === "authority" && entity) {
@@ -317,6 +329,7 @@ export default function EntityDetailPage() {
                     { id: "overview", label: "Overview" },
                     { id: "enrichment", label: "Enrichment" },
                     { id: "authority", label: "Authority" },
+                    { id: "comments", label: "Comments", badge: commentCount > 0 ? commentCount : undefined },
                 ]}
                 activeTab={tab}
                 onTabChange={(id) => setTab(id as Tab)}
@@ -450,6 +463,13 @@ export default function EntityDetailPage() {
                             )}
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* ── Comments ── */}
+            {tab === "comments" && (
+                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+                    <AnnotationThread entityId={entity.id} />
                 </div>
             )}
 
