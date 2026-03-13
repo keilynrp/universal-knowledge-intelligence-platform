@@ -38,6 +38,7 @@ from backend.routers import (
     ingest,
     notifications,
     reports,
+    search,
     stores,
     webhooks,
 )
@@ -99,6 +100,19 @@ with database.engine.connect() as _conn:
             _conn.execute(text("ALTER TABLE audit_logs ADD COLUMN status_code INTEGER"))
             _conn.execute(text("ALTER TABLE audit_logs ADD COLUMN ip_address VARCHAR"))
             _conn.commit()
+
+    # ── Sprint 53: FTS5 search index ─────────────────────────────────────────
+    _conn.execute(text("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS search_index
+        USING fts5(
+            doc_type,
+            doc_id   UNINDEXED,
+            title,
+            body,
+            href     UNINDEXED
+        )
+    """))
+    _conn.commit()
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -223,3 +237,4 @@ app.include_router(branding.router)
 app.include_router(artifacts.router)
 app.include_router(context.router)
 app.include_router(audit_log.router)
+app.include_router(search.router)

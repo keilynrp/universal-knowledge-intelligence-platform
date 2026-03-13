@@ -23,6 +23,7 @@ export const translations = {
         'nav.domains': 'Domain Registry',
         'nav.integrations': 'Connectors',
         'nav.audit_log': 'Audit Log',
+        'nav.search': 'Search',
         'nav.settings': 'Settings',
 
         // Settings
@@ -69,6 +70,7 @@ export const translations = {
         'nav.domains': 'Registro de Dominios',
         'nav.integrations': 'Conectores',
         'nav.audit_log': 'Registro de Auditoría',
+        'nav.search': 'Búsqueda',
         'nav.settings': 'Configuración',
 
         // Settings

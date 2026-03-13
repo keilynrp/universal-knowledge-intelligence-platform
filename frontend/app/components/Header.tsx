@@ -1,12 +1,17 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
 import { useTheme } from "../contexts/ThemeContext";
 import { useDomain } from "../contexts/DomainContext";
 import { useBranding } from "../contexts/BrandingContext";
 import { useSidebar } from "./SidebarProvider";
 import NotificationBell from "./NotificationBell";
 import UserMenu from "./UserMenu";
+import { apiFetch } from "@/lib/api";
+
+// ── Page title map ──────────────────────────────────────────────────────────────
 
 const pageTitles: Record<string, { title: string; subtitle: string }> = {
   "/": { title: "Master Data Hub", subtitle: "Browse and search your entity database" },
@@ -23,7 +28,167 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   "/artifacts/gaps": { title: "Knowledge Gap Detector", subtitle: "Identify and prioritize data quality issues in your domain" },
   "/context":   { title: "Context Engineering", subtitle: "Domain context snapshots, sessions, and tool invocations" },
   "/audit-log": { title: "Audit Log", subtitle: "Complete history of all platform mutations and user activity" },
+  "/search":    { title: "Search", subtitle: "Full-text search across entities, authority records, and annotations" },
 };
+
+// ── Search result type ─────────────────────────────────────────────────────────
+
+interface SearchHit {
+  doc_type: string;
+  doc_id:   number;
+  title:    string;
+  snippet:  string;
+  href:     string;
+}
+
+const HIT_BADGE: Record<string, string> = {
+  entity:     "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400",
+  authority:  "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400",
+  annotation: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400",
+};
+
+// ── GlobalSearch component ─────────────────────────────────────────────────────
+
+function GlobalSearch() {
+  const router = useRouter();
+  const [open,    setOpen]    = useState(false);
+  const [query,   setQuery]   = useState("");
+  const [hits,    setHits]    = useState<SearchHit[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const inputRef    = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Debounced live search
+  const liveSearch = useCallback((q: string) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!q.trim()) { setHits([]); setLoading(false); return; }
+    setLoading(true);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await apiFetch(`/search?q=${encodeURIComponent(q)}&limit=6`);
+        if (res.ok) {
+          const data = await res.json();
+          setHits(data.items ?? []);
+        } else {
+          setHits([]);
+        }
+      } catch {
+        setHits([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 280);
+  }, []);
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const v = e.target.value;
+    setQuery(v);
+    setOpen(true);
+    liveSearch(v);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter" && query.trim()) {
+      setOpen(false);
+      router.push(`/search?q=${encodeURIComponent(query)}`);
+    }
+    if (e.key === "Escape") {
+      setOpen(false);
+      setQuery("");
+      setHits([]);
+    }
+  }
+
+  function handleFocus() {
+    if (query.trim()) setOpen(true);
+  }
+
+  const showDropdown = open && query.trim().length > 0;
+
+  return (
+    <div ref={containerRef} className="relative hidden md:block">
+      {/* Search input */}
+      <div className="relative">
+        <div className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center">
+          {loading ? (
+            <svg className="h-3.5 w-3.5 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ) : (
+            <svg className="h-3.5 w-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          )}
+        </div>
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          onFocus={handleFocus}
+          placeholder="Search… (Enter for full results)"
+          className="h-8 w-52 rounded-lg border border-gray-200 bg-white pl-7 pr-3 text-xs text-gray-700 placeholder-gray-400 outline-none transition-all focus:w-72 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:placeholder-gray-500 dark:focus:border-blue-500"
+        />
+      </div>
+
+      {/* Dropdown */}
+      {showDropdown && (
+        <div className="absolute left-0 top-full z-50 mt-1.5 w-80 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900">
+          {hits.length === 0 && !loading && (
+            <p className="px-4 py-3 text-xs text-gray-400">No results for &ldquo;{query}&rdquo;</p>
+          )}
+          {hits.map((hit) => (
+            <Link
+              key={`${hit.doc_type}-${hit.doc_id}`}
+              href={hit.href}
+              onClick={() => { setOpen(false); setQuery(""); setHits([]); }}
+              className="flex items-start gap-3 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
+              <span className={`mt-0.5 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${HIT_BADGE[hit.doc_type] ?? "bg-gray-100 text-gray-600"}`}>
+                {hit.doc_type}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-xs font-medium text-gray-800 dark:text-gray-200">
+                  {hit.title || "(no title)"}
+                </p>
+                {hit.snippet && (
+                  <p className="truncate text-[10px] text-gray-400">{hit.snippet}</p>
+                )}
+              </div>
+            </Link>
+          ))}
+          {hits.length > 0 && (
+            <div className="border-t border-gray-100 dark:border-gray-800">
+              <Link
+                href={`/search?q=${encodeURIComponent(query)}`}
+                onClick={() => { setOpen(false); }}
+                className="block px-3 py-2 text-center text-xs font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
+              >
+                See all results →
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Header ─────────────────────────────────────────────────────────────────────
 
 export default function Header() {
   const pathname = usePathname();
@@ -57,10 +222,15 @@ export default function Header() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {/* Global search */}
+          <GlobalSearch />
+
+          <div className="h-6 w-px bg-gray-200 dark:bg-gray-800" />
+
           {/* Domain Selector */}
           <div className="flex items-center gap-2">
-            <span className="hidden text-sm font-medium text-gray-500 dark:text-gray-400 sm:inline">Workspace:</span>
+            <span className="hidden text-sm font-medium text-gray-500 dark:text-gray-400 lg:inline">Workspace:</span>
             {isLoading ? (
               <div className="h-9 w-40 animate-pulse rounded-lg bg-gray-200 dark:bg-gray-800"></div>
             ) : (
@@ -107,4 +277,3 @@ export default function Header() {
     </header>
   );
 }
-

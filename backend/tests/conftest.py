@@ -45,6 +45,20 @@ def override_get_db():
 # Create tables in the in-memory DB
 models.Base.metadata.create_all(bind=test_engine)
 
+# FTS5 virtual table (not in ORM metadata — must be created manually)
+with test_engine.connect() as _fts_conn:
+    _fts_conn.execute(text("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS search_index
+        USING fts5(
+            doc_type,
+            doc_id   UNINDEXED,
+            title,
+            body,
+            href     UNINDEXED
+        )
+    """))
+    _fts_conn.commit()
+
 # Override dependency — imported from database to match auth.py's import
 from backend.database import get_db  # noqa: E402
 app.dependency_overrides[get_db] = override_get_db
@@ -153,6 +167,7 @@ _TABLES_TO_CLEAN = [
     "artifact_templates",
     "analysis_contexts",
     "audit_logs",
+    "search_index",
     # Note: "users" is intentionally excluded — the super_admin/editor/viewer
     # test accounts must persist across the entire test session.
 ]
