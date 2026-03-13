@@ -11,7 +11,7 @@
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-4-%2338B2AC.svg?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 [![DuckDB](https://img.shields.io/badge/DuckDB-OLAP-FFF000?style=for-the-badge&logo=duckdb&logoColor=black)](https://duckdb.org/)
 [![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector%20DB-ff6b35?style=for-the-badge)](https://www.trychroma.com/)
-[![Tests](https://img.shields.io/badge/Tests-578%20passing-brightgreen?style=for-the-badge)](backend/tests/)
+[![Tests](https://img.shields.io/badge/Tests-629%20passing-brightgreen?style=for-the-badge)](backend/tests/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=for-the-badge)](LICENSE)
 
 A domain-agnostic intelligence platform that ingests raw data, harmonizes it, enriches it against global knowledge bases, runs OLAP analytics and stochastic simulations, and lets you query everything through a RAG-powered AI assistant.
@@ -24,7 +24,7 @@ A domain-agnostic intelligence platform that ingests raw data, harmonizes it, en
 
 ## Why UKIP?
 
-Most data platforms force you to choose: clean your data **or** analyze it. UKIP does both in a single pipeline. It started as a catalog deduplication tool and evolved into a full research intelligence engine across 55 development sprints.
+Most data platforms force you to choose: clean your data **or** analyze it. UKIP does both in a single pipeline. It started as a catalog deduplication tool and evolved into a full research intelligence engine across 59 development sprints.
 
 **What it does:**
 
@@ -35,6 +35,7 @@ Most data platforms force you to choose: clean your data **or** analyze it. UKIP
 5. **Query** your entire dataset in natural language through a RAG assistant powered by any LLM provider.
 6. **Collaborate** through threaded comments on any entity or authority record, with full RBAC and edit/delete controls.
 7. **Observe** every action through a real-time activity feed, persistent audit log with HTTP-level tracking, and outbound webhooks.
+8. **Manage users and profiles** — role-based user management, per-user avatar, display name, bio, and a dedicated self-service profile page accessible to all roles.
 
 ### Design Philosophy
 
@@ -94,7 +95,7 @@ One rule: **Justified Complexity** ([details](docs/ARCHITECTURE.md)).
 - **Audit Log** — HTTP-level middleware captures every mutating request: actor (JWT sub), endpoint, method, HTTP status, IP address, and timestamp. Frontend timeline at `/audit-log` with stats bar, 7-day sparkline, filter bar (action/resource/user/date), paginated timeline, and CSV export.
 - **Activity Feed** — Real-time audit timeline on the home dashboard. Auto-refreshes every 30 seconds.
 - **Webhooks** — Outbound HTTP callbacks for any platform event. HMAC-SHA256 request signing, per-event subscription, fire-and-forget delivery with status tracking.
-- **Notifications** — In-app notification system with bell icon indicator.
+- **Notification Center** — Full `/notifications` page with per-user read/unread state (server-side `last_read_at` threshold), action links to relevant entities, filter by event type, paginated feed, bulk mark-all-read, and per-item dismiss. Bell icon shows live unread count badge.
 - **Branding** — Configurable platform name, accent color, and footer text, applied throughout the UI and report/PPTX exports.
 
 ### Scientometric Enrichment
@@ -121,6 +122,12 @@ Three-phase cascading enrichment worker:
 - **ChromaDB** vector store with OpenAI or local `all-MiniLM-L6-v2` embeddings.
 - Natural language queries return grounded, source-attributed answers with similarity scores.
 - **Context-aware mode** enriches queries with active domain context and tool invocation history.
+
+### User & Profile Management
+- **User Management UI** — `/settings/users` page (super_admin only): stats cards (total/active/inactive/by role), search + role/status filters, inline role assignment, activate/deactivate toggle, and create/edit slide-over form.
+- **Personal Profile Page** — `/profile` page accessible to all roles. Hero card with avatar, display name, role badge, bio, and member-since date. Sections: Profile Picture upload, Personal Information form (display name, email, bio), and Security (change password).
+- **User Avatar** — Drag & drop avatar upload with canvas center-crop to 200×200 JPEG. Stored as base64 data URL. Shown in header trigger, user menu dropdown, user management table, and entity views.
+- **Password Strength Indicator** — Real-time 4-segment bar (Weak → Fair → Good → Strong) with criteria checklist (length, uppercase, lowercase, number, special chars). Present on all password input fields: profile page, settings account tab, and user creation/edit form.
 
 ### Security
 - **JWT authentication** with bcrypt password hashing.
@@ -273,15 +280,22 @@ graph TD
 
 ## API Overview
 
-139 endpoints across 25 functional routers. Full interactive docs at `/docs` (Swagger) or `/redoc`.
+143 endpoints across 25 functional routers. Full interactive docs at `/docs` (Swagger) or `/redoc`.
 
 ### Authentication & Users
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/auth/token` | Login (OAuth2 password flow) |
 | `GET` | `/users/me` | Current user profile |
+| `PATCH` | `/users/me/profile` | Update display name, email, bio (any auth) |
+| `POST` | `/users/me/password` | Change password (any auth) |
+| `POST` | `/users/me/avatar` | Upload avatar — base64 data URL (any auth) |
+| `DELETE` | `/users/me/avatar` | Remove avatar (any auth) |
+| `GET` | `/users/stats` | User count stats by role/status (super_admin) |
 | `POST` | `/users` | Create user (super_admin) |
-| `POST` | `/users/me/password` | Change password |
+| `PUT` | `/users/{id}` | Update user email, role, or status (super_admin) |
+| `POST` | `/users/{id}/activate` | Reactivate a deactivated user (super_admin) |
+| `DELETE` | `/users/{id}` | Soft-deactivate user (super_admin) |
 
 ### Entity Catalog
 | Method | Endpoint | Description |
@@ -391,6 +405,13 @@ graph TD
 | `POST` | `/context/tools` | Register tool schema |
 | `POST` | `/context/tools/{id}/invoke` | Invoke tool and log result |
 
+### Notification Center
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/notifications/center` | Paginated feed with `is_read` flag per entry (any auth) |
+| `GET` | `/notifications/center/unread-count` | Fast unread count for bell badge (any auth) |
+| `POST` | `/notifications/center/read-all` | Mark all entries read up to now (any auth) |
+
 ### Audit Log
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -448,13 +469,13 @@ ukip/
 │   ├── exporters/
 │   │   ├── excel_exporter.py      # Branded 4-sheet Excel workbook
 │   │   └── pptx_exporter.py       # Branded 16:9 PowerPoint (python-pptx)
-│   ├── routers/                   # 25 domain routers (139 endpoints)
+│   ├── routers/                   # 25 domain routers (143 endpoints)
 │   │   ├── ai_rag.py              # RAG index/query/stats
 │   │   ├── analytics.py           # Dashboard, OLAP, ROI, topic analyzers
 │   │   ├── annotations.py         # Collaborative threaded comments
 │   │   ├── artifacts.py           # Gap detector + report templates
 │   │   ├── audit_log.py           # Audit timeline, stats, CSV export
-│   │   ├── auth_users.py          # JWT auth + RBAC user management
+│   │   ├── auth_users.py          # JWT auth + RBAC + avatar + profile endpoints
 │   │   ├── authority.py           # Authority resolution + review queue
 │   │   ├── branding.py            # Platform branding settings
 │   │   ├── context.py             # Context sessions + tool registry
@@ -465,18 +486,18 @@ ukip/
 │   │   ├── entity_linker.py       # Duplicate detection + merge/dismiss
 │   │   ├── harmonization.py       # Normalization pipeline (undo/redo)
 │   │   ├── ingest.py              # File upload + export
-│   │   ├── notifications.py       # In-app notification system
+│   │   ├── notifications.py       # Notification center (read/unread state)
 │   │   ├── reports.py             # HTML/PDF/Excel/PPTX report generation
 │   │   ├── search.py              # FTS5 global search + index rebuild
 │   │   ├── stores.py              # E-commerce connector management
 │   │   └── webhooks.py            # Outbound webhook CRUD + delivery
-│   ├── tests/                     # 578 tests across 32 files
+│   ├── tests/                     # 629 tests across 35 files
 │   ├── audit.py                   # AuditMiddleware (HTTP-level interception)
 │   ├── auth.py                    # JWT + RBAC + account lockout
 │   ├── circuit_breaker.py         # External API resilience
 │   ├── encryption.py              # Fernet credential encryption
 │   ├── main.py                    # FastAPI app (slim orchestrator)
-│   ├── models.py                  # SQLAlchemy ORM (18 tables)
+│   ├── models.py                  # SQLAlchemy ORM (19 tables)
 │   ├── olap.py                    # DuckDB OLAP engine
 │   ├── report_builder.py          # Section builders for reports
 │   └── schema_registry.py         # Dynamic domain schema loader
@@ -501,19 +522,26 @@ ukip/
 │   │   │   └── link/              # Entity Linker (duplicate detection + merge)
 │   │   ├── harmonization/         # Data cleaning workflows
 │   │   ├── integrations/          # Store + AI provider config
+│   │   ├── notifications/         # Notification Center (read/unread, action links, bulk read)
+│   │   ├── profile/               # Personal Profile page (avatar, info, bio, password)
 │   │   ├── rag/                   # Semantic RAG chat
 │   │   ├── reports/               # Report Builder (HTML/PDF/Excel/PPTX)
 │   │   ├── search/                # Full-text search results page
-│   │   ├── settings/              # App settings + user management + webhooks
+│   │   ├── settings/
+│   │   │   ├── page.tsx           # App settings (preferences, account, webhooks, branding)
+│   │   │   └── users/             # User Management (stats, search, role/status management)
 │   │   └── components/
 │   │       ├── AnnotationThread.tsx   # Threaded comments with RBAC
 │   │       ├── ActivityFeed.tsx       # Real-time audit timeline
+│   │       ├── AvatarUpload.tsx       # Drag & drop avatar upload with canvas crop
 │   │       ├── ConceptCloud.tsx       # Shared concept visualization
 │   │       ├── DisambiguationTool.tsx # Fuzzy cluster resolver
 │   │       ├── EntityTable.tsx        # Entity list with detail links
 │   │       ├── MonteCarloChart.tsx    # Citation projection chart
-│   │       ├── NotificationBell.tsx   # In-app notification indicator
+│   │       ├── NotificationBell.tsx   # Bell icon with live unread count badge
+│   │       ├── PasswordStrength.tsx   # Real-time password strength bar + criteria checklist
 │   │       ├── RAGChatInterface.tsx   # AI chat with source attribution
+│   │       ├── UserAvatar.tsx         # Shared avatar: image or role-colored initials fallback
 │   │       └── ui/                    # Shared design system (TabNav, Badge, PageHeader…)
 │   └── lib/                       # apiFetch API client
 ├── data/demo/
@@ -566,19 +594,21 @@ ukip/
 | 53 | Search | Full-Text Search — SQLite FTS5 index, global search bar in Header (live dropdown), `/search` page |
 | 54 | Entity UX | Comments Tab — 4th tab on Entity Detail page, live annotation count badge, `AnnotationThread` |
 | 55 | Data Quality | Entity Linker — fuzzy duplicate detection, side-by-side merge, dismiss with undo |
+| 56 | Notifications | Notification Center — `/notifications` page, per-user read/unread state (`UserNotificationState`), action links, bulk mark-all-read, filter by event type |
+| 57 | Users | User Management UI — `/settings/users` with stats cards, search + filters, inline role assignment, activate/deactivate, create/edit slide-over |
+| 58 | Users | User Avatar Upload — drag & drop, canvas center-crop to 200×200 JPEG, base64 storage, shown in header, menu, and user table |
+| 59 | Users | Personal Profile Management — `display_name` + `bio` fields, `PATCH /users/me/profile`, dedicated `/profile` page (all roles), password strength indicator on all password fields |
 
 ### Up Next 🔜
 
 | Priority | Sprint | Feature |
 |----------|--------|---------|
-| High | 56 | **Notification Center UI** — Full notifications page with read/unread state, action links, bulk mark-as-read |
-| High | 57 | **User Management UI** — `/settings/users` page listing all users with role assignment, activate/deactivate |
-| Medium | 58 | **Webhooks UI Panel** — Visual webhook manager: create, test, view delivery history and last status |
-| Medium | 59 | **Scheduled Imports** — Cron-based automated ingestion from configured store connections |
-| Medium | 60 | **Bulk Entity Editor** — Multi-select in the entity list, batch field updates, bulk delete |
-| Low | 61 | **Scopus Adapter** — Elsevier premium enrichment (BYOK institutional API key) |
-| Low | 62 | **PostgreSQL/MySQL backends** — Swap SQLite for production-grade database via `DATABASE_URL` env var |
-| Low | 63 | **SSO Integration** — OAuth2/SAML for institutional deployments |
+| High | 60 | **Webhooks UI Panel** — Visual webhook manager: create, test, view delivery history and last status |
+| Medium | 61 | **Scheduled Imports** — Cron-based automated ingestion from configured store connections |
+| Medium | 62 | **Bulk Entity Editor** — Multi-select in the entity list, batch field updates, bulk delete |
+| Low | 63 | **Scopus Adapter** — Elsevier premium enrichment (BYOK institutional API key) |
+| Low | 64 | **PostgreSQL/MySQL backends** — Swap SQLite for production-grade database via `DATABASE_URL` env var |
+| Low | 65 | **SSO Integration** — OAuth2/SAML for institutional deployments |
 
 See [EVOLUTION_STRATEGY.md](docs/EVOLUTION_STRATEGY.md) for the full platform vision and phased roadmap (Phases 6–11).
 
