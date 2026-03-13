@@ -5,6 +5,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../components/ui";
 import { apiFetch } from "../../../lib/api";
 import UserAvatar from "../../components/UserAvatar";
+import PasswordStrength from "../../components/PasswordStrength";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -177,7 +178,7 @@ function UserFormSlider({ initial, onClose, onSaved, toast }: UserFormProps) {
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
                 {isEdit ? "New password" : "Password"}{" "}
-                <span className="font-normal text-gray-400">{isEdit ? "(leave blank to keep)" : "* min. 8 chars"}</span>
+                <span className="font-normal text-gray-400">{isEdit ? "(leave blank to keep)" : "*"}</span>
               </label>
               <input
                 type="password"
@@ -188,6 +189,7 @@ function UserFormSlider({ initial, onClose, onSaved, toast }: UserFormProps) {
                 autoComplete="new-password"
                 placeholder={isEdit ? "••••••••" : ""}
               />
+              <PasswordStrength password={form.password} />
             </div>
 
             <div>

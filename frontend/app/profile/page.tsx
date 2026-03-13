@@ -6,6 +6,7 @@ import { useToast } from "../components/ui";
 import UserAvatar from "../components/UserAvatar";
 import AvatarUpload from "../components/AvatarUpload";
 import { apiFetch } from "@/lib/api";
+import PasswordStrength from "../components/PasswordStrength";
 
 const ROLE_META: Record<string, { label: string; pill: string }> = {
     super_admin: { label: "Super Admin", pill: "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400" },
@@ -251,37 +252,36 @@ export default function ProfilePage() {
                             autoComplete="current-password"
                         />
                     </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div>
-                            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                New password <span className="text-gray-400 font-normal">(min. 8 chars)</span>
-                            </label>
-                            <input
-                                type="password"
-                                className={inputCls}
-                                value={newPw}
-                                onChange={e => setNewPw(e.target.value)}
-                                required
-                                minLength={8}
-                                autoComplete="new-password"
-                            />
-                        </div>
-                        <div>
-                            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                Confirm new password
-                            </label>
-                            <input
-                                type="password"
-                                className={`${inputCls} ${confirmPw && confirmPw !== newPw ? "border-red-400 focus:border-red-500 focus:ring-red-400" : ""}`}
-                                value={confirmPw}
-                                onChange={e => setConfirmPw(e.target.value)}
-                                required
-                                autoComplete="new-password"
-                            />
-                            {confirmPw && confirmPw !== newPw && (
-                                <p className="mt-1 text-xs text-red-500">Passwords do not match</p>
-                            )}
-                        </div>
+                    <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            New password
+                        </label>
+                        <input
+                            type="password"
+                            className={inputCls}
+                            value={newPw}
+                            onChange={e => setNewPw(e.target.value)}
+                            required
+                            minLength={8}
+                            autoComplete="new-password"
+                        />
+                        <PasswordStrength password={newPw} />
+                    </div>
+                    <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Confirm new password
+                        </label>
+                        <input
+                            type="password"
+                            className={`${inputCls} ${confirmPw && confirmPw !== newPw ? "border-red-400 focus:border-red-500 focus:ring-red-400" : ""}`}
+                            value={confirmPw}
+                            onChange={e => setConfirmPw(e.target.value)}
+                            required
+                            autoComplete="new-password"
+                        />
+                        {confirmPw && confirmPw !== newPw && (
+                            <p className="mt-1 text-xs text-red-500">Passwords do not match</p>
+                        )}
                     </div>
                     <div className="flex justify-end">
                         <button

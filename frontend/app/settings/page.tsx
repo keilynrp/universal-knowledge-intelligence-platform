@@ -10,6 +10,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { PageHeader, TabNav, Badge, useToast } from "../components/ui";
 import { apiFetch } from "@/lib/api";
 import AvatarUpload from "../components/AvatarUpload";
+import PasswordStrength from "../components/PasswordStrength";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -376,7 +377,7 @@ function AccountTab({ user, updateAvatarUrl, toast }: { user: any; updateAvatarU
                     </div>
                     <div>
                         <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                            New password <span className="text-gray-400 font-normal">(min. 8 chars)</span>
+                            New password
                         </label>
                         <input
                             type="password"
@@ -387,6 +388,7 @@ function AccountTab({ user, updateAvatarUrl, toast }: { user: any; updateAvatarU
                             minLength={8}
                             autoComplete="new-password"
                         />
+                        <PasswordStrength password={newPw} />
                     </div>
                     <div>
                         <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
