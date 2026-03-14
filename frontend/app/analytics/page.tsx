@@ -317,6 +317,33 @@ export default function AnalyticsPage() {
                 </Link>
             </div>
 
+            {/* Natural Language Query CTA */}
+            <div className="flex items-center justify-between rounded-xl border border-purple-200 bg-gradient-to-r from-violet-50 to-purple-50 px-5 py-3.5 dark:border-purple-900/40 dark:from-violet-900/10 dark:to-purple-900/10">
+                <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400">
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-violet-900 dark:text-violet-200">Natural Language Query</p>
+                            <span className="rounded-full bg-violet-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:bg-violet-500/30 dark:text-violet-300">New</span>
+                        </div>
+                        <p className="text-xs text-violet-600 dark:text-violet-400">Ask your data anything in plain English — AI translates it into an OLAP query instantly</p>
+                    </div>
+                </div>
+                <Link
+                    href="/analytics/nlq"
+                    className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 transition-colors flex-shrink-0"
+                >
+                    Try NLQ
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                </Link>
+            </div>
+
             {/* Topic Modeling CTA */}
             <div className="flex items-center justify-between rounded-xl border border-violet-200 bg-violet-50 px-5 py-3.5 dark:border-violet-900/40 dark:bg-violet-900/10">
                 <div className="flex items-center gap-3">

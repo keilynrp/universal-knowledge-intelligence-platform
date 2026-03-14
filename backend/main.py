@@ -41,6 +41,7 @@ from backend.routers import (
     graph_export,
     harmonization,
     ingest,
+    nlq,
     notifications,
     quality,
     relationships,
@@ -340,6 +341,7 @@ app.include_router(entity_linker.router)
 app.include_router(scheduled_imports.router)
 app.include_router(relationships.router)
 app.include_router(graph_export.router)
+app.include_router(nlq.router)
 
 # ── Static file serving (uploaded logos etc.) ─────────────────────────────────
 _static_dir = pathlib.Path("static")

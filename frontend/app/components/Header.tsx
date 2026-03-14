@@ -23,6 +23,7 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   "/rag": { title: "Semantic RAG", subtitle: "AI-powered retrieval and semantic analysis" },
   "/domains": { title: "Domain Registry", subtitle: "Manage workspace schemas and entity type definitions" },
   "/analytics/olap": { title: "OLAP Cube Explorer", subtitle: "Multi-dimensional analysis and drill-down across your data" },
+  "/analytics/nlq":  { title: "Natural Language Query", subtitle: "Ask your data anything in plain English — AI translates it to OLAP" },
   "/analytics/topics": { title: "Topic Modeling", subtitle: "Concept frequency, co-occurrence, clusters, and field correlations" },
   "/artifacts": { title: "Artifact Studio", subtitle: "Build and export strategic intelligence artifacts" },
   "/artifacts/gaps": { title: "Knowledge Gap Detector", subtitle: "Identify and prioritize data quality issues in your domain" },
