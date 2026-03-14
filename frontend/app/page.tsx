@@ -12,7 +12,7 @@ import { useAuth } from "./contexts/AuthContext";
 
 interface DashboardStats {
   total: number;
-  brands: number;
+  labels: number;
   models: number;
   enriched: number;
 }
@@ -159,8 +159,8 @@ export default function Home() {
             </svg>
           }
           iconColor="amber"
-          label="Unique Brands"
-          value={stats?.brands?.toLocaleString() ?? "—"}
+          label="Unique Primary Labels"
+          value={stats?.labels?.toLocaleString() ?? "—"}
         />
         <StatCard
           icon={

@@ -604,6 +604,8 @@ ukip/
 | 63 | Enrichment | Scopus Adapter — Elsevier premium enrichment (BYOK institutional API key), cascade integration `enrichment_worker.py` |
 | 64 | Infrastructure| PostgreSQL/MySQL backends — Swapped SQLite for production-grade DBs via `DATABASE_URL` (psycopg2, pymysql, pooled connections), `docker-compose.yml` added for Postgres out-of-the-box |
 | 65 | Authentication | SSO Integration — OAuth2/OIDC integration via Authlib (`/sso/login` & `/sso/callback`), auto-provisioning of users, session middleware injection |
+| 66 | Core | Universal Entity Backend — Database migration to Phase 8a schema. RawProduct replaced by UniversalEntity seamlessly via SQLAlchemy `@hybrid_property` backward-compatibility mapping |
+| 67 | UI | Agnostic UI Refactor — `brand`, `model`, `ecommerce` literal references removed globally from UI dashboard, reports and pages. Rendered via YAML domain attributes natively |
 
 ### Up Next 🔜
 

@@ -1,8 +1,16 @@
 /**
  * Centralized API configuration for UKIP frontend.
- * Set NEXT_PUBLIC_API_URL in .env.local for non-localhost environments.
+ *
+ * In the browser all requests go through the Next.js proxy at /api/backend/*
+ * so they stay on the same origin (no CORS / Private-Network-Access issues).
+ * Server-side (SSR / API routes) hits the backend directly via NEXT_PUBLIC_API_URL.
  */
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const DIRECT_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+
+export const API_BASE =
+  typeof window === "undefined"
+    ? DIRECT_URL          // server-side: call backend directly
+    : "/api/backend";     // browser: route through Next.js proxy (same-origin)
 
 /**
  * Authenticated fetch wrapper.
@@ -21,7 +29,12 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  } catch {
+    throw new Error(`Cannot connect to backend at ${API_BASE}. Is the server running?`);
+  }
 
   if (response.status === 401 && typeof window !== "undefined") {
     localStorage.removeItem("ukip_token");

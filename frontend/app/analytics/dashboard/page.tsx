@@ -246,10 +246,10 @@ export default function ExecutiveDashboardPage() {
       {/* ── Section 3: Brand × Year Heatmap ── */}
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
         <h3 className="mb-1 text-base font-semibold text-gray-900 dark:text-white">
-          Top Brands by Year
+          Top Primary Labels by Year
         </h3>
         <p className="mb-5 text-xs text-gray-500 dark:text-gray-400">
-          Entity count per brand × year — darker violet = higher volume
+          Entity count per label × year — darker violet = higher volume
         </p>
 
         {loading ? (
@@ -264,7 +264,7 @@ export default function ExecutiveDashboardPage() {
               <thead>
                 <tr>
                   <th className="border border-gray-100 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-400">
-                    Brand
+                    Label
                   </th>
                   {data.brand_year_matrix.years.map((yr) => (
                     <th
@@ -353,7 +353,7 @@ export default function ExecutiveDashboardPage() {
                 <tr className="border-b border-gray-100 dark:border-gray-800">
                   <th className="pb-3 pr-4 text-xs font-semibold uppercase tracking-wide text-gray-500">#</th>
                   <th className="pb-3 pr-4 text-xs font-semibold uppercase tracking-wide text-gray-500">Entity</th>
-                  <th className="pb-3 pr-4 text-xs font-semibold uppercase tracking-wide text-gray-500">Brand</th>
+                  <th className="pb-3 pr-4 text-xs font-semibold uppercase tracking-wide text-gray-500">Primary Label</th>
                   <th className="pb-3 pr-4 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Citations</th>
                   <th className="pb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Source</th>
                 </tr>

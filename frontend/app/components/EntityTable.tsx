@@ -62,6 +62,7 @@ export default function EntityTable() {
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [bulkDeleting, setBulkDeleting] = useState(false);
     const [bulkEnriching, setBulkEnriching] = useState(false);
+    const [fetchError, setFetchError] = useState<string | null>(null);
 
     useEffect(() => {
         const handler = setTimeout(() => {
@@ -74,6 +75,7 @@ export default function EntityTable() {
     const fetchEntities = useCallback(async () => {
         setLoading(true);
         setSelectedIds(new Set());
+        setFetchError(null);
         try {
             const queryParams = new URLSearchParams({
                 skip: (page * limit).toString(),
@@ -82,9 +84,11 @@ export default function EntityTable() {
             if (debouncedSearch) queryParams.append("search", debouncedSearch);
 
             const res = await apiFetch(`/entities?${queryParams}`);
-            if (!res.ok) throw new Error("Failed to fetch entities");
+            if (!res.ok) throw new Error(`Server responded with ${res.status}`);
             setEntities(await res.json());
         } catch (error) {
+            const msg = error instanceof Error ? error.message : "Unknown error";
+            setFetchError(msg);
             console.error("Error fetching entities:", error);
         } finally {
             setLoading(false);
@@ -296,7 +300,25 @@ export default function EntityTable() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                            {loading ? (
+                            {fetchError ? (
+                                <tr>
+                                    <td colSpan={11} className="px-5 py-12 text-center">
+                                        <div className="flex flex-col items-center gap-3">
+                                            <svg className="h-8 w-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                            </svg>
+                                            <span className="text-sm font-medium text-red-600 dark:text-red-400">Failed to load entities</span>
+                                            <span className="text-xs text-gray-500 dark:text-gray-400">{fetchError}</span>
+                                            <button
+                                                onClick={fetchEntities}
+                                                className="mt-1 rounded-md bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/40"
+                                            >
+                                                Retry
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : loading ? (
                                 <tr>
                                     <td colSpan={11} className="px-5 py-12 text-center">
                                         <div className="flex flex-col items-center gap-2">

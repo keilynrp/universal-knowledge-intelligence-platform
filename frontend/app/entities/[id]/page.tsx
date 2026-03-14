@@ -59,7 +59,7 @@ const CORE_FIELDS: (keyof Entity)[] = [
 ];
 
 const FIELD_LABELS: Record<string, string> = {
-    entity_name: "Entity Name", brand_capitalized: "Brand", model: "Model",
+    entity_name: "Entity Name", brand_capitalized: "Primary Label", model: "Secondary Label",
     sku: "SKU", variant: "Variant", classification: "Classification",
     entity_type: "Entity Type", status: "Status", validation_status: "Validation",
     gtin: "GTIN", barcode: "Barcode", unit_of_measure: "Unit of Measure",

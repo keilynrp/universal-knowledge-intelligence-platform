@@ -19,10 +19,10 @@ interface Entity {
 
 const EDITABLE_FIELDS = [
     { key: "entity_name",       label: "Name" },
-    { key: "brand_capitalized", label: "Brand" },
+    { key: "brand_capitalized", label: "Primary Label" },
     { key: "status",            label: "Status" },
     { key: "classification",    label: "Classification" },
-    { key: "model",             label: "Model" },
+    { key: "model",             label: "Secondary Label" },
     { key: "variant",           label: "Variant" },
     { key: "entity_type",       label: "Entity Type" },
 ];
@@ -264,10 +264,10 @@ export default function BulkEditPage() {
                                 </th>
                                 <th className="px-4 py-3">ID</th>
                                 <th className="px-4 py-3">Name</th>
-                                <th className="px-4 py-3">Brand</th>
+                                <th className="px-4 py-3">Primary Label</th>
                                 <th className="px-4 py-3">Status</th>
                                 <th className="px-4 py-3">Classification</th>
-                                <th className="px-4 py-3">Model</th>
+                                <th className="px-4 py-3">Secondary Label</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50 dark:divide-gray-800">

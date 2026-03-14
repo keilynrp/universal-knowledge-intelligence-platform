@@ -41,8 +41,8 @@ function simLabel(s: number): { label: string; variant: "error" | "warning" | "i
 
 const DISPLAY_FIELDS: Array<{ key: keyof EntitySnap; label: string }> = [
   { key: "entity_name",       label: "Name"   },
-  { key: "brand_capitalized", label: "Brand"  },
-  { key: "model",             label: "Model"  },
+  { key: "brand_capitalized", label: "Primary Label"  },
+  { key: "model",             label: "Secondary Label"  },
   { key: "sku",               label: "SKU"    },
 ];
 

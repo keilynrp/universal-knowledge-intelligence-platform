@@ -35,7 +35,7 @@ const SECTION_ICONS: Record<string, string> = {
 const SECTION_DESCRIPTIONS: Record<string, string> = {
   entity_stats:         "Total entities, validation status breakdown, distribution chart",
   enrichment_coverage:  "Coverage %, average citations, top enriched entities",
-  top_brands:           "Top 15 brands or classifications by entity count",
+  top_brands:           "Top 15 primary labels or classifications by entity count",
   topic_clusters:       "Most frequent concepts from enrichment data",
   harmonization_log:    "Last 10 harmonization steps with status",
 };
