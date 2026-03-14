@@ -5,10 +5,12 @@ import Link from "next/link";
 import EntityTable from "./components/EntityTable";
 import EntityVariantView from "./components/EntityVariantView";
 import ActivityFeed from "./components/ActivityFeed";
+import GuidedTour, { resetTour } from "./components/GuidedTour";
 import { PageHeader, StatCard } from "./components/ui";
 import { useDomain } from "./contexts/DomainContext";
 import { apiFetch } from "../lib/api";
 import { useAuth } from "./contexts/AuthContext";
+import { Analytics } from "../lib/analytics";
 
 interface DashboardStats {
   total: number;
@@ -75,6 +77,8 @@ export default function Home() {
       if (res.ok) {
         await fetchDemoStatus();
         await fetchStats();
+        resetTour(); // reset so tour shows for new demo session
+        Analytics.demoSeeded();
       }
     } catch { /* non-critical */ } finally {
       setDemoLoading(false);
@@ -268,6 +272,9 @@ export default function Home() {
           <ActivityFeed />
         </div>
       </div>
+
+      {/* Guided tour — auto-starts after demo is seeded */}
+      <GuidedTour autoStart={demoStatus?.demo_seeded === true} />
     </div>
   );
 }

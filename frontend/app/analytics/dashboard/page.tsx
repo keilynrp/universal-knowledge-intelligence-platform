@@ -11,10 +11,13 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { PageHeader, StatCard, Badge } from "../../components/ui";
+import { PageHeader, StatCard } from "../../components/ui";
 import ConceptCloud from "../../components/ConceptCloud";
 import { useDomain } from "../../contexts/DomainContext";
 import { apiFetch } from "@/lib/api";
+import { Analytics } from "@/lib/analytics";
+
+const REFRESH_INTERVAL_SEC = 5 * 60; // 5 minutes
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -98,6 +101,9 @@ export default function ExecutiveDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [countdown, setCountdown] = useState(REFRESH_INTERVAL_SEC);
+  const [exporting, setExporting] = useState(false);
 
   const fetchDashboard = useCallback(async () => {
     setLoading(true);
@@ -115,6 +121,50 @@ export default function ExecutiveDashboardPage() {
 
   useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
 
+  // Auto-refresh countdown
+  useEffect(() => {
+    if (!autoRefresh) { setCountdown(REFRESH_INTERVAL_SEC); return; }
+    const tick = setInterval(() => {
+      setCountdown(c => {
+        if (c <= 1) { fetchDashboard(); return REFRESH_INTERVAL_SEC; }
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [autoRefresh, fetchDashboard]);
+
+  const mm = String(Math.floor(countdown / 60)).padStart(2, "0");
+  const ss = String(countdown % 60).padStart(2, "0");
+
+  const handleExportPDF = async () => {
+    if (!data) return;
+    setExporting(true);
+    Analytics.dashboardExportPDF(activeDomainId);
+    try {
+      const res = await apiFetch("/exports/pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          domain_id: activeDomainId,
+          sections: ["entity_stats", "enrichment_coverage", "top_brands", "topic_clusters"],
+          title: "Executive Dashboard Report",
+        }),
+      });
+      if (!res.ok) { setError("PDF export failed (WeasyPrint may not be installed)"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `dashboard_${activeDomainId}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("PDF export error");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // Compute heatmap max for scaling
   const heatMax = data
     ? Math.max(1, ...data.brand_year_matrix.matrix.flat())
@@ -130,15 +180,53 @@ export default function ExecutiveDashboardPage() {
           { label: "Executive Dashboard" },
         ]}
         actions={
-          <button
-            onClick={fetchDashboard}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-            </svg>
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Auto-refresh toggle */}
+            <button
+              onClick={() => setAutoRefresh(v => !v)}
+              title={autoRefresh ? `Auto-refresh on — next in ${mm}:${ss}` : "Enable auto-refresh every 5 min"}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium shadow-sm transition ${
+                autoRefresh
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
+                  : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+              }`}
+            >
+              <svg className={`h-3.5 w-3.5 ${autoRefresh ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+              </svg>
+              <span className="tabular-nums">{autoRefresh ? `${mm}:${ss}` : "Auto"}</span>
+            </button>
+
+            {/* Manual refresh */}
+            <button
+              onClick={fetchDashboard}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+              </svg>
+              Refresh
+            </button>
+
+            {/* Export Dashboard PDF */}
+            <button
+              onClick={handleExportPDF}
+              disabled={exporting || loading || !data}
+              className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50"
+            >
+              {exporting ? (
+                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                </svg>
+              ) : (
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+              )}
+              {exporting ? "Exporting…" : "Export PDF"}
+            </button>
+          </div>
         }
       />
 
@@ -151,7 +239,7 @@ export default function ExecutiveDashboardPage() {
       {/* ── Section 1: Hero KPIs ── */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
         {loading ? (
-          Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28" />)
+          Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-28" />)
         ) : data ? (
           <>
             <StatCard
@@ -164,7 +252,6 @@ export default function ExecutiveDashboardPage() {
               label="Total Entities"
               value={data.kpis.total_entities.toLocaleString()}
             />
-
             <StatCard
               iconColor="emerald"
               icon={
@@ -244,7 +331,6 @@ export default function ExecutiveDashboardPage() {
         <p className="mb-5 text-xs text-gray-500 dark:text-gray-400">
           Entity creation by year — extracted from <code>creation_date</code>
         </p>
-
         {loading ? (
           <Skeleton className="h-52" />
         ) : !data || data.entities_by_year.length === 0 ? (
@@ -288,7 +374,6 @@ export default function ExecutiveDashboardPage() {
         <p className="mb-5 text-xs text-gray-500 dark:text-gray-400">
           Entity count per label × year — darker violet = higher volume
         </p>
-
         {loading ? (
           <Skeleton className="h-40" />
         ) : !data || data.brand_year_matrix.brands.length === 0 ? (
@@ -350,7 +435,6 @@ export default function ExecutiveDashboardPage() {
             </Link>
           )}
         </div>
-
         {loading ? (
           <Skeleton className="h-32" />
         ) : (
@@ -376,7 +460,6 @@ export default function ExecutiveDashboardPage() {
             View all →
           </Link>
         </div>
-
         {loading ? (
           <Skeleton className="h-48" />
         ) : !data || data.top_entities.length === 0 ? (

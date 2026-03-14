@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useDomain } from "../../contexts/DomainContext";
 import { apiFetch } from "@/lib/api";
+import { Analytics } from "@/lib/analytics";
+
+const PAGE_SIZE = 50;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -71,6 +74,7 @@ export default function OLAPExplorerPage() {
   const [querying, setQuerying] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   // Load dimensions when domain changes
   useEffect(() => {
@@ -81,6 +85,7 @@ export default function OLAPExplorerPage() {
     setSecondaryDim("");
     setResult(null);
     setFilters({});
+    setVisibleCount(PAGE_SIZE);
 
     apiFetch(`/cube/dimensions/${activeDomainId}`)
       .then(r => r.ok ? r.json() : Promise.reject())
@@ -93,6 +98,7 @@ export default function OLAPExplorerPage() {
     if (!primaryDim) return;
     setQuerying(true);
     setError(null);
+    setVisibleCount(PAGE_SIZE);
     const group_by = secondaryDim && secondaryDim !== primaryDim
       ? [primaryDim, secondaryDim]
       : [primaryDim];
@@ -107,7 +113,9 @@ export default function OLAPExplorerPage() {
         const err = await res.json().catch(() => ({ detail: "Query failed" }));
         setError(err.detail ?? "Query failed");
       } else {
-        setResult(await res.json());
+        const data: CubeResult = await res.json();
+        setResult(data);
+        Analytics.olapQuery(activeDomainId, group_by.length);
       }
     } catch {
       setError("Network error");
@@ -147,6 +155,9 @@ export default function OLAPExplorerPage() {
   const primaryDimLabel = dimensions.find(d => d.name === primaryDim)?.label ?? primaryDim;
   const secondaryDimLabel = dimensions.find(d => d.name === secondaryDim)?.label ?? secondaryDim;
   const isCrossTab = result && result.group_by.length === 2;
+
+  const visibleRows = result?.rows.slice(0, visibleCount) ?? [];
+  const hasMore = result ? visibleCount < result.rows.length : false;
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
@@ -248,6 +259,7 @@ export default function OLAPExplorerPage() {
             <input
               value={filterInput.value}
               onChange={e => setFilterInput(f => ({ ...f, value: e.target.value }))}
+              onKeyDown={e => { if (e.key === "Enter") addFilter(); }}
               placeholder="Value…"
               className="w-28 rounded-lg border border-gray-200 px-2 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
@@ -291,9 +303,15 @@ export default function OLAPExplorerPage() {
       {result && (
         <div className="flex flex-col gap-3 flex-1 min-h-0">
           {/* Summary */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center justify-between">
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              <span className="font-semibold text-gray-900 dark:text-white">{result.rows.length}</span> groups ·{" "}
+              Showing{" "}
+              <span className="font-semibold text-gray-900 dark:text-white">
+                {Math.min(visibleCount, result.rows.length)}
+              </span>{" "}
+              of{" "}
+              <span className="font-semibold text-gray-900 dark:text-white">{result.rows.length}</span>{" "}
+              groups ·{" "}
               <span className="font-semibold text-gray-900 dark:text-white">{result.total.toLocaleString()}</span> total records
             </p>
             {isCrossTab && (
@@ -328,7 +346,7 @@ export default function OLAPExplorerPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {result.rows.map((row, i) => (
+                {visibleRows.map((row, i) => (
                   <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
                     <td className="px-6 py-3 font-medium text-gray-900 dark:text-white">
                       {row.values[result.group_by[0]] ?? <span className="text-gray-400 italic">null</span>}
@@ -353,6 +371,7 @@ export default function OLAPExplorerPage() {
                           setFilters(f => ({ ...f, [field]: value }));
                           if (secondaryDim) setPrimaryDim(secondaryDim);
                           setSecondaryDim("");
+                          setVisibleCount(PAGE_SIZE);
                         }}
                         className="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-600 hover:bg-blue-100 hover:text-blue-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-blue-900/30 dark:hover:text-blue-400 transition-colors"
                         title={`Drill down into ${row.values[result.group_by[0]]}`}
@@ -371,6 +390,27 @@ export default function OLAPExplorerPage() {
               </div>
             )}
           </div>
+
+          {/* Load more */}
+          {hasMore && (
+            <div className="flex items-center justify-center gap-3 py-2">
+              <span className="text-xs text-gray-400">
+                {result.rows.length - visibleCount} more rows not shown
+              </span>
+              <button
+                onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
+                className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-medium text-gray-600 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800"
+              >
+                Load {Math.min(PAGE_SIZE, result.rows.length - visibleCount)} more
+              </button>
+              <button
+                onClick={() => setVisibleCount(result.rows.length)}
+                className="text-xs text-blue-600 hover:underline dark:text-blue-400"
+              >
+                Show all
+              </button>
+            </div>
+          )}
         </div>
       )}
 
