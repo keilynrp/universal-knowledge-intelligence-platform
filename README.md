@@ -11,7 +11,7 @@
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-4-%2338B2AC.svg?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 [![DuckDB](https://img.shields.io/badge/DuckDB-OLAP-FFF000?style=for-the-badge&logo=duckdb&logoColor=black)](https://duckdb.org/)
 [![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector%20DB-ff6b35?style=for-the-badge)](https://www.trychroma.com/)
-[![Tests](https://img.shields.io/badge/Tests-1091%20passing-brightgreen?style=for-the-badge)](backend/tests/)
+[![Tests](https://img.shields.io/badge/Tests-1148%20passing-brightgreen?style=for-the-badge)](backend/tests/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=for-the-badge)](LICENSE)
 
 A domain-agnostic intelligence platform that ingests raw data, harmonizes it, enriches it against global knowledge bases, runs OLAP analytics and stochastic simulations, builds entity relationship graphs, and lets you query everything through an agentic RAG-powered AI assistant — with custom dashboards, scheduled reports, Slack/Teams alerts, and a public API ecosystem.
@@ -24,7 +24,7 @@ A domain-agnostic intelligence platform that ingests raw data, harmonizes it, en
 
 ## Why UKIP?
 
-Most data platforms force you to choose: clean your data **or** analyze it. UKIP does both in a single pipeline. It started as a catalog deduplication tool and evolved into a full research intelligence engine across **82 development sprints**.
+Most data platforms force you to choose: clean your data **or** analyze it. UKIP does both in a single pipeline. It started as a catalog deduplication tool and evolved into a full research intelligence engine across **86 development sprints**.
 
 **What it does:**
 
@@ -37,8 +37,10 @@ Most data platforms force you to choose: clean your data **or** analyze it. UKIP
 7. **Build dashboards** — each user gets a personal workspace with drag-and-drop widget panels, 8 widget types, and persistent layouts.
 8. **Automate** with scheduled reports (PDF/Excel/HTML delivered by email on any cadence), Slack/Teams/Discord push alerts for 8 platform events, and cron-style data imports from connected stores.
 9. **Integrate** programmatically through long-lived **API Keys** with scope control (`read`/`write`/`admin`) — zero friction for developer ecosystems.
-10. **Collaborate** through threaded comments, full RBAC (4 roles), role-aware UI, and outbound webhooks.
+10. **Collaborate** through threaded comments with emoji reactions and resolve workflows, full RBAC (4 roles), role-aware UI, and outbound webhooks.
 11. **Observe** every action through a real-time audit log, notification center, and HTTP-level audit middleware.
+12. **Scale** with multi-tenant **Organizations** — users belong to orgs, roles scoped per org, plan tiers (free/pro/enterprise).
+13. **Present** data instantly with the **Sales Deck** generator — live HTML narrative printable to PDF for prospects and stakeholders.
 
 ### Design Philosophy
 
@@ -649,16 +651,22 @@ ukip/
 
 The following sprints are proposed for the next development cycle. Each is designed to compound on the platform's strengths — retention, ecosystem, and intelligence.
 
-#### Sprint 83 — Data Lineage Tracker
-Track the full provenance chain of every entity: which file it came from, which harmonization steps touched it, which authority records confirmed it, and which enrichment sources contributed. Visual lineage graph per entity. Exportable lineage report. Supports compliance and reproducibility requirements.
+#### ✅ Sprint 83 — Performance Optimization
+In-memory TTL analytics cache (`_SimpleCache`, 5 min / 2 min) for all expensive topic/correlation/dashboard computations. Virtual scrolling in the entities table for pages > 50 rows (ROW_HEIGHT=52px, 620px viewport, sticky thead, editing-row pinning). Admin cache-invalidation endpoint. 200-row page size option.
 
-#### Sprint 84 — Real-time Collaboration (WebSocket)
+#### ✅ Sprint 84 — Demo-Readiness & Sales Deck
+`GET /exports/sales-deck` generates a self-contained print-ready HTML page (gradient hero, live KPI cards, value props, workflow timeline, domain table, capabilities checklist) — open in browser → Print → Save as PDF for a polished sales deck. Companion `/demo/sales` interactive page with animated KPI counters.
+
+#### ✅ Sprint 85 — Multi-tenant Organizations
+`Organization` + `OrganizationMember` models with slug, plan (free/pro/enterprise), and owner/admin/member roles. `org_id` nullable FK on User (backward-compatible). 9-endpoint organizations router (CRUD + invite/remove members + `/switch`). `/settings/organizations` management UI in the platform.
+
+#### ✅ Sprint 86 — Collaborative Annotations (Enhanced)
+Annotation resolve/unresolve workflow (`is_resolved`, `resolved_at`, `resolved_by_id`). Emoji reactions (👍 ❤️ 🚀 👀 ✅ 😄 🎉) per annotation with per-user toggle. Thread statistics endpoint (`total_threads`, `resolved`, `unresolved`, `total_reactions`). UI: resolve badge, reaction bar with counts in `AnnotationThread.tsx`.
+
+#### Sprint 87 — Real-time Collaboration (WebSocket)
 Add live presence indicators and real-time co-editing signals using WebSockets. Users see who else is viewing the same entity, dashboard edits broadcast instantly, and scheduled report status updates push live without polling. Foundation for team-based workflows.
 
-#### Sprint 85 — Multi-tenant Workspaces
-Introduce **Organization** as a top-level resource above domain. Each org gets isolated data, users, settings, and branding. Org-level admins manage their own members. Enables SaaS deployment with true tenant isolation — the strategic gateway to commercial scaling.
-
-#### Sprint 86 — Workflow Automation Engine
+#### Sprint 88 — Workflow Automation Engine
 Visual no-code workflow builder: trigger → condition → action chains. Triggers: scheduled time, entity imported, quality score drops below threshold, alert fired. Actions: run harmonization, send report, call webhook, notify Slack, enrich domain. Replaces one-off scripts with reusable, audited automations.
 
 #### Sprint 87 — Embedding & Widget SDK
@@ -685,9 +693,9 @@ Allow admins to export their enriched, harmonized entity dataset as a fine-tunin
 
 | Horizon | Theme | Description |
 |---------|-------|-------------|
-| **Now** (Sprints 77–82) | Platform Maturity | Automation, custom dashboards, alerts, API ecosystem |
-| **Near** (Sprints 83–87) | Scale & Ecosystem | Multi-tenancy, real-time collab, embedded widgets, lineage |
-| **Far** (Sprints 88–92) | Intelligence Network | Recommendations, marketplaces, governance, fine-tuned models |
+| **Now** (Sprints 83–86) | Performance & Scale | Analytics cache, virtual scroll, multi-tenancy, sales deck, annotation workflows |
+| **Near** (Sprints 87–91) | Ecosystem & Intelligence | Real-time collab, workflow automation, embedded widgets, data lineage, compliance |
+| **Far** (Sprints 92–96) | Intelligence Network | Recommendations, marketplaces, governance, fine-tuned domain models |
 
 *See [EVOLUTION_STRATEGY.md](docs/EVOLUTION_STRATEGY.md) for the full phase-by-phase platform vision.*
 
