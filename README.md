@@ -11,7 +11,7 @@
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-4-%2338B2AC.svg?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 [![DuckDB](https://img.shields.io/badge/DuckDB-OLAP-FFF000?style=for-the-badge&logo=duckdb&logoColor=black)](https://duckdb.org/)
 [![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector%20DB-ff6b35?style=for-the-badge)](https://www.trychroma.com/)
-[![Tests](https://img.shields.io/badge/Tests-950%20passing-brightgreen?style=for-the-badge)](backend/tests/)
+[![Tests](https://img.shields.io/badge/Tests-1013%20passing-brightgreen?style=for-the-badge)](backend/tests/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=for-the-badge)](LICENSE)
 
 A domain-agnostic intelligence platform that ingests raw data, harmonizes it, enriches it against global knowledge bases, runs OLAP analytics and stochastic simulations, builds entity relationship graphs, and lets you query everything through an agentic RAG-powered AI assistant.
@@ -24,7 +24,7 @@ A domain-agnostic intelligence platform that ingests raw data, harmonizes it, en
 
 ## Why UKIP?
 
-Most data platforms force you to choose: clean your data **or** analyze it. UKIP does both in a single pipeline. It started as a catalog deduplication tool and evolved into a full research intelligence engine across 73 development sprints.
+Most data platforms force you to choose: clean your data **or** analyze it. UKIP does both in a single pipeline. It started as a catalog deduplication tool and evolved into a full research intelligence engine across 76 development sprints.
 
 **What it does:**
 
@@ -57,8 +57,9 @@ One rule: **Justified Complexity** ([details](docs/ARCHITECTURE.md)).
 - **Entity Quality Score** — 0.0–1.0 composite index per entity: field completeness (40%), enrichment coverage (30%), confirmed authority (20%), relationship count (10%). Tri-color badge (green/amber/red), `min_quality` filter, quality sort, and bulk recompute endpoint.
 - **Graph Analytics Dashboard** — Whole-graph KPIs, top-10 PageRank leaderboard, top-10 degree centrality table, and interactive Path Finder with BFS hop-chain visualization (`/analytics/graph`).
 - **Entity Linker** — Fuzzy pairwise duplicate detection across the catalog. Configurable similarity threshold, side-by-side field comparison, merge (winner absorbs loser's non-empty fields), and dismiss (persisted with undo).
-- **Bulk Import Wizard** — 5-step guided import: Upload → Map Fields → Domain → Validate → Import. Drag-and-drop file zone, auto-preview (`POST /upload/preview`) with format detection, column auto-mapping, and sample rows. Science formats (BibTeX/RIS) show fixed read-only mapping. Custom column→field routing with skip support.
+- **Bulk Import Wizard** — 5-step guided import: Upload → Map Fields → Domain → Validate → Import. Drag-and-drop file zone, auto-preview (`POST /upload/preview`) with format detection, column auto-mapping, and sample rows. Science formats (BibTeX/RIS) show fixed read-only mapping. Custom column→field routing with skip support. **AI Suggest** button in Step 2 calls the active LLM to auto-map unknown columns — sends column names + sample values, returns field suggestions ranked by confidence.
 - **Multi-format Import/Export** — Excel, CSV, JSON, XML, BibTeX, RIS, Parquet, RDF/TTL. Drag-and-drop pre-analyzer. Export to Excel with clean universal headers.
+- **Knowledge Graph Export** — Export the full entity relationship graph to standard network formats: GraphML (Gephi/yEd), Cytoscape JSON, and JSON-LD (schema.org). Optional `?domain=` filter scopes the export to a single domain. Enables interoperability with external network analysis ecosystems.
 - **Domain Registry** — Define custom schemas (Science, Healthcare, Business, or your own) with YAML-based configurations.
 - **Demo Mode** — One-click seed of 1,000 demo entities; one-click wipe.
 
@@ -103,7 +104,7 @@ One rule: **Justified Complexity** ([details](docs/ARCHITECTURE.md)).
 - **Activity Feed** — Real-time audit timeline on the home dashboard. Auto-refreshes every 30 seconds.
 - **Webhooks** — Outbound HTTP callbacks for any platform event. HMAC-SHA256 request signing, per-event subscription, fire-and-forget delivery with status tracking.
 - **Notification Center** — Full `/notifications` page with per-user read/unread state (server-side `last_read_at` threshold), action links to relevant entities, filter by event type, paginated feed, bulk mark-all-read, and per-item dismiss. Bell icon shows live unread count badge.
-- **Branding** — Configurable platform name, accent color, and footer text, applied throughout the UI and report/PPTX exports.
+- **Branding** — Configurable platform name, accent color, and footer text, applied throughout the UI and report/PPTX exports. **Logo Drag & Drop** — upload PNG, SVG, WebP, JPEG, or GIF via drag-and-drop or click-to-browse. Stored as a static file and reflected globally (sidebar header, reports, exports) via `BrandingContext`. Successive uploads auto-replace the previous file. Remove logo with one click.
 
 ### Scientometric Enrichment
 Four-phase cascading enrichment worker:
@@ -217,7 +218,7 @@ Open `http://localhost:3004`
 
 ```bash
 python -m pytest backend/tests/ -x -q
-# 950 tests, all passing
+# 1013 tests, all passing
 ```
 
 ---
@@ -320,9 +321,15 @@ graph TD
 | `DELETE` | `/entities/bulk` | Bulk delete by ID list (editor+) |
 | `POST` | `/entities/bulk-update` | Batch field update (editor+) |
 | `POST` | `/upload/preview` | Parse file without importing — returns format, columns, auto-mapping, sample rows |
+| `POST` | `/upload/suggest-mapping` | LLM-assisted column mapping — sends column names + sample values, returns suggested UKIP field mapping (editor+) |
 | `POST` | `/upload` | Import file with domain + custom field mapping (editor+) |
 | `GET` | `/export` | Export catalog to Excel |
 | `GET` | `/stats` | Aggregated system statistics |
+
+### Knowledge Graph Export
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/export/graph` | Export relationship graph (`?format=graphml\|cytoscape\|jsonld`, optional `?domain=`) |
 
 ### Entity Relationships
 | Method | Endpoint | Description |
@@ -509,7 +516,8 @@ ukip/
 │   │   ├── audit_log.py           # Audit timeline, stats, CSV export
 │   │   ├── auth_users.py          # JWT auth + RBAC + avatar + profile endpoints
 │   │   ├── authority.py           # Authority resolution + review queue
-│   │   ├── branding.py            # Platform branding settings
+│   │   ├── branding.py            # Platform branding settings + logo upload/delete
+│   │   ├── graph_export.py        # Knowledge graph export (GraphML, Cytoscape, JSON-LD)
 │   │   ├── column_maps.py         # Universal column header → model field mapping
 │   │   ├── context.py             # Context sessions + tool registry + diff/insights
 │   │   ├── demo.py                # Demo seed/reset
@@ -518,14 +526,14 @@ ukip/
 │   │   ├── entities.py            # Entity CRUD + pagination + bulk ops
 │   │   ├── entity_linker.py       # Duplicate detection + merge/dismiss
 │   │   ├── harmonization.py       # Universal normalization pipeline (undo/redo)
-│   │   ├── ingest.py              # Import wizard (preview + upload) + export
+│   │   ├── ingest.py              # Import wizard (preview + upload + AI suggest-mapping) + export
 │   │   ├── notifications.py       # Notification center (read/unread state)
 │   │   ├── relationships.py       # Entity relationship graph (CRUD + BFS)
 │   │   ├── reports.py             # HTML/PDF/Excel/PPTX report generation
 │   │   ├── search.py              # FTS5 global search + index rebuild
 │   │   ├── stores.py              # Store connector management
 │   │   └── webhooks.py            # Outbound webhook CRUD + delivery
-│   ├── tests/                     # 950 tests across 38 files
+│   ├── tests/                     # 1013 tests across 41 files
 │   ├── audit.py                   # AuditMiddleware (HTTP-level interception)
 │   ├── auth.py                    # JWT + RBAC + account lockout
 │   ├── circuit_breaker.py         # External API resilience
@@ -540,6 +548,7 @@ ukip/
 │   ├── app/
 │   │   ├── analytics/
 │   │   │   ├── dashboard/         # Executive Dashboard (KPIs, heatmap, top entities)
+│   │   │   ├── graph/             # Graph Analytics Dashboard + Export panel (GraphML/Cytoscape/JSON-LD)
 │   │   │   ├── olap/              # OLAP Cube Explorer
 │   │   │   ├── topics/            # Topic Modeling & Correlations
 │   │   │   ├── roi/               # ROI Calculator (Monte Carlo I+D)
@@ -565,7 +574,7 @@ ukip/
 │   │   ├── reports/               # Report Builder (HTML/PDF/Excel/PPTX)
 │   │   ├── search/                # Full-text search results page
 │   │   ├── settings/
-│   │   │   ├── page.tsx           # App settings (preferences, account, webhooks, branding)
+│   │   │   ├── page.tsx           # App settings (preferences, account, webhooks, branding + logo drag & drop)
 │   │   │   └── users/             # User Management (stats, search, role/status management)
 │   │   └── components/
 │   │       ├── AnnotationThread.tsx   # Threaded comments with RBAC
@@ -653,6 +662,9 @@ ukip/
 | — | Cleanup | Universal Schema Cleanup — removed all 33 e-commerce hybrid properties from model; replaced `Entity` schema, `COLUMN_MAPPING`, harmonization steps, and analytics queries with domain-agnostic equivalents; 881 tests passing |
 | 72 | Quality | Entity Quality Score — 0.0–1.0 composite index per entity (field completeness 40%, enrichment 30%, authority 20%, relationships 10%); `POST /entities/quality/compute`, `GET /entities/{id}/quality`; quality badge in entity list; `min_quality` filter and quality sort; knowledge-gap detector integration; 908 tests |
 | 73 | Graph | Graph Analytics — pure-Python PageRank (power iteration, damping 0.85), degree centrality (in/out + by relation type), weakly-connected components (BFS), BFS shortest path with hop labels; `GET /graph/stats`, `/graph/path`, `/graph/components`, `/entities/{id}/graph/metrics`; Graph Analytics dashboard page; 950 tests |
+| 74 | Import | LLM-Assisted Column Mapping — `POST /upload/suggest-mapping` calls the active LLM with column names + sample values and returns a suggested UKIP field mapping; `_parse_llm_mapping()` helper strips markdown fences, falls back to regex JSON extraction, coerces unknown fields to null; "AI Suggest" button in Import Wizard Step 2 with provider attribution banner; 966 tests |
+| 75 | Graph | Knowledge Graph Export — `GET /export/graph?format=graphml\|cytoscape\|jsonld` serializes the full relationship graph; optional `?domain=` filter; `backend/routers/graph_export.py` with `_to_graphml`, `_to_cytoscape`, `_to_jsonld` serializers; Export panel in Graph Analytics page with domain filter and per-format download buttons; 996 tests |
+| 76 | Branding | Logo Drag & Drop — `POST /branding/logo` (multipart upload, 2 MB cap, PNG/SVG/WebP/JPEG/GIF, 415/413 validation) + `DELETE /branding/logo`; cache-busting UUID filenames; `LogoDropZone` component in Settings with drag-and-drop, click-to-browse, live preview, and remove button; `LogoIcon` in Sidebar propagates logo via `BrandingContext`; StaticFiles mount at `/static`; 1013 tests |
 
 ### Up Next 🔜
 
