@@ -14,7 +14,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 import pandas as pd
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -37,18 +37,196 @@ _MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
 _MAX_ROWS = 100_000
 _CHUNK_SIZE = 10_000
 
+# Fields exposed for wizard field-mapping
+MAPPABLE_MODEL_FIELDS = [
+    "primary_label", "secondary_label", "canonical_id", "entity_type", "domain",
+    "enrichment_doi", "enrichment_citation_count", "enrichment_concepts",
+    "enrichment_source", "creation_date", "validation_status",
+]
+
+_SCIENCE_AUTO_MAPPING = {
+    "title":    "primary_label",
+    "authors":  "secondary_label",
+    "doi":      "enrichment_doi",
+    "keywords": "enrichment_concepts",
+    "year":     "creation_date",
+    "journal":  "secondary_label",
+}
+
+
+def _parse_file_to_records(filename: str, contents: bytes) -> tuple[str, list[dict]]:
+    """Parse file bytes → (format_str, records list). Raises HTTPException on error."""
+    if filename.endswith(".xlsx"):
+        df = pd.read_excel(io.BytesIO(contents))
+        return "excel", df.to_dict("records")
+    elif filename.endswith(".csv"):
+        try:
+            df = pd.read_csv(io.BytesIO(contents), encoding="utf-8")
+        except UnicodeDecodeError:
+            df = pd.read_csv(io.BytesIO(contents), encoding="latin-1")
+        return "csv", df.to_dict("records")
+    elif filename.endswith(".parquet"):
+        df = pd.read_parquet(io.BytesIO(contents))
+        return "parquet", df.to_dict("records")
+    elif filename.endswith(".json") or filename.endswith(".jsonld"):
+        data = json.loads(contents.decode("utf-8"))
+        if isinstance(data, dict):
+            records = next((v for v in data.values() if isinstance(v, list)), [data])
+        else:
+            records = data if isinstance(data, list) else []
+        return "json", records
+    elif filename.endswith(".xml"):
+        root = ET.fromstring(contents.decode("utf-8"))
+        records = []
+        for child in root:
+            record = {sub.tag: sub.text for sub in child}
+            if record:
+                records.append(record)
+        return "xml", records
+    elif filename.endswith(".rdf") or filename.endswith(".ttl"):
+        import rdflib
+        g = rdflib.Graph()
+        fmt = "ttl" if filename.endswith(".ttl") else "xml"
+        g.parse(data=contents.decode("utf-8"), format=fmt)
+        entities: dict = {}
+        for s, p, o in g:
+            subj = str(s)
+            pred = str(p).split("/")[-1].split("#")[-1]
+            obj = str(o)
+            if subj not in entities:
+                entities[subj] = {"entity_key": subj}
+            if pred in entities[subj]:
+                entities[subj][pred] += f"; {obj}"
+            else:
+                entities[subj][pred] = obj
+        return "rdf", list(entities.values())
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported file format for tabular parsing.")
+
+
+# ── Preview endpoint (Sprint 71) ───────────────────────────────────────────────
+
+@router.post("/upload/preview")
+async def preview_upload(
+    file: UploadFile = File(...),
+    _: models.User = Depends(require_role("super_admin", "admin", "editor")),
+):
+    """
+    Sprint 71 — Bulk Import Wizard step 2.
+    Parse the file without importing and return:
+      format, row_count, columns, sample_rows (first 5), auto_mapping, is_science_format
+    """
+    filename = file.filename.lower()
+    contents = await file.read()
+
+    if len(contents) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large. Maximum 20 MB.")
+
+    # Science formats: BibTeX and RIS have fixed semantic mapping
+    try:
+        if filename.endswith(".bib"):
+            records = parse_bibtex(contents.decode("utf-8", errors="replace"))
+            return {
+                "format": "bibtex",
+                "row_count": len(records),
+                "columns": list(_SCIENCE_AUTO_MAPPING.keys()),
+                "sample_rows": [
+                    {k: v for k, v in r.items() if k in _SCIENCE_AUTO_MAPPING}
+                    for r in records[:5]
+                ],
+                "auto_mapping": _SCIENCE_AUTO_MAPPING,
+                "is_science_format": True,
+            }
+        elif filename.endswith(".ris"):
+            records = parse_ris(contents.decode("utf-8", errors="replace"))
+            return {
+                "format": "ris",
+                "row_count": len(records),
+                "columns": list(_SCIENCE_AUTO_MAPPING.keys()),
+                "sample_rows": [
+                    {k: v for k, v in r.items() if k in _SCIENCE_AUTO_MAPPING}
+                    for r in records[:5]
+                ],
+                "auto_mapping": _SCIENCE_AUTO_MAPPING,
+                "is_science_format": True,
+            }
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {exc}")
+
+    try:
+        _fmt, tabular_records = _parse_file_to_records(filename, contents)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {exc}")
+
+    if not tabular_records:
+        return {
+            "format": _fmt,
+            "row_count": 0,
+            "columns": [],
+            "sample_rows": [],
+            "auto_mapping": {},
+            "is_science_format": False,
+        }
+
+    # Detect all columns from first 100 rows
+    all_cols: set = set()
+    for row in tabular_records[:100]:
+        if isinstance(row, dict):
+            all_cols.update(str(k) for k in row.keys())
+
+    stripped_mapping = {k.strip(): v for k, v in COLUMN_MAPPING.items()}
+    valid_model_keys = set(COLUMN_MAPPING.values())
+
+    auto_mapping = {}
+    for col in all_cols:
+        sk = col.strip()
+        if sk in stripped_mapping:
+            auto_mapping[col] = stripped_mapping[sk]
+        elif sk in valid_model_keys:
+            auto_mapping[col] = sk
+        else:
+            auto_mapping[col] = None  # unmatched — user must decide
+
+    # Sanitize sample rows (replace NaN with None)
+    def _clean(v):
+        try:
+            import math
+            if isinstance(v, float) and math.isnan(v):
+                return None
+        except Exception:
+            pass
+        return v
+
+    sample = [
+        {str(k): _clean(v) for k, v in row.items()}
+        for row in tabular_records[:5]
+        if isinstance(row, dict)
+    ]
+
+    return {
+        "format": _fmt,
+        "row_count": len(tabular_records),
+        "columns": sorted(all_cols),
+        "sample_rows": sample,
+        "auto_mapping": auto_mapping,
+        "is_science_format": False,
+    }
+
 
 @router.post("/upload", status_code=201)
 async def upload_file(
     file: UploadFile = File(...),
+    domain: str = Form("default"),
+    field_mapping: str = Form("{}"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
 ):
     filename = file.filename.lower()
     allowed_extensions = (
         ".xlsx", ".csv", ".json", ".xml", ".parquet",
-        ".jsonld", ".rdf", ".ttl",
-        ".bib", ".ris",  # Science domain: BibTeX and RIS
+        ".jsonld", ".rdf", ".ttl", ".bib", ".ris",
     )
     if not any(filename.endswith(ext) for ext in allowed_extensions):
         raise HTTPException(
@@ -64,98 +242,55 @@ async def upload_file(
                    f"(received {len(contents) // (1024*1024)} MB).",
         )
 
-    records = []
+    # Parse custom field mapping from wizard (JSON string)
     try:
-        if filename.endswith(".xlsx"):
-            df = pd.read_excel(io.BytesIO(contents))
-            records = df.to_dict("records")
-        elif filename.endswith(".csv"):
-            try:
-                df = pd.read_csv(io.BytesIO(contents), encoding="utf-8")
-            except UnicodeDecodeError:
-                df = pd.read_csv(io.BytesIO(contents), encoding="latin-1")
-            records = df.to_dict("records")
-        elif filename.endswith(".parquet"):
-            df = pd.read_parquet(io.BytesIO(contents))
-            records = df.to_dict("records")
-        elif filename.endswith(".json") or filename.endswith(".jsonld"):
-            data = json.loads(contents.decode("utf-8"))
-            if isinstance(data, dict):
-                list_data = next((v for v in data.values() if isinstance(v, list)), [data])
-                records = list_data
-            elif isinstance(data, list):
-                records = data
-        elif filename.endswith(".xml"):
-            root = ET.fromstring(contents.decode("utf-8"))
-            for child in root:
-                record = {}
-                for subchild in child:
-                    record[subchild.tag] = subchild.text
-                if record:
-                    records.append(record)
-        elif filename.endswith(".bib"):
-            science_records = parse_bibtex(contents.decode("utf-8", errors="replace"))
-            objects = [
-                models.RawEntity(**science_record_to_entity(r))
-                for r in science_records
-            ]
-            for i in range(0, len(objects), _CHUNK_SIZE):
-                db.bulk_save_objects(objects[i : i + _CHUNK_SIZE])
-            _audit(db, "upload", user_id=current_user.id,
-                   details={"filename": file.filename, "rows": len(objects), "format": "bibtex"})
-            db.commit()
-            _dispatch_webhook("upload", {"filename": file.filename, "rows": len(objects)},
-                              database.SessionLocal)
-            return {
-                "message": f"Successfully imported {len(objects)} publications from BibTeX",
-                "total_rows": len(objects),
-                "format": "bibtex",
-                "domain": "science",
-                "matched_columns": ["title", "authors", "doi", "journal", "year", "keywords",
-                                    "abstract", "entity_type"],
-                "unmatched_columns": [],
-            }
-        elif filename.endswith(".ris"):
-            science_records = parse_ris(contents.decode("utf-8", errors="replace"))
-            objects = [
-                models.RawEntity(**science_record_to_entity(r))
-                for r in science_records
-            ]
-            for i in range(0, len(objects), _CHUNK_SIZE):
-                db.bulk_save_objects(objects[i : i + _CHUNK_SIZE])
-            _audit(db, "upload", user_id=current_user.id,
-                   details={"filename": file.filename, "rows": len(objects), "format": "ris"})
-            db.commit()
-            _dispatch_webhook("upload", {"filename": file.filename, "rows": len(objects)},
-                              database.SessionLocal)
-            return {
-                "message": f"Successfully imported {len(objects)} publications from RIS",
-                "total_rows": len(objects),
-                "format": "ris",
-                "domain": "science",
-                "matched_columns": ["title", "authors", "doi", "journal", "year", "keywords",
-                                    "abstract", "entity_type"],
-                "unmatched_columns": [],
-            }
-        elif filename.endswith(".rdf") or filename.endswith(".ttl"):
-            import rdflib
-            g = rdflib.Graph()
-            format_type = "ttl" if filename.endswith(".ttl") else "xml"
-            g.parse(data=contents.decode("utf-8"), format=format_type)
-            entities: dict = {}
-            for s, p, o in g:
-                subj = str(s)
-                pred = str(p).split("/")[-1].split("#")[-1]
-                obj = str(o)
-                if subj not in entities:
-                    entities[subj] = {"entity_key": subj}
-                if pred in entities[subj]:
-                    entities[subj][pred] += f"; {obj}"
-                else:
-                    entities[subj][pred] = obj
-            records = list(entities.values())
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to process file: {str(e)}")
+        custom_mapping: dict = json.loads(field_mapping) if field_mapping else {}
+    except json.JSONDecodeError:
+        custom_mapping = {}
+
+    # ── Science formats: fixed mapping ────────────────────────────────────────
+    if filename.endswith(".bib") or filename.endswith(".ris"):
+        # Science formats default to "science" domain when none is specified
+        effective_domain = domain if domain and domain != "default" else "science"
+        try:
+            science_records = (
+                parse_bibtex(contents.decode("utf-8", errors="replace"))
+                if filename.endswith(".bib")
+                else parse_ris(contents.decode("utf-8", errors="replace"))
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Failed to parse file: {exc}")
+
+        objects = []
+        for r in science_records:
+            entity_data = science_record_to_entity(r)
+            entity_data["domain"] = effective_domain
+            objects.append(models.RawEntity(**entity_data))
+
+        fmt = "bibtex" if filename.endswith(".bib") else "ris"
+        for i in range(0, len(objects), _CHUNK_SIZE):
+            db.bulk_save_objects(objects[i : i + _CHUNK_SIZE])
+        _audit(db, "upload", user_id=current_user.id,
+               details={"filename": file.filename, "rows": len(objects), "format": fmt})
+        db.commit()
+        _dispatch_webhook("upload", {"filename": file.filename, "rows": len(objects)},
+                          database.SessionLocal)
+        return {
+            "message": f"Successfully imported {len(objects)} publications from {fmt.upper()}",
+            "total_rows": len(objects),
+            "format": fmt,
+            "domain": effective_domain,
+            "matched_columns": list(_SCIENCE_AUTO_MAPPING.keys()),
+            "unmatched_columns": [],
+        }
+
+    # ── Tabular formats ────────────────────────────────────────────────────────
+    try:
+        _fmt, records = _parse_file_to_records(filename, contents)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to process file: {str(exc)}")
 
     if not records:
         return {
@@ -172,20 +307,25 @@ async def upload_file(
                    f"Maximum allowed is {_MAX_ROWS:,} rows per upload.",
         )
 
-    # Gather all unique keys from records
+    # Build effective mapping: custom_mapping takes priority over COLUMN_MAPPING
+    stripped_mapping = {k.strip(): v for k, v in COLUMN_MAPPING.items()}
+    valid_model_keys = set(COLUMN_MAPPING.values()) | set(MAPPABLE_MODEL_FIELDS)
+
+    effective_mapping = {**stripped_mapping, **{k.strip(): v for k, v in custom_mapping.items()}}
+
     all_keys: set = set()
     for row in records[:100]:
         if isinstance(row, dict):
             all_keys.update(row.keys())
 
-    stripped_mapping = {k.strip(): v for k, v in COLUMN_MAPPING.items()}
-    valid_model_keys = set(COLUMN_MAPPING.values())
-
     matched_columns: set = set()
     unmatched_columns: set = set()
     for col in all_keys:
         col_str = str(col).strip()
-        if col_str in stripped_mapping or col_str in valid_model_keys:
+        mapped = effective_mapping.get(col_str)
+        if mapped and mapped in valid_model_keys:
+            matched_columns.add(col_str)
+        elif col_str in valid_model_keys:
             matched_columns.add(col_str)
         else:
             unmatched_columns.add(col_str)
@@ -195,7 +335,7 @@ async def upload_file(
         if not isinstance(row, dict):
             continue
 
-        row_data: dict = {}
+        row_data: dict = {"domain": domain}
         unmatched_data: dict = {}
 
         for k, val in row.items():
@@ -208,14 +348,17 @@ async def upload_file(
                         is_nan = True
                 except (TypeError, ValueError):
                     pass
-
             if is_nan:
                 val = None
 
             sk = str(k).strip()
-            if sk in stripped_mapping:
-                model_field = stripped_mapping[sk]
-                row_data[model_field] = str(val) if val is not None else None
+            # "" means skip this column (wizard user chose "ignore")
+            mapped_field = effective_mapping.get(sk)
+            if mapped_field == "" or mapped_field is None and sk not in valid_model_keys:
+                if mapped_field != "":  # only store if not explicitly skipped
+                    unmatched_data[sk] = val
+            elif mapped_field:
+                row_data[mapped_field] = str(val) if val is not None else None
             elif sk in valid_model_keys:
                 row_data[sk] = str(val) if val is not None else None
             else:
@@ -245,6 +388,7 @@ async def upload_file(
     return {
         "message": f"Successfully imported {len(objects)} entities",
         "total_rows": len(objects),
+        "domain": domain,
         "matched_columns": list(matched_columns),
         "unmatched_columns": list(unmatched_columns),
     }
