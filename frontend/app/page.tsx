@@ -6,6 +6,8 @@ import EntityTable from "./components/EntityTable";
 import EntityVariantView from "./components/EntityVariantView";
 import ActivityFeed from "./components/ActivityFeed";
 import GuidedTour, { resetTour } from "./components/GuidedTour";
+import WelcomeModal from "./components/WelcomeModal";
+import OnboardingChecklist from "./components/OnboardingChecklist";
 import { PageHeader, StatCard } from "./components/ui";
 import { useDomain } from "./contexts/DomainContext";
 import { apiFetch } from "../lib/api";
@@ -125,6 +127,8 @@ export default function Home() {
 
   return (
     <div className="space-y-6">
+      <WelcomeModal />
+
       <PageHeader
         breadcrumbs={[{ label: "Home" }]}
         title="Knowledge Dashboard"
@@ -226,6 +230,9 @@ export default function Home() {
         )
       )}
 
+      {/* Onboarding checklist */}
+      <OnboardingChecklist token={token} />
+
       {/* Quick action cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Link href="/import-export" className="group rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-500 p-5 text-white shadow-sm transition-shadow hover:shadow-md">
@@ -266,7 +273,33 @@ export default function Home() {
       {/* Activity feed + Entity browser */}
       <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1fr_280px]">
         <div>
-          {viewMode === "table" ? <EntityTable /> : <EntityVariantView />}
+          {stats?.total === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 py-16 dark:border-gray-700 dark:bg-gray-900/20">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+              </div>
+              <h3 className="mt-4 text-base font-semibold text-gray-900 dark:text-gray-100">No entities yet</h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 text-center max-w-xs">
+                Import a CSV, Excel, or JSON-LD file to populate your knowledge base, or launch the demo to explore a sample dataset.
+              </p>
+              <div className="mt-6 flex gap-3">
+                <Link href="/import-export" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors">
+                  Import Data
+                </Link>
+                {demoStatus !== null && !demoStatus.demo_seeded && (
+                  <button
+                    onClick={handleLaunchDemo}
+                    disabled={demoLoading}
+                    className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                  >
+                    {demoLoading ? "Loading..." : "Try Demo"}
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : viewMode === "table" ? <EntityTable /> : <EntityVariantView />}
         </div>
         <div>
           <ActivityFeed />

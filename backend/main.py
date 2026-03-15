@@ -57,6 +57,7 @@ from backend.routers import (
     stores,
     transformations,
     webhooks,
+    onboarding,
     widgets,
     workflows,
     ws,
@@ -297,6 +298,7 @@ app.include_router(sales_deck.router)
 app.include_router(organizations.router)
 app.include_router(transformations.router)
 app.include_router(scrapers.router)
+app.include_router(onboarding.router)
 app.include_router(widgets.router)
 app.include_router(workflows.router)
 app.include_router(ws.router)
