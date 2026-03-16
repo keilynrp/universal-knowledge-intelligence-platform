@@ -5,6 +5,7 @@ import { PageHeader, useToast, ErrorBanner } from "../components/ui";
 import DataSourceSchemaAnalyzer from "../components/DataSourceSchemaAnalyzer";
 import { useDomain } from "../contexts/DomainContext";
 import { apiFetch } from "@/lib/api";
+import { useLanguage } from "../contexts/LanguageContext";
 
 interface UploadResult {
     message: string;
@@ -23,6 +24,7 @@ interface PurgeResult {
 export default function ImportExportPage() {
     const { activeDomain } = useDomain();
     const { toast } = useToast();
+    const { t } = useLanguage();
     const [dragOver, setDragOver] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
@@ -145,8 +147,8 @@ export default function ImportExportPage() {
     return (
         <div className="space-y-6">
             <PageHeader
-                breadcrumbs={[{ label: "Home", href: "/" }, { label: "Import / Export" }]}
-                title="Import / Export"
+                breadcrumbs={[{ label: "Home", href: "/" }, { label: t('page.import_export.title') }]}
+                title={t('page.import_export.title')}
                 description="Upload and download dataset in Excel, CSV, JSON-LD, Parquet, and RDF formats"
             />
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -159,7 +161,7 @@ export default function ImportExportPage() {
                             </svg>
                         </div>
                         <div>
-                            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Import Data</h3>
+                            <h3 className="text-base font-semibold text-gray-900 dark:text-white">{t('page.import_export.import_title')}</h3>
                             <p className="text-xs text-gray-500 dark:text-gray-400">Excel, CSV, JSON, XML, Parquet, RDF · BibTeX, RIS (Science)</p>
                         </div>
                     </div>
@@ -188,7 +190,7 @@ export default function ImportExportPage() {
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                                 </svg>
-                                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Uploading and processing…</p>
+                                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('page.import_export.uploading')}</p>
                                 <span className="sr-only">Processing file upload</span>
                             </>
                         ) : (
@@ -197,7 +199,7 @@ export default function ImportExportPage() {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12l-3-3m0 0l-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                                 </svg>
                                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                    Drop your file here or <span className="text-blue-600 dark:text-blue-400">browse</span>
+                                    {t('page.import_export.drop_zone_text')}
                                 </p>
                                 <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Excel · CSV · JSON · XML · Parquet · RDF</p>
                                 <p className="mt-0.5 text-xs text-violet-500 dark:text-violet-400">BibTeX (.bib) · RIS (.ris) — auto-maps to Science domain</p>
@@ -212,7 +214,7 @@ export default function ImportExportPage() {
                                 <svg className="h-5 w-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                <span className="text-sm font-semibold text-green-800 dark:text-green-300">Import Successful</span>
+                                <span className="text-sm font-semibold text-green-800 dark:text-green-300">{t('page.import_export.import_success')}</span>
                                 {uploadResult.domain === "science" && (
                                     <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-500/10 dark:text-violet-400">
                                         <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -224,11 +226,11 @@ export default function ImportExportPage() {
                             </div>
                             <div className="space-y-2 text-sm">
                                 <div className="flex justify-between">
-                                    <span className="text-green-700 dark:text-green-400">Records imported</span>
+                                    <span className="text-green-700 dark:text-green-400">{t('page.import_export.records_imported_label')}</span>
                                     <span className="font-semibold text-green-900 dark:text-green-200">{uploadResult.total_rows.toLocaleString()}</span>
                                 </div>
                                 <div className="flex justify-between">
-                                    <span className="text-green-700 dark:text-green-400">Fields mapped</span>
+                                    <span className="text-green-700 dark:text-green-400">{t('page.import_export.fields_mapped_label')}</span>
                                     <span className="font-semibold text-green-900 dark:text-green-200">{uploadResult.matched_columns.length}</span>
                                 </div>
                                 {uploadResult.domain === "science" && (
@@ -275,7 +277,7 @@ export default function ImportExportPage() {
                             </svg>
                         </div>
                         <div>
-                            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Export Data</h3>
+                            <h3 className="text-base font-semibold text-gray-900 dark:text-white">{t('page.import_export.export_title')}</h3>
                             <p className="text-xs text-gray-500 dark:text-gray-400">Download products as Excel with original column headers</p>
                         </div>
                     </div>
@@ -284,7 +286,7 @@ export default function ImportExportPage() {
                     <div className="mb-5 rounded-xl bg-gray-50 p-4 dark:bg-gray-800">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Total records available</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">{t('page.import_export.total_records_label')}</p>
                                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
                                     {totalProducts != null ? totalProducts.toLocaleString() : "—"}
                                 </p>
@@ -333,14 +335,14 @@ export default function ImportExportPage() {
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                                 </svg>
-                                Generating Excel...
+                                {t('page.import_export.exporting')}
                             </>
                         ) : (
                             <>
                                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
-                                Download Excel (.xlsx)
+                                {t('page.import_export.export_button')}
                             </>
                         )}
                     </button>
@@ -354,7 +356,7 @@ export default function ImportExportPage() {
                         <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                         </svg>
-                        <h3 className="text-base font-semibold text-red-700 dark:text-red-400">Danger Zone</h3>
+                        <h3 className="text-base font-semibold text-red-700 dark:text-red-400">{t('page.import_export.danger_zone_title')}</h3>
                     </div>
                     <p className="mt-0.5 text-xs text-red-500 dark:text-red-500">Irreversible actions - proceed with caution</p>
                 </div>
@@ -365,7 +367,7 @@ export default function ImportExportPage() {
                                 <svg className="h-5 w-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                <span className="text-sm font-semibold text-green-800 dark:text-green-300">Database Purged</span>
+                                <span className="text-sm font-semibold text-green-800 dark:text-green-300">{t('page.import_export.purge_success')}</span>
                             </div>
                             <p className="mt-1 text-sm text-green-700 dark:text-green-400">
                                 {purgeResult.products_deleted.toLocaleString()} products deleted
@@ -388,7 +390,7 @@ export default function ImportExportPage() {
                                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
                                 </svg>
-                                Purge Database
+                                {t('page.import_export.purge_button')}
                             </button>
                         </div>
                     ) : (
@@ -417,10 +419,10 @@ export default function ImportExportPage() {
                                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                                             </svg>
-                                            Deleting...
+                                            {t('page.import_export.deleting')}
                                         </>
                                     ) : (
-                                        "Yes, delete everything"
+                                        t('page.import_export.purge_confirm_button')
                                     )}
                                 </button>
                                 <button
@@ -473,15 +475,15 @@ export default function ImportExportPage() {
             {/* Column mapping reference */}
             <div className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
                 <div className="border-b border-gray-200 px-5 py-4 dark:border-gray-800">
-                    <h3 className="text-base font-semibold text-gray-900 dark:text-white">Column Format Reference</h3>
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-white">{t('page.import_export.reference_title')}</h3>
                     <p className="text-xs text-gray-500 dark:text-gray-400">Expected Excel columns mapped to database fields</p>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
                         <thead>
                             <tr className="border-b border-gray-200 dark:border-gray-800">
-                                <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Excel Column</th>
-                                <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Database Field</th>
+                                <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('page.import_export.reference_header_excel')}</th>
+                                <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('page.import_export.reference_header_field')}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -499,7 +501,7 @@ export default function ImportExportPage() {
                             ) : (
                                 <tr>
                                     <td colSpan={2} className="px-5 py-4 text-center text-sm text-gray-500">
-                                        Loading domain schema...
+                                        {t('page.import_export.loading_schema')}
                                     </td>
                                 </tr>
                             )}

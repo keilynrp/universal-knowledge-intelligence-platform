@@ -6,6 +6,7 @@ import { PageHeader, StatCard, Badge } from "../components/ui";
 import { useDomain } from "../contexts/DomainContext";
 import { apiFetch } from "@/lib/api";
 import ConceptCloud from "../components/ConceptCloud";
+import { useLanguage } from "../contexts/LanguageContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -127,6 +128,7 @@ function CoverageRing({ pct }: { pct: number }) {
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function AnalyticsPage() {
+    const { t } = useLanguage();
     const { activeDomainId } = useDomain();
     const [stats, setStats] = useState<Stats | null>(null);
     const [enrichStats, setEnrichStats] = useState<EnrichStats | null>(null);
@@ -198,19 +200,19 @@ export default function AnalyticsPage() {
         <div className="space-y-8">
 
             <PageHeader
-                breadcrumbs={[{ label: "Home", href: "/" }, { label: "Analytics" }]}
-                title="Intelligence Dashboard"
-                description="Key metrics, enrichment pipeline, and data quality insights"
+                breadcrumbs={[{ label: "Home", href: "/" }, { label: t('page.analytics.breadcrumb') }]}
+                title={t('page.analytics.title')}
+                description={t('page.analytics.description')}
             />
 
             {/* ═══ SECTION 1: Data Hub Overview ════════════════════════════════ */}
-            <SectionDivider label="Data Hub Overview" />
+            <SectionDivider label={t('page.analytics.section_overview')} />
 
             {/* Metric cards */}
             {stats && (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     <StatCard
-                        label="Total Entities"
+                        label={t('page.analytics.metric_total_entities')}
                         value={totalCount.toLocaleString()}
                         iconColor="blue"
                         icon={
@@ -218,10 +220,10 @@ export default function AnalyticsPage() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                             </svg>
                         }
-                        subtitle="Records in repository"
+                        subtitle={t('page.analytics.metric_total_subtitle')}
                     />
                     <StatCard
-                        label="Active Domain"
+                        label={t('page.analytics.metric_active_domain')}
                         value={stats.domain_name || "Catalog"}
                         iconColor="violet"
                         icon={
@@ -299,7 +301,7 @@ export default function AnalyticsPage() {
                         </svg>
                     </div>
                     <div>
-                        <p className="text-sm font-medium text-blue-900 dark:text-blue-200">OLAP Cube Explorer</p>
+                        <p className="text-sm font-medium text-blue-900 dark:text-blue-200">{t('page.analytics.cta_olap_title')}</p>
                         <p className="text-xs text-blue-600 dark:text-blue-400">Multi-dimensional GROUP BY queries, cross-tabs, drill-down and Excel export — powered by DuckDB</p>
                     </div>
                 </div>
@@ -307,7 +309,7 @@ export default function AnalyticsPage() {
                     href="/analytics/olap"
                     className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors flex-shrink-0"
                 >
-                    Open Explorer
+                    {t('page.analytics.cta_olap_button')}
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
@@ -324,7 +326,7 @@ export default function AnalyticsPage() {
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium text-violet-900 dark:text-violet-200">Natural Language Query</p>
+                            <p className="text-sm font-medium text-violet-900 dark:text-violet-200">{t('page.analytics.cta_nlq_title')}</p>
                             <span className="rounded-full bg-violet-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:bg-violet-500/30 dark:text-violet-300">New</span>
                         </div>
                         <p className="text-xs text-violet-600 dark:text-violet-400">Ask your data anything in plain English — AI translates it into an OLAP query instantly</p>
@@ -334,7 +336,7 @@ export default function AnalyticsPage() {
                     href="/analytics/nlq"
                     className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 transition-colors flex-shrink-0"
                 >
-                    Try NLQ
+                    {t('page.analytics.cta_nlq_button')}
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
@@ -350,7 +352,7 @@ export default function AnalyticsPage() {
                         </svg>
                     </div>
                     <div>
-                        <p className="text-sm font-medium text-violet-900 dark:text-violet-200">Topic Modeling</p>
+                        <p className="text-sm font-medium text-violet-900 dark:text-violet-200">{t('page.analytics.cta_topics_title')}</p>
                         <p className="text-xs text-violet-600 dark:text-violet-400">Concept frequency, co-occurrence, topic clusters, and Cramér&apos;s V field correlations</p>
                     </div>
                 </div>
@@ -358,7 +360,7 @@ export default function AnalyticsPage() {
                     href="/analytics/topics"
                     className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 transition-colors flex-shrink-0"
                 >
-                    Explore Topics
+                    {t('page.analytics.cta_topics_button')}
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
@@ -374,7 +376,7 @@ export default function AnalyticsPage() {
                         </svg>
                     </div>
                     <div>
-                        <p className="text-sm font-medium text-emerald-900 dark:text-emerald-200">ROI Calculator</p>
+                        <p className="text-sm font-medium text-emerald-900 dark:text-emerald-200">{t('page.analytics.cta_roi_title')}</p>
                         <p className="text-xs text-emerald-600 dark:text-emerald-400">Monte Carlo I+D projection — adoption uncertainty, break-even probability and year-by-year ROI trajectory</p>
                     </div>
                 </div>
@@ -382,7 +384,7 @@ export default function AnalyticsPage() {
                     href="/analytics/roi"
                     className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 transition-colors flex-shrink-0"
                 >
-                    Open Calculator
+                    {t('page.analytics.cta_roi_button')}
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
@@ -398,7 +400,7 @@ export default function AnalyticsPage() {
                         </svg>
                     </div>
                     <div>
-                        <p className="text-sm font-medium text-purple-900 dark:text-purple-200">Executive Dashboard</p>
+                        <p className="text-sm font-medium text-purple-900 dark:text-purple-200">{t('page.analytics.cta_dashboard_title')}</p>
                         <p className="text-xs text-purple-600 dark:text-purple-400">KPI heatmap, impact timeline, concept cloud and top entities — full knowledge portfolio at a glance</p>
                     </div>
                 </div>
@@ -406,7 +408,7 @@ export default function AnalyticsPage() {
                     href="/analytics/dashboard"
                     className="flex items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 transition-colors flex-shrink-0"
                 >
-                    Open Dashboard
+                    {t('page.analytics.cta_dashboard_button')}
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
@@ -422,7 +424,7 @@ export default function AnalyticsPage() {
                         </svg>
                     </div>
                     <div>
-                        <p className="text-sm font-medium text-teal-900 dark:text-teal-200">Domain Comparison</p>
+                        <p className="text-sm font-medium text-teal-900 dark:text-teal-200">{t('page.analytics.cta_compare_title')}</p>
                         <p className="text-xs text-teal-600 dark:text-teal-400">Compare KPIs, entity types, concepts, and citation impact across 2–4 domains side by side</p>
                     </div>
                 </div>
@@ -430,7 +432,7 @@ export default function AnalyticsPage() {
                     href="/analytics/compare"
                     className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 transition-colors flex-shrink-0"
                 >
-                    Compare
+                    {t('page.analytics.cta_compare_button')}
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
@@ -472,14 +474,14 @@ export default function AnalyticsPage() {
                                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                                     </svg>
-                                    Enriching Hub…
+                                    {t('page.analytics.enrichment_loading')}
                                 </>
                             ) : (
                                 <>
                                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                                     </svg>
-                                    Trigger Hub Enrichment
+                                    {t('page.analytics.enrichment_button')}
                                 </>
                             )}
                         </button>
@@ -498,7 +500,7 @@ export default function AnalyticsPage() {
                     {/* Top row: KPI cards */}
                     <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                         {[
-                            { label: "Enriched Entities", value: enrichStats.enriched_count, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10" },
+                            { label: t('page.analytics.stat_enriched_entities'), value: enrichStats.enriched_count, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10" },
                             { label: "Avg. Connectivity", value: enrichStats.citations.average, color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-500/10" },
                             { label: "Max Influence", value: enrichStats.citations.max.toLocaleString(), color: "text-fuchsia-600 dark:text-fuchsia-400", bg: "bg-fuchsia-50 dark:bg-fuchsia-500/10" },
                             { label: "Total Knowledge Points", value: enrichStats.citations.total.toLocaleString(), color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-500/10" },
@@ -515,7 +517,7 @@ export default function AnalyticsPage() {
 
                         {/* Coverage & Status */}
                         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900 xl:col-span-1">
-                            <h3 className="mb-1 text-base font-semibold text-gray-900 dark:text-white">Knowledge Hub Coverage</h3>
+                            <h3 className="mb-1 text-base font-semibold text-gray-900 dark:text-white">{t('page.analytics.coverage_title')}</h3>
                             <p className="mb-5 text-xs text-gray-500 dark:text-gray-400">Percentage of repository mapped to global intelligence sources</p>
                             <div className="flex items-center gap-6">
                                 <CoverageRing pct={enrichStats.enrichment_coverage_pct} />
@@ -559,7 +561,7 @@ export default function AnalyticsPage() {
                     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                         <div className="mb-4 flex items-start justify-between">
                             <div>
-                                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Ontological Concept Map</h3>
+                                <h3 className="text-base font-semibold text-gray-900 dark:text-white">{t('page.analytics.concept_map_title')}</h3>
                                 <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                                     Top domain concepts extracted via global APIs — size indicates conceptual density
                                 </p>

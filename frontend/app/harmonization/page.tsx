@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { PageHeader, Badge, useToast, EmptyState } from "../components/ui";
 import { apiFetch } from "@/lib/api";
+import { useLanguage } from "../contexts/LanguageContext";
 
 interface HarmonizationChange {
     record_id: number;
@@ -98,6 +99,7 @@ function Spinner({ className = "h-4 w-4" }: { className?: string }) {
 }
 
 export default function HarmonizationPage() {
+    const { t } = useLanguage();
     const { toast } = useToast();
     const [pipeline, setPipeline] = useState<PipelineStatus | null>(null);
     const [loading, setLoading] = useState(false);
@@ -244,9 +246,9 @@ export default function HarmonizationPage() {
     return (
         <div className="space-y-6">
             <PageHeader
-                breadcrumbs={[{ label: "Home", href: "/" }, { label: "Harmonization" }]}
-                title="Data Harmonization"
-                description="Automated pipeline for cleaning and consolidating entity data"
+                breadcrumbs={[{ label: "Home", href: "/" }, { label: t('page.harmonization.breadcrumb') }]}
+                title={t('page.harmonization.title')}
+                description={t('page.harmonization.description')}
                 actions={
                     <button
                         onClick={fetchPipeline}
@@ -258,7 +260,7 @@ export default function HarmonizationPage() {
                                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
                                 </svg>
-                                {pipeline ? "Refresh" : "Load Pipeline"}
+                                {pipeline ? t('page.harmonization.refresh_button') : t('page.harmonization.load_button')}
                             </>
                         )}
                     </button>
@@ -269,19 +271,19 @@ export default function HarmonizationPage() {
             {pipeline && (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Total Products</p>
+                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('page.harmonization.stat_total_products')}</p>
                         <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{pipeline.total_products.toLocaleString()}</p>
                     </div>
                     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Steps Completed</p>
+                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('page.harmonization.stat_steps_completed')}</p>
                         <p className="mt-1 text-2xl font-bold text-green-600 dark:text-green-400">{completedCount} <span className="text-sm font-normal text-gray-400">/ {pipeline.steps.length}</span></p>
                     </div>
                     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Steps Pending</p>
+                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('page.harmonization.stat_steps_pending')}</p>
                         <p className="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">{pipeline.steps.length - completedCount}</p>
                     </div>
                     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Records Modified</p>
+                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('page.harmonization.stat_records_modified')}</p>
                         <p className="mt-1 text-2xl font-bold text-blue-600 dark:text-blue-400">{totalModified.toLocaleString()}</p>
                     </div>
                 </div>
@@ -346,10 +348,10 @@ export default function HarmonizationPage() {
                                                 <div className="flex items-center gap-2">
                                                     <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{step.name}</h3>
                                                     {isCompleted && (
-                                                        <Badge variant="success">Completed</Badge>
+                                                        <Badge variant="success">{t('page.harmonization.step_status_completed')}</Badge>
                                                     )}
                                                     {hasPreview && !isCompleted && (
-                                                        <Badge variant="info">Previewed</Badge>
+                                                        <Badge variant="info">{t('page.harmonization.step_status_previewed')}</Badge>
                                                     )}
                                                 </div>
                                                 <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{step.description}</p>
@@ -368,13 +370,13 @@ export default function HarmonizationPage() {
                                                 disabled={previewing === step.step_id}
                                                 className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
                                             >
-                                                {previewing === step.step_id ? <><Spinner /> Previewing...</> : (
+                                                {previewing === step.step_id ? <><Spinner /> {t('page.harmonization.previewing')}</> : (
                                                     <>
                                                         <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                                         </svg>
-                                                        Preview
+                                                        {t('page.harmonization.preview_button')}
                                                     </>
                                                 )}
                                             </button>
@@ -383,7 +385,7 @@ export default function HarmonizationPage() {
                                                 disabled={applying === step.step_id}
                                                 className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                                             >
-                                                {applying === step.step_id ? <><Spinner /> Applying...</> : "Apply"}
+                                                {applying === step.step_id ? <><Spinner /> {t('page.harmonization.applying')}</> : t('page.harmonization.apply_button')}
                                             </button>
                                         </div>
                                     </div>
@@ -424,10 +426,10 @@ export default function HarmonizationPage() {
                                                     <table className="w-full min-w-[600px] text-left text-xs">
                                                         <thead>
                                                             <tr className="border-b border-gray-200 dark:border-gray-700">
-                                                                <th className="px-3 py-2 font-semibold text-gray-500 dark:text-gray-400">ID</th>
-                                                                <th className="px-3 py-2 font-semibold text-gray-500 dark:text-gray-400">Field</th>
-                                                                <th className="px-3 py-2 font-semibold text-gray-500 dark:text-gray-400">Before</th>
-                                                                <th className="px-3 py-2 font-semibold text-gray-500 dark:text-gray-400">After</th>
+                                                                <th className="px-3 py-2 font-semibold text-gray-500 dark:text-gray-400">{t('page.harmonization.preview_table_id')}</th>
+                                                                <th className="px-3 py-2 font-semibold text-gray-500 dark:text-gray-400">{t('page.harmonization.preview_table_field')}</th>
+                                                                <th className="px-3 py-2 font-semibold text-gray-500 dark:text-gray-400">{t('page.harmonization.preview_table_before')}</th>
+                                                                <th className="px-3 py-2 font-semibold text-gray-500 dark:text-gray-400">{t('page.harmonization.preview_table_after')}</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -476,8 +478,8 @@ export default function HarmonizationPage() {
                                 </svg>
                             </div>
                             <div className="text-left">
-                                <h2 className="text-base font-semibold text-gray-900 dark:text-white">Modification History</h2>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">View, undo, and redo past harmonization operations</p>
+                                <h2 className="text-base font-semibold text-gray-900 dark:text-white">{t('page.harmonization.history_title')}</h2>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">{t('page.harmonization.history_description')}</p>
                             </div>
                         </div>
                         <svg className={`h-5 w-5 text-gray-400 transition-transform ${showHistory ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -492,7 +494,7 @@ export default function HarmonizationPage() {
                                     <svg className="mb-2 h-8 w-8 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">No harmonization operations recorded yet</p>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">{t('page.harmonization.no_operations')}</p>
                                 </div>
                             ) : (
                                 <div className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -538,7 +540,7 @@ export default function HarmonizationPage() {
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
                                                             </svg>
                                                         )}
-                                                        Undo
+                                                        {t('page.harmonization.undo_button')}
                                                     </button>
                                                 ) : (
                                                     <button
@@ -551,7 +553,7 @@ export default function HarmonizationPage() {
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l6-6m0 0l-6-6m6 6H9a6 6 0 000 12h3" />
                                                             </svg>
                                                         )}
-                                                        Redo
+                                                        {t('page.harmonization.redo_button')}
                                                     </button>
                                                 )}
                                             </div>
@@ -568,8 +570,8 @@ export default function HarmonizationPage() {
             {!pipeline && !loading && (
                 <EmptyState
                   icon="document"
-                  title="Data Harmonization Pipeline"
-                  description='Click "Load Pipeline" to analyze your data and prepare cleaning steps'
+                  title={t('page.harmonization.empty_title')}
+                  description={t('page.harmonization.empty_description')}
                   size="page"
                 />
             )}
@@ -601,13 +603,13 @@ export default function HarmonizationPage() {
                             className="inline-flex h-10 items-center gap-2 rounded-lg bg-green-600 px-5 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             {runningAll ? (
-                                <><Spinner /> Running Pipeline...</>
+                                <><Spinner /> {t('page.harmonization.running')}</>
                             ) : (
                                 <>
                                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3l14 9-14 9V3z" />
                                     </svg>
-                                    Run All Steps
+                                    {t('page.harmonization.run_all_button')}
                                 </>
                             )}
                         </button>

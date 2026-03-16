@@ -6,6 +6,7 @@ import { useDomain, DomainSchema, DomainAttribute } from "../contexts/DomainCont
 import { useAuth } from "../contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { useFocusTrap } from "../hooks/useFocusTrap";
+import { useLanguage } from "../contexts/LanguageContext";
 
 const BUILTIN_IDS = new Set(["default", "science", "healthcare"]);
 
@@ -48,6 +49,7 @@ const SLUG_RE = /^[a-z][a-z0-9_]*$/;
 export default function DomainsPage() {
   const { domains, activeDomainId, setActiveDomainId, refreshDomains } = useDomain();
   const { user } = useAuth();
+  const { t } = useLanguage();
   const isAdmin = user?.role === "super_admin" || user?.role === "admin";
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -135,8 +137,8 @@ export default function DomainsPage() {
   return (
     <div className="flex h-full flex-col gap-6">
       <PageHeader
-        breadcrumbs={[{ label: "Home", href: "/" }, { label: "Domain Registry" }]}
-        title="Domain Registry"
+        breadcrumbs={[{ label: "Home", href: "/" }, { label: t('page.domains.breadcrumb') }]}
+        title={t('page.domains.title')}
         description={`${domains.length} domain${domains.length !== 1 ? "s" : ""} registered · Active: ${activeDomainId}`}
         actions={isAdmin ? (
           <button
@@ -144,7 +146,7 @@ export default function DomainsPage() {
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-            New Domain
+            {t('page.domains.new_button')}
           </button>
         ) : undefined}
       />
@@ -198,7 +200,7 @@ export default function DomainsPage() {
                     onClick={e => { e.stopPropagation(); setActiveDomainId(d.id); }}
                     className="rounded-md bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
                   >
-                    Set Active
+                    {t('page.domains.set_active_button')}
                   </button>
                 )}
                 {isAdmin && !BUILTIN_IDS.has(d.id) && (
@@ -207,7 +209,7 @@ export default function DomainsPage() {
                     disabled={deleting === d.id}
                     className="rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 transition-colors disabled:opacity-50"
                   >
-                    {deleting === d.id ? "Deleting…" : "Delete"}
+                    {deleting === d.id ? t('page.domains.deleting') : t('page.domains.delete_button')}
                   </button>
                 )}
               </div>
@@ -236,10 +238,10 @@ export default function DomainsPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 dark:bg-gray-800/50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Field Name</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Label</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Type</th>
-                      <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Required</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('page.domains.table_field_name_header')}</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('page.domains.table_label_header')}</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('page.domains.table_type_header')}</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('page.domains.table_required_header')}</th>
                       <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Core</th>
                     </tr>
                   </thead>
@@ -278,7 +280,7 @@ export default function DomainsPage() {
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 text-gray-400 dark:text-gray-600">
               <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" /></svg>
-              <p className="text-sm">Select a domain to view its attributes</p>
+              <p className="text-sm">{t('page.domains.select_domain_prompt')}</p>
             </div>
           )}
         </div>
@@ -297,7 +299,7 @@ export default function DomainsPage() {
           >
             {/* Form header */}
             <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-800">
-              <h3 id="new-domain-title" className="font-semibold text-gray-900 dark:text-white">New Domain Schema</h3>
+              <h3 id="new-domain-title" className="font-semibold text-gray-900 dark:text-white">{t('page.domains.form_title')}</h3>
               <button onClick={() => setShowForm(false)} aria-label="Close" className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
                 <svg className="w-5 h-5" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
@@ -307,7 +309,7 @@ export default function DomainsPage() {
               {/* Basic info */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="domain-id" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Domain ID <span className="text-red-500" aria-label="required">*</span></label>
+                  <label htmlFor="domain-id" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{t('page.domains.form_id_label')} <span className="text-red-500" aria-label="required">*</span></label>
                   <input
                     id="domain-id"
                     value={formId} onChange={e => setFormId(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
@@ -317,7 +319,7 @@ export default function DomainsPage() {
                   <p className="mt-1 text-xs text-gray-400">Lowercase, no spaces</p>
                 </div>
                 <div>
-                  <label htmlFor="domain-name" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Name <span className="text-red-500" aria-label="required">*</span></label>
+                  <label htmlFor="domain-name" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{t('page.domains.form_name_label')} <span className="text-red-500" aria-label="required">*</span></label>
                   <input
                     id="domain-name"
                     value={formName} onChange={e => setFormName(e.target.value)}
@@ -328,7 +330,7 @@ export default function DomainsPage() {
               </div>
 
               <div>
-                <label htmlFor="domain-desc" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Description <span className="text-red-500" aria-label="required">*</span></label>
+                <label htmlFor="domain-desc" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{t('page.domains.form_description_label')} <span className="text-red-500" aria-label="required">*</span></label>
                 <input
                   id="domain-desc"
                   value={formDesc} onChange={e => setFormDesc(e.target.value)}
@@ -368,7 +370,7 @@ export default function DomainsPage() {
                     className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
                   >
                     <svg className="w-3 h-3" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                    Add attribute
+                    {t('page.domains.add_attribute_button')}
                   </button>
                 </div>
                 <div className="space-y-2">
@@ -414,14 +416,14 @@ export default function DomainsPage() {
             {/* Form footer */}
             <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4 dark:border-gray-800">
               <button onClick={() => setShowForm(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
-                Cancel
+                {t('page.domains.cancel_button')}
               </button>
               <button
                 onClick={handleCreate}
                 disabled={saving}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
-                {saving ? "Creating…" : "Create Domain"}
+                {saving ? t('page.domains.creating') : t('page.domains.create_button')}
               </button>
             </div>
           </div>

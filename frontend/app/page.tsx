@@ -12,6 +12,7 @@ import { PageHeader, StatCard } from "./components/ui";
 import { useDomain } from "./contexts/DomainContext";
 import { apiFetch } from "../lib/api";
 import { useAuth } from "./contexts/AuthContext";
+import { useLanguage } from "./contexts/LanguageContext";
 import { Analytics } from "../lib/analytics";
 
 interface DashboardStats {
@@ -35,6 +36,7 @@ export default function Home() {
   const [demoLoading, setDemoLoading] = useState(false);
   const { activeDomainId } = useDomain();
   const { token } = useAuth();
+  const { t } = useLanguage();
 
   const fetchDemoStatus = useCallback(async () => {
     try {
@@ -110,7 +112,7 @@ export default function Home() {
             : "text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
         }`}
       >
-        Table View
+        {t('page.home.view_table')}
       </button>
       <button
         onClick={() => setViewMode("variants")}
@@ -120,7 +122,7 @@ export default function Home() {
             : "text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
         }`}
       >
-        Variant Groups
+        {t('page.home.view_variants')}
       </button>
     </div>
   );
@@ -130,9 +132,9 @@ export default function Home() {
       <WelcomeModal />
 
       <PageHeader
-        breadcrumbs={[{ label: "Home" }]}
-        title="Knowledge Dashboard"
-        description="Centralized entity management and harmonization tools"
+        breadcrumbs={[{ label: t('page.home.breadcrumb') }]}
+        title={t('page.home.title')}
+        description={t('page.home.description')}
         actions={viewToggle}
       />
 
@@ -145,7 +147,7 @@ export default function Home() {
             </svg>
           }
           iconColor="blue"
-          label="Total Entities"
+          label={t('page.home.metric_total_entities')}
           value={stats?.total?.toLocaleString() ?? "—"}
         />
         <StatCard
@@ -155,7 +157,7 @@ export default function Home() {
             </svg>
           }
           iconColor="emerald"
-          label="Enrichment Coverage"
+          label={t('page.home.metric_enrichment_coverage')}
           value={`${Math.round(enrichPct)}%`}
           trend={enrichPct > 0 ? { value: `${Math.round(enrichPct)}%`, direction: "up", positive: true } : undefined}
         />
@@ -167,7 +169,7 @@ export default function Home() {
             </svg>
           }
           iconColor="amber"
-          label="Unique Primary Labels"
+          label={t('page.home.metric_primary_labels')}
           value={stats?.labels?.toLocaleString() ?? "—"}
         />
         <StatCard
@@ -177,7 +179,7 @@ export default function Home() {
             </svg>
           }
           iconColor="violet"
-          label="Active Domains"
+          label={t('page.home.metric_active_domains')}
           value={domainCount || "—"}
         />
       </div>
@@ -193,8 +195,8 @@ export default function Home() {
                 </svg>
               </div>
               <div>
-                <p className="text-sm font-medium text-indigo-900 dark:text-indigo-200">Try UKIP Demo</p>
-                <p className="text-xs text-indigo-600 dark:text-indigo-400">Load 1,000 pre-generated entities across Technology, Healthcare, Science and Engineering to explore all platform features.</p>
+                <p className="text-sm font-medium text-indigo-900 dark:text-indigo-200">{t('page.home.demo_banner_title')}</p>
+                <p className="text-xs text-indigo-600 dark:text-indigo-400">{t('page.home.demo_banner_description')}</p>
               </div>
             </div>
             <button
@@ -207,7 +209,7 @@ export default function Home() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-              ) : "Launch Demo"}
+              ) : t('page.home.demo_launch_button')}
             </button>
           </div>
         ) : (
@@ -215,8 +217,8 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <span className="text-lg">demo</span>
               <div>
-                <p className="text-sm font-medium text-amber-900 dark:text-amber-200">Demo mode active</p>
-                <p className="text-xs text-amber-600 dark:text-amber-400">{demoStatus.demo_entity_count.toLocaleString()} demo entities loaded. Clear them when you are ready to import your own data.</p>
+                <p className="text-sm font-medium text-amber-900 dark:text-amber-200">{t('page.home.demo_active_title')}</p>
+                <p className="text-xs text-amber-600 dark:text-amber-400">{demoStatus.demo_entity_count.toLocaleString()} {t('page.home.demo_active_description')}</p>
               </div>
             </div>
             <button
@@ -224,7 +226,7 @@ export default function Home() {
               disabled={demoLoading}
               className="flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-50 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
             >
-              {demoLoading ? "Clearing..." : "Clear Demo"}
+              {demoLoading ? t('page.home.demo_clearing') : t('page.home.demo_clear_button')}
             </button>
           </div>
         )
@@ -241,8 +243,8 @@ export default function Home() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
             </svg>
             <div>
-              <p className="font-semibold">Import Data</p>
-              <p className="text-sm text-white/70">Upload Excel, CSV, JSON-LD</p>
+              <p className="font-semibold">{t('page.home.cta_import_title')}</p>
+              <p className="text-sm text-white/70">{t('page.home.cta_import_desc')}</p>
             </div>
           </div>
         </Link>
@@ -252,8 +254,8 @@ export default function Home() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
             <div>
-              <p className="font-semibold">Authority Resolution</p>
-              <p className="text-sm text-white/70">Wikidata, VIAF, ORCID, DBpedia</p>
+              <p className="font-semibold">{t('page.home.cta_authority_title')}</p>
+              <p className="text-sm text-white/70">{t('page.home.cta_authority_desc')}</p>
             </div>
           </div>
         </Link>
@@ -263,8 +265,8 @@ export default function Home() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
             </svg>
             <div>
-              <p className="font-semibold">OLAP Explorer</p>
-              <p className="text-sm text-white/70">Multi-dimensional analysis</p>
+              <p className="font-semibold">{t('page.home.cta_olap_title')}</p>
+              <p className="text-sm text-white/70">{t('page.home.cta_olap_desc')}</p>
             </div>
           </div>
         </Link>
@@ -280,13 +282,13 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                 </svg>
               </div>
-              <h3 className="mt-4 text-base font-semibold text-gray-900 dark:text-gray-100">No entities yet</h3>
+              <h3 className="mt-4 text-base font-semibold text-gray-900 dark:text-gray-100">{t('page.home.empty_title')}</h3>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 text-center max-w-xs">
-                Import a CSV, Excel, or JSON-LD file to populate your knowledge base, or launch the demo to explore a sample dataset.
+                {t('page.home.empty_description')}
               </p>
               <div className="mt-6 flex gap-3">
                 <Link href="/import-export" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors">
-                  Import Data
+                  {t('page.home.cta_import_title')}
                 </Link>
                 {demoStatus !== null && !demoStatus.demo_seeded && (
                   <button
@@ -294,7 +296,7 @@ export default function Home() {
                     disabled={demoLoading}
                     className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300"
                   >
-                    {demoLoading ? "Loading..." : "Try Demo"}
+                    {demoLoading ? t('page.home.empty_loading') : t('page.home.empty_demo_button')}
                   </button>
                 )}
               </div>

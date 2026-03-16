@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, Fragment } from "react";
 import { PageHeader, TabNav, Badge, useToast } from "../components/ui";
 import { useDomain } from "../contexts/DomainContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { apiFetch } from "@/lib/api";
 import AnnotationThread from "../components/AnnotationThread";
 
@@ -274,8 +275,8 @@ function ReviewQueueTab({ activeDomain }: { activeDomain: any }) {
                             onChange={e => setBatchEntityType(e.target.value)}
                             className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
                         >
-                            {["general", "person", "organization", "concept", "institution"].map(t => (
-                                <option key={t} value={t}>{t}</option>
+                            {["general", "person", "organization", "concept", "institution"].map(et => (
+                                <option key={et} value={et}>{et}</option>
                             ))}
                         </select>
                     </div>
@@ -326,6 +327,7 @@ function ReviewQueueTab({ activeDomain }: { activeDomain: any }) {
                             <option value="confirmed">Confirmed</option>
                             <option value="rejected">Rejected</option>
                         </select>
+                        {/* status labels intentionally kept in English as DB values */}
                         <select
                             value={fieldFilter}
                             onChange={e => setFieldFilter(e.target.value)}
@@ -825,19 +827,20 @@ function DisambiguationTab({ activeDomain }: { activeDomain: any }) {
 
 export default function AuthorityPage() {
     const { activeDomain } = useDomain();
+    const { t } = useLanguage();
     const [tab, setTab] = useState<"disambiguation" | "review">("disambiguation");
 
     const tabs = [
-        { id: "disambiguation" as const, label: "Disambiguation" },
-        { id: "review" as const, label: "Review Queue" },
+        { id: "disambiguation" as const, label: t('page.authority.tab_groups') },
+        { id: "review" as const, label: t('page.authority.tab_review_queue') },
     ];
 
     return (
         <div className="space-y-6">
             <PageHeader
-                breadcrumbs={[{ label: "Home", href: "/" }, { label: "Authority Control" }]}
-                title="Authority Control"
-                description="Normalize and harmonize field values with canonical rules"
+                breadcrumbs={[{ label: "Home", href: "/" }, { label: t('page.authority.breadcrumb') }]}
+                title={t('page.authority.title')}
+                description={t('page.authority.description')}
             />
 
             <TabNav

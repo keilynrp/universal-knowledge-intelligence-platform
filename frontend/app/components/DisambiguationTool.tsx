@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useDomain } from "../contexts/DomainContext";
 import { apiFetch } from "@/lib/api";
 import { Badge, useToast } from "./ui";
+import { useLanguage } from "../contexts/LanguageContext";
 
 interface VariationGroup {
     main: string;
@@ -72,6 +73,7 @@ const ENTITY_TYPES = [
 ];
 
 export default function DisambiguationTool() {
+    const { t } = useLanguage();
     const { activeDomain } = useDomain();
     const { toast } = useToast();
     const [field, setField] = useState("");
@@ -342,7 +344,7 @@ export default function DisambiguationTool() {
                         <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">{fieldLabel}</p>
                     </div>
                     <div className="flex-1 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Lexical Variations</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('disambiguation.variants')}</p>
                         <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">
                             {groups.reduce((acc, g) => acc + g.count, 0)}
                         </p>
@@ -390,7 +392,7 @@ export default function DisambiguationTool() {
                                 <div className="mt-2 flex items-end justify-between">
                                     <div>
                                         <div className="flex items-center gap-2">
-                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Canonical term:</span>
+                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('disambiguation.canonical')}:</span>
                                             <span className="inline-flex items-center rounded bg-indigo-100 px-2 py-0.5 font-mono text-lg font-bold text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-300">
                                                 {resolutions[idx].canonical_value}
                                             </span>
@@ -429,7 +431,7 @@ export default function DisambiguationTool() {
                                             <svg className="h-3.5 w-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                                             </svg>
-                                            Auto-Resolve via AI
+                                            {t('disambiguation.resolve')}
                                         </>
                                     )}
                                 </button>

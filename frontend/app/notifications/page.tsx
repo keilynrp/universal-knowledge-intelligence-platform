@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { apiFetch } from "../../lib/api";
 import { EmptyState } from "../components/ui";
+import { useLanguage } from "../contexts/LanguageContext";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -113,6 +114,7 @@ function clearLocalReadIds() {
 // ── Page component ────────────────────────────────────────────────────────────
 
 export default function NotificationsPage() {
+  const { t } = useLanguage();
   const [page, setPage]             = useState<FeedPage | null>(null);
   const [items, setItems]           = useState<NotifEntry[]>([]);
   const [skip, setSkip]             = useState(0);
@@ -200,12 +202,12 @@ export default function NotificationsPage() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Notification Center
+            {t('page.notifications.title')}
           </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             {page
               ? `${page.total} total · ${unreadCount} unread`
-              : "Loading…"}
+              : t('page.notifications.loading')}
           </p>
         </div>
 
@@ -226,26 +228,33 @@ export default function NotificationsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             )}
-            Mark all read
+            {t('page.notifications.mark_all_read_button')}
           </button>
         )}
       </div>
 
       {/* ── Action type filter tabs ───────────────────────────────────────── */}
       <div className="mb-5 flex flex-wrap gap-1.5">
-        {ACTION_FILTERS.map((f) => (
-          <button
-            key={f.key}
-            onClick={() => setAction(f.key)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              action === f.key
-                ? "bg-blue-600 text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
+        {ACTION_FILTERS.map((f) => {
+          const filterLabel =
+            f.key === ""             ? t('page.notifications.filter_all') :
+            f.key === "upload"       ? t('page.notifications.filter_uploads') :
+            f.key === "entity.update" ? t('page.notifications.filter_updates') :
+            f.label;
+          return (
+            <button
+              key={f.key}
+              onClick={() => setAction(f.key)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                action === f.key
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+              }`}
+            >
+              {filterLabel}
+            </button>
+          );
+        })}
       </div>
 
       {/* ── List ──────────────────────────────────────────────────────────── */}
@@ -260,8 +269,8 @@ export default function NotificationsPage() {
       ) : items.length === 0 ? (
         <EmptyState
           icon="bell"
-          title="No notifications"
-          description="You're all caught up!"
+          title={t('page.notifications.empty_title')}
+          description={t('page.notifications.empty_description')}
           size="page"
           cta={action ? [{ label: "Clear filter", onClick: () => setAction("") }] : undefined}
         />
@@ -331,7 +340,7 @@ export default function NotificationsPage() {
                           className="hidden text-[10px] font-medium text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 group-hover:block"
                           title="Mark as read"
                         >
-                          Mark read
+                          {t('page.notifications.mark_read_button')}
                         </button>
                       </>
                     )}
@@ -355,11 +364,11 @@ export default function NotificationsPage() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                    Loading…
+                    {t('page.notifications.loading')}
                   </>
                 ) : (
                   <>
-                    Load more
+                    {t('page.notifications.load_more_button')}
                     <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                       {page!.total - items.length} remaining
                     </span>

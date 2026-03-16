@@ -5,6 +5,7 @@ import Link from "next/link";
 import AIIntegrations from "./AIIntegrations";
 import { apiFetch } from "@/lib/api";
 import { PageHeader, TabNav, Badge, useToast } from "../components/ui";
+import { useLanguage } from "../contexts/LanguageContext";
 
 interface StoreConnection {
     id: number;
@@ -34,6 +35,7 @@ const DIRECTION_LABELS: Record<string, string> = {
 
 export default function IntegrationsPage() {
     const { toast } = useToast();
+    const { t } = useLanguage();
     const [activeTab, setActiveTab] = useState<"stores" | "ai">("stores");
     const [stores, setStores] = useState<StoreConnection[]>([]);
     const [loading, setLoading] = useState(true);
@@ -154,14 +156,14 @@ export default function IntegrationsPage() {
     return (
         <div className="space-y-6">
             <PageHeader
-                breadcrumbs={[{ label: "Home", href: "/" }, { label: "Integrations" }]}
-                title="Integrations"
+                breadcrumbs={[{ label: "Home", href: "/" }, { label: t('page.integrations.breadcrumb') }]}
+                title={t('page.integrations.title')}
                 description="Connect external e-commerce stores or configure predictive Semantic Generative AI (RAG)."
             />
             <TabNav
                 tabs={[
-                    { id: "stores", label: "🛒 E-commerce Stores" },
-                    { id: "ai", label: "🧠 AI Language Models" },
+                    { id: "stores", label: t('page.integrations.tab_stores') },
+                    { id: "ai", label: t('page.integrations.tab_ai') },
                 ]}
                 activeTab={activeTab}
                 onTabChange={(id) => setActiveTab(id as "stores" | "ai")}
@@ -179,7 +181,7 @@ export default function IntegrationsPage() {
                             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                             </svg>
-                            Add Store
+                            {t('page.integrations.add_store_button')}
                         </button>
                     </div>
 
@@ -187,12 +189,12 @@ export default function IntegrationsPage() {
                     {showForm && (
                         <div className="rounded-2xl border border-blue-200 bg-white p-6 dark:border-blue-500/20 dark:bg-gray-900">
                             <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
-                                {editingStore ? `Edit: ${editingStore.name}` : "New Store Connection"}
+                                {editingStore ? `Edit: ${editingStore.name}` : t('page.integrations.new_store_title')}
                             </h2>
                             <form onSubmit={handleSubmit} className="space-y-4">
                                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                     <div>
-                                        <label className={labelClass}>Store Name *</label>
+                                        <label className={labelClass}>{t('page.integrations.store_name_label')} *</label>
                                         <input
                                             type="text"
                                             required
@@ -203,7 +205,7 @@ export default function IntegrationsPage() {
                                         />
                                     </div>
                                     <div>
-                                        <label className={labelClass}>Platform *</label>
+                                        <label className={labelClass}>{t('page.integrations.platform_label')} *</label>
                                         <select
                                             className={inputClass}
                                             value={formData.platform}
@@ -218,7 +220,7 @@ export default function IntegrationsPage() {
                                 </div>
 
                                 <div>
-                                    <label className={labelClass}>Base URL *</label>
+                                    <label className={labelClass}>{t('page.integrations.base_url_label')} *</label>
                                     <input
                                         type="url"
                                         required
@@ -237,7 +239,7 @@ export default function IntegrationsPage() {
 
                                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                                     <div>
-                                        <label className={labelClass}>API Key</label>
+                                        <label className={labelClass}>{t('page.integrations.api_key_label')}</label>
                                         <input
                                             type="password"
                                             className={inputClass}
@@ -270,7 +272,7 @@ export default function IntegrationsPage() {
 
                                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                     <div>
-                                        <label className={labelClass}>Sync Direction</label>
+                                        <label className={labelClass}>{t('page.integrations.sync_direction_label')}</label>
                                         <select
                                             className={inputClass}
                                             value={formData.sync_direction}
@@ -282,7 +284,7 @@ export default function IntegrationsPage() {
                                         </select>
                                     </div>
                                     <div>
-                                        <label className={labelClass}>Notes</label>
+                                        <label className={labelClass}>{t('page.integrations.notes_label')}</label>
                                         <input
                                             type="text"
                                             className={inputClass}
@@ -305,7 +307,7 @@ export default function IntegrationsPage() {
                                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                                             </svg>
                                         ) : null}
-                                        {editingStore ? "Update Connection" : "Save Connection"}
+                                        {editingStore ? t('page.integrations.update_button') : t('page.integrations.save_button')}
                                     </button>
                                     <button
                                         type="button"
@@ -334,7 +336,7 @@ export default function IntegrationsPage() {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-9.86a4.5 4.5 0 00-6.364 6.364L12 10.5" />
                                 </svg>
                             </div>
-                            <h3 className="mb-1 text-lg font-semibold text-gray-900 dark:text-white">No store connections yet</h3>
+                            <h3 className="mb-1 text-lg font-semibold text-gray-900 dark:text-white">{t('page.integrations.empty_title')}</h3>
                             <p className="mb-4 max-w-sm text-center text-sm text-gray-500 dark:text-gray-400">
                                 Connect your WooCommerce, Shopify, Bsale, or custom API stores to sync and manage your product catalog.
                             </p>
@@ -345,7 +347,7 @@ export default function IntegrationsPage() {
                                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                 </svg>
-                                Add Your First Store
+                                {t('page.integrations.empty_button')}
                             </button>
                         </div>
                     ) : (
@@ -412,13 +414,13 @@ export default function IntegrationsPage() {
                                                 href={`/integrations/${store.id}`}
                                                 className="flex-1 rounded-lg px-3 py-1.5 text-center text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-500/10"
                                             >
-                                                Details
+                                                {t('page.integrations.details_button')}
                                             </Link>
                                             <button
                                                 onClick={() => openEditForm(store)}
                                                 className="flex-1 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
                                             >
-                                                Edit
+                                                {t('page.integrations.edit_button')}
                                             </button>
                                             <button
                                                 onClick={() => handleToggle(store)}
@@ -427,7 +429,7 @@ export default function IntegrationsPage() {
                                                     : "text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-500/10"
                                                     }`}
                                             >
-                                                {store.is_active ? "Deactivate" : "Activate"}
+                                                {store.is_active ? t('page.integrations.deactivate_button') : t('page.integrations.activate_button')}
                                             </button>
                                             <button
                                                 onClick={() => handleDelete(store)}

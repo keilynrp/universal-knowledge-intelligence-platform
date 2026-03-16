@@ -5,6 +5,7 @@ import { PageHeader, Badge } from "../components/ui";
 import { apiFetch } from "../../lib/api";
 import { useDomain } from "../contexts/DomainContext";
 import { useToast } from "../components/ui";
+import { useLanguage } from "../contexts/LanguageContext";
 
 // ── Template types ─────────────────────────────────────────────────────────────
 
@@ -56,6 +57,7 @@ const FORMAT_OPTIONS: { value: ExportFormat; label: string; desc: string; icon: 
 export default function ReportsPage() {
   const { activeDomainId } = useDomain();
   const { toast } = useToast();
+  const { t } = useLanguage();
 
   const [sections, setSections] = useState<Section[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -206,12 +208,12 @@ export default function ReportsPage() {
     <div className="space-y-6">
       <PageHeader
         breadcrumbs={[
-          { label: "Home", href: "/" },
-          { label: "Analytics", href: "/analytics" },
-          { label: "Report Builder" },
+          { label: t('page.reports.breadcrumb_home'), href: "/" },
+          { label: t('page.reports.breadcrumb_analytics'), href: "/analytics" },
+          { label: t('page.reports.title') },
         ]}
-        title="Report Builder"
-        description="Generate self-contained HTML reports — printable and shareable"
+        title={t('page.reports.title')}
+        description={t('page.reports.description')}
         actions={
           <button
             onClick={handleGenerate}
@@ -224,14 +226,14 @@ export default function ReportsPage() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                Generating…
+                {t('page.reports.generating')}
               </>
             ) : (
               <>
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                 </svg>
-                Generate & Download
+                {t('page.reports.generate_button')}
               </>
             )}
           </button>
@@ -246,7 +248,7 @@ export default function ReportsPage() {
         >
           <div className="flex items-center gap-2">
             <span className="text-base">📐</span>
-            <span className="text-sm font-semibold text-gray-900 dark:text-white">Templates</span>
+            <span className="text-sm font-semibold text-gray-900 dark:text-white">{t('page.reports.templates_panel_title')}</span>
             {templates.length > 0 && (
               <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">
                 {templates.length}
@@ -270,7 +272,7 @@ export default function ReportsPage() {
                 ))}
               </div>
             ) : templates.length === 0 ? (
-              <p className="text-sm text-gray-400 dark:text-gray-500">No templates found.</p>
+              <p className="text-sm text-gray-400 dark:text-gray-500">{t('page.reports.no_templates')}</p>
             ) : (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {templates.map((tpl) => (
@@ -311,7 +313,7 @@ export default function ReportsPage() {
                   disabled={savingTemplate || !newTemplateName.trim()}
                   className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-300"
                 >
-                  {savingTemplate ? "Saving…" : "Save"}
+                  {savingTemplate ? t('page.reports.template_saving') : t('page.reports.template_save_button')}
                 </button>
               </div>
             )}
@@ -324,15 +326,15 @@ export default function ReportsPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
-              Report Sections
+              {t('page.reports.sections_title')}
               <span className="ml-2 text-xs font-normal text-gray-400">
-                {selected.size} of {sections.length} selected
+                {selected.size} of {sections.length} {t('page.reports.sections_selected_count')}
               </span>
             </h2>
             <div className="flex gap-2">
-              <button onClick={selectAll} className="text-xs text-blue-600 hover:underline dark:text-blue-400">All</button>
+              <button onClick={selectAll} className="text-xs text-blue-600 hover:underline dark:text-blue-400">{t('page.reports.select_all_button')}</button>
               <span className="text-gray-300 dark:text-gray-700">·</span>
-              <button onClick={clearAll} className="text-xs text-gray-500 hover:underline dark:text-gray-400">None</button>
+              <button onClick={clearAll} className="text-xs text-gray-500 hover:underline dark:text-gray-400">{t('page.reports.select_none_button')}</button>
             </div>
           </div>
 
@@ -388,11 +390,11 @@ export default function ReportsPage() {
         <div className="space-y-4">
           {/* Report title */}
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-            <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">Configuration</h3>
+            <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">{t('page.reports.config_title')}</h3>
             <div className="space-y-4">
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
-                  Report Title (optional)
+                  {t('page.reports.title_label')}
                 </label>
                 <input
                   type="text"
@@ -404,22 +406,22 @@ export default function ReportsPage() {
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
-                  Active Domain
+                  {t('page.reports.domain_label')}
                 </label>
                 <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-800">
                   <span className="text-sm text-gray-700 dark:text-gray-300">{activeDomainId || "default"}</span>
-                  <Badge variant="info" size="sm">active</Badge>
+                  <Badge variant="info" size="sm">{t('page.reports.domain_active_badge')}</Badge>
                 </div>
-                <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Change domain in the header selector</p>
+                <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{t('page.reports.domain_help')}</p>
               </div>
             </div>
           </div>
 
           {/* Preview of what's included */}
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-            <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">Included Sections</h3>
+            <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">{t('page.reports.included_sections_title')}</h3>
             {selected.size === 0 ? (
-              <p className="text-xs text-gray-400 dark:text-gray-500">No sections selected</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">{t('page.reports.no_sections_selected')}</p>
             ) : (
               <ol className="space-y-2">
                 {sections
@@ -438,7 +440,7 @@ export default function ReportsPage() {
 
           {/* Format selector */}
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-            <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">Export Format</h3>
+            <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">{t('page.reports.format_title')}</h3>
             <div className="space-y-2">
               {FORMAT_OPTIONS.map((opt) => (
                 <button

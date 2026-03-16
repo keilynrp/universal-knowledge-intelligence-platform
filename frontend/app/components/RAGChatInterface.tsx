@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { apiFetch } from "@/lib/api";
 import { Badge } from "./ui";
 import { useDomain } from "../contexts/DomainContext";
+import { useLanguage } from "../contexts/LanguageContext";
 
 interface ToolCall {
     tool: string;
@@ -24,6 +25,7 @@ interface Message {
 }
 
 export default function RAGChatInterface() {
+    const { t } = useLanguage();
     const { activeDomainId } = useDomain();
     const [messages, setMessages] = useState<Message[]>([
         {
@@ -62,7 +64,7 @@ export default function RAGChatInterface() {
             const data = await res.json();
             setMessages(prev => [...prev, {
                 role: "assistant",
-                content: `✅ **Indexing complete!** ${data.indexed} items embedded and stored in the Vector Database. ${data.skipped || 0} entities skipped (insufficient data). You can now ask questions about your knowledge hub.`
+                content: `✅ ${t('rag.index.success')} ${data.indexed} items embedded and stored in the Vector Database. ${data.skipped || 0} entities skipped (insufficient data). You can now ask questions about your knowledge hub.`
             }]);
             fetchStats();
         } catch (e) {
@@ -158,7 +160,7 @@ export default function RAGChatInterface() {
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                             </svg>
                         ) : "⚡"}
-                        {isIndexing ? "Indexing..." : "Index Hub Knowledge"}
+                        {isIndexing ? t('rag.index.rebuilding') : t('rag.index.rebuild')}
                     </button>
                 </div>
             </div>
