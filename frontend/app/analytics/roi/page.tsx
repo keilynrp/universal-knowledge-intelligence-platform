@@ -458,7 +458,7 @@ export default function ROICalculatorPage() {
                       <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#6b7280" }}
                         tickFormatter={(v) => `${v}%`} />
                       <Tooltip
-                        formatter={(v: number | undefined, name: string | undefined) => [`${(v ?? 0).toFixed(1)}%`, name ?? ""]}
+                        formatter={(v, name) => [`${(Number(v) || 0).toFixed(1)}%`, String(name ?? "")]}
                         contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)", fontSize: "12px" }}
                       />
                       <Area type="monotone" dataKey="optimistic" stroke="#4ade80" strokeWidth={1.5}
@@ -491,7 +491,7 @@ export default function ROICalculatorPage() {
                         tick={{ fontSize: 9, fill: "#9ca3af" }} interval={3} dy={6} />
                       <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#6b7280" }} />
                       <Tooltip
-                        formatter={(v: number | undefined) => [String(v ?? 0), "Simulations"]}
+                        formatter={(v) => [String(v ?? 0), "Simulations"]}
                         contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)", fontSize: "12px" }}
                       />
                       <Bar dataKey="count" fill="#6366f1" radius={[3, 3, 0, 0]} name="Count" />

@@ -31,6 +31,7 @@ if SECRET_KEY == _INSECURE_DEFAULT_KEY:
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("JWT_EXPIRE_MINUTES", "480"))  # 8h
+REFRESH_TOKEN_EXPIRE_MINUTES = int(os.environ.get("JWT_REFRESH_MINUTES", "10080")) # 7 days
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
@@ -55,7 +56,18 @@ def create_access_token(subject: str, role: str, expires_delta: Optional[timedel
         expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     return jwt.encode(
-        {"sub": subject, "role": role, "exp": expire},
+        {"sub": subject, "role": role, "exp": expire, "type": "access"},
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+
+
+def create_refresh_token(subject: str, role: str, expires_delta: Optional[timedelta] = None) -> str:
+    expire = datetime.now(timezone.utc) + (
+        expires_delta or timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES)
+    )
+    return jwt.encode(
+        {"sub": subject, "role": role, "exp": expire, "type": "refresh"},
         SECRET_KEY,
         algorithm=ALGORITHM,
     )

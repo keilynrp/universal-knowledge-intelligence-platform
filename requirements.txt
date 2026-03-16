@@ -31,3 +31,6 @@ pymysql
 # ── Sprint 65: SSO Integration ───────────────────────────────
 authlib
 itsdangerous
+
+# ── Prioridad 3: Telemetry & Monitoring
+sentry-sdk[fastapi]

@@ -232,7 +232,7 @@ export default function AuditLogPage() {
                   <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
                   <Tooltip
                     contentStyle={{ fontSize: 12, borderRadius: 6 }}
-                    formatter={(v: number | undefined) => [v ?? 0, "Events"]}
+                    formatter={(v) => [Number(v) || 0, "Events"]}
                   />
                   <Bar dataKey="count" fill="#3b82f6" radius={[3, 3, 0, 0]} />
                 </BarChart>

@@ -32,20 +32,12 @@ from backend import enrichment_worker
 from backend import entity_linker as _entity_linker
 from backend.routers.deps import _audit, _dispatch_webhook
 from backend.routers.limiter import limiter
+from backend.services.entity_service import EntityService
 
 router = APIRouter(tags=["entities"])
 
 
 # ── Entity list endpoints (must come before wildcard /{entity_id}) ────────────
-
-_FACET_FIELDS = {
-    "entity_type":        models.RawEntity.entity_type,
-    "domain":             models.RawEntity.domain,
-    "validation_status":  models.RawEntity.validation_status,
-    "enrichment_status":  models.RawEntity.enrichment_status,
-    "source":             models.RawEntity.source,
-}
-
 
 @router.get("/entities/facets")
 def get_entity_facets(
@@ -58,21 +50,7 @@ def get_entity_facets(
     Response: { field: [{value, count}, ...], ... }
     Unknown fields are silently ignored.
     """
-    requested = [f.strip() for f in fields.split(",") if f.strip()]
-    result = {}
-    for field in requested:
-        col = _FACET_FIELDS.get(field)
-        if col is None:
-            continue
-        rows = (
-            db.query(col, func.count(models.RawEntity.id).label("cnt"))
-            .filter(col != None, col != "")
-            .group_by(col)
-            .order_by(func.count(models.RawEntity.id).desc())
-            .all()
-        )
-        result[field] = [{"value": r[0], "count": r[1]} for r in rows]
-    return result
+    return EntityService.get_facets(db, fields)
 
 
 @router.get("/entities", response_model=List[schemas.Entity])
@@ -92,45 +70,20 @@ def get_entities(
     db: Session = Depends(get_db),
     _: models.User = Depends(get_current_user),
 ):
-    query = db.query(models.RawEntity)
-    if search:
-        search_filter = f"%{search}%"
-        query = query.filter(
-            or_(
-                models.RawEntity.primary_label.ilike(search_filter),
-                models.RawEntity.canonical_id.ilike(search_filter),
-                models.RawEntity.secondary_label.ilike(search_filter),
-                models.RawEntity.entity_type.ilike(search_filter),
-            )
-        )
-
-    # Quality filter
-    if min_quality is not None:
-        query = query.filter(models.RawEntity.quality_score >= min_quality)
-
-    # Facet filters
-    if ft_entity_type:
-        query = query.filter(models.RawEntity.entity_type == ft_entity_type)
-    if ft_domain:
-        query = query.filter(models.RawEntity.domain == ft_domain)
-    if ft_validation_status:
-        query = query.filter(models.RawEntity.validation_status == ft_validation_status)
-    if ft_enrichment_status:
-        query = query.filter(models.RawEntity.enrichment_status == ft_enrichment_status)
-    if ft_source:
-        query = query.filter(models.RawEntity.source == ft_source)
-
-    # Sorting
-    sort_col = {
-        "id": models.RawEntity.id,
-        "quality_score": models.RawEntity.quality_score,
-        "primary_label": models.RawEntity.primary_label,
-        "enrichment_status": models.RawEntity.enrichment_status,
-    }.get(sort_by, models.RawEntity.id)
-    query = query.order_by(sort_col.desc() if order == "desc" else sort_col.asc())
-
-    total = query.count()
-    entities = query.offset(skip).limit(limit).all()
+    total, entities = EntityService.get_list(
+        db=db,
+        skip=skip,
+        limit=limit,
+        search=search,
+        sort_by=sort_by,
+        order=order,
+        min_quality=min_quality,
+        ft_entity_type=ft_entity_type,
+        ft_domain=ft_domain,
+        ft_validation_status=ft_validation_status,
+        ft_enrichment_status=ft_enrichment_status,
+        ft_source=ft_source,
+    )
     response.headers["X-Total-Count"] = str(total)
     return entities
 
@@ -148,55 +101,9 @@ def get_entities_grouped(
     Group entities by primary_label and show all variants for each entity.
     Similar to OpenRefine's clustering/faceting feature.
     """
-    variant_counts = (
-        db.query(
-            models.RawEntity.primary_label,
-            func.count(models.RawEntity.id).label("variant_count"),
-        )
-        .filter(models.RawEntity.primary_label != None)
-        .group_by(models.RawEntity.primary_label)
-        .subquery()
-    )
-
-    query = (
-        db.query(models.RawEntity.primary_label, variant_counts.c.variant_count)
-        .join(variant_counts, models.RawEntity.primary_label == variant_counts.c.primary_label)
-        .group_by(models.RawEntity.primary_label, variant_counts.c.variant_count)
-    )
-
-    if search:
-        search_filter = f"%{search}%"
-        query = query.filter(models.RawEntity.primary_label.ilike(search_filter))
-
-    query = query.order_by(variant_counts.c.variant_count.desc())
-
-    total_groups = query.count()
+    total_groups, results = EntityService.get_grouped(db, skip, limit, search)
     response.headers["X-Total-Count"] = str(total_groups)
-
-    product_groups = query.offset(skip).limit(limit).all()
-
-    entity_names = [row[0] for row in product_groups]
-    if not entity_names:
-        return []
-
-    all_variants = (
-        db.query(models.RawEntity)
-        .filter(models.RawEntity.primary_label.in_(entity_names))
-        .all()
-    )
-
-    variants_by_name: dict[str, list] = defaultdict(list)
-    for v in all_variants:
-        variants_by_name[v.primary_label].append(v)
-
-    return [
-        {
-            "primary_label": entity_name,
-            "variant_count": variant_count,
-            "variants": variants_by_name.get(entity_name, []),
-        }
-        for entity_name, variant_count in product_groups
-    ]
+    return results
 
 
 # ── Entity linker (must come before /{entity_id} to avoid shadowing) ──────────

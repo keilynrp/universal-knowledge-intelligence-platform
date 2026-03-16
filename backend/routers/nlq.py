@@ -9,6 +9,7 @@ POST /nlq/query
 """
 import json
 import logging
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -24,7 +25,53 @@ from backend.routers.limiter import limiter
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["nlq"])
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Helpers & Security ────────────────────────────────────────────────────────
+
+class NLQSanitizer:
+    """Security layer to prevent prompt-injected SQL manipulation escaping context."""
+    
+    # Block well-known SQL injections, comment symbols, and DML keywords contextually.
+    DANGEROUS_PATTERNS = re.compile(r"(;|--|/\*|\*/|DROP\s+TABLE|DELETE\s+FROM|UNION\s+ALL|exec\()", re.IGNORECASE)
+
+    @classmethod
+    def sanitize(cls, translated: dict, valid_dim_names: set[str]) -> tuple[list[str], dict[str, str]]:
+        # 1. Structural check
+        allowed_keys = {"group_by", "filters", "explanation"}
+        if any(k not in allowed_keys for k in translated.keys()):
+            logger.warning("NLQSanitizer: Rejected non-standard schema keys: %s", translated.keys())
+            raise ValueError("The AI generated an invalid structural format.")
+
+        # 2. Extract and validate GROUP BY
+        group_by = translated.get("group_by") or []
+        if not isinstance(group_by, list):
+            raise ValueError("The 'group_by' field must be a list.")
+        
+        for dim in group_by:
+            if not isinstance(dim, str):
+                raise ValueError("Dimension names must be text strings.")
+            if dim not in valid_dim_names:
+                raise ValueError(f"AI attempted to group by an unknown or unsafe dimension: '{dim}'.")
+            if cls.DANGEROUS_PATTERNS.search(dim):
+                raise ValueError("Dangerous syntax prevented in grouping.")
+
+        # 3. Extract and validate FILTERS
+        filters_raw = translated.get("filters") or {}
+        if not isinstance(filters_raw, dict):
+            raise ValueError("The 'filters' field must be a dictionary object.")
+        
+        safe_filters = {}
+        for k, v in filters_raw.items():
+            if k not in valid_dim_names:
+                raise ValueError(f"AI attempted to filter on an unknown dimension: '{k}'.")
+            
+            val_str = str(v)
+            if cls.DANGEROUS_PATTERNS.search(val_str):
+                raise ValueError("Security Sandbox: Dangerous character/keyword blocked within filter values.")
+            
+            safe_filters[k] = val_str
+            
+        return group_by, safe_filters
+
 
 def _get_active_integration(db: Session):
     """Return the decrypted active AIIntegration, or None."""
@@ -150,26 +197,25 @@ async def nlq_query(request: Request, payload: NLQRequest, db: Session = Depends
         logger.exception("NLQ: LLM call failed")
         raise HTTPException(status_code=500, detail=f"LLM call failed: {e}")
 
-    # 4. Validate & sanitise LLM output
+    # 4. Validate & sanitise LLM output (Security Boundary)
     valid_dim_names = {d["name"] for d in dimensions}
-    group_by: list[str] = [
-        g for g in (translated.get("group_by") or []) if g in valid_dim_names
-    ]
+    
+    try:
+        group_by, filters = NLQSanitizer.sanitize(translated, valid_dim_names)
+    except ValueError as e:
+        logger.warning(f"NLQ sanitization failed: {e}")
+        raise HTTPException(status_code=422, detail=str(e))
+
     if not group_by:
         sample = ", ".join(f'"{d["label"]}"' for d in dimensions[:5])
         raise HTTPException(
             status_code=422,
             detail=(
-                f"Could not map your question to the available data dimensions. "
+                f"Could not map your question strictly to the available data dimensions. "
                 f"Try mentioning one of: {sample}."
             ),
         )
 
-    filters: dict[str, str] = {
-        k: str(v)
-        for k, v in (translated.get("filters") or {}).items()
-        if k in valid_dim_names and v is not None
-    }
     explanation: str = translated.get("explanation", "")
 
     # 5. Execute OLAP query

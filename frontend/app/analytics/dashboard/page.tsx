@@ -339,7 +339,7 @@ export default function ExecutiveDashboardPage() {
               <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#6b7280" }} />
               <Tooltip
                 contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)", fontSize: "12px" }}
-                formatter={(v: number | undefined) => [(v ?? 0).toLocaleString(), "Entities"]}
+                formatter={(v) => [(Number(v) || 0).toLocaleString(), "Entities"]}
               />
               <Area
                 type="monotone"

@@ -15,7 +15,8 @@ from authlib.integrations.starlette_client import OAuth
 import os
 
 from backend import models, schemas
-from backend.auth import authenticate_user, create_access_token, get_current_user, require_role
+from backend.auth import authenticate_user, create_access_token, create_refresh_token, get_current_user, require_role, SECRET_KEY, ALGORITHM
+from jose import jwt, JWTError
 from backend.database import get_db
 from backend.routers.limiter import limiter
 
@@ -43,7 +44,45 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     token = create_access_token(subject=user.username, role=user.role)
-    return {"access_token": token, "token_type": "bearer"}
+    refresh_token = create_refresh_token(subject=user.username, role=user.role)
+    return {"access_token": token, "refresh_token": refresh_token, "token_type": "bearer"}
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str = Field(..., description="The valid refresh JWT token")
+
+
+@router.post("/auth/refresh", tags=["auth"])
+@limiter.limit("20/minute")
+def refresh_token(request: Request, payload: RefreshTokenRequest, db: Session = Depends(get_db)):
+    """
+    Exchange a valid refresh_token for a fresh access_token & refresh_token pair.
+    """
+    credentials_exc = HTTPException(
+        status_code=401,
+        detail="Invalid or expired refresh token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        token_payload = jwt.decode(payload.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = token_payload.get("sub")
+        token_type = token_payload.get("type")
+        if not username or token_type != "refresh":
+            raise credentials_exc
+    except JWTError:
+        raise credentials_exc
+
+    user = db.query(models.User).filter(
+        models.User.username == username,
+        models.User.is_active == True,
+    ).first()
+    if not user:
+        raise credentials_exc
+
+    new_access = create_access_token(subject=user.username, role=user.role)
+    new_refresh = create_refresh_token(subject=user.username, role=user.role)
+
+    return {"access_token": new_access, "refresh_token": new_refresh, "token_type": "bearer"}
 
 
 # ── SSO Integration (Sprint 65) ───────────────────────────────────────────────
@@ -108,8 +147,9 @@ async def sso_callback(request: Request, db: Session = Depends(get_db)):
 
     # Generate JWT
     access_token = create_access_token(subject=user.username, role=user.role)
+    refresh_token = create_refresh_token(subject=user.username, role=user.role)
     frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
-    return RedirectResponse(url=f"{frontend_url}/login?token={access_token}")
+    return RedirectResponse(url=f"{frontend_url}/login?token={access_token}&refresh={refresh_token}")
 
 
 # ── User Management (RBAC) ────────────────────────────────────────────────────

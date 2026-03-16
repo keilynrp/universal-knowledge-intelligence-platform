@@ -362,6 +362,7 @@ function RunHistoryPanel({ workflowId, onClose }: { workflowId: number; onClose:
 
   useEffect(() => {
     apiFetch(`/workflows/${workflowId}/runs`)
+      .then((r) => r.json())
       .then((d) => setRuns(d.items || []))
       .finally(() => setLoading(false));
   }, [workflowId]);
@@ -448,10 +449,11 @@ function ManualRunDialog({
     setRunning(true);
     setError("");
     try {
-      const run = await apiFetch(`/workflows/${workflowId}/run`, {
+      const res = await apiFetch(`/workflows/${workflowId}/run`, {
         method: "POST",
         body: JSON.stringify({ entity_id: parseInt(entityId) }),
       });
+      const run = await res.json();
       setResult(run);
       onComplete();
     } catch (e: unknown) {
@@ -526,6 +528,7 @@ export default function WorkflowsPage() {
   const load = useCallback(() => {
     setLoading(true);
     apiFetch("/workflows")
+      .then((r) => r.json())
       .then((d) => setWorkflows(d.items || []))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
