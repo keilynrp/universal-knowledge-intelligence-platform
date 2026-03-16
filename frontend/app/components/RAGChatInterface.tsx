@@ -296,13 +296,13 @@ export default function RAGChatInterface() {
                         value={input}
                         onChange={e => setInput(e.target.value)}
                         disabled={isQuerying}
-                        placeholder="Ask something about your hub..."
+                        placeholder={t('rag.chat.placeholder')}
                         className="h-11 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 text-sm outline-none transition-colors focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-400 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:bg-gray-800"
                     />
                     <button
                         type="submit"
                         disabled={isQuerying || !input.trim()}
-                        aria-label={isQuerying ? "Sending…" : "Send message"}
+                        aria-label={isQuerying ? "Sending…" : t('rag.chat.send')}
                         className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-600 text-white transition-colors hover:bg-indigo-700 disabled:opacity-40"
                     >
                         {isQuerying ? (
