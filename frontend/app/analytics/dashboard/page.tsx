@@ -14,7 +14,6 @@ import {
 } from "recharts";
 import { PageHeader, StatCard, ErrorBanner, SkeletonCard, useToast } from "../../components/ui";
 import ConceptCloud from "../../components/ConceptCloud";
-import PilotFlowCard, { type PilotFlowStepId } from "../../components/PilotFlowCard";
 import { useDomain } from "../../contexts/DomainContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { apiFetch } from "@/lib/api";
@@ -188,9 +187,6 @@ export default function ExecutiveDashboardPage() {
   );
   const translateBenchmarkProfileName = (profileId: string, fallback: string) => (
     tr(`page.exec_dashboard.benchmark_profile_name.${profileId}`, fallback)
-  );
-  const translateBenchmarkProfileDescription = (profileId: string, fallback: string) => (
-    tr(`page.exec_dashboard.benchmark_profile_description.${profileId}`, fallback)
   );
   const translateBenchmarkStatus = (status: string) => (
     tr(`page.exec_dashboard.benchmark_status.${status}`, status)
@@ -393,7 +389,6 @@ export default function ExecutiveDashboardPage() {
       return {
         ...action,
         title: translateActionText(action, "title"),
-        detail: translateActionText(action, "detail"),
         evidence: translateActionText(action, "evidence"),
         tone,
       };
@@ -410,13 +405,6 @@ export default function ExecutiveDashboardPage() {
     data.institutional_benchmark.status === "ready" ? toneStyles.emerald :
     data.institutional_benchmark.status === "watch" ? toneStyles.violet :
     toneStyles.amber;
-  const benchmarkNarrative =
-    !data ? "" :
-    data.institutional_benchmark.status === "ready"
-      ? tr("page.exec_dashboard.benchmark_narrative.ready", "This benchmark is in a ready state. The current dataset is strong enough for a first stakeholder-facing interpretation.")
-      : data.institutional_benchmark.status === "watch"
-        ? tr("page.exec_dashboard.benchmark_narrative.watch", "This benchmark is in a watch state. The signal is already useful, but there are still gaps that make the reading better suited for internal review than final external positioning.")
-        : tr("page.exec_dashboard.benchmark_narrative.gap", "This benchmark is currently showing a material gap. It still helps as a directional baseline, but the dataset should not yet be treated as fully decision-ready.");
   const leadingGap = data?.institutional_benchmark?.top_gaps?.[0] ?? null;
   const signalToneStyles: Record<"high" | "medium" | "low", string> = {
     high: "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-500/20 dark:bg-emerald-500/5 dark:text-emerald-200",
@@ -436,40 +424,19 @@ export default function ExecutiveDashboardPage() {
         body: tr("page.exec_dashboard.next.review.body", "Use authority and review queues to clean the weakest records before sharing conclusions."),
         cta: tr("page.exec_dashboard.next.review.cta", "Open review"),
       };
-  const stakeholderReadout = useMemo(() => {
-    if (!data) return null;
-
-    const importedMessage = importedFlag
-      ? `This dashboard is reflecting the latest imported workspace${importedRows ? ` with ${importedRows} rows` : ""}.`
-      : "This dashboard is summarizing the current active workspace for a stakeholder-facing review.";
-
-    const readinessMessage =
-      data.institutional_benchmark.status === "ready"
-        ? "The current benchmark signal is strong enough for an external readout."
-        : data.institutional_benchmark.status === "watch"
-          ? "The signal is already useful, but it still benefits from a review framing before wider circulation."
-          : "Treat this as an internal pilot readout for now; the current gaps should be explained explicitly in the conversation.";
-
-    const tone =
-      data.institutional_benchmark.status === "ready"
-        ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-100"
-        : data.institutional_benchmark.status === "watch"
-          ? "border-violet-200 bg-violet-50 text-violet-900 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-100"
-          : "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-100";
-
-    return { importedMessage, readinessMessage, tone };
-  }, [data, importedFlag, importedRows]);
-  const dashboardFlowStep: PilotFlowStepId =
-    !data ? "enrich" :
-    data.kpis.enrichment_pct >= 60 ? "brief" :
-    data.kpis.enrichment_pct >= 30 ? "review" :
-    "enrich";
+  const qualityPct = data?.quality?.average != null ? Math.round(data.quality.average * 100) : null;
+  const readinessStatusTone =
+    data?.institutional_benchmark.status === "ready"
+      ? "text-emerald-300 bg-emerald-500/10 border-emerald-400/20"
+      : data?.institutional_benchmark.status === "gap"
+        ? "text-amber-300 bg-amber-500/10 border-amber-400/20"
+        : "text-violet-300 bg-violet-500/10 border-violet-400/20";
 
   return (
     <div className="flex flex-col gap-6 pb-10">
       <PageHeader
         title={tr("page.exec_dashboard.title", "Executive Dashboard")}
-        description={tr("page.exec_dashboard.description", "High-level KPIs, temporal trends, and concept landscape for decision makers")}
+        description={tr("page.exec_dashboard.description", "Signal, readiness, impact, and next action.")}
         breadcrumbs={[
           { label: tr("page.exec_dashboard.breadcrumb_analytics", "Analytics"), href: "/analytics" },
           { label: tr("page.exec_dashboard.title", "Executive Dashboard") },
@@ -528,81 +495,95 @@ export default function ExecutiveDashboardPage() {
         }
       />
 
-      {stakeholderReadout && (
-        <div className={`rounded-2xl border px-5 py-4 ${stakeholderReadout.tone}`}>
-          <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
-            <div>
-              <p className="text-sm font-semibold">{tr("page.exec_dashboard.session.title", "Stakeholder session readout")}</p>
-              <p className="mt-1 text-xs opacity-80">{stakeholderReadout.importedMessage}</p>
+      {error && <ErrorBanner message={error} onRetry={fetchDashboard} variant="card" />}
+
+      {data && (
+        <div className="ukip-gradient-panel p-5">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-stretch xl:justify-between">
+            <div className="min-w-0 xl:max-w-sm">
+              <p className="ukip-kicker">{tr("page.exec_dashboard.signal_summary", "Executive signal")}</p>
+              <h2 className="mt-2 text-2xl font-semibold text-[var(--ukip-text-strong)]">
+                {translateBenchmarkStatus(data.institutional_benchmark.status)}
+              </h2>
+              <p className="mt-2 text-sm text-[var(--ukip-muted)]">
+                {importedFlag
+                  ? t("page.exec_dashboard.imported_into_domain", {
+                      summary: importedRows
+                        ? `${Number(importedRows).toLocaleString()} ${tr("page.import.entities_imported", "entities imported")}`
+                        : tr("page.exec_dashboard.latest_import", "Your latest import"),
+                      domain: importedDomain ?? activeDomainId,
+                    })
+                  : tr("page.exec_dashboard.current_workspace", "Current active workspace")}
+              </p>
             </div>
-            <div className="rounded-xl bg-white/70 px-4 py-3 text-xs shadow-sm dark:bg-gray-950/30">
-              <p className="font-semibold">{tr("page.exec_dashboard.session.readiness", "How to frame this session")}</p>
-              <p className="mt-1 opacity-80">{stakeholderReadout.readinessMessage}</p>
+
+            <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ukip-muted)]">
+                  {tr("page.exec_dashboard.benchmark_score", "Benchmark Score")}
+                </p>
+                <p className="mt-2 text-3xl font-bold text-[var(--ukip-text-strong)]">
+                  {Math.round(data.institutional_benchmark.readiness_pct)}%
+                </p>
+                <span className={`mt-3 inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${readinessStatusTone}`}>
+                  {translateBenchmarkStatus(data.institutional_benchmark.status)}
+                </span>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ukip-muted)]">
+                  {tr("page.exec_dashboard.kpi.enrichment_coverage", "Enrichment Coverage")}
+                </p>
+                <p className="mt-2 text-3xl font-bold text-[var(--ukip-text-strong)]">{data.kpis.enrichment_pct}%</p>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-700/70">
+                  <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400" style={{ width: `${data.kpis.enrichment_pct}%` }} />
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ukip-muted)]">
+                  {tr("page.exec_dashboard.kpi.avg_quality", "Avg Quality")}
+                </p>
+                <p className="mt-2 text-3xl font-bold text-[var(--ukip-text-strong)]">{qualityPct != null ? `${qualityPct}%` : "—"}</p>
+                <p className="mt-3 text-xs text-[var(--ukip-muted)]">
+                  {tr("page.exec_dashboard.records_scored", "records scored")}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ukip-muted)]">
+                  {tr("page.exec_dashboard.benchmark_leading_gap", "Main current constraint")}
+                </p>
+                <p className="mt-2 text-sm font-semibold text-[var(--ukip-text-strong)]">
+                  {leadingGap ? translateRuleLabel(leadingGap.id, leadingGap.label) : tr("page.exec_dashboard.no_active_gap", "No active gap")}
+                </p>
+                <Link href={nextPilotStep.href} className="mt-4 inline-flex rounded-lg bg-violet-500 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-400">
+                  {nextPilotStep.cta}
+                </Link>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {error && <ErrorBanner message={error} onRetry={fetchDashboard} variant="card" />}
-
-      {data && (
-        <PilotFlowCard
-          currentStep={dashboardFlowStep}
-          tone="sky"
-          title={nextPilotStep.title}
-          body={nextPilotStep.body}
-          primaryCta={{
-            href: nextPilotStep.href,
-            label: nextPilotStep.cta,
-          }}
-          secondaryCta={{
-            href: "/import-export",
-            label: tr("page.exec_dashboard.next.import.cta", "Open import"),
-          }}
-        />
-      )}
-
       {importedFlag && (
-        <div className="rounded-2xl border border-violet-200 bg-gradient-to-r from-violet-50 to-indigo-50 p-5 shadow-sm dark:border-violet-500/20 dark:from-violet-500/5 dark:to-indigo-500/5">
+        <div className="rounded-2xl border border-violet-400/20 bg-violet-500/10 p-4 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-sm font-semibold text-violet-900 dark:text-violet-200">
+              <p className="text-sm font-semibold text-[var(--ukip-text-strong)]">
                 {tr("page.exec_dashboard.fresh_import_title", "Fresh import ready for pilot review")}
               </p>
-              <p className="mt-1 text-sm text-violet-700 dark:text-violet-300">
-                {t("page.exec_dashboard.imported_into_domain", {
-                  summary: importedRows
-                    ? `${Number(importedRows).toLocaleString()} ${tr("page.import.entities_imported", "entities imported")}`
-                    : tr("page.exec_dashboard.latest_import", "Your latest import"),
-                  domain: importedDomain ?? activeDomainId,
-                })}{" "}
-                {tr("page.exec_dashboard.fresh_import_description", "This dashboard is the fastest place to check coverage, impact, and next actions.")}
+              <p className="mt-1 text-sm text-[var(--ukip-muted)]">
+                {tr("page.exec_dashboard.fresh_import_description", "Check coverage, impact, and next actions.")}
               </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {[
-                  tr("page.import.success.read_kpis", "Read the KPIs"),
-                  tr("page.import.success.scan_highlights", "Scan the highlights"),
-                  tr("page.import.success.prepare_brief", "Prepare an executive brief"),
-                ].map((item) => (
-                  <span
-                    key={item}
-                    className="rounded-full bg-white/80 px-3 py-1 text-xs font-semibold text-violet-700 shadow-sm dark:bg-gray-900/80 dark:text-violet-300"
-                  >
-                    {item}
-                  </span>
-                ))}
-              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <Link
                 href={briefBuilderHref}
-                className="rounded-lg border border-violet-200 bg-white px-4 py-2 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-50 dark:border-violet-500/30 dark:bg-gray-900 dark:text-violet-300 dark:hover:bg-violet-500/10"
+                className="rounded-lg border border-violet-400/30 bg-violet-500/10 px-4 py-2 text-sm font-medium text-violet-200 transition-colors hover:bg-violet-500/20"
               >
                 {tr("page.import.success.open_brief", "Prepare Executive Brief")}
               </Link>
               <Link
                 href={latestImportExplorerHref}
-                className="rounded-lg border border-violet-200 bg-white px-4 py-2 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-50 dark:border-violet-500/30 dark:bg-gray-900 dark:text-violet-300 dark:hover:bg-violet-500/10"
+                className="rounded-lg border border-violet-400/30 bg-violet-500/10 px-4 py-2 text-sm font-medium text-violet-200 transition-colors hover:bg-violet-500/20"
               >
                 {tr("page.exec_dashboard.open_explorer", "Open Knowledge Explorer")}
               </Link>
@@ -636,12 +617,6 @@ export default function ExecutiveDashboardPage() {
                   {translateBenchmarkStatus(data.institutional_benchmark.status)}
                 </span>
               </div>
-              <p className="mt-2 text-sm opacity-90">
-                {translateBenchmarkProfileDescription(
-                  data.institutional_benchmark.profile_id,
-                  data.institutional_benchmark.description,
-                )}
-              </p>
               <div className="mt-3 max-w-sm">
                 <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] opacity-70">
                   {tr("page.exec_dashboard.benchmark_profile", "Benchmark profile")}
@@ -665,24 +640,6 @@ export default function ExecutiveDashboardPage() {
                   total: data.institutional_benchmark.total_rules,
                 })}
               </p>
-              <div className="mt-4 rounded-2xl bg-white/80 p-4 shadow-sm dark:bg-gray-900/70">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">
-                  {tr("page.exec_dashboard.benchmark_reading_title", "Executive reading")}
-                </p>
-                <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">
-                  {benchmarkNarrative}
-                </p>
-                {leadingGap && (
-                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    {tr("page.exec_dashboard.benchmark_leading_gap", "Main current constraint")}:{" "}
-                    <span className="font-semibold text-gray-700 dark:text-gray-300">
-                      {translateRuleLabel(leadingGap.id, leadingGap.label)}
-                    </span>
-                    {" — "}
-                    {translateRuleMessage(data.institutional_benchmark.profile_id, leadingGap.id, leadingGap.passed, leadingGap.message)}
-                  </p>
-                )}
-              </div>
             </div>
             <div className="min-w-[180px] rounded-2xl bg-white/80 p-4 text-center shadow-sm dark:bg-gray-900/70">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">
@@ -706,9 +663,6 @@ export default function ExecutiveDashboardPage() {
                       {translatePriority(gap.priority)}
                     </span>
                   </div>
-                  <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">
-                    {translateRuleMessage(data.institutional_benchmark.profile_id, gap.id, gap.passed, gap.message)}
-                  </p>
                   <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                     {translateBenchmarkEvidence(data.institutional_benchmark.profile_id, gap)}
                   </p>
@@ -730,7 +684,6 @@ export default function ExecutiveDashboardPage() {
                 {tr("page.exec_dashboard.suggested_next_action", "Suggested Next Action")}
               </p>
               <p className="text-sm font-semibold">{highlight.title}</p>
-              <p className="mt-2 text-sm opacity-90">{highlight.detail}</p>
               <p className="mt-3 text-xs font-medium opacity-75">{highlight.evidence}</p>
               {highlight.id === "bulk_enrichment" && (
                 <button
@@ -748,52 +701,10 @@ export default function ExecutiveDashboardPage() {
         </div>
       )}
 
-      <div className="rounded-2xl border border-sky-200 bg-sky-50/80 p-5 shadow-sm dark:border-sky-900/40 dark:bg-sky-950/20">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-3xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-sky-700 dark:text-sky-400">
-              {tr("page.exec_dashboard.reading_guide.eyebrow", "How to read this dashboard")}
-            </p>
-            <h2 className="mt-2 text-base font-semibold text-slate-900 dark:text-slate-100">
-              {tr("page.exec_dashboard.reading_guide.title", "Start with coverage and quality before trusting the story")}
-            </h2>
-            <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-400">
-              {tr("page.exec_dashboard.reading_guide.description", "Coverage tells you how much of the dataset has been enriched. Quality tells you how safe the first interpretation is. The benchmark turns those signals into a readiness readout for stakeholder review.")}
-            </p>
-          </div>
-          <div className="grid gap-3 text-xs text-slate-600 dark:text-slate-400 sm:grid-cols-3 lg:max-w-xl">
-            <div className="rounded-xl border border-white/70 bg-white/70 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/70">
-              <p className="font-semibold text-slate-800 dark:text-slate-200">
-                {tr("page.exec_dashboard.reading_guide.coverage_title", "Coverage")}
-              </p>
-              <p className="mt-1">
-                {tr("page.exec_dashboard.reading_guide.coverage_body", "Higher coverage means more records already carry identifiers, citations, or concepts.")}
-              </p>
-            </div>
-            <div className="rounded-xl border border-white/70 bg-white/70 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/70">
-              <p className="font-semibold text-slate-800 dark:text-slate-200">
-                {tr("page.exec_dashboard.reading_guide.quality_title", "Quality")}
-              </p>
-              <p className="mt-1">
-                {tr("page.exec_dashboard.reading_guide.quality_body", "Quality reflects confidence in the records you are summarizing or sharing.")}
-              </p>
-            </div>
-            <div className="rounded-xl border border-white/70 bg-white/70 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/70">
-              <p className="font-semibold text-slate-800 dark:text-slate-200">
-                {tr("page.exec_dashboard.reading_guide.benchmark_title", "Benchmark")}
-              </p>
-              <p className="mt-1">
-                {tr("page.exec_dashboard.reading_guide.benchmark_body", "Benchmark readiness is a policy lens, not just a volume metric.")}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Section 1: Hero KPIs ── */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+      {/* ── Section 1: Signal KPIs ── */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {loading ? (
-          Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} lines={2} />)
+          Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} lines={2} />)
         ) : data ? (
           <>
             <StatCard
@@ -805,23 +716,7 @@ export default function ExecutiveDashboardPage() {
               }
               label={tr("page.exec_dashboard.kpi.total_entities", "Total Entities")}
               value={data.kpis.total_entities.toLocaleString()}
-              subtitle={tr("page.exec_dashboard.kpi_help.total_entities", "How many records are currently in this domain")}
-            />
-            <StatCard
-              iconColor="emerald"
-              icon={
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              }
-              label={tr("page.exec_dashboard.kpi.enrichment_coverage", "Enrichment Coverage")}
-              value={`${data.kpis.enrichment_pct}%`}
-              trend={{
-                value: `${data.kpis.enriched_count.toLocaleString()} enriched`,
-                direction: "up",
-                positive: true,
-              }}
-              subtitle={tr("page.exec_dashboard.kpi_help.enrichment_coverage", "Share of records that already carry enrichment signals")}
+              subtitle={tr("page.exec_dashboard.volume_signal", "Volume")}
             />
             <StatCard
               iconColor="violet"
@@ -832,7 +727,7 @@ export default function ExecutiveDashboardPage() {
               }
               label={tr("page.exec_dashboard.kpi.avg_citations", "Avg Citations")}
               value={data.kpis.avg_citations}
-              subtitle={tr("page.exec_dashboard.kpi_help.avg_citations", "Average citation count among enriched records")}
+              subtitle={tr("page.exec_dashboard.impact_signal", "Impact")}
             />
             <StatCard
               iconColor="amber"
@@ -843,24 +738,22 @@ export default function ExecutiveDashboardPage() {
               }
               label={tr("page.exec_dashboard.kpi.distinct_concepts", "Distinct Concepts")}
               value={data.kpis.total_concepts.toLocaleString()}
-              subtitle={tr("page.exec_dashboard.kpi_help.distinct_concepts", "Unique concepts extracted from enriched records")}
+              subtitle={tr("page.exec_dashboard.semantic_signal", "Semantic signal")}
             />
             {/* Quality KPI */}
-            <div className="rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm dark:border-indigo-500/20 dark:bg-gray-900">
+            <div className="ukip-panel-soft p-5">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-500/10">
-                  <svg className="h-5 w-5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/10">
+                  <svg className="h-5 w-5 text-violet-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
                   </svg>
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{tr("page.exec_dashboard.kpi.avg_quality", "Avg Quality")}</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  <p className="text-xs text-[var(--ukip-muted)]">{tr("page.exec_dashboard.kpi.avg_quality", "Avg Quality")}</p>
+                  <p className="text-2xl font-bold text-[var(--ukip-text-strong)]">
                     {data.quality?.average != null ? `${Math.round(data.quality.average * 100)}%` : "—"}
                   </p>
-                  <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                    {tr("page.exec_dashboard.kpi_help.avg_quality", "Confidence score for the records you are most likely to summarize or review")}
-                  </p>
+                  <p className="mt-1 text-xs text-[var(--ukip-muted)]">{tr("page.exec_dashboard.quality_signal", "Confidence")}</p>
                 </div>
               </div>
               {data.quality?.distribution && (
@@ -889,9 +782,7 @@ export default function ExecutiveDashboardPage() {
         <h3 className="mb-1 text-base font-semibold text-gray-900 dark:text-white">
           {tr("page.exec_dashboard.entities_over_time", "Entities Over Time")}
         </h3>
-        <p className="mb-5 text-xs text-gray-500 dark:text-gray-400">
-          {tr("page.exec_dashboard.entities_over_time_desc", "Entity creation by year — useful for spotting whether this dataset is concentrated in a narrow time window or spread across multiple periods.")}
-        </p>
+        <p className="mb-5 ukip-kicker">{tr("page.exec_dashboard.temporal_signal", "Temporal signal")}</p>
         {loading ? (
           <SkeletonCard lines={4} />
         ) : !data || data.entities_by_year.length === 0 ? (
@@ -934,9 +825,7 @@ export default function ExecutiveDashboardPage() {
             <h3 className="text-base font-semibold text-gray-900 dark:text-white">
               {tr("page.exec_dashboard.emerging_signals", "Emerging Topic Signals")}
             </h3>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {tr("page.exec_dashboard.emerging_signals_desc", "Experimental early signals based on recent concept acceleration across the years detected in the imported portfolio.")}
-            </p>
+            <p className="mt-1 ukip-kicker">{tr("page.exec_dashboard.acceleration", "Acceleration")}</p>
           </div>
           {data?.emerging_topic_signals?.is_experimental && (
             <span className="rounded-full bg-gray-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-600 dark:bg-gray-800 dark:text-gray-300">
@@ -1008,9 +897,7 @@ export default function ExecutiveDashboardPage() {
         <h3 className="mb-1 text-base font-semibold text-gray-900 dark:text-white">
           {tr("page.exec_dashboard.top_labels_by_year", "Top Primary Labels by Year")}
         </h3>
-        <p className="mb-5 text-xs text-gray-500 dark:text-gray-400">
-          {tr("page.exec_dashboard.top_labels_by_year_desc", "Entity count per label × year — darker violet means higher concentration and helps surface where the portfolio is densest.")}
-        </p>
+        <p className="mb-5 ukip-kicker">{tr("page.exec_dashboard.density_map", "Density map")}</p>
         {loading ? (
           <SkeletonCard lines={3} />
         ) : !data || data.brand_year_matrix.brands.length === 0 ? (
@@ -1059,9 +946,7 @@ export default function ExecutiveDashboardPage() {
             <h3 className="text-base font-semibold text-gray-900 dark:text-white">
               {tr("page.exec_dashboard.knowledge_concept_map", "Knowledge Concept Map")}
             </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {tr("page.exec_dashboard.knowledge_concept_map_desc", "Top concepts extracted from enriched entities — this is the quickest semantic read of what the imported portfolio is really about.")}
-            </p>
+            <p className="ukip-kicker">{tr("page.exec_dashboard.semantic_signal", "Semantic signal")}</p>
           </div>
           {data && (
             <Link
@@ -1086,9 +971,7 @@ export default function ExecutiveDashboardPage() {
             <h3 className="text-base font-semibold text-gray-900 dark:text-white">
               {tr("page.exec_dashboard.top_entities_impact", "Top Entities by Impact")}
             </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {tr("page.exec_dashboard.top_entities_impact_desc", "Highest citation count among enriched entities — a practical shortlist for stakeholder attention and follow-up.")}
-            </p>
+            <p className="ukip-kicker">{tr("page.exec_dashboard.impact_rank", "Impact rank")}</p>
           </div>
             <Link
               href={enrichedExplorerHref}

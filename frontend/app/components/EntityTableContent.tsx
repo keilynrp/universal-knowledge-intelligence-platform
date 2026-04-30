@@ -124,6 +124,18 @@ function enrichmentBadgeMeta(
     }
 }
 
+function recordStatusTone(
+    validationStatus: string | null,
+    enrichmentStatus: string | null,
+): "verified" | "review" | "rejected" | "pending" | "enriched" | "default" {
+    if (validationStatus === "invalid") return "rejected";
+    if (validationStatus === "valid") return "verified";
+    if (enrichmentStatus === "completed") return "enriched";
+    if (enrichmentStatus === "processing" || validationStatus === "pending") return "review";
+    if (enrichmentStatus === "pending" || enrichmentStatus === "none") return "pending";
+    return "default";
+}
+
 export interface EntityTableContentProps {
     activeDomain: EntityTableDomain;
     entities: Entity[];
@@ -174,74 +186,39 @@ export default function EntityTableContent({
     editingId,
     editData,
     saving,
-    deletingId,
-    enrichingId,
     portalByBatchId,
-    sortBy,
-    sortOrder,
     scrollContainerRef,
     onScrollTopChange,
-    onToggleSelectAll,
     onToggleSelect,
-    onSortQuality,
     onRetry,
-    onStartEdit,
     onCancelEdit,
     onSaveEdit,
     onEditDataChange,
     onSelectEntity,
-    onDeleteEntity,
-    onEnrichEntity,
 }: EntityTableContentProps) {
     const { t } = useLanguage();
     const inputClass =
         "h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white";
     const activeAttributes = activeDomain?.attributes ?? [];
-    const summaryAttributes = activeAttributes.filter((attribute) => !["title", "authors", "primary_label", "secondary_label"].includes(attribute.name));
     const sourceLabel = (() => {
         const translated = t("page.exec_dashboard.source");
         return translated === "page.exec_dashboard.source" ? "Source" : translated;
     })();
 
     return (
-        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <div className="overflow-hidden rounded-2xl bg-transparent">
             <div
                 ref={scrollContainerRef}
-                className="divide-y divide-gray-100 dark:divide-gray-800"
+                className="space-y-4"
                 style={shouldVirtualize ? { maxHeight: viewportHeight, overflowY: "auto" } : undefined}
                 onScroll={shouldVirtualize ? (event) => onScrollTopChange(event.currentTarget.scrollTop) : undefined}
             >
-                <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-white/95 px-4 py-3 backdrop-blur dark:border-gray-800 dark:bg-gray-900/95">
-                    <label className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-300">
-                        <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-gray-300 accent-blue-600"
-                            checked={entities.length > 0 && selectedIds.size === entities.length}
-                            ref={(element) => {
-                                if (element) {
-                                    element.indeterminate = selectedIds.size > 0 && selectedIds.size < entities.length;
-                                }
-                            }}
-                            onChange={onToggleSelectAll}
-                            aria-label={t("page.entity_table.select_all")}
-                        />
-                        <span className="font-medium text-gray-900 dark:text-white">{entities.length.toLocaleString()}</span>
-                    </label>
-                    <button
-                        onClick={onSortQuality}
-                        className="rounded-xl border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
-                        title={t("page.entity_table.sort_quality")}
-                    >
-                        {t("entities.quality")} {sortBy === "quality_score" ? (sortOrder === "desc" ? "↓" : "↑") : ""}
-                    </button>
-                </div>
-
                 {fetchError ? (
                     <div className="p-4">
                         <ErrorBanner variant="row" message={t("page.entity_table.failed_load")} detail={fetchError} onRetry={onRetry} />
                     </div>
                 ) : loading ? (
-                    <div className="space-y-4 p-4">
+                    <div className="grid gap-4 md:grid-cols-2">
                         {Array.from({ length: limit }).map((_, index) => (
                             <div key={index} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-950">
                                 <div className="flex animate-pulse gap-4">
@@ -271,7 +248,7 @@ export default function EntityTableContent({
                 ) : (
                     <>
                         {paddingTop > 0 && <div style={{ height: paddingTop }} />}
-                        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                        <div className="grid gap-4 md:grid-cols-2">
                             {visibleEntities.map((entity) => {
                                 const isEditing = editingId === entity.id;
                                 const parsedJson = parseNormalizedJson(entity.normalized_json);
@@ -281,9 +258,9 @@ export default function EntityTableContent({
                                 const journalValue = resolveAttributeValue(entity, parsedJson, "journal", true);
                                 const yearValue = resolveAttributeValue(entity, parsedJson, "year", true);
                                 const citationsValue = resolveAttributeValue(entity, parsedJson, "citations", true);
-                                const sourceValue = parsedJson.source ?? entity.source ?? "";
                                 const statusMeta = enrichmentBadgeMeta(entity.enrichment_status, t);
                                 const portalSlug = entity.import_batch_id ? portalByBatchId[entity.import_batch_id] : undefined;
+                                const statusTone = recordStatusTone(entity.validation_status, entity.enrichment_status);
 
                                 if (isEditing) {
                                     return (
@@ -347,13 +324,13 @@ export default function EntityTableContent({
                                 }
 
                                 return (
-                                    <div key={entity.id} className={`p-4 ${selectedIds.has(entity.id) ? "bg-blue-50/60 dark:bg-blue-500/5" : ""}`}>
+                                    <div key={entity.id} className={`${selectedIds.has(entity.id) ? "rounded-2xl bg-violet-50/70 dark:bg-violet-500/5" : ""}`}>
                                         <RecordResultCard
                                             leadingSlot={
                                                 <div className="flex flex-col items-start gap-3">
                                                     <input
                                                         type="checkbox"
-                                                        className="mt-1 h-4 w-4 rounded border-gray-300 accent-blue-600"
+                                                        className="h-4 w-4 rounded border-violet-300 accent-violet-600"
                                                         checked={selectedIds.has(entity.id)}
                                                         onChange={() => onToggleSelect(entity.id)}
                                                         aria-label={`${t("page.entity_table.select_entity")} ${entity.id}`}
@@ -361,6 +338,7 @@ export default function EntityTableContent({
                                                 </div>
                                             }
                                             tileLabel={(entity.entity_type || entity.domain || "entity").slice(0, 3)}
+                                            statusTone={statusTone}
                                             title={titleValue}
                                             idTag={<Badge variant="default">#{entity.id}</Badge>}
                                             secondaryLine={
@@ -374,70 +352,43 @@ export default function EntityTableContent({
                                             }
                                             statusRow={
                                                 <>
-                                                    <Badge variant="default">{renderLocalizedValue("validation_status", entity.validation_status, t("page.entity_table.empty_value"), t)}</Badge>
                                                     <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
                                                     <QualityBadge score={entity.quality_score} />
                                                     {entity.entity_type ? <Badge variant="default">{entity.entity_type}</Badge> : null}
-                                                    {entity.domain ? <Badge variant="default">{entity.domain}</Badge> : null}
                                                 </>
                                             }
                                             primaryMeta={[
                                                 {
-                                                    label: t("page.import.field.canonical_id"),
+                                                    label: "ID canónico",
                                                     value: renderDisplayValue("canonical_id", identifierValue, t("page.entity_table.empty_value")),
                                                     minWidthClassName: "min-w-[12rem]",
                                                 },
                                                 {
-                                                    label: t("page.entity_table.system_status"),
-                                                    value: <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>,
-                                                },
-                                                {
-                                                    label: t("page.entity_table.review_status"),
+                                                    label: "Revisión",
                                                     value: renderLocalizedValue("validation_status", entity.validation_status, t("page.entity_table.empty_value"), t),
                                                 },
                                                 {
-                                                    label: sourceLabel,
-                                                    value: sourceValue ? String(sourceValue) : t("page.entity_table.empty_value"),
+                                                    label: "Citas",
+                                                    value: citationsValue !== null && citationsValue !== "" ? String(citationsValue) : "0",
+                                                },
+                                                {
+                                                    label: "Dominio",
+                                                    value: entity.domain || sourceLabel,
                                                 },
                                             ]}
-                                            secondaryMeta={summaryAttributes.slice(0, 6).map((attribute) => {
-                                                const value = resolveAttributeValue(entity, parsedJson, attribute.name, attribute.is_core);
-                                                return {
-                                                    label: CORE_ATTRIBUTE_LABEL_KEYS[attribute.name] ? t(CORE_ATTRIBUTE_LABEL_KEYS[attribute.name]) : attribute.label,
-                                                    value: renderLocalizedValue(attribute.name, value, t("page.entity_table.empty_value"), t),
-                                                    minWidthClassName: "min-w-[12rem]",
-                                                };
-                                            })}
                                             actions={
                                                 <>
-                                                    <button onClick={() => onSelectEntity(entity)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
-                                                        {t("page.entity_table.quick_view")}
-                                                    </button>
-                                                    <Link href={`/entities/${entity.id}`} className="rounded-xl border border-blue-200 px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50 dark:border-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-950/30">
-                                                        {t("page.entity_table.view_full_details")}
+                                                    <Link href={`/entities/${entity.id}`} className="text-xs font-bold text-violet-600 transition hover:text-violet-800 dark:text-violet-300">
+                                                        Abrir ↗
                                                     </Link>
                                                     {portalSlug ? (
-                                                        <Link href={`/catalogs/${portalSlug}`} className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50 dark:border-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-950/30">
+                                                        <Link href={`/catalogs/${portalSlug}`} className="text-xs font-bold text-emerald-600 transition hover:text-emerald-800 dark:text-emerald-300">
                                                             Portal
                                                         </Link>
                                                     ) : null}
-                                                    <button onClick={() => onStartEdit(entity)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
-                                                        {t("common.edit")}
+                                                    <button onClick={() => onSelectEntity(entity)} className="text-xs font-bold text-slate-500 transition hover:text-slate-900 dark:text-[var(--ukip-muted)] dark:hover:text-[var(--ukip-text)]">
+                                                        ···
                                                     </button>
-                                                    <button onClick={() => onEnrichEntity(entity.id)} disabled={enrichingId === entity.id} className="rounded-xl border border-purple-200 px-3 py-2 text-sm font-medium text-purple-700 transition hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-purple-900/40 dark:text-purple-300 dark:hover:bg-purple-950/30">
-                                                        {enrichingId === entity.id ? "..." : t("page.entity_table.enrich_entity")}
-                                                    </button>
-                                                    <button onClick={() => onDeleteEntity(entity)} disabled={deletingId === entity.id} className="rounded-xl border border-red-200 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/40 dark:text-red-300 dark:hover:bg-red-950/30">
-                                                        {deletingId === entity.id ? "..." : t("common.delete")}
-                                                    </button>
-                                                    {citationsValue !== null && citationsValue !== "" ? (
-                                                        <div className="text-sm text-slate-600 dark:text-slate-300">
-                                                            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-                                                                Citations
-                                                            </span>
-                                                            <div className="mt-1">{String(citationsValue)}</div>
-                                                        </div>
-                                                    ) : null}
                                                 </>
                                             }
                                         />

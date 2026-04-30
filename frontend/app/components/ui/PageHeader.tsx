@@ -22,19 +22,19 @@ export default function PageHeader({ breadcrumbs, title, description, actions }:
           {breadcrumbs.map((crumb, i) => (
             <span key={i} className="flex items-center gap-1.5">
               {i > 0 && (
-                <svg className="h-3.5 w-3.5 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="h-3.5 w-3.5 text-[var(--ukip-muted-soft)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
               )}
               {crumb.href ? (
                 <Link
                   href={crumb.href}
-                  className="text-gray-500 transition-colors hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
+                  className="text-[var(--ukip-muted)] transition-colors hover:text-[var(--ukip-cyan)]"
                 >
                   {crumb.label}
                 </Link>
               ) : (
-                <span className="text-gray-700 dark:text-gray-300">{crumb.label}</span>
+                <span className="text-[var(--ukip-text)]">{crumb.label}</span>
               )}
             </span>
           ))}
@@ -42,9 +42,9 @@ export default function PageHeader({ breadcrumbs, title, description, actions }:
       )}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{title}</h1>
+          <h1 className="text-2xl font-bold text-[var(--ukip-text-strong)]">{title}</h1>
           {description && (
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{description}</p>
+            <p className="mt-1 text-sm text-[var(--ukip-muted)]">{description}</p>
           )}
         </div>
         {actions && <div className="flex items-center gap-3">{actions}</div>}

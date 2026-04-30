@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "./styles/tokens.css";
+@import "./styles/globals.css";
 
 @keyframes toast-enter {
   from { opacity: 0; transform: translateX(1rem); }
@@ -17,10 +19,10 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #f9fafb;
-  --foreground: #1e293b;
-  --card-bg: #ffffff;
-  --card-border: #e5e7eb;
+  --background: var(--ukip-bg);
+  --foreground: var(--ukip-text);
+  --card-bg: var(--ukip-panel);
+  --card-border: var(--ukip-border);
   --sidebar-width: 16rem;
   --sidebar-collapsed-width: 5rem;
 }
@@ -28,15 +30,32 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-ukip-bg: var(--ukip-bg);
+  --color-ukip-surface: var(--ukip-surface);
+  --color-ukip-panel: var(--ukip-panel);
+  --color-ukip-border: var(--ukip-border);
+  --color-ukip-text: var(--ukip-text);
+  --color-ukip-muted: var(--ukip-muted);
+  --color-ukip-primary: var(--ukip-primary);
+  --color-ukip-violet: var(--ukip-violet);
+  --color-ukip-cyan: var(--ukip-cyan);
+  --color-ukip-emerald: var(--ukip-emerald);
+  --color-ukip-warning: var(--ukip-warning);
+  --color-ukip-danger: var(--ukip-danger);
+  --radius-ukip-sm: var(--ukip-radius-sm);
+  --radius-ukip-md: var(--ukip-radius-md);
+  --radius-ukip-lg: var(--ukip-radius-lg);
+  --radius-ukip-xl: var(--ukip-radius-xl);
+  --shadow-ukip-panel: var(--ukip-shadow-panel);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 .dark {
-  --background: #030712;
-  --foreground: #f1f5f9;
-  --card-bg: #111827;
-  --card-border: #1f2937;
+  --background: var(--ukip-bg);
+  --foreground: var(--ukip-text);
+  --card-bg: var(--ukip-panel);
+  --card-border: var(--ukip-border);
 }
 
 body {

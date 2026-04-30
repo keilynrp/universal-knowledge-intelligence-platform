@@ -44,17 +44,17 @@ export default function UserMenu() {
       {/* Trigger */}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2.5 rounded-full pl-1 pr-3 py-1 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+        className="flex h-10 items-center gap-2.5 rounded-xl border border-slate-200 bg-white pl-1.5 pr-3 shadow-sm transition-colors hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:hover:bg-[var(--ukip-panel-strong)]"
         aria-label={t("header.user.aria")}
       >
         {/* Avatar */}
         <UserAvatar username={user?.username ?? "?"} role={role} avatarUrl={user?.avatar_url} size="sm" />
         {/* Name + role — hidden on small screens */}
         <div className="hidden flex-col items-start leading-tight sm:flex">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+          <span className="max-w-[8rem] truncate text-sm font-semibold text-slate-900 dark:text-[var(--ukip-text-strong)]">
             {user?.display_name || user?.username || "…"}
           </span>
-          <span className="text-[11px] font-medium capitalize text-gray-400 dark:text-gray-500">
+          <span className="max-w-[8rem] truncate text-[11px] font-medium capitalize text-slate-500 dark:text-[var(--ukip-muted)]">
             {t(roleInfo.labelKey)}
           </span>
         </div>

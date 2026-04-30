@@ -1,0 +1,111 @@
+@layer base {
+  * {
+    border-color: var(--ukip-border);
+  }
+
+  html {
+    background: var(--ukip-bg);
+  }
+
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at top left, rgb(124 58 237 / 0.14), transparent 34rem),
+      radial-gradient(circle at 86% 12%, rgb(8 145 178 / 0.12), transparent 30rem),
+      linear-gradient(135deg, var(--ukip-bg), var(--ukip-bg));
+    color: var(--ukip-text);
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: rgb(124 58 237 / 0.32);
+    color: var(--ukip-text-strong);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ukip-focus-ring);
+    outline-offset: 2px;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .ukip-app-shell {
+    background:
+      linear-gradient(180deg, rgb(15 23 42 / 0.04), transparent),
+      var(--ukip-bg);
+  }
+
+  .ukip-panel {
+    border: 1px solid var(--ukip-border);
+    border-radius: var(--ukip-radius-xl);
+    background: var(--ukip-panel);
+    box-shadow: var(--ukip-shadow-panel);
+    backdrop-filter: blur(18px);
+  }
+
+  .ukip-panel-soft {
+    border: 1px solid var(--ukip-border);
+    border-radius: var(--ukip-radius-xl);
+    background: var(--ukip-surface);
+    box-shadow: var(--ukip-shadow-soft);
+    backdrop-filter: blur(16px);
+  }
+
+  .ukip-gradient-panel {
+    border: 1px solid rgb(167 139 250 / 0.28);
+    border-radius: var(--ukip-radius-xl);
+    background:
+      radial-gradient(circle at top right, rgb(167 139 250 / 0.18), transparent 18rem),
+      linear-gradient(135deg, var(--ukip-panel-strong), var(--ukip-panel));
+    box-shadow: var(--ukip-glow-violet);
+  }
+
+  .ukip-kicker {
+    color: var(--ukip-cyan);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  .ukip-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border: 1px solid var(--ukip-border);
+    border-radius: 999px;
+    background: var(--ukip-panel-strong);
+    color: var(--ukip-text);
+    font-size: 0.75rem;
+    font-weight: 650;
+    line-height: 1;
+    padding: 0.35rem 0.625rem;
+  }
+
+  .ukip-focus {
+    transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+  }
+
+  .ukip-focus:focus-visible {
+    border-color: var(--ukip-focus-ring);
+    box-shadow: 0 0 0 4px rgb(124 58 237 / 0.18);
+    outline: none;
+  }
+}
+
+@layer utilities {
+  .text-ukip-muted {
+    color: var(--ukip-muted);
+  }
+
+  .text-ukip-strong {
+    color: var(--ukip-text-strong);
+  }
+}

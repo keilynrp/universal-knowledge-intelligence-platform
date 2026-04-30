@@ -3,11 +3,9 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useTheme } from "../contexts/ThemeContext";
 import { useDomain } from "../contexts/DomainContext";
 import { useBranding } from "../contexts/BrandingContext";
 import { useLanguage } from "../contexts/LanguageContext";
-import { usePilotMode } from "../contexts/PilotModeContext";
 import { useSidebar } from "./SidebarProvider";
 import NotificationBell from "./NotificationBell";
 import UserMenu from "./UserMenu";
@@ -134,17 +132,17 @@ function GlobalSearch() {
   const showDropdown = open && query.trim().length > 0;
 
   return (
-    <div ref={containerRef} className="relative hidden md:block">
+    <div ref={containerRef} className="relative hidden min-w-0 flex-1 md:block">
       {/* Search input */}
       <div className="relative">
-        <div className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center">
+        <div className="pointer-events-none absolute inset-y-0 left-4 flex items-center">
           {loading ? (
-            <svg className="h-3.5 w-3.5 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
+            <svg className="h-4 w-4 animate-spin text-slate-400" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
           ) : (
-            <svg className="h-3.5 w-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           )}
@@ -161,42 +159,45 @@ function GlobalSearch() {
           aria-controls={showDropdown ? dropdownId : undefined}
           aria-expanded={showDropdown}
           role="combobox"
-          className="h-8 w-52 rounded-lg border border-gray-200 bg-white pl-7 pr-3 text-xs text-gray-700 placeholder-gray-400 outline-none transition-all focus:w-72 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:placeholder-gray-500 dark:focus:border-blue-500"
+          className="ukip-focus h-10 w-full rounded-xl border border-slate-200 bg-slate-50/90 pl-11 pr-16 text-sm text-slate-800 shadow-sm outline-none transition focus:border-violet-300 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)] dark:placeholder:text-[var(--ukip-muted-soft)]"
         />
+        <span className="pointer-events-none absolute inset-y-0 right-3 hidden items-center rounded-md border border-slate-200 bg-white px-2 font-mono text-xs text-slate-500 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-[var(--ukip-muted)] lg:flex">
+          ⌘K
+        </span>
       </div>
 
       {/* Dropdown */}
       {showDropdown && (
-        <div id={dropdownId} className="absolute left-0 top-full z-50 mt-1.5 w-80 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900">
+        <div id={dropdownId} className="absolute left-0 top-full z-50 mt-1.5 w-80 overflow-hidden rounded-xl border border-[var(--ukip-border)] bg-[var(--ukip-panel)] shadow-[var(--ukip-shadow-panel)]">
           {hits.length === 0 && !loading && (
-            <p className="px-4 py-3 text-xs text-gray-400">{t("header.search.no_results", { query })}</p>
+            <p className="px-4 py-3 text-xs text-[var(--ukip-muted)]">{t("header.search.no_results", { query })}</p>
           )}
           {hits.map((hit) => (
             <Link
               key={`${hit.doc_type}-${hit.doc_id}`}
               href={hit.href}
               onClick={() => { setOpen(false); setQuery(""); setHits([]); }}
-              className="flex items-start gap-3 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800"
+              className="flex items-start gap-3 px-3 py-2.5 hover:bg-[var(--ukip-panel-strong)]"
             >
               <span className={`mt-0.5 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${HIT_BADGE[hit.doc_type] ?? "bg-gray-100 text-gray-600"}`}>
                 {hit.doc_type}
               </span>
               <div className="min-w-0">
-                <p className="truncate text-xs font-medium text-gray-800 dark:text-gray-200">
+                <p className="truncate text-xs font-medium text-[var(--ukip-text-strong)]">
                   {hit.title || t("header.search.no_title")}
                 </p>
                 {hit.snippet && (
-                  <p className="truncate text-[10px] text-gray-400">{hit.snippet}</p>
+                  <p className="truncate text-[10px] text-[var(--ukip-muted)]">{hit.snippet}</p>
                 )}
               </div>
             </Link>
           ))}
           {hits.length > 0 && (
-            <div className="border-t border-gray-100 dark:border-gray-800">
+            <div className="border-t border-[var(--ukip-border)]">
               <Link
                 href={`/search?q=${encodeURIComponent(query)}`}
                 onClick={() => { setOpen(false); }}
-                className="block px-3 py-2 text-center text-xs font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
+                className="block px-3 py-2 text-center text-xs font-medium text-[var(--ukip-cyan)] hover:bg-[var(--ukip-panel-strong)]"
               >
                 {t("header.search.view_all")}
               </Link>
@@ -213,11 +214,13 @@ function GlobalSearch() {
 export default function Header() {
   const pathname = usePathname();
   const { t } = useLanguage();
-  const { theme, toggleTheme } = useTheme();
   const { domains, activeDomainId, activeDomain, setActiveDomainId, isLoading } = useDomain();
   const { branding } = useBranding();
-  const { pilotMode, togglePilotMode } = usePilotMode();
-  const { toggleMobile } = useSidebar();
+  const { toggle, toggleMobile } = useSidebar();
+  const tr = useCallback((key: string, fallback: string) => {
+    const value = t(key);
+    return value === key ? fallback : value;
+  }, [t]);
 
   const page = pageTitles[pathname] || {
     titleKey: "header.page.default.title",
@@ -232,107 +235,81 @@ export default function Header() {
     return activeDomainId || t("header.workspace.none");
   }, [activeDomain?.name, activeDomainId, isLoading, t]);
   const hasDomains = domains.length > 0;
+  const currentTitle = t(page.titleKey) === page.titleKey ? page.titleFallback : t(page.titleKey);
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center border-b border-gray-200 bg-white/80 shadow-sm backdrop-blur-sm dark:border-gray-800 dark:bg-gray-900/80">
-      <div className="flex w-full min-w-0 items-center justify-between gap-3 px-4 lg:px-6">
-        <div className="flex min-w-0 items-center gap-3">
-          {/* Mobile hamburger — hidden on desktop */}
+    <header className="sticky top-0 z-40 flex h-16 items-center border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-[var(--ukip-header-bg)]">
+      <div className="flex w-full min-w-0 items-center gap-3 px-4 lg:px-5">
+        <div className="flex min-w-0 shrink-0 items-center gap-4">
           <button
             onClick={toggleMobile}
-            className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 lg:hidden"
+            className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-[var(--ukip-muted)] dark:hover:bg-[var(--ukip-panel-strong)] dark:hover:text-[var(--ukip-text-strong)] lg:hidden"
             aria-label={t("header.mobile.open_navigation")}
           >
             <svg className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
             </svg>
           </button>
-          <div className="min-w-0">
-            <h1 className="truncate text-lg font-semibold text-gray-900 dark:text-white">
-              {t(page.titleKey) === page.titleKey ? page.titleFallback : t(page.titleKey)}
-            </h1>
-            <p className="hidden truncate text-xs text-gray-500 dark:text-gray-400 sm:block">
-              {(t(page.subtitleKey) === page.subtitleKey ? page.subtitleFallback : t(page.subtitleKey)) || branding.platform_name}
-            </p>
-          </div>
+          <button
+            onClick={toggle}
+            className="hidden rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-[var(--ukip-muted)] dark:hover:bg-[var(--ukip-panel-strong)] dark:hover:text-[var(--ukip-text-strong)] lg:inline-flex"
+            aria-label={t("sidebar.collapse")}
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.5 6.75h15m-15 5.25h15m-15 5.25h15M8.25 4.5v15" />
+            </svg>
+          </button>
+          <div className="hidden h-6 w-px bg-slate-200 dark:bg-[var(--ukip-border)] lg:block" />
+          <nav className="hidden min-w-0 items-center gap-2 text-sm md:flex" aria-label="Breadcrumb">
+            <span className="text-slate-500 dark:text-[var(--ukip-muted)]">
+              {tr("page.home.breadcrumb", "Workspace")}
+            </span>
+            <span className="text-slate-300 dark:text-[var(--ukip-muted-soft)]">/</span>
+            <span className="max-w-[12rem] truncate font-semibold text-slate-900 dark:text-[var(--ukip-text-strong)]">
+              {pathname === "/" ? tr("page.home.summary_title", "Resumen") : currentTitle}
+            </span>
+          </nav>
         </div>
-        <div className="flex min-w-0 shrink-0 items-center gap-2 lg:gap-3">
-          <button
-            onClick={togglePilotMode}
-            className={`hidden rounded-full px-3 py-1 text-xs font-semibold transition-colors md:inline-flex ${
-              pilotMode
-                ? "bg-violet-100 text-violet-700 hover:bg-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:hover:bg-violet-900/50"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-            }`}
-            title={pilotMode ? t("header.pilot_mode.on_help") : t("header.pilot_mode.off_help")}
-          >
-            {pilotMode ? t("header.pilot_mode.on") : t("header.pilot_mode.off")}
-          </button>
 
-          {/* Global search */}
+        <div className="mx-auto hidden min-w-[18rem] max-w-[32rem] flex-1 md:block">
           <GlobalSearch />
+        </div>
 
-          <div className="hidden h-6 w-px bg-gray-200 dark:bg-gray-800 lg:block" />
-
-          {/* Domain Selector */}
-          <div className="flex min-w-0 items-center gap-2">
-            <div className="hidden min-w-0 xl:block">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500">
-                {t("header.workspace.label")}
-              </p>
-              <p className="truncate text-xs text-gray-500 dark:text-gray-400">
-                {activeDomainLabel}
-              </p>
-            </div>
+        <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2">
+          <div className="hidden min-w-0 items-center lg:flex">
             {isLoading ? (
-              <div className="h-9 w-28 animate-pulse rounded-lg bg-gray-200 dark:bg-gray-800 xl:w-40"></div>
+              <div className="h-10 w-48 animate-pulse rounded-xl bg-slate-100 dark:bg-[var(--ukip-panel-strong)]"></div>
             ) : (
-              <select
-                id="workspace-select"
-                value={activeDomainId}
-                onChange={(e) => setActiveDomainId(e.target.value)}
-                aria-label={t("header.workspace.aria")}
-                disabled={!hasDomains}
-                className="h-9 max-w-[8rem] cursor-pointer rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none transition-colors hover:bg-gray-50 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800 dark:disabled:bg-gray-800 dark:disabled:text-gray-500 sm:max-w-[10rem] xl:max-w-none"
-              >
-                {hasDomains ? (
-                  domains.map((domain) => (
-                    <option key={domain.id} value={domain.id}>
-                      {domain.name}
+              <label className="relative block">
+                <span className="sr-only">{t("header.workspace.label")}</span>
+                <select
+                  id="workspace-select"
+                  value={activeDomainId}
+                  onChange={(e) => setActiveDomainId(e.target.value)}
+                  aria-label={t("header.workspace.aria")}
+                  title={activeDomainLabel || branding.platform_name}
+                  disabled={!hasDomains}
+                  className="ukip-focus h-10 max-w-[13rem] cursor-pointer appearance-none rounded-xl border border-slate-200 bg-white py-0 pl-4 pr-9 text-sm font-medium text-slate-700 shadow-sm outline-none transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)] dark:hover:bg-[var(--ukip-panel-strong)] xl:max-w-[16rem]"
+                >
+                  {hasDomains ? (
+                    domains.map((domain) => (
+                      <option key={domain.id} value={domain.id}>
+                        {domain.name}
+                      </option>
+                    ))
+                  ) : (
+                    <option value={activeDomainId || "default"}>
+                      {t("header.workspace.none")}
                     </option>
-                  ))
-                ) : (
-                  <option value={activeDomainId || "default"}>
-                    {t("header.workspace.none")}
-                  </option>
-                )}
-              </select>
+                  )}
+                </select>
+                <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-[var(--ukip-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.25 9.75L12 13.5l3.75-3.75" />
+                </svg>
+              </label>
             )}
           </div>
-
-          <div className="hidden h-6 w-px bg-gray-200 dark:bg-gray-800 lg:block" />
-
-          {/* Theme toggle */}
-          <button
-            onClick={toggleTheme}
-            aria-label={theme === "dark" ? t("header.theme.switch_light") : t("header.theme.switch_dark")}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-          >
-            {theme === "dark" ? (
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-            ) : (
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-              </svg>
-            )}
-          </button>
-
-          {/* Notification bell */}
           <NotificationBell />
-
-          {/* User profile menu */}
           <UserMenu />
         </div>
       </div>

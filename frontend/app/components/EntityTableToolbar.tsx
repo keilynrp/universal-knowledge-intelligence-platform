@@ -16,6 +16,15 @@ export interface EntityTableToolbarProps {
     search: string;
     minQuality: string;
     page: number;
+    totalCount?: number;
+    visibleCount?: number;
+    selectedCount?: number;
+    selectableCount?: number;
+    isAllSelected?: boolean;
+    isPartiallySelected?: boolean;
+    sortLabel?: string;
+    onToggleSelectAll?: () => void;
+    onSortQuality?: () => void;
     onSearchChange: (value: string) => void;
     onMinQualityChange: (value: string) => void;
     onClearFacet: (field: string) => void;
@@ -26,6 +35,15 @@ export default function EntityTableToolbar({
     search,
     minQuality,
     page,
+    totalCount,
+    visibleCount,
+    selectedCount,
+    selectableCount,
+    isAllSelected,
+    isPartiallySelected,
+    sortLabel,
+    onToggleSelectAll,
+    onSortQuality,
     onSearchChange,
     onMinQualityChange,
     onClearFacet,
@@ -39,7 +57,8 @@ export default function EntityTableToolbar({
         const translated = t(key);
         return translated === key ? field.replace(/_/g, " ") : translated;
     };
-    const formatFacetValue = (field: string, value: string) => {
+    const formatFacetValue = (field: string, value: string | null) => {
+        if (!value) return t("page.entity_table.empty_value");
         if (field === "entity_type") {
             const translated = t(`page.authority.entity_type_${value}`);
             return translated === `page.authority.entity_type_${value}` ? value : translated;
@@ -66,9 +85,9 @@ export default function EntityTableToolbar({
     return (
         <>
             {hasToolbarFilters && (
-                <div className="mb-2 flex flex-wrap gap-1.5 px-1">
+                <div className="mb-3 flex flex-wrap gap-1.5 px-1">
                     {search && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-100 px-2 py-0.5 text-xs text-sky-800 dark:border-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs text-sky-800 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-200">
                             <span className="font-medium">{t("common.search")}:</span> {search}
                             <button
                                 onClick={() => onSearchChange("")}
@@ -79,7 +98,7 @@ export default function EntityTableToolbar({
                         </span>
                     )}
                     {minQuality && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
                             <span className="font-medium">{t("page.entity_table.min_quality")}:</span>
                             {minQuality === "0.7" ? "70%+" : minQuality === "0.3" ? "30%+" : t("page.entity_table.under_30")}
                             <button
@@ -95,7 +114,7 @@ export default function EntityTableToolbar({
                         .map(([field, value]) => (
                             <span
                                 key={field}
-                                className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-100 px-2 py-0.5 text-xs text-indigo-800 dark:border-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
+                                className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs text-violet-800 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-200"
                             >
                                 <span className="font-medium">{formatFacetField(field)}:</span> {formatFacetValue(field, value)}
                                 <button
@@ -109,11 +128,11 @@ export default function EntityTableToolbar({
                 </div>
             )}
 
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-3">
-                    <div className="relative">
+            <div className="rounded-[22px] border border-slate-200 bg-white p-2 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
+                <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1fr)_auto]">
+                    <div className="relative w-full">
                         <svg
-                            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+                            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -127,27 +146,64 @@ export default function EntityTableToolbar({
                         </svg>
                         <input
                             type="text"
-                            placeholder={t("entities.search_placeholder")}
-                            className="h-10 w-80 rounded-lg border border-gray-200 bg-white pl-10 pr-4 text-sm text-gray-700 placeholder-gray-400 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:placeholder-gray-500 dark:focus:border-blue-500"
+                            placeholder="Buscar por título, canonical_id u owner..."
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/80 pl-10 pr-4 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-400 focus:border-violet-300 focus:bg-white focus:ring-2 focus:ring-violet-100 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)] dark:focus:ring-violet-500/20"
                             value={search}
                             onChange={(event) => onSearchChange(event.target.value)}
                         />
                     </div>
-                    <div className="flex items-center gap-2">
-                        <label className="text-xs font-medium text-gray-500 dark:text-gray-400">{t("page.entity_table.min_quality")}:</label>
+                    <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                        {onToggleSelectAll ? (
+                            <label className="flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)]">
+                                <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-violet-300 accent-violet-600"
+                                    checked={Boolean(isAllSelected)}
+                                    ref={(element) => {
+                                        if (element) {
+                                            element.indeterminate = Boolean(isPartiallySelected);
+                                        }
+                                    }}
+                                    onChange={onToggleSelectAll}
+                                    aria-label={t("page.entity_table.select_all")}
+                                />
+                                <span>{selectedCount ? `${selectedCount} sel.` : `${(selectableCount ?? visibleCount ?? 0).toLocaleString()}`}</span>
+                            </label>
+                        ) : null}
+                        <div className="flex h-11 items-center gap-2 px-2 font-mono text-xs font-semibold text-slate-500 dark:text-[var(--ukip-muted)]">
+                            <span>{(visibleCount ?? 0).toLocaleString()}</span>
+                            <span>/</span>
+                            <span>{(totalCount ?? 0).toLocaleString()}</span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={onSortQuality}
+                            className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-700 outline-none transition hover:bg-white focus:border-violet-300 focus:ring-2 focus:ring-violet-100 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)]"
+                        >
+                            {sortLabel ?? "↕ Recientes"}
+                        </button>
                         <select
                             value={minQuality}
                             onChange={(event) => onMinQualityChange(event.target.value)}
-                            className="h-10 rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                            className="hidden h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)] lg:block"
+                            title={t("page.entity_table.min_quality")}
                         >
                             <option value="">{t("common.all")}</option>
                             <option value="0.7">70%+</option>
                             <option value="0.3">30%+</option>
                             <option value="0.0">{t("page.entity_table.under_30")}</option>
                         </select>
+                        <div className="flex h-11 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/5">
+                            <button className="flex h-full w-11 items-center justify-center text-violet-600 dark:text-violet-300" aria-label="Grid view">
+                                ⊞
+                            </button>
+                            <button className="flex h-full w-11 items-center justify-center border-l border-slate-200 text-slate-500 dark:border-white/10 dark:text-[var(--ukip-muted)]" aria-label="List view">
+                                ☰
+                            </button>
+                        </div>
+                        <span className="sr-only">{t("common.page")} {page + 1}</span>
                     </div>
                 </div>
-                <span className="text-sm text-gray-500 dark:text-gray-400">{t("common.page")} {page + 1}</span>
             </div>
         </>
     );

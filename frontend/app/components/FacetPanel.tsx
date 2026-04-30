@@ -16,13 +16,12 @@ const FIELD_LABELS: Record<string, string> = {
   source:            "page.exec_dashboard.source",
 };
 
-// Color chips per field for visual identity
 const FIELD_COLORS: Record<string, string> = {
-  entity_type:       "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300",
-  domain:            "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
-  validation_status: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-  enrichment_status: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
-  source:            "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300",
+  entity_type:       "text-violet-700 dark:text-violet-200",
+  domain:            "text-blue-700 dark:text-blue-200",
+  validation_status: "text-amber-700 dark:text-amber-200",
+  enrichment_status: "text-emerald-700 dark:text-emerald-200",
+  source:            "text-slate-600 dark:text-[var(--ukip-muted)]",
 };
 
 interface FacetPanelProps {
@@ -30,11 +29,15 @@ interface FacetPanelProps {
   onFacetChange: (field: string, value: string | null) => void;
   search?: string;
   minQuality?: string;
+  totalCount?: number;
+  visibleCount?: number;
   refreshKey?: number; // increment to trigger re-fetch
   facetsData?: FacetData | null;
 }
 
-export default function FacetPanel({ activeFacets, onFacetChange, search, minQuality, refreshKey, facetsData }: FacetPanelProps) {
+const FIELD_ORDER = ["entity_type", "domain", "validation_status", "enrichment_status", "source"];
+
+export default function FacetPanel({ activeFacets, onFacetChange, search, minQuality, totalCount, visibleCount, refreshKey, facetsData }: FacetPanelProps) {
   const { t } = useLanguage();
   const [facets, setFacets] = useState<FacetData>({});
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -73,12 +76,43 @@ export default function FacetPanel({ activeFacets, onFacetChange, search, minQua
   const activeCount = Object.values(activeFacets).filter(Boolean).length;
 
   const translateFacetLabel = (field: string) => {
+    const explicitLabels: Record<string, string> = {
+      entity_type: "Tipo de entidad",
+      domain: "Dominio",
+    };
+    if (explicitLabels[field]) return explicitLabels[field];
     const key = FIELD_LABELS[field];
     return key ? t(key) : field;
   };
 
   const translateFacetValue = (field: string, value: string) => {
     if (!value) return t("page.entity_table.empty_value");
+
+    const valueMap: Record<string, Record<string, string>> = {
+      entity_type: {
+        publication: "Publicación",
+        author: "Autor",
+        affiliation: "Afiliación",
+        dataset: "Dataset",
+        patent: "Patente",
+        organization: "Organización",
+        journal_article: "Publicación",
+      },
+      domain: {
+        technology: "Tecnología",
+        tecnologia: "Tecnología",
+        health: "Salud",
+        healthcare: "Salud",
+        salud: "Salud",
+        science: "Ciencia",
+        ciencia: "Ciencia",
+        engineering: "Ingeniería",
+        ingenieria: "Ingeniería",
+        humanities: "Humanidades",
+        humanidades: "Humanidades",
+      },
+    };
+    if (valueMap[field]?.[value]) return valueMap[field][value];
 
     if (field === "entity_type") {
       const translated = t(`page.authority.entity_type_${value}`);
@@ -107,16 +141,19 @@ export default function FacetPanel({ activeFacets, onFacetChange, search, minQua
   };
 
   return (
-    <aside className="flex flex-col gap-2">
+    <aside className="h-full min-h-[72rem] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
       {/* Header */}
-      <div className="flex items-center justify-between px-1 mb-1">
-        <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-          {t("page.facets.filter_by")}
-        </span>
+      <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 dark:border-white/10">
+        <div>
+          <h3 className="text-base font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">Filtros</h3>
+          <p className="mt-1 font-mono text-sm text-slate-500 dark:text-[var(--ukip-muted)]">
+            {(visibleCount ?? 0).toLocaleString()} de {(totalCount ?? 0).toLocaleString()}
+          </p>
+        </div>
         {activeCount > 0 && (
           <button
             onClick={() => Object.keys(activeFacets).forEach(f => onFacetChange(f, null))}
-            className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+            className="text-xs font-semibold text-violet-600 hover:underline dark:text-violet-300"
           >
             {t("page.facets.clear_all", { count: activeCount })}
           </button>
@@ -124,67 +161,70 @@ export default function FacetPanel({ activeFacets, onFacetChange, search, minQua
       </div>
 
       {loading && (
-        <div className="text-xs text-gray-400 px-1 animate-pulse">{t("page.facets.loading")}</div>
+        <div className="animate-pulse px-5 py-4 text-xs text-slate-400">{t("page.facets.loading")}</div>
       )}
 
-      {Object.entries(FIELD_LABELS).map(([field]) => {
-        const values = facets[field] ?? [];
-        if (values.length === 0) return null;
-        const isCollapsed = collapsed[field];
-        const active = activeFacets[field];
-        const chipColor = FIELD_COLORS[field] ?? "bg-gray-100 text-gray-700";
+      <div className="max-h-[calc(100vh-8rem)] overflow-y-auto px-5 py-4">
+        {FIELD_ORDER.map((field) => {
+          const values = facets[field] ?? [];
+          if (values.length === 0) return null;
+          const isCollapsed = collapsed[field];
+          const active = activeFacets[field];
+          const chipColor = FIELD_COLORS[field] ?? "text-slate-600";
 
-        return (
-          <div
-            key={field}
-            className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden"
-          >
-            {/* Section header */}
-            <button
-              onClick={() => toggleCollapse(field)}
-              className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+          return (
+            <div
+              key={field}
+              className="border-b border-slate-200 py-4 last:border-b-0 dark:border-white/10"
             >
-              <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{translateFacetLabel(field)}</span>
-              <span className="text-gray-400 text-xs">{isCollapsed ? "▸" : "▾"}</span>
-            </button>
+              <button
+                onClick={() => toggleCollapse(field)}
+                className="flex w-full items-center justify-between text-left"
+              >
+                <span className="text-sm font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-[var(--ukip-muted)]">{translateFacetLabel(field)}</span>
+                <span className="text-sm text-slate-500">{isCollapsed ? "⌄" : "⌃"}</span>
+              </button>
 
-            {/* Values list */}
-            {!isCollapsed && (
-              <ul className="px-2 pb-2 space-y-0.5">
-                {values.slice(0, 8).map(({ value, count }) => {
-                  const isActive = active === value;
-                  return (
-                    <li key={value}>
-                      <button
-                        onClick={() => onFacetChange(field, isActive ? null : value)}
-                        className={`w-full flex items-center justify-between px-2 py-1 rounded text-left text-xs transition-colors ${
-                          isActive
-                            ? "bg-indigo-600 text-white font-medium"
-                            : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
-                        }`}
-                        >
-                        <span className="truncate max-w-[110px]">{translateFacetValue(field, value)}</span>
-                        <span
-                          className={`ml-1 flex-shrink-0 rounded-full px-1.5 py-0 text-[10px] font-mono ${
-                            isActive ? "bg-white/20 text-white" : chipColor
+              {!isCollapsed && (
+                <ul className="mt-3 space-y-3">
+                  {values.slice(0, 8).map(({ value, count }) => {
+                    const isActive = active === value;
+                    return (
+                      <li key={value}>
+                        <button
+                          onClick={() => onFacetChange(field, isActive ? null : value)}
+                          className={`flex w-full items-center justify-between rounded-lg text-left text-sm transition-colors ${
+                            isActive
+                              ? "font-semibold text-violet-700 dark:text-violet-200"
+                              : "text-slate-700 hover:text-violet-700 dark:text-[var(--ukip-text)]"
                           }`}
                         >
-                          {count}
-                        </span>
-                      </button>
+                          <span className="flex min-w-0 items-center gap-3">
+                            <span className={`h-4 w-4 rounded-full border ${isActive ? "border-violet-600 bg-violet-50 ring-2 ring-violet-100" : "border-violet-500"}`} />
+                            <span className="truncate">{translateFacetValue(field, value)}</span>
+                          </span>
+                          <span
+                            className={`ml-2 shrink-0 font-mono text-xs ${
+                              isActive ? "text-violet-700 dark:text-violet-200" : chipColor
+                            }`}
+                          >
+                            {count}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                  {values.length > 8 && (
+                    <li className="px-2 pt-0.5 text-[10px] text-slate-400">
+                      {t("page.facets.read_more", { count: values.length - 8 })}
                     </li>
-                  );
-                })}
-                {values.length > 8 && (
-                  <li className="text-[10px] text-gray-400 px-2 pt-0.5">
-                    {t("page.facets.read_more", { count: values.length - 8 })}
-                  </li>
-                )}
-              </ul>
-            )}
-          </div>
-        );
-      })}
+                  )}
+                </ul>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </aside>
   );
 }

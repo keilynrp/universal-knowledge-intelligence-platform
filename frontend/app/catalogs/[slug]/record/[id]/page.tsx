@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
-import { ErrorBanner, PageHeader } from "../../../../components/ui";
+import { ErrorBanner, PageHeader, QualityBadge } from "../../../../components/ui";
 import { useLanguage } from "../../../../contexts/LanguageContext";
 
 interface CatalogRecord {
@@ -54,6 +54,33 @@ function formatValue(value: unknown): string {
   if (Array.isArray(value)) return value.join(", ");
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
+}
+
+function formatQualityPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  return `${Math.round(value * 100)}%`;
+}
+
+function resolveEnrichmentHeading(
+  t: (key: string) => string,
+  fallback: string,
+  status: string | null | undefined,
+): string {
+  if (status === "completed") {
+    const translated = t("entities.filter.enriched");
+    return translated === "entities.filter.enriched" ? fallback : translated;
+  }
+  return fallback;
+}
+
+function buildEnrichmentSummary(
+  t: (key: string) => string,
+  status: string | null | undefined,
+  score: number | null | undefined,
+): string {
+  const label = resolveEnrichmentHeading(t, "Enriquecido", status);
+  const percent = formatQualityPercent(score);
+  return `${label} ${percent}`;
 }
 
 export default function CatalogRecordPage() {
@@ -112,7 +139,7 @@ export default function CatalogRecordPage() {
     { label: tr("entities.enrichment_status", "System status"), value: record.enrichment_status },
     { label: tr("page.exec_dashboard.source", "Source"), value: record.source },
     { label: tr("page.import.field.enrichment_citation_count", "Citation count"), value: record.enrichment_citation_count },
-    { label: tr("entities.quality", "Quality"), value: record.quality_score !== null && record.quality_score !== undefined ? record.quality_score.toFixed(2) : "—" },
+    { label: resolveEnrichmentHeading(t, "Enriquecido", record.enrichment_status), value: formatQualityPercent(record.quality_score), isQuality: true },
     { label: tr("page.import.field.validation_status", "Validation status"), value: record.validation_status },
   ] : [];
 
@@ -150,6 +177,33 @@ export default function CatalogRecordPage() {
             </Link>
           </div>
 
+          <section className="rounded-2xl border border-sky-200 bg-sky-50/80 px-5 py-4 shadow-sm dark:border-sky-900/40 dark:bg-sky-950/20">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-sky-700 dark:text-sky-400">
+                  {tr("catalogs.record.readiness_eyebrow", "Record readiness")}
+                </p>
+                <h2 className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {tr("catalogs.record.readiness_title", "Enrichment signal for this record")}
+                </h2>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                  {tr("catalogs.record.readiness_body", "This percentage reflects how complete and ready the record is for consultation inside the catalog experience.")}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/70 bg-white/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/70">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                  {resolveEnrichmentHeading(t, "Enriquecido", record.enrichment_status)}
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <QualityBadge score={record.quality_score} />
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    {buildEnrichmentSummary(t, record.enrichment_status, record.quality_score)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
             <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -173,7 +227,14 @@ export default function CatalogRecordPage() {
                 {systemFields.map((field) => (
                   <div key={field.label} className="border-b border-gray-100 pb-3 dark:border-gray-800">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">{field.label}</p>
-                    <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">{formatValue(field.value)}</p>
+                    {field.isQuality ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-3">
+                        <QualityBadge score={record.quality_score} />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{formatValue(field.value)}</span>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">{formatValue(field.value)}</p>
+                    )}
                   </div>
                 ))}
               </div>

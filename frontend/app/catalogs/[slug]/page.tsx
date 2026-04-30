@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
-import { Badge, EmptyState, ErrorBanner, PageHeader, QualityBadge, StatCard, useToast } from "../../components/ui";
+import { Badge, EmptyState, ErrorBanner, QualityBadge, useToast } from "../../components/ui";
 import FacetPanel from "../../components/FacetPanel";
 import EntityTableToolbar from "../../components/EntityTableToolbar";
 import RecordResultCard from "../../components/RecordResultCard";
@@ -280,6 +280,18 @@ export default function CatalogPortalPage() {
     return translated === key ? value : translated;
   };
 
+  const recordStatusTone = (
+    validationStatus: string | null | undefined,
+    enrichmentStatus: string | null | undefined,
+  ): "verified" | "review" | "rejected" | "pending" | "enriched" | "default" => {
+    if (validationStatus === "invalid") return "rejected";
+    if (validationStatus === "valid") return "verified";
+    if (enrichmentStatus === "completed") return "enriched";
+    if (enrichmentStatus === "processing" || validationStatus === "pending") return "review";
+    if (enrichmentStatus === "pending" || enrichmentStatus === "none") return "pending";
+    return "default";
+  };
+
   const goToPage = (page: number) => {
     const next = new URLSearchParams(searchParams.toString());
     next.set("page", String(page));
@@ -364,139 +376,61 @@ export default function CatalogPortalPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        breadcrumbs={[
-          { label: tr("nav.home", "Knowledge Explorer"), href: "/" },
-          { label: tr("nav.catalogs", "Catalog Portals"), href: "/catalogs" },
-          { label: portal?.title || slug },
-        ]}
-        title={portal?.title || tr("catalogs.portal_title_loading", "Catalog portal")}
-        description={portal?.description || tr("catalogs.portal_subtitle", "A lighter discovery view over the current workspace scope.")}
-        actions={portal?.visibility === "public" ? (
-          <a
-            href={typeof window !== "undefined" ? window.location.href : `/catalogs/${slug}`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center rounded-xl border border-blue-200 px-4 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/30"
-          >
-            {tr("catalogs.share.open_public", "Open public view")}
-          </a>
-        ) : undefined}
-      />
-
+    <div className="space-y-5">
       {error && <ErrorBanner message={error} />}
 
       {portal && (
-        <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-gradient-to-br from-slate-900 via-blue-950 to-cyan-950 text-white shadow-sm dark:border-slate-800">
-          <div className="grid gap-6 px-6 py-6 lg:grid-cols-[1.2fr_0.8fr] lg:px-8 lg:py-8">
-            <div className="space-y-4">
+        <section className="rounded-[28px] bg-slate-100/70 p-4 dark:bg-black/10">
+          <div className="grid gap-4 lg:grid-cols-[1.2fr_repeat(3,minmax(0,0.45fr))]">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-100">
-                  {tr("catalogs.hero.eyebrow", "Catalog portal")}
-                </span>
-                <span className={`rounded-full px-3 py-1 text-xs font-medium ${visibilityTone(portal.visibility)}`}>
+                <span className="ukip-kicker">{tr("catalogs.hero.eyebrow", "Catalog portal")}</span>
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${visibilityTone(portal.visibility)}`}>
                   {visibilityLabel(portal.visibility)}
                 </span>
-                <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-slate-100">
-                  {portal.domain_id}
-                </span>
               </div>
-              <div>
-                <h2 className="text-2xl font-semibold tracking-tight text-white lg:text-3xl">
-                  {portal.title}
-                </h2>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-200 lg:text-base">
-                  {portal.description || tr("catalogs.hero.no_description", "Browse this collection through a calmer discovery view designed for pilot sessions, lightweight consultation, and stakeholder conversations.")}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-3 text-sm text-slate-200">
-                {portal.source_label && (
-                  <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
-                      {tr("catalogs.results.scope_source", "Collection origin")}
-                    </p>
-                    <p className="mt-1 font-medium text-white">{portal.source_label}</p>
-                  </div>
-                )}
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
-                    {tr("catalogs.results.scope_search", "Default query")}
-                  </p>
-                  <p className="mt-1 font-medium text-white">
-                    {portal.search || tr("catalogs.results.scope_search_any", "Open discovery")}
-                  </p>
-                </div>
-              </div>
+              <h1 className="mt-3 text-2xl font-bold tracking-[-0.04em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
+                {portal.title}
+              </h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 dark:text-[var(--ukip-muted)]">
+                {portal.description || tr("catalogs.hero.no_description", "Browse this collection through a calmer discovery view designed for pilot sessions, lightweight consultation, and stakeholder conversations.")}
+              </p>
             </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-4 backdrop-blur">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
-                  {tr("catalogs.hero.readiness_title", "Session mode")}
-                </p>
-                <p className="mt-2 text-base font-semibold text-white">
-                  {portal.visibility === "public"
-                    ? tr("catalogs.hero.public_hint", "Ready to share for read-only consultation")
-                    : portal.visibility === "org"
-                      ? tr("catalogs.hero.org_hint", "Visible to organization members with a lighter discovery experience")
-                      : tr("catalogs.hero.private_hint", "Private collection under active setup")}
-                </p>
-              </div>
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-4 backdrop-blur">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
-                  {tr("catalogs.hero.discovery_title", "How to use it")}
-                </p>
-                <p className="mt-2 text-sm leading-6 text-slate-200">
-                  {tr("catalogs.hero.discovery_body", "Start with a broad search, refine with the facet panel, and open the record detail when you need the complete metadata story.")}
-                </p>
-              </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-[var(--ukip-muted)]">{tr("catalogs.summary.total", "Records")}</p>
+              <p className="mt-3 font-mono text-2xl font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">
+                {(portal.summary?.total_records ?? results?.total ?? 0).toLocaleString()}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-[var(--ukip-muted)]">{portal.domain_id}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-[var(--ukip-muted)]">{tr("catalogs.summary.enriched", "Enriched")}</p>
+              <p className="mt-3 font-mono text-2xl font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">
+                {portal.summary ? `${portal.summary.enriched_pct.toFixed(1)}%` : "—"}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-[var(--ukip-muted)]">{portal.summary?.enriched_records?.toLocaleString() ?? "—"} records</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-[var(--ukip-muted)]">{tr("catalogs.results.scope_source", "Collection origin")}</p>
+              <p className="mt-3 text-sm font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">{portal.source_label || tr("catalogs.results.scope_search_any", "Open discovery")}</p>
+              {portal?.visibility === "public" ? (
+                <a
+                  href={typeof window !== "undefined" ? window.location.href : `/catalogs/${slug}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex text-xs font-semibold text-violet-600 hover:underline dark:text-violet-300"
+                >
+                  {tr("catalogs.share.open_public", "Open public view")}
+                </a>
+              ) : null}
             </div>
           </div>
         </section>
       )}
 
-      {portal?.summary && (
-        <div className="grid gap-4 md:grid-cols-3">
-          <StatCard
-            icon={<span className="text-lg">#</span>}
-            label={tr("catalogs.summary.total", "Records")}
-            value={portal.summary.total_records.toLocaleString()}
-            subtitle={tr("catalogs.summary.total_hint", "Items currently inside this portal scope")}
-          />
-          <StatCard
-            icon={<span className="text-lg">+</span>}
-            label={tr("catalogs.summary.enriched", "Enriched")}
-            value={`${portal.summary.enriched_pct.toFixed(1)}%`}
-            subtitle={`${portal.summary.enriched_records.toLocaleString()} ${tr("catalogs.summary.enriched_hint", "records already enriched")}`}
-          />
-          <StatCard
-            icon={<span className="text-lg">Q</span>}
-            label={tr("catalogs.summary.quality", "Average quality")}
-            value={portal.summary.avg_quality !== null ? portal.summary.avg_quality.toFixed(2) : "—"}
-            subtitle={tr("catalogs.summary.quality_hint", "Use this as a quick signal before sharing broadly")}
-          />
-        </div>
-      )}
-
-      {portal?.source_label && (
-        <section className="rounded-2xl border border-violet-200 bg-violet-50 px-5 py-4 text-sm text-violet-900 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-100">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-violet-600 dark:text-violet-300">
-            {tr("catalogs.source_context.eyebrow", "Collection origin")}
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="font-semibold">{portal.source_label}</span>
-            {portal.source_context?.format && <span>{String(portal.source_context.format).toUpperCase()}</span>}
-            {portal.source_context?.rows !== null && portal.source_context?.rows !== undefined && (
-              <span>{String(portal.source_context.rows)} {tr("catalogs.source_context.rows", "rows")}</span>
-            )}
-          </div>
-        </section>
-      )}
-
-      <section className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="space-y-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950">
+      <section className="grid gap-5 rounded-[28px] bg-slate-100/70 p-4 dark:bg-black/10 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <aside className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[var(--ukip-surface)]">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
@@ -509,7 +443,7 @@ export default function CatalogPortalPage() {
               {isAuthenticated ? (
                 <button
                   onClick={() => setEditing((prev) => !prev)}
-                  className="rounded-xl border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                    className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:text-[var(--ukip-text)] dark:hover:bg-[var(--ukip-panel-strong)]"
                 >
                   {editing ? tr("common.cancel", "Cancel") : tr("common.edit", "Edit")}
                 </button>
@@ -597,8 +531,8 @@ export default function CatalogPortalPage() {
             )}
           </div>
 
-          <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-200">
-            <p className="font-semibold">{tr("catalogs.filters_title", "Catalog filters")}</p>
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 dark:border-white/10 dark:bg-[var(--ukip-surface)] dark:text-[var(--ukip-muted)]">
+            <p className="font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">{tr("catalogs.filters_title", "Catalog filters")}</p>
             <p className="mt-1">{tr("catalogs.vufind_like_hint", "Use the search bar, then narrow by facets on the left. This portal now follows the same consultation pattern as the internal catalog view.")}</p>
           </div>
 
@@ -607,46 +541,20 @@ export default function CatalogPortalPage() {
             onFacetChange={handleFacetChange}
             search={search}
             minQuality={minQuality}
+            totalCount={results?.total ?? 0}
+            visibleCount={results?.items.length ?? 0}
             facetsData={results?.facets ?? null}
           />
         </aside>
 
-        <section className="space-y-5">
-          <div className="rounded-2xl border border-sky-200 bg-sky-50/80 px-4 py-4 shadow-sm dark:border-sky-900/40 dark:bg-sky-950/20">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="max-w-3xl">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-sky-700 dark:text-sky-400">
-                  {tr("catalogs.results.section_eyebrow", "Catalog results")}
-                </p>
-                <h2 className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  {tr("catalogs.results.section_title", "Browse the collection")}
-                </h2>
-                <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-400">
-                  {tr("catalogs.vufind_like_hint", "Use the search bar, then narrow by facets on the left. This portal now follows the same consultation pattern as the internal catalog view.")}
-                </p>
-              </div>
-              <div className="grid gap-3 text-xs text-slate-600 dark:text-slate-400 sm:grid-cols-3 lg:max-w-xl">
-                <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/70">
-                  <p className="font-semibold text-slate-800 dark:text-slate-200">{tr("catalogs.summary.total", "Records")}</p>
-                  <p className="mt-1">{results ? results.total.toLocaleString() : "—"}</p>
-                </div>
-                <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/70">
-                  <p className="font-semibold text-slate-800 dark:text-slate-200">{tr("catalogs.results.scope_source", "Collection origin")}</p>
-                  <p className="mt-1">{portal?.source_label || tr("catalogs.results.scope_search_any", "Open discovery")}</p>
-                </div>
-                <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/70">
-                  <p className="font-semibold text-slate-800 dark:text-slate-200">{tr("catalogs.visibility.private", "Private workspace")}</p>
-                  <p className="mt-1">{visibilityLabel(portal?.visibility)}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
+        <section className="space-y-4">
           <EntityTableToolbar
             activeFacets={activeFacets}
             search={search}
             minQuality={minQuality}
             page={Math.max(0, currentPage - 1)}
+            totalCount={results?.total ?? 0}
+            visibleCount={results?.items.length ?? 0}
             onSearchChange={setSearch}
             onMinQualityChange={setMinQuality}
             onClearFacet={(field) => handleFacetChange(field, null)}
@@ -655,7 +563,7 @@ export default function CatalogPortalPage() {
           <div className="flex flex-wrap gap-2">
             <button
               onClick={applyFilters}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
+              className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700"
             >
               {tr("catalogs.filters.apply", "Apply filters")}
             </button>
@@ -671,14 +579,14 @@ export default function CatalogPortalPage() {
                   source: null,
                 });
               }}
-              className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:bg-[var(--ukip-panel)] dark:text-[var(--ukip-text)] dark:hover:bg-[var(--ukip-panel-strong)]"
             >
               {tr("catalogs.filters.clear", "Clear filters")}
             </button>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-            <div className="border-b border-gray-200 bg-white/95 px-4 py-3 backdrop-blur dark:border-gray-800 dark:bg-gray-900/95">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm dark:border-white/10 dark:bg-black/10">
+            <div className="m-3 rounded-xl border border-slate-200 bg-white/95 px-4 py-3 backdrop-blur dark:border-white/10 dark:bg-[var(--ukip-panel)]">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
                   {results ? results.total.toLocaleString() : "0"}
@@ -689,7 +597,7 @@ export default function CatalogPortalPage() {
               </div>
             </div>
 
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            <div className="grid gap-4 p-3 pt-0 md:grid-cols-2">
               {loading ? (
                 <div className="space-y-4 p-4">
                   {Array.from({ length: 8 }).map((_, index) => (
@@ -714,11 +622,13 @@ export default function CatalogPortalPage() {
                   const attributes = parseAttributes(record.attributes_json);
                   const journal = (attributes.journal as string | undefined) || (attributes.venue as string | undefined);
                   const year = attributes.year as string | number | undefined;
+                  const statusTone = recordStatusTone(record.validation_status, record.enrichment_status);
                   return (
                     <RecordResultCard
                       key={record.id}
                       onClick={() => router.push(`/catalogs/${slug}/record/${record.id}`)}
                       tileLabel={(record.entity_type || record.domain || "record").slice(0, 3)}
+                      statusTone={statusTone}
                       title={record.primary_label || tr("common.no_data", "No data")}
                       idTag={<Badge variant="default">#{record.id}</Badge>}
                       secondaryLine={
@@ -732,13 +642,11 @@ export default function CatalogPortalPage() {
                       }
                       statusRow={
                         <>
-                          <Badge variant="default">{statusLabel("validation", record.validation_status)}</Badge>
                           <Badge variant={enrichmentVariant(record.enrichment_status)}>
                             {statusLabel("enrichment", record.enrichment_status)}
                           </Badge>
                           <QualityBadge score={record.quality_score} />
                           {record.entity_type ? <Badge variant="default">{record.entity_type}</Badge> : null}
-                          {record.domain ? <Badge variant="default">{record.domain}</Badge> : null}
                         </>
                       }
                       primaryMeta={[
@@ -752,43 +660,27 @@ export default function CatalogPortalPage() {
                           minWidthClassName: "min-w-[12rem]",
                         },
                         {
-                          label: tr("page.entity_table.system_status", "System status"),
-                          value: <Badge variant={enrichmentVariant(record.enrichment_status)}>{statusLabel("enrichment", record.enrichment_status)}</Badge>,
-                        },
-                        {
                           label: tr("page.entity_table.review_status", "Review status"),
                           value: statusLabel("validation", record.validation_status),
                         },
                         {
-                          label: tr("page.exec_dashboard.source", "Source"),
-                          value: record.source || "—",
-                        },
-                      ]}
-                      secondaryMeta={[
-                        {
                           label: tr("catalogs.record.citations", "Citations"),
                           value: (record.enrichment_citation_count ?? 0).toLocaleString(),
-                          minWidthClassName: "min-w-[8rem]",
                         },
                         {
-                          label: tr("catalogs.record.journal", "Journal / Venue"),
-                          value: journal || "—",
-                          minWidthClassName: "min-w-[12rem]",
-                        },
-                        {
-                          label: tr("catalogs.record.publication_year", "Publication year"),
-                          value: year ? String(year) : "—",
+                          label: tr("page.import.field.domain", "Domain"),
+                          value: record.domain || record.source || "—",
                         },
                       ]}
                       actions={
                         <button
-                          className="rounded-xl border border-blue-200 px-3 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50 dark:border-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-950/30"
+                          className="text-xs font-bold text-violet-600 transition hover:text-violet-800 dark:text-violet-300"
                           onClick={(event) => {
                             event.stopPropagation();
                             router.push(`/catalogs/${slug}/record/${record.id}`);
                           }}
                         >
-                          {tr("catalogs.record.open", "Open record")}
+                          {tr("catalogs.record.open", "Open record")} ↗
                         </button>
                       }
                     />

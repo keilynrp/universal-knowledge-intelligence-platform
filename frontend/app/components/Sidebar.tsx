@@ -87,11 +87,11 @@ export default function Sidebar() {
       )}
 
       <aside
-        className={`fixed left-0 top-0 z-50 flex h-screen w-72 flex-col overflow-hidden border-r border-gray-200 bg-white transition-[width,transform] duration-300 ease-out dark:border-gray-800 dark:bg-gray-900 ${desktopWidth} ${mobileTranslate}`}
+        className={`fixed left-0 top-0 z-50 flex h-screen w-72 flex-col overflow-hidden border-r border-[var(--ukip-border)] bg-[var(--ukip-sidebar-bg)] shadow-[var(--ukip-shadow-panel)] backdrop-blur-xl transition-[width,transform] duration-300 ease-out ${desktopWidth} ${mobileTranslate}`}
       >
         {/* Logo */}
         <div
-          className={`relative flex h-16 items-center border-b border-gray-200 dark:border-gray-800 ${
+          className={`relative flex h-16 items-center border-b border-[var(--ukip-border)] ${
             compactDesktop ? "justify-center px-3" : "justify-between px-6"
           }`}
         >
@@ -103,7 +103,7 @@ export default function Sidebar() {
           >
             <LogoIcon branding={branding} size={8} />
             {!compactDesktop && (
-              <span className="truncate text-base font-semibold text-gray-900 transition-opacity duration-200 dark:text-white">
+              <span className="truncate text-base font-semibold text-[var(--ukip-text-strong)] transition-opacity duration-200">
                 {branding.platform_name}
               </span>
             )}
@@ -112,7 +112,7 @@ export default function Sidebar() {
           <button
             onClick={toggle}
             aria-label={collapsed ? tr("sidebar.expand", "Expand sidebar") : tr("sidebar.collapse", "Collapse sidebar")}
-            className={`hidden rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 lg:block ${
+            className={`hidden rounded-lg p-1.5 text-[var(--ukip-muted)] transition-colors hover:bg-[var(--ukip-panel-strong)] hover:text-[var(--ukip-text-strong)] lg:block ${
               compactDesktop ? "absolute right-1 top-1/2 -translate-y-1/2" : ""
             }`}
           >
@@ -128,7 +128,7 @@ export default function Sidebar() {
           <button
             onClick={closeMobile}
             aria-label={tr("sidebar.close_navigation", "Close navigation")}
-            className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 lg:hidden"
+            className="rounded-lg p-1.5 text-[var(--ukip-muted)] hover:bg-[var(--ukip-panel-strong)] hover:text-[var(--ukip-text-strong)] lg:hidden"
           >
             <svg className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
@@ -141,10 +141,10 @@ export default function Sidebar() {
           {visibleSections.map((section, sectionIdx) => (
             <div key={section.header} className={sectionIdx > 0 ? "mt-6" : ""}>
               {compactDesktop ? (
-                sectionIdx > 0 && <div className="mx-2 mb-3 h-px bg-gray-200 dark:bg-gray-800" />
+                sectionIdx > 0 && <div className="mx-2 mb-3 h-px bg-[var(--ukip-border)]" />
               ) : (
                 <div className="mb-2 px-3">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--ukip-muted-soft)]">
                     {t(section.translationKey)}
                   </span>
                 </div>
@@ -164,13 +164,13 @@ export default function Sidebar() {
                           compactDesktop ? "justify-center px-1.5" : "gap-3 px-3"
                         } ${
                           isActive
-                            ? "bg-blue-50 text-blue-600 dark:bg-blue-600/10 dark:text-blue-400"
-                            : "text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                            ? "bg-violet-500/15 text-violet-200 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.26)]"
+                            : "text-[var(--ukip-muted)] hover:bg-[var(--ukip-panel-strong)] hover:text-[var(--ukip-text-strong)]"
                         }`}
                         title={collapsed && !mobileOpen ? t(item.translationKey) : undefined}
                       >
                         <span
-                          className={`shrink-0 ${isActive ? "text-blue-600 dark:text-blue-400" : "text-gray-400 dark:text-gray-500"}`}
+                          className={`shrink-0 ${isActive ? "text-violet-300" : "text-[var(--ukip-muted-soft)]"}`}
                         >
                           {item.icon}
                         </span>
@@ -185,25 +185,25 @@ export default function Sidebar() {
         </nav>
 
         {/* Footer */}
-        <div className={`border-t border-gray-200 py-4 dark:border-gray-800 ${compactDesktop ? "px-2" : "px-4"}`}>
+        <div className={`border-t border-[var(--ukip-border)] py-4 ${compactDesktop ? "px-2" : "px-4"}`}>
           {!compactDesktop ? (
             <div className="space-y-3">
               <button
                 onClick={togglePilotMode}
                 className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
                   pilotMode
-                    ? "border-violet-200 bg-violet-50 dark:border-violet-900/40 dark:bg-violet-950/30"
-                    : "border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800"
+                    ? "border-violet-400/30 bg-violet-500/15"
+                    : "border-[var(--ukip-border)] bg-[var(--ukip-panel-strong)]"
                 }`}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold text-gray-900 dark:text-white">
+                    <p className="text-xs font-semibold text-[var(--ukip-text-strong)]">
                       {pilotMode
                         ? tr("sidebar.pilot_mode.on", "Pilot mode on")
                         : tr("sidebar.pilot_mode.off", "Full workspace")}
                     </p>
-                    <p className="mt-1 text-[11px] leading-4 text-gray-500 dark:text-gray-400">
+                    <p className="mt-1 text-[11px] leading-4 text-[var(--ukip-muted)]">
                       {pilotMode
                         ? tr("sidebar.pilot_mode.on_help", "Showing the shortest path for imports, enrichment, review, and briefing.")
                         : tr("sidebar.pilot_mode.off_help", "Showing the full UKIP workspace, including advanced tools.")}
@@ -211,7 +211,7 @@ export default function Sidebar() {
                   </div>
                   <span
                     className={`inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      pilotMode ? "bg-violet-600" : "bg-gray-300 dark:bg-gray-600"
+                      pilotMode ? "bg-violet-500" : "bg-[var(--ukip-border-strong)]"
                     }`}
                   >
                     <span
@@ -222,13 +222,13 @@ export default function Sidebar() {
                   </span>
                 </div>
               </button>
-              <div className="rounded-lg bg-gray-50 px-3 py-3 dark:bg-gray-800">
-                <p className="text-xs font-semibold text-gray-900 dark:text-white">UKIP</p>
+              <div className="rounded-lg border border-[var(--ukip-border)] bg-[var(--ukip-panel-strong)] px-3 py-3">
+                <p className="text-xs font-semibold text-[var(--ukip-text-strong)]">UKIP</p>
               </div>
             </div>
           ) : (
             <div className="flex justify-center">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[var(--ukip-panel-strong)] text-xs font-bold text-[var(--ukip-muted)]">
                 U
               </span>
             </div>
