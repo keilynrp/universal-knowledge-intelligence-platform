@@ -10,13 +10,11 @@ type MetaItem = {
 
 interface RecordResultCardProps {
   title: ReactNode;
-  idTag?: ReactNode;
   secondaryLine?: ReactNode;
   statusRow?: ReactNode;
   primaryMeta?: MetaItem[];
   secondaryMeta?: MetaItem[];
   actions?: ReactNode;
-  tileLabel: ReactNode;
   leadingSlot?: ReactNode;
   statusTone?: "verified" | "review" | "rejected" | "pending" | "enriched" | "default";
   onClick?: () => void;
@@ -41,13 +39,11 @@ function MetaRow({ items }: { items: MetaItem[] }) {
 
 export default function RecordResultCard({
   title,
-  idTag,
   secondaryLine,
   statusRow,
   primaryMeta = [],
   secondaryMeta = [],
   actions,
-  tileLabel,
   leadingSlot,
   statusTone = "default",
   onClick,
@@ -61,32 +57,17 @@ export default function RecordResultCard({
     default: "border-l-slate-300 hover:border-l-violet-400",
   }[statusTone];
 
-  const tileToneClass = {
-    verified: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200",
-    enriched: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200",
-    review: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200",
-    pending: "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-200",
-    rejected: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200",
-    default: "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-200",
-  }[statusTone];
-
   return (
     <article
       className={`${onClick ? "cursor-pointer" : ""} h-full transition`}
       onClick={onClick}
     >
       <div className={`h-full rounded-2xl border border-l-4 border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-md dark:border-white/10 dark:bg-[var(--ukip-panel)] dark:hover:border-violet-400/30 ${toneClass}`}>
-        <div className="flex h-full flex-col">
-          <div className="flex items-start gap-2">
-            <div className="pt-0.5">{leadingSlot}</div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] ${tileToneClass}`}>
-                  {tileLabel}
-                </span>
-                {idTag}
-              </div>
-              <p className="mt-3 line-clamp-2 text-sm font-bold leading-5 text-slate-950 dark:text-[var(--ukip-text-strong)]">
+        <div className="grid h-full grid-cols-[1.25rem_minmax(0,1fr)] gap-3">
+          <div className="pt-1">{leadingSlot}</div>
+          <div className="flex min-w-0 flex-col">
+            <div className="min-w-0">
+              <p className="line-clamp-2 text-sm font-bold leading-5 text-slate-950 dark:text-[var(--ukip-text-strong)]">
                 {title}
               </p>
               {secondaryLine ? (
@@ -95,16 +76,16 @@ export default function RecordResultCard({
                 </div>
               ) : null}
             </div>
+
+            {statusRow ? <div className="mt-3 flex flex-wrap gap-1.5">{statusRow}</div> : null}
+            <MetaRow items={[...primaryMeta, ...secondaryMeta].slice(0, 4)} />
+
+            {actions ? (
+              <div className="mt-auto flex flex-row flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 dark:border-white/10">
+                {actions}
+              </div>
+            ) : null}
           </div>
-
-          {statusRow ? <div className="mt-3 flex flex-wrap gap-1.5">{statusRow}</div> : null}
-          <MetaRow items={[...primaryMeta, ...secondaryMeta].slice(0, 4)} />
-
-          {actions ? (
-            <div className="mt-auto flex flex-row flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 dark:border-white/10">
-              {actions}
-            </div>
-          ) : null}
         </div>
       </div>
     </article>

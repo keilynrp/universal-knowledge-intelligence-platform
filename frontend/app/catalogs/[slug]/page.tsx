@@ -7,6 +7,7 @@ import { Badge, EmptyState, ErrorBanner, QualityBadge, useToast } from "../../co
 import FacetPanel from "../../components/FacetPanel";
 import EntityTableToolbar from "../../components/EntityTableToolbar";
 import RecordResultCard from "../../components/RecordResultCard";
+import RecordListRow from "../../components/RecordListRow";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { useAuth } from "../../contexts/AuthContext";
 
@@ -128,6 +129,7 @@ export default function CatalogPortalPage() {
   const [editing, setEditing] = useState(false);
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [minQuality, setMinQuality] = useState(searchParams.get("min_quality") ?? "");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [activeFacets, setActiveFacets] = useState<Record<string, string | null>>({
     entity_type: searchParams.get("ft_entity_type") ?? null,
     domain: searchParams.get("ft_domain") ?? null,
@@ -555,6 +557,8 @@ export default function CatalogPortalPage() {
             page={Math.max(0, currentPage - 1)}
             totalCount={results?.total ?? 0}
             visibleCount={results?.items.length ?? 0}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
             onSearchChange={setSearch}
             onMinQualityChange={setMinQuality}
             onClearFacet={(field) => handleFacetChange(field, null)}
@@ -597,7 +601,7 @@ export default function CatalogPortalPage() {
               </div>
             </div>
 
-            <div className="grid gap-4 p-3 pt-0 md:grid-cols-2">
+            <div className={viewMode === "list" ? "space-y-2 p-3 pt-0" : "grid gap-4 p-3 pt-0 md:grid-cols-2"}>
               {loading ? (
                 <div className="space-y-4 p-4">
                   {Array.from({ length: 8 }).map((_, index) => (
@@ -623,14 +627,38 @@ export default function CatalogPortalPage() {
                   const journal = (attributes.journal as string | undefined) || (attributes.venue as string | undefined);
                   const year = attributes.year as string | number | undefined;
                   const statusTone = recordStatusTone(record.validation_status, record.enrichment_status);
+                  const score = record.quality_score !== null && record.quality_score !== undefined ? record.quality_score.toFixed(2) : "—";
+                  if (viewMode === "list") {
+                    return (
+                      <RecordListRow
+                        key={record.id}
+                        tone={statusTone}
+                        onClick={() => router.push(`/catalogs/${slug}/record/${record.id}`)}
+                        title={record.primary_label || tr("common.no_data", "No data")}
+                        metaLine={
+                          <>
+                            {record.canonical_id || `#${record.id}`}
+                            {record.entity_type ? ` · ${record.entity_type}` : ""}
+                            {record.domain ? ` · ${record.domain}` : ""}
+                          </>
+                        }
+                        authorityScore={score}
+                        qualityScore={score}
+                        statusBadge={
+                          <Badge variant={enrichmentVariant(record.enrichment_status)}>
+                            {statusLabel("enrichment", record.enrichment_status)}
+                          </Badge>
+                        }
+                        owner={record.secondary_label || record.source || "—"}
+                      />
+                    );
+                  }
                   return (
                     <RecordResultCard
                       key={record.id}
                       onClick={() => router.push(`/catalogs/${slug}/record/${record.id}`)}
-                      tileLabel={(record.entity_type || record.domain || "record").slice(0, 3)}
                       statusTone={statusTone}
                       title={record.primary_label || tr("common.no_data", "No data")}
-                      idTag={<Badge variant="default">#{record.id}</Badge>}
                       secondaryLine={
                         <>
                           {record.secondary_label ? <span>{record.secondary_label}</span> : null}

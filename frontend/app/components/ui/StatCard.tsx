@@ -1,5 +1,7 @@
 "use client";
 
+import DeltaBadge from "./DeltaBadge";
+
 interface StatCardProps {
   icon: React.ReactNode;
   iconColor?: "blue" | "emerald" | "amber" | "violet" | "red" | "gray";
@@ -22,22 +24,9 @@ const ICON_COLORS: Record<string, { bg: string; text: string }> = {
   gray:    { bg: "bg-white/5",      text: "text-[var(--ukip-muted)]" },
 };
 
-const TREND_COLORS = {
-  positive: "bg-emerald-500/10 text-emerald-300",
-  negative: "bg-red-500/10 text-red-300",
-  neutral:  "bg-[var(--ukip-panel-strong)] text-[var(--ukip-muted)]",
-};
-
 export default function StatCard({ icon, iconColor = "blue", label, value, trend, subtitle }: StatCardProps) {
   const colors = ICON_COLORS[iconColor] || ICON_COLORS.blue;
-
-  const trendColorKey = trend
-    ? trend.direction === "neutral"
-      ? "neutral"
-      : trend.positive !== false
-        ? "positive"
-        : "negative"
-    : null;
+  const trendDirection = trend?.direction === "neutral" ? "neutral" : trend?.positive === false ? "down" : "up";
 
   return (
     <div className="ukip-panel-soft p-5">
@@ -45,20 +34,8 @@ export default function StatCard({ icon, iconColor = "blue", label, value, trend
         <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${colors.bg}`}>
           <span className={colors.text}>{icon}</span>
         </div>
-        {trend && trendColorKey && (
-          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${TREND_COLORS[trendColorKey]}`}>
-            {trend.direction === "up" && (
-              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-              </svg>
-            )}
-            {trend.direction === "down" && (
-              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
-            )}
-            {trend.value}
-          </span>
+        {trend && (
+          <DeltaBadge value={trend.value} direction={trendDirection} />
         )}
       </div>
       <div className="mt-4">

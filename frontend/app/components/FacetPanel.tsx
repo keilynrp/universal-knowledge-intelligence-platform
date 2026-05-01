@@ -146,9 +146,6 @@ export default function FacetPanel({ activeFacets, onFacetChange, search, minQua
       <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 dark:border-white/10">
         <div>
           <h3 className="text-base font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">Filtros</h3>
-          <p className="mt-1 font-mono text-sm text-slate-500 dark:text-[var(--ukip-muted)]">
-            {(visibleCount ?? 0).toLocaleString()} de {(totalCount ?? 0).toLocaleString()}
-          </p>
         </div>
         {activeCount > 0 && (
           <button

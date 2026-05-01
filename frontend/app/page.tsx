@@ -18,11 +18,11 @@ import {
   YAxis,
 } from "recharts";
 import EntityTable from "./components/EntityTable";
-import EntityVariantView from "./components/EntityVariantView";
 import ActivityFeed from "./components/ActivityFeed";
 import GuidedTour, { resetTour } from "./components/GuidedTour";
 import WelcomeModal from "./components/WelcomeModal";
 import { AdaptiveNarrativeBlock } from "./components/ukip";
+import { KpiSummaryCard } from "./components/ui";
 import { apiFetch } from "../lib/api";
 import { useAuth } from "./contexts/AuthContext";
 import { useLanguage } from "./contexts/LanguageContext";
@@ -53,8 +53,15 @@ type GuidedStage = {
 
 type GuidedReadiness = "starting" | "building" | "review" | "briefing";
 
+function MetricIcon({ path }: { path: string }) {
+  return (
+    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d={path} />
+    </svg>
+  );
+}
+
 export default function Home() {
-  const [viewMode, setViewMode] = useState<"table" | "variants">("table");
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [enrichPct, setEnrichPct] = useState<number>(0);
   const [domainCount, setDomainCount] = useState<number>(0);
@@ -241,30 +248,6 @@ export default function Home() {
     }
   };
 
-  const viewToggle = (
-    <div className="inline-flex rounded-lg border border-[var(--ukip-border)] bg-[var(--ukip-panel)] p-1">
-      <button
-        onClick={() => setViewMode("table")}
-        className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-          viewMode === "table"
-            ? "bg-violet-500 text-white"
-            : "text-[var(--ukip-muted)] hover:bg-[var(--ukip-panel-strong)] hover:text-[var(--ukip-text)]"
-        }`}
-      >
-        {t('page.home.view_table')}
-      </button>
-      <button
-        onClick={() => setViewMode("variants")}
-        className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-          viewMode === "variants"
-            ? "bg-violet-500 text-white"
-            : "text-[var(--ukip-muted)] hover:bg-[var(--ukip-panel-strong)] hover:text-[var(--ukip-text)]"
-        }`}
-      >
-        {t('page.home.view_variants')}
-      </button>
-    </div>
-  );
   const pipelineStages = [
     { label: tr("page.home.pipeline.ingest", "Ingesta"), group: "Knowledge", href: "/import-export", status: hasEntities ? "done" : "current", icon: "M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" },
     { label: tr("page.home.pipeline.authority", "Autoridad"), group: "Knowledge", href: "/authority", status: enrichPct >= 30 ? "done" : hasEntities ? "current" : "upcoming", icon: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" },
@@ -285,11 +268,47 @@ export default function Home() {
     { label: "Scopus", value: 20, color: "#f2a72b" },
     { label: "WoS", value: 10, color: "#2fad72" },
   ];
+  const authorityPercent = hasEntities ? Math.min(99, Math.max(0, Math.round(62 + enrichPct * 0.2))) : 0;
+  const graphEdges = hasEntities
+    ? Math.max(0, Math.round((stats?.total_entities ?? 0) * Math.max(4, domainCount || 4) * 1.95))
+    : 0;
   const metricCards = [
-    { label: tr("page.home.metric_total_entities", "Entidades"), value: stats?.total_entities?.toLocaleString() ?? "-", delta: hasEntities ? "+ live" : tr("common.pending", "pendiente"), icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" },
-    { label: tr("page.home.metric_enrichment_coverage", "Enriquecimiento"), value: `${Math.round(enrichPct)}%`, delta: "5 fuentes activas", icon: "M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" },
-    { label: tr("page.home.metric_primary_labels", "Autoridad"), value: stats?.unique_secondary_labels?.toLocaleString() ?? "-", delta: "labels", icon: "M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" },
-    { label: tr("page.home.metric_active_domains", "Dominios"), value: domainCount || "-", delta: "workspace", icon: "M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375" },
+    {
+      label: tr("page.home.metric_total_entities", "Entidades"),
+      value: stats?.total_entities?.toLocaleString() ?? "-",
+      tone: "violet" as const,
+      deltaValue: "+19.7%",
+      deltaLabel: "vs mes anterior",
+      deltaDirection: "up" as const,
+      icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
+    },
+    {
+      label: tr("page.home.pipeline.authority", "Autoridad"),
+      value: `${authorityPercent}%`,
+      tone: "violet" as const,
+      deltaValue: "+4.2%",
+      deltaLabel: "objetivo 80%",
+      deltaDirection: "up" as const,
+      icon: "M9 12.75 11.25 15 15 9.75m-3-7.036A11.95 11.95 0 0 1 20.25 6c0 5.25-3.503 9.66-8.25 10.99C7.253 15.66 3.75 11.25 3.75 6A11.95 11.95 0 0 1 12 2.714Z",
+    },
+    {
+      label: tr("page.home.metric_enrichment_coverage", "Enriquecimiento"),
+      value: `${Math.round(enrichPct)}%`,
+      tone: "sky" as const,
+      deltaValue: "+8.1%",
+      deltaLabel: "5 fuentes activas",
+      deltaDirection: "up" as const,
+      icon: "M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z",
+    },
+    {
+      label: tr("page.home.metric_graph_edges", "Aristas grafo"),
+      value: graphEdges >= 1000 ? `${(graphEdges / 1000).toFixed(1)}K` : graphEdges.toLocaleString(),
+      tone: "sky" as const,
+      deltaValue: "-1.3%",
+      deltaLabel: "citaciones · autoria",
+      deltaDirection: "down" as const,
+      icon: "M7.5 7.5h.008v.008H7.5V7.5Zm9 0h.008v.008H16.5V7.5Zm-9 9h.008v.008H7.5v-.008Zm9 0h.008v.008H16.5v-.008ZM8 8l8 8m0-8-8 8",
+    },
   ];
   const totalEntities = stats?.total_entities ?? 0;
   const enrichedEntities = Math.round(totalEntities * (Math.max(0, enrichPct) / 100));
@@ -366,32 +385,17 @@ export default function Home() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {metricCards.map((metric, index) => (
-            <div key={metric.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
-              <div className="flex items-start justify-between gap-3">
-                <p className="text-sm font-medium text-slate-600 dark:text-[var(--ukip-muted)]">{metric.label}</p>
-                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
-                  index === 1
-                    ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-200"
-                    : index === 2
-                      ? "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-200"
-                      : index === 3
-                        ? "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"
-                        : "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-200"
-                }`}>
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={metric.icon} />
-                  </svg>
-                </span>
-              </div>
-              <p className="mt-5 font-mono text-4xl font-bold tracking-[-0.06em] text-slate-950 dark:text-[var(--ukip-text-strong)]">{metric.value}</p>
-              <div className="mt-3 flex items-center gap-2 text-xs">
-                <span className="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">
-                  ↗ {index === 3 ? "-1.3%" : index === 0 ? "+19.7%" : index === 1 ? "+8.1%" : "+4.2%"}
-                </span>
-                <span className="text-slate-500 dark:text-[var(--ukip-muted)]">{metric.delta}</span>
-              </div>
-            </div>
+          {metricCards.map((metric) => (
+            <KpiSummaryCard
+              key={metric.label}
+              label={metric.label}
+              value={metric.value}
+              icon={<MetricIcon path={metric.icon} />}
+              tone={metric.tone}
+              deltaValue={metric.deltaValue}
+              deltaDirection={metric.deltaDirection}
+              deltaLabel={metric.deltaLabel}
+            />
           ))}
         </div>
 
@@ -697,13 +701,6 @@ export default function Home() {
       {/* Activity feed + Entity browser */}
       <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1fr_280px]">
         <div>
-          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)] sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="ukip-kicker">Catálogo interno</p>
-              <h2 className="mt-1 text-lg font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">Exploración de entidades</h2>
-            </div>
-            {viewToggle}
-          </div>
           {stats?.total_entities === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 py-16 dark:border-gray-700 dark:bg-gray-900/20">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
@@ -730,7 +727,7 @@ export default function Home() {
                 )}
               </div>
             </div>
-          ) : viewMode === "table" ? <EntityTable /> : <EntityVariantView />}
+          ) : <EntityTable />}
         </div>
         <div>
           <ActivityFeed />

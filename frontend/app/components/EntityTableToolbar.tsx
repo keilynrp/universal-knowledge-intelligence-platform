@@ -23,8 +23,10 @@ export interface EntityTableToolbarProps {
     isAllSelected?: boolean;
     isPartiallySelected?: boolean;
     sortLabel?: string;
+    viewMode?: "grid" | "list";
     onToggleSelectAll?: () => void;
     onSortQuality?: () => void;
+    onViewModeChange?: (mode: "grid" | "list") => void;
     onSearchChange: (value: string) => void;
     onMinQualityChange: (value: string) => void;
     onClearFacet: (field: string) => void;
@@ -42,8 +44,10 @@ export default function EntityTableToolbar({
     isAllSelected,
     isPartiallySelected,
     sortLabel,
+    viewMode = "grid",
     onToggleSelectAll,
     onSortQuality,
+    onViewModeChange,
     onSearchChange,
     onMinQualityChange,
     onClearFacet,
@@ -128,8 +132,8 @@ export default function EntityTableToolbar({
                 </div>
             )}
 
-            <div className="rounded-[22px] border border-slate-200 bg-white p-2 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
-                <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="min-w-0 rounded-[22px] border border-slate-200 bg-white p-2 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
+                <div className="grid min-w-0 grid-cols-1 gap-2">
                     <div className="relative w-full">
                         <svg
                             className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
@@ -152,12 +156,12 @@ export default function EntityTableToolbar({
                             onChange={(event) => onSearchChange(event.target.value)}
                         />
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                    <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-[auto_minmax(4.5rem,auto)_minmax(8rem,1fr)_auto_auto]">
                         {onToggleSelectAll ? (
-                            <label className="flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)]">
+                            <label className="flex h-11 min-w-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)]">
                                 <input
                                     type="checkbox"
-                                    className="h-4 w-4 rounded border-violet-300 accent-violet-600"
+                                    className="ukip-selection-control"
                                     checked={Boolean(isAllSelected)}
                                     ref={(element) => {
                                         if (element) {
@@ -167,10 +171,10 @@ export default function EntityTableToolbar({
                                     onChange={onToggleSelectAll}
                                     aria-label={t("page.entity_table.select_all")}
                                 />
-                                <span>{selectedCount ? `${selectedCount} sel.` : `${(selectableCount ?? visibleCount ?? 0).toLocaleString()}`}</span>
+                                <span className="truncate">{selectedCount ? `${selectedCount} sel.` : `${(selectableCount ?? visibleCount ?? 0).toLocaleString()}`}</span>
                             </label>
                         ) : null}
-                        <div className="flex h-11 items-center gap-2 px-2 font-mono text-xs font-semibold text-slate-500 dark:text-[var(--ukip-muted)]">
+                        <div className="flex h-11 min-w-0 items-center justify-center gap-2 rounded-xl px-2 font-mono text-xs font-semibold text-slate-500 dark:text-[var(--ukip-muted)]">
                             <span>{(visibleCount ?? 0).toLocaleString()}</span>
                             <span>/</span>
                             <span>{(totalCount ?? 0).toLocaleString()}</span>
@@ -178,14 +182,14 @@ export default function EntityTableToolbar({
                         <button
                             type="button"
                             onClick={onSortQuality}
-                            className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-700 outline-none transition hover:bg-white focus:border-violet-300 focus:ring-2 focus:ring-violet-100 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)]"
+                            className="col-span-2 h-11 min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-700 outline-none transition hover:bg-white focus:border-violet-300 focus:ring-2 focus:ring-violet-100 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)] sm:col-span-1"
                         >
-                            {sortLabel ?? "↕ Recientes"}
+                            <span className="block truncate">{sortLabel ?? "↕ Recientes"}</span>
                         </button>
                         <select
                             value={minQuality}
                             onChange={(event) => onMinQualityChange(event.target.value)}
-                            className="hidden h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)] lg:block"
+                            className="h-11 min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)]"
                             title={t("page.entity_table.min_quality")}
                         >
                             <option value="">{t("common.all")}</option>
@@ -193,11 +197,23 @@ export default function EntityTableToolbar({
                             <option value="0.3">30%+</option>
                             <option value="0.0">{t("page.entity_table.under_30")}</option>
                         </select>
-                        <div className="flex h-11 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/5">
-                            <button className="flex h-full w-11 items-center justify-center text-violet-600 dark:text-violet-300" aria-label="Grid view">
+                        <div className="flex h-11 min-w-[5.75rem] overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-white/10 dark:bg-white/5">
+                            <button
+                                type="button"
+                                onClick={() => onViewModeChange?.("grid")}
+                                className={`flex h-full w-10 items-center justify-center rounded-lg transition ${viewMode === "grid" ? "bg-white text-violet-600 shadow-sm dark:bg-white/10 dark:text-violet-200" : "text-slate-500 hover:text-violet-600 dark:text-[var(--ukip-muted)]"}`}
+                                aria-label="Grid view"
+                                aria-pressed={viewMode === "grid"}
+                            >
                                 ⊞
                             </button>
-                            <button className="flex h-full w-11 items-center justify-center border-l border-slate-200 text-slate-500 dark:border-white/10 dark:text-[var(--ukip-muted)]" aria-label="List view">
+                            <button
+                                type="button"
+                                onClick={() => onViewModeChange?.("list")}
+                                className={`flex h-full w-10 items-center justify-center rounded-lg transition ${viewMode === "list" ? "bg-white text-violet-600 shadow-sm dark:bg-white/10 dark:text-violet-200" : "text-slate-500 hover:text-violet-600 dark:text-[var(--ukip-muted)]"}`}
+                                aria-label="List view"
+                                aria-pressed={viewMode === "list"}
+                            >
                                 ☰
                             </button>
                         </div>

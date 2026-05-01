@@ -98,6 +98,46 @@
     box-shadow: 0 0 0 4px rgb(124 58 237 / 0.18);
     outline: none;
   }
+
+  .ukip-selection-control {
+    appearance: none;
+    display: inline-grid;
+    place-content: center;
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 auto;
+    border: 1.5px solid var(--ukip-primary);
+    border-radius: 999px;
+    background: transparent;
+    cursor: pointer;
+    transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .ukip-selection-control::before {
+    content: "";
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 999px;
+    transform: scale(0);
+    transition: transform 140ms ease;
+    background: var(--ukip-primary);
+  }
+
+  .ukip-selection-control:checked {
+    background: rgb(124 58 237 / 0.1);
+    box-shadow: 0 0 0 3px rgb(124 58 237 / 0.12);
+  }
+
+  .ukip-selection-control:checked::before {
+    transform: scale(1);
+  }
+
+  .ukip-selection-control:indeterminate::before {
+    width: 0.5rem;
+    height: 0.12rem;
+    border-radius: 999px;
+    transform: scale(1);
+  }
 }
 
 @layer utilities {

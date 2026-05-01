@@ -1,9 +1,9 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useDomain } from "../contexts/DomainContext";
 import { useLanguage } from "../contexts/LanguageContext";
-import { useToast } from "./ui";
+import { KpiSummaryCard, useToast } from "./ui";
 import FacetPanel from "./FacetPanel";
 import EntityTablePagination from "./EntityTablePagination";
 import EntityTableBulkActions from "./EntityTableBulkActions";
@@ -12,6 +12,46 @@ import EntityTableContent from "./EntityTableContent";
 import EntityTableDetailsModal from "./EntityTableDetailsModal";
 import { useEntityTableController } from "./useEntityTableController";
 import { useEntityTableVirtualization } from "./useEntityTableVirtualization";
+
+function NetworkIcon() {
+    return (
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 16 16" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+            <circle cx="8" cy="4" r="2" />
+            <circle cx="5" cy="11" r="2" />
+            <circle cx="11" cy="11" r="2" />
+            <path strokeLinecap="round" d="M7.2 5.8 5.8 9.2M8.8 5.8l1.4 3.4M7 11h2" />
+        </svg>
+    );
+}
+
+function SlidersIcon() {
+    return (
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 16 16" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+            <path strokeLinecap="round" d="M3 4h10M3 8h10M3 12h10" />
+            <circle cx="6" cy="4" r="1.4" fill="currentColor" stroke="none" />
+            <circle cx="10" cy="8" r="1.4" fill="currentColor" stroke="none" />
+            <circle cx="7" cy="12" r="1.4" fill="currentColor" stroke="none" />
+        </svg>
+    );
+}
+
+function CheckIcon() {
+    return (
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 16 16" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+            <circle cx="8" cy="8" r="5.5" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="m5.5 8.2 1.6 1.6 3.4-3.7" />
+        </svg>
+    );
+}
+
+function SearchIcon() {
+    return (
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 16 16" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+            <circle cx="7" cy="7" r="4.2" />
+            <path strokeLinecap="round" d="m10.2 10.2 2.8 2.8" />
+        </svg>
+    );
+}
 
 export default function EntityTable() {
     const { activeDomain } = useDomain();
@@ -64,6 +104,7 @@ export default function EntityTable() {
         setScrollTop,
     } = useEntityTableController({ toast });
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
     const { shouldVirtualize, visibleEntities, paddingTop, paddingBottom, viewportHeight } = useEntityTableVirtualization({
         entities,
@@ -76,6 +117,9 @@ export default function EntityTable() {
         ? entities.reduce((sum, entity) => sum + (entity.quality_score ?? 0), 0) / entities.length
         : 0;
     const verifiedPercent = entities.length ? Math.round((verifiedCount / entities.length) * 100) : 0;
+    const currentPortalSlug = entities
+        .map((entity) => entity.import_batch_id ? portalByBatchId[entity.import_batch_id] : undefined)
+        .find(Boolean);
     const pipelineStages = [
         { label: "Ingesta", group: "Knowledge", active: true },
         { label: "Autoridad", group: "Knowledge", active: verifiedCount > 0 },
@@ -111,12 +155,18 @@ export default function EntityTable() {
                             </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                            <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-[var(--ukip-panel)] dark:text-[var(--ukip-text)]">
-                                Sembrar demo
-                            </button>
-                            <a href="/import-export" className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white shadow-sm shadow-violet-500/20 transition hover:bg-violet-700">
-                                Nuevo wizard
-                            </a>
+                            {currentPortalSlug ? (
+                                <a
+                                    href={`/catalogs/${currentPortalSlug}`}
+                                    className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white shadow-sm shadow-violet-500/20 transition hover:bg-violet-700"
+                                >
+                                    Abrir portal de ingesta ↗
+                                </a>
+                            ) : (
+                                <span className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-500 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)] dark:text-[var(--ukip-muted)]">
+                                    Portal no configurado
+                                </span>
+                            )}
                         </div>
                     </div>
                 </section>
@@ -144,23 +194,39 @@ export default function EntityTable() {
                 </section>
 
                 <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    {[
-                        { label: "Total entidades", value: totalCount.toLocaleString(), delta: "+12 todas las fuentes", tone: "violet" },
-                        { label: "Tasa de duplicados", value: "3.4%", delta: "-0.8pp fuzzy matching", tone: "amber" },
-                        { label: "Authority media", value: avgQuality ? avgQuality.toFixed(2) : "0.00", delta: "+0.03 score 0-1.0", tone: "emerald" },
-                        { label: "Verificadas", value: `${verifiedPercent}%`, delta: "+6pp ratio sobre total", tone: "sky" },
-                    ].map((metric) => (
-                        <div key={metric.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
-                            <div className="flex items-start justify-between">
-                                <p className="text-sm font-semibold text-slate-500 dark:text-[var(--ukip-muted)]">{metric.label}</p>
-                                <span className={`h-8 w-8 rounded-full ${metric.tone === "violet" ? "bg-violet-100 text-violet-700" : metric.tone === "amber" ? "bg-amber-100 text-amber-700" : metric.tone === "emerald" ? "bg-emerald-100 text-emerald-700" : "bg-sky-100 text-sky-700"} flex items-center justify-center text-xs font-bold`}>
-                                    ●
-                                </span>
-                            </div>
-                            <p className="mt-4 font-mono text-4xl font-bold tracking-[-0.06em] text-slate-950 dark:text-[var(--ukip-text-strong)]">{metric.value}</p>
-                            <p className="mt-2 text-xs font-semibold text-emerald-600">{metric.delta}</p>
-                        </div>
-                    ))}
+                    <KpiSummaryCard
+                        label="Total entidades"
+                        value={totalCount.toLocaleString()}
+                        icon={<NetworkIcon />}
+                        tone="violet"
+                        deltaValue="+12"
+                        deltaLabel="todas las fuentes"
+                    />
+                    <KpiSummaryCard
+                        label="Tasa de duplicados"
+                        value="3.4%"
+                        icon={<SlidersIcon />}
+                        tone="amber"
+                        deltaValue="-0.6pp"
+                        deltaDirection="down"
+                        deltaLabel="fuzzy matching"
+                    />
+                    <KpiSummaryCard
+                        label="Authority media"
+                        value={avgQuality ? avgQuality.toFixed(2) : "0.00"}
+                        icon={<CheckIcon />}
+                        tone="emerald"
+                        deltaValue="+0.03"
+                        deltaLabel="score 0.0-1.0"
+                    />
+                    <KpiSummaryCard
+                        label="Verificadas"
+                        value={`${verifiedPercent}%`}
+                        icon={<SearchIcon />}
+                        tone="sky"
+                        deltaValue="+4pp"
+                        deltaLabel="ratio sobre total"
+                    />
                 </section>
 
                 <div className="grid items-start gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -185,6 +251,7 @@ export default function EntityTable() {
                             isAllSelected={entities.length > 0 && selectedIds.size === entities.length}
                             isPartiallySelected={selectedIds.size > 0 && selectedIds.size < entities.length}
                             sortLabel={`${t("entities.quality")} ${sortBy === "quality_score" ? (sortOrder === "desc" ? "↓" : "↑") : "↕"}`}
+                            viewMode={viewMode}
                             onToggleSelectAll={toggleSelectAll}
                             onSortQuality={() => {
                                 if (sortBy === "quality_score") {
@@ -195,6 +262,7 @@ export default function EntityTable() {
                                 }
                                 setPage(0);
                             }}
+                            onViewModeChange={setViewMode}
                             onSearchChange={setSearch}
                             onMinQualityChange={(value) => {
                                 setMinQuality(value);
@@ -221,6 +289,7 @@ export default function EntityTable() {
                             deletingId={deletingId}
                             enrichingId={enrichingId}
                             portalByBatchId={portalByBatchId}
+                            viewMode={viewMode}
                             sortBy={sortBy}
                             sortOrder={sortOrder}
                             scrollContainerRef={scrollContainerRef}

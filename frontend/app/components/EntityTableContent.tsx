@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useLanguage } from "../contexts/LanguageContext";
 import { Badge, ErrorBanner, QualityBadge } from "./ui";
 import RecordResultCard from "./RecordResultCard";
+import RecordListRow from "./RecordListRow";
 import type { EntityTableDomain, EditableFields, Entity } from "./EntityTable.types";
 
 function parseNormalizedJson(normalizedJson: string | null): Record<string, unknown> {
@@ -154,6 +155,7 @@ export interface EntityTableContentProps {
     deletingId: number | null;
     enrichingId: number | null;
     portalByBatchId: Record<number, string>;
+    viewMode?: "grid" | "list";
     sortBy: string;
     sortOrder: string;
     scrollContainerRef: React.RefObject<HTMLDivElement | null>;
@@ -187,14 +189,18 @@ export default function EntityTableContent({
     editData,
     saving,
     portalByBatchId,
+    viewMode = "grid",
     scrollContainerRef,
     onScrollTopChange,
     onToggleSelect,
     onRetry,
+    onStartEdit,
     onCancelEdit,
     onSaveEdit,
     onEditDataChange,
     onSelectEntity,
+    onDeleteEntity,
+    onEnrichEntity,
 }: EntityTableContentProps) {
     const { t } = useLanguage();
     const inputClass =
@@ -248,7 +254,7 @@ export default function EntityTableContent({
                 ) : (
                     <>
                         {paddingTop > 0 && <div style={{ height: paddingTop }} />}
-                        <div className="grid gap-4 md:grid-cols-2">
+                        <div className={viewMode === "list" ? "space-y-2" : "grid gap-4 md:grid-cols-2"}>
                             {visibleEntities.map((entity) => {
                                 const isEditing = editingId === entity.id;
                                 const parsedJson = parseNormalizedJson(entity.normalized_json);
@@ -323,6 +329,31 @@ export default function EntityTableContent({
                                     );
                                 }
 
+                                if (viewMode === "list") {
+                                    return (
+                                        <RecordListRow
+                                            key={entity.id}
+                                            selected={selectedIds.has(entity.id)}
+                                            selectable
+                                            tone={statusTone}
+                                            onSelect={() => onToggleSelect(entity.id)}
+                                            onClick={() => onSelectEntity(entity)}
+                                            title={titleValue}
+                                            metaLine={
+                                                <>
+                                                    {identifierValue ? String(identifierValue) : `#${entity.id}`}
+                                                    {entity.entity_type ? ` · ${entity.entity_type}` : ""}
+                                                    {entity.domain ? ` · ${entity.domain}` : ""}
+                                                </>
+                                            }
+                                            authorityScore={entity.quality_score !== null && entity.quality_score !== undefined ? entity.quality_score.toFixed(2) : "—"}
+                                            qualityScore={entity.quality_score !== null && entity.quality_score !== undefined ? entity.quality_score.toFixed(2) : "—"}
+                                            statusBadge={<Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>}
+                                            owner={secondaryValue ? String(secondaryValue) : sourceLabel}
+                                        />
+                                    );
+                                }
+
                                 return (
                                     <div key={entity.id} className={`${selectedIds.has(entity.id) ? "rounded-2xl bg-violet-50/70 dark:bg-violet-500/5" : ""}`}>
                                         <RecordResultCard
@@ -330,17 +361,15 @@ export default function EntityTableContent({
                                                 <div className="flex flex-col items-start gap-3">
                                                     <input
                                                         type="checkbox"
-                                                        className="h-4 w-4 rounded border-violet-300 accent-violet-600"
+                                                        className="ukip-selection-control"
                                                         checked={selectedIds.has(entity.id)}
                                                         onChange={() => onToggleSelect(entity.id)}
                                                         aria-label={`${t("page.entity_table.select_entity")} ${entity.id}`}
                                                     />
                                                 </div>
                                             }
-                                            tileLabel={(entity.entity_type || entity.domain || "entity").slice(0, 3)}
                                             statusTone={statusTone}
                                             title={titleValue}
-                                            idTag={<Badge variant="default">#{entity.id}</Badge>}
                                             secondaryLine={
                                                 <>
                                                     {secondaryValue ? <span>{String(secondaryValue)}</span> : null}
@@ -378,16 +407,40 @@ export default function EntityTableContent({
                                             ]}
                                             actions={
                                                 <>
-                                                    <Link href={`/entities/${entity.id}`} className="text-xs font-bold text-violet-600 transition hover:text-violet-800 dark:text-violet-300">
-                                                        Abrir ↗
+                                                    <Link
+                                                        href={`/entities/${entity.id}`}
+                                                        className="rounded-lg px-2 py-1 text-xs font-bold text-violet-600 transition hover:bg-violet-50 hover:text-violet-800 dark:text-violet-300 dark:hover:bg-violet-500/10"
+                                                    >
+                                                        Ver
                                                     </Link>
+                                                    <button
+                                                        onClick={() => onStartEdit(entity)}
+                                                        className="rounded-lg px-2 py-1 text-xs font-bold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-[var(--ukip-muted)] dark:hover:bg-white/10 dark:hover:text-[var(--ukip-text)]"
+                                                    >
+                                                        Editar
+                                                    </button>
+                                                    <button
+                                                        onClick={() => onEnrichEntity(entity.id)}
+                                                        className="rounded-lg px-2 py-1 text-xs font-bold text-purple-600 transition hover:bg-purple-50 hover:text-purple-800 dark:text-purple-300 dark:hover:bg-purple-500/10"
+                                                    >
+                                                        Enriquecer
+                                                    </button>
                                                     {portalSlug ? (
-                                                        <Link href={`/catalogs/${portalSlug}`} className="text-xs font-bold text-emerald-600 transition hover:text-emerald-800 dark:text-emerald-300">
+                                                        <Link href={`/catalogs/${portalSlug}`} className="rounded-lg px-2 py-1 text-xs font-bold text-emerald-600 transition hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-500/10">
                                                             Portal
                                                         </Link>
                                                     ) : null}
-                                                    <button onClick={() => onSelectEntity(entity)} className="text-xs font-bold text-slate-500 transition hover:text-slate-900 dark:text-[var(--ukip-muted)] dark:hover:text-[var(--ukip-text)]">
-                                                        ···
+                                                    <button
+                                                        onClick={() => onSelectEntity(entity)}
+                                                        className="rounded-lg px-2 py-1 text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-[var(--ukip-muted)] dark:hover:bg-white/10 dark:hover:text-[var(--ukip-text)]"
+                                                    >
+                                                        Vista rápida
+                                                    </button>
+                                                    <button
+                                                        onClick={() => onDeleteEntity(entity)}
+                                                        className="rounded-lg px-2 py-1 text-xs font-bold text-red-600 transition hover:bg-red-50 hover:text-red-800 dark:text-red-300 dark:hover:bg-red-500/10"
+                                                    >
+                                                        Eliminar
                                                     </button>
                                                 </>
                                             }

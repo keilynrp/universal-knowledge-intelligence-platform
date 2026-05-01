@@ -11,6 +11,8 @@ export { default as Select } from "./Select";
 export { default as Surface } from "./Surface";
 export { default as TabNav } from "./TabNav";
 export { default as DataTable } from "./DataTable";
+export { default as DeltaBadge } from "./DeltaBadge";
+export { default as KpiSummaryCard } from "./KpiSummaryCard";
 export { ToastProvider, useToast } from "./Toast";
 export type { ToastVariant } from "./Toast";
 export { default as EmptyState } from "./EmptyState";
