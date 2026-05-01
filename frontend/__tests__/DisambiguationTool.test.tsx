@@ -19,6 +19,19 @@ vi.mock("../app/contexts/DomainContext", () => ({
   }),
 }));
 
+vi.mock("../app/contexts/AuthContext", () => ({
+  useAuth: () => ({
+    token: "test-token",
+    user: { id: 1, username: "testadmin", role: "superadmin", email: null, is_active: true },
+    isAuthenticated: true,
+    hydrated: true,
+    login: vi.fn(),
+    logout: vi.fn(),
+    refreshUser: vi.fn(),
+    updateAvatarUrl: vi.fn(),
+  }),
+}));
+
 vi.mock("../app/components/ui/Toast", () => ({
   useToast: () => ({ toast: vi.fn() }),
 }));

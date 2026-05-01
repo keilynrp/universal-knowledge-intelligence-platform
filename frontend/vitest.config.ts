@@ -9,6 +9,8 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./vitest.setup.tsx"],
     include: ["**/__tests__/**/*.{test,spec}.{ts,tsx}"],
+    pool: "threads",
+    maxWorkers: 2,
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

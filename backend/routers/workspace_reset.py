@@ -186,17 +186,24 @@ def _count_where_ids(
 def _delete_annotations(db: Session, entity_ids: list[int], authority_ids: list[int]) -> int:
     if not (entity_ids or authority_ids):
         return 0
-    return int(
-        db.query(models.Annotation)
-        .filter(
-            or_(
-                models.Annotation.entity_id.in_(entity_ids) if entity_ids else text("1=0"),
-                models.Annotation.authority_id.in_(authority_ids) if authority_ids else text("1=0"),
-            )
-        )
-        .delete(synchronize_session=False)
-        or 0
-    )
+    clauses: list[str] = []
+    params: dict[str, object] = {}
+    if entity_ids:
+        clauses.append("entity_id IN :entity_ids")
+        params["entity_ids"] = entity_ids
+    if authority_ids:
+        clauses.append("authority_id IN :authority_ids")
+        params["authority_ids"] = authority_ids
+
+    stmt = text(f"DELETE FROM annotations WHERE {' OR '.join(clauses)}")
+    bind_params = []
+    if entity_ids:
+        bind_params.append(bindparam("entity_ids", expanding=True))
+    if authority_ids:
+        bind_params.append(bindparam("authority_ids", expanding=True))
+    if bind_params:
+        stmt = stmt.bindparams(*bind_params)
+    return int(db.execute(stmt, params).rowcount or 0)
 
 
 def _delete_link_dismissals(db: Session, entity_ids: list[int]) -> int:
@@ -389,32 +396,13 @@ def reset_workspace_data(
         else:
             deleted["harmonization_change_records"] = 0
 
-        deleted["annotations"] = _delete_annotations(db, entity_ids, authority_ids)
+        deleted["annotations"] = 0
         deleted["link_dismissals"] = _delete_link_dismissals(db, entity_ids)
 
         if store_ids:
-            deleted["sync_queue_items"] = (
-                db.query(models.SyncQueueItem)
-                .filter(models.SyncQueueItem.store_id.in_(store_ids))
-                .delete(synchronize_session=False)
-            )
-            deleted["sync_queue_items"] += _delete_where_ids(
-                db,
-                "store_sync_queue",
-                "store_id",
-                store_ids,
-                existing_tables=existing_tables,
-            )
-            deleted["sync_logs"] = (
-                db.query(models.SyncLog)
-                .filter(models.SyncLog.store_id.in_(store_ids))
-                .delete(synchronize_session=False)
-            )
-            deleted["sync_mappings"] = (
-                db.query(models.StoreSyncMapping)
-                .filter(models.StoreSyncMapping.store_id.in_(store_ids))
-                .delete(synchronize_session=False)
-            )
+            deleted["sync_queue_items"] = 0
+            deleted["sync_logs"] = 0
+            deleted["sync_mappings"] = 0
         else:
             deleted["sync_queue_items"] = 0
             deleted["sync_logs"] = 0
@@ -430,11 +418,7 @@ def reset_workspace_data(
             deleted["analysis_contexts"] = 0
 
         if workflow_ids:
-            deleted["workflow_runs"] = (
-                db.query(models.WorkflowRun)
-                .filter(models.WorkflowRun.workflow_id.in_(workflow_ids))
-                .delete(synchronize_session=False)
-            )
+            deleted["workflow_runs"] = 0
         else:
             deleted["workflow_runs"] = workflow_run_query.delete(synchronize_session=False)
 
@@ -455,6 +439,7 @@ def reset_workspace_data(
         deleted["normalization_rules"] = rule_query.delete(synchronize_session=False)
         deleted["harmonization_logs"] = harmonization_query.delete(synchronize_session=False)
         deleted["raw_entities"] = entity_query.delete(synchronize_session=False)
+        deleted["annotations"] += _delete_annotations(db, entity_ids, authority_ids)
 
         reset_counters["store_connections"] = store_query.update(
             {
@@ -501,6 +486,44 @@ def reset_workspace_data(
             },
             synchronize_session=False,
         )
+
+        if store_ids:
+            deleted["sync_queue_items"] += _delete_where_ids(
+                db,
+                "sync_queue",
+                "store_id",
+                store_ids,
+                existing_tables=existing_tables,
+            )
+            deleted["sync_queue_items"] += _delete_where_ids(
+                db,
+                "store_sync_queue",
+                "store_id",
+                store_ids,
+                existing_tables=existing_tables,
+            )
+            deleted["sync_logs"] += _delete_where_ids(
+                db,
+                "sync_logs",
+                "store_id",
+                store_ids,
+                existing_tables=existing_tables,
+            )
+            deleted["sync_mappings"] += _delete_where_ids(
+                db,
+                "store_sync_mappings",
+                "store_id",
+                store_ids,
+                existing_tables=existing_tables,
+            )
+        if workflow_ids:
+            deleted["workflow_runs"] += _delete_where_ids(
+                db,
+                "workflow_runs",
+                "workflow_id",
+                workflow_ids,
+                existing_tables=existing_tables,
+            )
 
         try:
             db.execute(text("DELETE FROM search_index"))

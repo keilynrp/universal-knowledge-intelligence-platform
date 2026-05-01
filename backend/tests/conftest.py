@@ -86,6 +86,34 @@ _olap_module.engine = test_engine
 # Seed the super_admin in the in-memory test DB so the login fixture works.
 # Startup side effects are disabled in tests, so seeding must happen explicitly.
 from backend.auth import hash_password as _hash_pw  # noqa: E402
+
+
+def _ensure_test_admin() -> None:
+    """Keep the session-scoped CI admin deterministic across test ordering."""
+    with TestingSessionLocal() as db:
+        admin = (
+            db.query(models.User)
+            .filter(models.User.username == os.environ["ADMIN_USERNAME"])
+            .first()
+        )
+        if admin is None:
+            db.add(models.User(
+                username=os.environ["ADMIN_USERNAME"],
+                password_hash=_hash_pw(os.environ["ADMIN_PASSWORD"]),
+                role="super_admin",
+                is_active=True,
+                failed_attempts=0,
+                locked_until=None,
+            ))
+        else:
+            admin.password_hash = _hash_pw(os.environ["ADMIN_PASSWORD"])
+            admin.role = "super_admin"
+            admin.is_active = True
+            admin.failed_attempts = 0
+            admin.locked_until = None
+        db.commit()
+
+
 with TestingSessionLocal() as _seed_db:
     if _seed_db.query(models.User).count() == 0:
         _seed_db.add(models.User(
@@ -95,6 +123,7 @@ with TestingSessionLocal() as _seed_db:
             is_active=True,
         ))
         _seed_db.commit()
+_ensure_test_admin()
 
 
 @pytest.fixture(scope="session")
@@ -104,19 +133,15 @@ def client():
         yield c
 
 
-@pytest.fixture(scope="session")
-def auth_token(client):
-    """Obtain a valid JWT token for the super_admin test account."""
-    response = client.post(
-        "/auth/token",
-        data={"username": os.environ["ADMIN_USERNAME"], "password": os.environ["ADMIN_PASSWORD"]},
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-    )
-    assert response.status_code == 200, f"Auth failed: {response.text}"
-    return response.json()["access_token"]
+@pytest.fixture()
+def auth_token():
+    """Create a fresh JWT token for the deterministic super_admin test account."""
+    _ensure_test_admin()
+    from backend.auth import create_access_token as _cat
+    return _cat(subject=os.environ["ADMIN_USERNAME"], role="super_admin")
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def auth_headers(auth_token):
     return {"Authorization": f"Bearer {auth_token}"}
 
@@ -132,32 +157,41 @@ def session_factory():
 
 # ── RBAC test users ────────────────────────────────────────────────────────
 
-@pytest.fixture(scope="session")
-def editor_headers(client, auth_headers):
-    """Create an editor user and return its auth headers (session-scoped).
-    Token is generated directly (bypasses rate-limited /auth/token endpoint)."""
+def _ensure_role_user(username: str, role: str) -> None:
+    with TestingSessionLocal() as db:
+        user = db.query(models.User).filter(models.User.username == username).first()
+        if user is None:
+            db.add(models.User(
+                username=username,
+                password_hash=_hash_pw(f"{role}1234"),
+                role=role,
+                is_active=True,
+                failed_attempts=0,
+                locked_until=None,
+            ))
+        else:
+            user.password_hash = _hash_pw(f"{role}1234")
+            user.role = role
+            user.is_active = True
+            user.failed_attempts = 0
+            user.locked_until = None
+        db.commit()
+
+
+@pytest.fixture()
+def editor_headers():
+    """Create an editor user and return fresh auth headers."""
     from backend.auth import create_access_token as _cat
-    resp = client.post(
-        "/users",
-        json={"username": "test_editor", "password": "editor1234", "role": "editor"},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 201, f"Editor creation failed: {resp.text}"
+    _ensure_role_user("test_editor", "editor")
     token = _cat(subject="test_editor", role="editor")
     return {"Authorization": f"Bearer {token}"}
 
 
-@pytest.fixture(scope="session")
-def viewer_headers(client, auth_headers):
-    """Create a viewer user and return its auth headers (session-scoped).
-    Token is generated directly (bypasses rate-limited /auth/token endpoint)."""
+@pytest.fixture()
+def viewer_headers():
+    """Create a viewer user and return fresh auth headers."""
     from backend.auth import create_access_token as _cat
-    resp = client.post(
-        "/users",
-        json={"username": "test_viewer", "password": "viewer1234", "role": "viewer"},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 201, f"Viewer creation failed: {resp.text}"
+    _ensure_role_user("test_viewer", "viewer")
     token = _cat(subject="test_viewer", role="viewer")
     return {"Authorization": f"Bearer {token}"}
 
@@ -208,6 +242,24 @@ def _reset_test_state(db):
         db.execute(text(f"DELETE FROM {table}"))
     db.execute(text("UPDATE users SET org_id = NULL"))
     db.commit()
+
+
+@pytest.fixture(autouse=True)
+def isolate_test_state():
+    """Isolate endpoint tests that do not explicitly request db_session."""
+    pre = TestingSessionLocal()
+    try:
+        _reset_test_state(pre)
+    finally:
+        pre.close()
+
+    yield
+
+    post = TestingSessionLocal()
+    try:
+        _reset_test_state(post)
+    finally:
+        post.close()
 
 
 @pytest.fixture()

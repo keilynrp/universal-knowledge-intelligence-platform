@@ -210,15 +210,22 @@ def test_workspace_reset_preview_requires_admin(client, viewer_headers):
     assert response.status_code == 403
 
 
-def test_workspace_reset_clears_only_active_org_scope(client, db_session):
-    admin_headers, admin, primary_org, secondary_org = _admin_headers(db_session)
-    _seed_workspace_data(db_session, admin, primary_org, secondary_org)
+def test_workspace_reset_clears_only_active_org_scope(client, session_factory):
+    seed_db = session_factory()
+    try:
+        admin_headers, admin, primary_org, secondary_org = _admin_headers(seed_db)
+        _seed_workspace_data(seed_db, admin, primary_org, secondary_org)
+        primary_org_id = primary_org.id
+        primary_org_name = primary_org.name
+        secondary_org_id = secondary_org.id
+    finally:
+        seed_db.close()
 
     preview = client.get("/admin/workspace-reset/preview", headers=admin_headers)
     assert preview.status_code == 200
     preview_data = preview.json()
     assert preview_data["scope_type"] == "organization"
-    assert preview_data["scope_label"] == primary_org.name
+    assert preview_data["scope_label"] == primary_org_name
     assert preview_data["counts"]["entities"] == 1
     assert preview_data["counts"]["authority_records"] == 1
 
@@ -240,48 +247,52 @@ def test_workspace_reset_clears_only_active_org_scope(client, db_session):
     assert payload["deleted"]["authority_records"] == 1
     assert payload["reset_counters"]["scheduled_imports"] == 1
 
-    assert db_session.query(models.RawEntity).filter(models.RawEntity.org_id == primary_org.id).count() == 0
-    assert db_session.query(models.RawEntity).filter(models.RawEntity.org_id == secondary_org.id).count() == 1
-    assert db_session.query(models.AuthorityRecord).filter(models.AuthorityRecord.org_id == primary_org.id).count() == 0
-    assert db_session.query(models.AuthorityRecord).filter(models.AuthorityRecord.org_id == secondary_org.id).count() == 1
-    assert db_session.query(models.Annotation).count() == 1
-    remaining_entity_audits = (
-        db_session.query(models.AuditLog)
-        .filter(models.AuditLog.entity_type == "entity")
-        .all()
-    )
-    assert len(remaining_entity_audits) == 1
-    surviving_secondary = db_session.query(models.RawEntity).filter(models.RawEntity.org_id == secondary_org.id).one()
-    assert remaining_entity_audits[0].entity_id == surviving_secondary.id
-    assert db_session.query(models.StoreSyncMapping).count() == 1
-    assert db_session.query(models.WorkflowRun).filter(models.WorkflowRun.org_id == primary_org.id).count() == 0
-    assert db_session.query(models.WorkflowRun).filter(models.WorkflowRun.org_id == secondary_org.id).count() == 1
+    verify_db = session_factory()
+    try:
+        assert verify_db.query(models.RawEntity).filter(models.RawEntity.org_id == primary_org_id).count() == 0
+        assert verify_db.query(models.RawEntity).filter(models.RawEntity.org_id == secondary_org_id).count() == 1
+        assert verify_db.query(models.AuthorityRecord).filter(models.AuthorityRecord.org_id == primary_org_id).count() == 0
+        assert verify_db.query(models.AuthorityRecord).filter(models.AuthorityRecord.org_id == secondary_org_id).count() == 1
+        assert verify_db.query(models.Annotation).count() == 1
+        remaining_entity_audits = (
+            verify_db.query(models.AuditLog)
+            .filter(models.AuditLog.entity_type == "entity")
+            .all()
+        )
+        assert len(remaining_entity_audits) == 1
+        surviving_secondary = verify_db.query(models.RawEntity).filter(models.RawEntity.org_id == secondary_org_id).one()
+        assert remaining_entity_audits[0].entity_id == surviving_secondary.id
+        assert verify_db.query(models.StoreSyncMapping).count() == 1
+        assert verify_db.query(models.WorkflowRun).filter(models.WorkflowRun.org_id == primary_org_id).count() == 0
+        assert verify_db.query(models.WorkflowRun).filter(models.WorkflowRun.org_id == secondary_org_id).count() == 1
 
-    primary_store = db_session.query(models.StoreConnection).filter(models.StoreConnection.org_id == primary_org.id).one()
-    secondary_store = db_session.query(models.StoreConnection).filter(models.StoreConnection.org_id == secondary_org.id).one()
-    assert primary_store.entity_count == 0
-    assert secondary_store.entity_count == 7
+        primary_store = verify_db.query(models.StoreConnection).filter(models.StoreConnection.org_id == primary_org_id).one()
+        secondary_store = verify_db.query(models.StoreConnection).filter(models.StoreConnection.org_id == secondary_org_id).one()
+        assert primary_store.entity_count == 0
+        assert secondary_store.entity_count == 7
 
-    primary_import = db_session.query(models.ScheduledImport).filter(models.ScheduledImport.org_id == primary_org.id).one()
-    secondary_import = db_session.query(models.ScheduledImport).filter(models.ScheduledImport.org_id == secondary_org.id).one()
-    assert primary_import.total_runs == 0
-    assert primary_import.total_entities_imported == 0
-    assert secondary_import.total_runs == 2
+        primary_import = verify_db.query(models.ScheduledImport).filter(models.ScheduledImport.org_id == primary_org_id).one()
+        secondary_import = verify_db.query(models.ScheduledImport).filter(models.ScheduledImport.org_id == secondary_org_id).one()
+        assert primary_import.total_runs == 0
+        assert primary_import.total_entities_imported == 0
+        assert secondary_import.total_runs == 2
 
-    primary_report = db_session.query(models.ScheduledReport).filter(models.ScheduledReport.org_id == primary_org.id).one()
-    secondary_report = db_session.query(models.ScheduledReport).filter(models.ScheduledReport.org_id == secondary_org.id).one()
-    assert primary_report.total_sent == 0
-    assert primary_report.last_status == "pending"
-    assert secondary_report.total_sent == 4
+        primary_report = verify_db.query(models.ScheduledReport).filter(models.ScheduledReport.org_id == primary_org_id).one()
+        secondary_report = verify_db.query(models.ScheduledReport).filter(models.ScheduledReport.org_id == secondary_org_id).one()
+        assert primary_report.total_sent == 0
+        assert primary_report.last_status == "pending"
+        assert secondary_report.total_sent == 4
 
-    primary_workflow = db_session.query(models.Workflow).filter(models.Workflow.org_id == primary_org.id).one()
-    secondary_workflow = db_session.query(models.Workflow).filter(models.Workflow.org_id == secondary_org.id).one()
-    assert primary_workflow.run_count == 0
-    assert primary_workflow.last_run_status is None
-    assert secondary_workflow.run_count == 4
+        primary_workflow = verify_db.query(models.Workflow).filter(models.Workflow.org_id == primary_org_id).one()
+        secondary_workflow = verify_db.query(models.Workflow).filter(models.Workflow.org_id == secondary_org_id).one()
+        assert primary_workflow.run_count == 0
+        assert primary_workflow.last_run_status is None
+        assert secondary_workflow.run_count == 4
 
-    primary_scraper = db_session.query(models.WebScraperConfig).filter(models.WebScraperConfig.org_id == primary_org.id).one()
-    secondary_scraper = db_session.query(models.WebScraperConfig).filter(models.WebScraperConfig.org_id == secondary_org.id).one()
-    assert primary_scraper.total_runs == 0
-    assert primary_scraper.total_enriched == 0
-    assert secondary_scraper.total_runs == 3
+        primary_scraper = verify_db.query(models.WebScraperConfig).filter(models.WebScraperConfig.org_id == primary_org_id).one()
+        secondary_scraper = verify_db.query(models.WebScraperConfig).filter(models.WebScraperConfig.org_id == secondary_org_id).one()
+        assert primary_scraper.total_runs == 0
+        assert primary_scraper.total_enriched == 0
+        assert secondary_scraper.total_runs == 3
+    finally:
+        verify_db.close()

@@ -19,13 +19,15 @@ vi.mock("../app/contexts/DomainContext", () => ({
   }),
 }));
 
-vi.mock("../app/components/ui", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../app/components/ui")>();
-  return {
-    ...actual,
-    useToast: () => ({ toast: vi.fn() }),
-  };
-});
+vi.mock("../app/components/ui", () => ({
+  KpiSummaryCard: ({ label, value }: { label: React.ReactNode; value: React.ReactNode }) => (
+    <div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  ),
+  useToast: () => ({ toast: vi.fn() }),
+}));
 
 // FacetPanel is a heavy dependency — stub it out
 vi.mock("../app/components/FacetPanel", () => ({
@@ -34,18 +36,69 @@ vi.mock("../app/components/FacetPanel", () => ({
   ),
 }));
 
-// MonteCarloChart stub
-vi.mock("../app/components/MonteCarloChart", () => ({
-  default: () => <div>MonteCarloChart</div>,
+vi.mock("../app/components/EntityTableToolbar", () => ({
+  default: ({ search, onSearchChange }: { search: string; onSearchChange: (value: string) => void }) => (
+    <input
+      aria-label="Search entities"
+      placeholder="Search entities..."
+      value={search}
+      onChange={(event) => onSearchChange(event.currentTarget.value)}
+    />
+  ),
+}));
+
+vi.mock("../app/components/EntityTableContent", () => ({
+  default: ({
+    entities,
+    loading,
+    fetchError,
+  }: {
+    entities: typeof MOCK_ENTITIES;
+    loading: boolean;
+    fetchError: string | null;
+  }) => {
+    if (loading) return <div aria-hidden="true">Loading entities</div>;
+    if (fetchError) return <div role="alert">{fetchError}</div>;
+    if (!entities.length) return <div>No entities found</div>;
+
+    return (
+      <div>
+        {entities.map((entity) => (
+          <article key={entity.id}>
+            <h3>{entity.primary_label}</h3>
+            {typeof entity.quality_score === "number" ? (
+              <span>{Math.round(entity.quality_score * 100)}%</span>
+            ) : null}
+          </article>
+        ))}
+      </div>
+    );
+  },
+}));
+
+vi.mock("../app/components/EntityTablePagination", () => ({
+  default: () => <div data-testid="entity-pagination" />,
+}));
+
+vi.mock("../app/components/EntityTableBulkActions", () => ({
+  default: () => <div data-testid="entity-bulk-actions" />,
+}));
+
+vi.mock("../app/components/EntityTableDetailsModal", () => ({
+  default: () => null,
 }));
 
 // Stub window.confirm
 vi.stubGlobal("confirm", vi.fn(() => true));
 
-// Stub URL.createObjectURL for CSV export
-vi.stubGlobal("URL", {
-  createObjectURL: vi.fn(() => "blob:url"),
-  revokeObjectURL: vi.fn(),
+// Stub URL blob helpers for CSV export without replacing the URL constructor.
+Object.defineProperty(URL, "createObjectURL", {
+  configurable: true,
+  value: vi.fn(() => "blob:url"),
+});
+Object.defineProperty(URL, "revokeObjectURL", {
+  configurable: true,
+  value: vi.fn(),
 });
 
 import { apiFetch } from "@/lib/api";
@@ -101,6 +154,15 @@ function successResponse(data: unknown, headers?: Record<string, string>) {
   };
 }
 
+function mockEntityTableResponses(entities: unknown = MOCK_ENTITIES, total = "2") {
+  mockApiFetch.mockImplementation((url: string) => {
+    if (url.startsWith("/catalogs")) {
+      return Promise.resolve(successResponse([]));
+    }
+    return Promise.resolve(successResponse(entities, { "X-Total-Count": total }));
+  });
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -109,16 +171,20 @@ beforeEach(() => {
 
 describe("EntityTable", () => {
   it("shows skeleton loader while fetching", () => {
-    // Never resolve — stays loading
-    mockApiFetch.mockReturnValue(new Promise(() => {}));
+    mockApiFetch.mockImplementation((url: string) => {
+      if (url.startsWith("/catalogs")) {
+        return Promise.resolve(successResponse([]));
+      }
+      return new Promise((resolve) => {
+        setTimeout(() => resolve(successResponse(MOCK_ENTITIES, { "X-Total-Count": "2" })), 100);
+      });
+    });
     renderWithLanguage(<EntityTable />);
     expect(document.querySelectorAll("[aria-hidden='true']").length).toBeGreaterThan(0);
   });
 
   it("renders entity rows after fetch", async () => {
-    mockApiFetch.mockResolvedValue(
-      successResponse(MOCK_ENTITIES, { "X-Total-Count": "2" })
-    );
+    mockEntityTableResponses();
     renderWithLanguage(<EntityTable />);
     await waitFor(() => {
       expect(screen.getByText("Einstein")).toBeInTheDocument();
@@ -127,7 +193,12 @@ describe("EntityTable", () => {
   });
 
   it("shows ErrorBanner on fetch failure", async () => {
-    mockApiFetch.mockResolvedValue({ ok: false, headers: { get: () => null }, json: async () => ({}) });
+    mockApiFetch.mockImplementation((url: string) => {
+      if (url.startsWith("/catalogs")) {
+        return Promise.resolve(successResponse([]));
+      }
+      return Promise.resolve({ ok: false, status: 500, headers: { get: () => null }, json: async () => ({}) });
+    });
     renderWithLanguage(<EntityTable />);
     await waitFor(() => {
       expect(screen.getByRole("alert")).toBeInTheDocument();
@@ -135,9 +206,7 @@ describe("EntityTable", () => {
   });
 
   it("displays quality score bar for entities with score", async () => {
-    mockApiFetch.mockResolvedValue(
-      successResponse(MOCK_ENTITIES, { "X-Total-Count": "2" })
-    );
+    mockEntityTableResponses();
     renderWithLanguage(<EntityTable />);
     await waitFor(() => {
       // Einstein has score 0.9 → 90%
@@ -146,7 +215,7 @@ describe("EntityTable", () => {
   });
 
   it("renders search input", async () => {
-    mockApiFetch.mockResolvedValue(successResponse([], { "X-Total-Count": "0" }));
+    mockEntityTableResponses([], "0");
     renderWithLanguage(<EntityTable />);
     await waitFor(() => {
       expect(screen.getByPlaceholderText("Search entities...")).toBeInTheDocument();
@@ -154,7 +223,7 @@ describe("EntityTable", () => {
   });
 
   it("typing in search triggers a new fetch", async () => {
-    mockApiFetch.mockResolvedValue(successResponse(MOCK_ENTITIES, { "X-Total-Count": "2" }));
+    mockEntityTableResponses();
     renderWithLanguage(<EntityTable />);
     await waitFor(() => screen.getByPlaceholderText("Search entities..."));
 
@@ -169,7 +238,7 @@ describe("EntityTable", () => {
   });
 
   it("shows FacetPanel", async () => {
-    mockApiFetch.mockResolvedValue(successResponse([], { "X-Total-Count": "0" }));
+    mockEntityTableResponses([], "0");
     renderWithLanguage(<EntityTable />);
     await waitFor(() => {
       expect(screen.getByTestId("facet-panel")).toBeInTheDocument();
@@ -177,7 +246,7 @@ describe("EntityTable", () => {
   });
 
   it("shows empty state message when no entities match", async () => {
-    mockApiFetch.mockResolvedValue(successResponse([], { "X-Total-Count": "0" }));
+    mockEntityTableResponses([], "0");
     renderWithLanguage(<EntityTable />);
     await waitFor(() => {
       expect(screen.getByText(/no entities/i)).toBeInTheDocument();

@@ -18,6 +18,7 @@ import pandas as pd
 from sqlalchemy import text
 
 from backend.database import engine
+from backend.schema_registry import registry
 from backend.tenant_access import add_org_sql_filter
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,24 @@ logger = logging.getLogger(__name__)
 # Concepts stored as "A, B, C" — split on ", " then strip each
 _SEPARATORS_RE = re.compile(r"[;,|]")
 _YEAR_RE = re.compile(r"\b(19\d{2}|20\d{2})\b")
+
+
+def _validate_domain(domain_id: str, org_id: int | None = None) -> None:
+    if domain_id in {"all", "default"}:
+        return
+    if registry.get_domain(domain_id) is not None:
+        return
+
+    where_clauses = ["domain = :domain_id"]
+    params: dict[str, object] = {"domain_id": domain_id}
+    add_org_sql_filter(where_clauses, params, org_id)
+    with engine.connect() as conn:
+        exists = conn.execute(
+            text(f"SELECT 1 FROM raw_entities WHERE {' AND '.join(where_clauses)} LIMIT 1"),
+            params,
+        ).first()
+    if exists is None:
+        raise ValueError(f"Domain '{domain_id}' not found")
 
 
 def _parse_concepts(raw: str | None) -> list[str]:
@@ -223,6 +242,7 @@ class TopicAnalyzer:
               "topics": [{"concept": str, "count": int, "pct": float}, ...]
             }
         """
+        _validate_domain(domain_id, org_id=org_id)
         df = _load_concepts_df(domain_id, org_id=org_id)
         total_enriched = len(df)
 
@@ -264,6 +284,7 @@ class TopicAnalyzer:
               "pairs": [{"concept_a": str, "concept_b": str, "count": int, "pmi": float}, ...]
             }
         """
+        _validate_domain(domain_id, org_id=org_id)
         df = _load_concepts_df(domain_id, org_id=org_id)
         total_enriched = len(df)
 
@@ -338,6 +359,7 @@ class TopicAnalyzer:
               ]
             }
         """
+        _validate_domain(domain_id, org_id=org_id)
         df = _load_concepts_df(domain_id, org_id=org_id)
 
         pair_counter: Counter = Counter()

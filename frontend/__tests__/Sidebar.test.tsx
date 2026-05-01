@@ -24,6 +24,14 @@ vi.mock("../app/components/SidebarProvider", () => ({
   }),
 }));
 
+vi.mock("../app/contexts/PilotModeContext", () => ({
+  usePilotMode: () => ({
+    pilotMode: false,
+    setPilotMode: vi.fn(),
+    togglePilotMode: vi.fn(),
+  }),
+}));
+
 function renderSidebar() {
   return render(
     <LanguageProvider>

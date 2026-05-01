@@ -1,5 +1,7 @@
 import "@testing-library/jest-dom";
 
+const stableSearchParams = new URLSearchParams();
+
 // Mock next/link — render a plain <a> in tests
 vi.mock("next/link", () => ({
   default: ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
@@ -13,7 +15,7 @@ vi.mock("next/link", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
   usePathname: () => "/",
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => stableSearchParams,
 }));
 
 // Suppress noisy console.error from React in tests
