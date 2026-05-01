@@ -78,6 +78,7 @@ import backend.audit as _audit_module  # noqa: E402
 import backend.analyzers.correlation as _correlation_module  # noqa: E402
 import backend.analyzers.topic_modeling as _topic_modeling_module  # noqa: E402
 import backend.olap as _olap_module  # noqa: E402
+import backend.routers.analytics as _analytics_router  # noqa: E402
 _audit_module.SessionLocal = TestingSessionLocal
 _correlation_module.engine = test_engine
 _topic_modeling_module.engine = test_engine
@@ -247,6 +248,8 @@ def _reset_test_state(db):
 @pytest.fixture(autouse=True)
 def isolate_test_state():
     """Isolate endpoint tests that do not explicitly request db_session."""
+    _analytics_router._analytics_cache.invalidate()
+    _analytics_router._dashboard_cache.invalidate()
     pre = TestingSessionLocal()
     try:
         _reset_test_state(pre)
@@ -255,6 +258,8 @@ def isolate_test_state():
 
     yield
 
+    _analytics_router._analytics_cache.invalidate()
+    _analytics_router._dashboard_cache.invalidate()
     post = TestingSessionLocal()
     try:
         _reset_test_state(post)
