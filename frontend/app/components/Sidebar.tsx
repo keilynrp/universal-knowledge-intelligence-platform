@@ -42,7 +42,7 @@ function LogoIcon({ branding, size = 8 }: { branding: BrandingSettings; size?: n
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { collapsed, toggle, mobileOpen, closeMobile } = useSidebar();
+  const { collapsed, mobileOpen, closeMobile } = useSidebar();
   const { t } = useLanguage();
   const { branding } = useBranding();
   const { pilotMode, togglePilotMode } = usePilotMode();
