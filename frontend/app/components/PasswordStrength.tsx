@@ -10,8 +10,8 @@ interface Criteria {
 }
 
 interface StrengthResult {
-  score: number;       // 0–4
-  level: "weak" | "fair" | "good" | "strong";
+  score: number;       // 0–3
+  level: "weak" | "medium" | "strong";
   label: string;
   criteria: Criteria[];
 }
@@ -28,24 +28,20 @@ export function getPasswordStrength(password: string): StrengthResult {
     { label: "Special character (!@#$…)",      met: /[^A-Za-z0-9]/.test(password) },
   ];
 
-  // Score: each criterion above the first (length ≥ 8) adds a point.
-  // The first is a hard floor — if not met, score is 0 regardless.
   const passesMinimum = criteria[0].met;
   const bonus = criteria.slice(1).filter(c => c.met).length; // 0–5
 
-  let score: 0 | 1 | 2 | 3 | 4;
-  if (!passesMinimum)  score = 0;
-  else if (bonus <= 1) score = 1;
-  else if (bonus === 2) score = 2;
-  else if (bonus === 3) score = 3;
-  else                  score = 4;
+  let score: 0 | 1 | 2 | 3;
+  if (!passesMinimum)   score = 0;
+  else if (bonus <= 1)  score = 1;
+  else if (bonus <= 3)  score = 2;
+  else                  score = 3;
 
   const meta: Record<number, { level: StrengthResult["level"]; label: string }> = {
     0: { level: "weak",   label: "Too short" },
     1: { level: "weak",   label: "Weak" },
-    2: { level: "fair",   label: "Fair" },
-    3: { level: "good",   label: "Good" },
-    4: { level: "strong", label: "Strong" },
+    2: { level: "medium", label: "Medium" },
+    3: { level: "strong", label: "Strong" },
   };
 
   return { score, ...meta[score], criteria };
@@ -55,8 +51,7 @@ export function getPasswordStrength(password: string): StrengthResult {
 
 const LEVEL_COLOR = {
   weak:   { bar: "bg-red-500",    text: "text-red-600 dark:text-red-400" },
-  fair:   { bar: "bg-orange-400", text: "text-orange-600 dark:text-orange-400" },
-  good:   { bar: "bg-yellow-400", text: "text-yellow-600 dark:text-yellow-400" },
+  medium: { bar: "bg-yellow-400", text: "text-yellow-600 dark:text-yellow-400" },
   strong: { bar: "bg-green-500",  text: "text-green-600 dark:text-green-400" },
 };
 
@@ -88,16 +83,15 @@ export default function PasswordStrength({ password, showCriteria = true }: Prop
   const localizedLabel =
     label === "Too short" ? t("settings.account.password_label_short")
       : label === "Weak" ? t("settings.account.password_label_weak")
-        : label === "Fair" ? t("settings.account.password_label_fair")
-          : label === "Good" ? t("settings.account.password_label_good")
-            : t("settings.account.password_label_strong");
+        : label === "Medium" ? t("settings.account.password_label_medium")
+          : t("settings.account.password_label_strong");
 
   return (
     <div className="mt-2 space-y-2">
       {/* Bar + label */}
       <div className="flex items-center gap-3">
         <div className="flex flex-1 gap-1">
-          {[1, 2, 3, 4].map(seg => (
+          {[1, 2, 3].map(seg => (
             <div
               key={seg}
               className={`h-1.5 flex-1 rounded-full transition-colors duration-300 ${
