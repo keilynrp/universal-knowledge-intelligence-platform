@@ -164,13 +164,13 @@ export default function Sidebar() {
                           compactDesktop ? "justify-center px-1.5" : "gap-3 px-3"
                         } ${
                           isActive
-                            ? "bg-violet-500/15 text-violet-200 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.26)]"
+                            ? "bg-[var(--ukip-primary-soft)] text-[var(--ukip-primary-strong)] shadow-[inset_0_0_0_1px_rgba(124,58,237,0.2)]"
                             : "text-[var(--ukip-muted)] hover:bg-[var(--ukip-panel-strong)] hover:text-[var(--ukip-text-strong)]"
                         }`}
                         title={collapsed && !mobileOpen ? t(item.translationKey) : undefined}
                       >
                         <span
-                          className={`shrink-0 ${isActive ? "text-violet-300" : "text-[var(--ukip-muted-soft)]"}`}
+                          className={`shrink-0 ${isActive ? "text-[var(--ukip-primary)]" : "text-[var(--ukip-muted-soft)]"}`}
                         >
                           {item.icon}
                         </span>

@@ -39,7 +39,7 @@ export default function KpiSummaryCard({
         </span>
       </div>
 
-      <p className="mt-4 font-mono text-4xl font-black tracking-[-0.07em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
+      <p className="mt-4 font-mono text-4xl font-bold tracking-[-0.07em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
         {value}
       </p>
 

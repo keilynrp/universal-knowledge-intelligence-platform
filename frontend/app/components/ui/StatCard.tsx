@@ -39,7 +39,7 @@ export default function StatCard({ icon, iconColor = "blue", label, value, trend
         )}
       </div>
       <div className="mt-4">
-        <p className="text-2xl font-bold text-[var(--ukip-text-strong)]">{value}</p>
+        <p className="text-2xl font-semibold text-[var(--ukip-text-strong)]">{value}</p>
         <p className="mt-1 text-sm font-medium text-[var(--ukip-muted)]">{label}</p>
         {subtitle && (
           <p className="mt-0.5 text-xs text-[var(--ukip-muted-soft)]">{subtitle}</p>

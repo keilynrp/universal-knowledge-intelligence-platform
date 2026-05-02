@@ -22,7 +22,7 @@ export default function Metric({ label, value, description, icon, tone = "violet
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ukip-muted)]">{label}</p>
-          <p className="mt-2 text-2xl font-bold text-[var(--ukip-text-strong)]">{value}</p>
+          <p className="mt-2 text-2xl font-semibold text-[var(--ukip-text-strong)]">{value}</p>
         </div>
         {icon ? <div className="rounded-xl bg-white/10 p-2">{icon}</div> : null}
       </div>
