@@ -12,6 +12,8 @@ services:
     image: ${UKIP_BACKEND_IMAGE:?Set UKIP_BACKEND_IMAGE}
     pull_policy: always
     restart: unless-stopped
+    networks:
+      - dokploy-network
     environment:
       PORT: 8000
       RUN_DB_MIGRATIONS_ON_START: ${RUN_DB_MIGRATIONS_ON_START:-0}
@@ -55,6 +57,8 @@ services:
     image: ${UKIP_FRONTEND_IMAGE:?Set UKIP_FRONTEND_IMAGE}
     pull_policy: always
     restart: unless-stopped
+    networks:
+      - dokploy-network
     depends_on:
       ukip-backend:
         condition: service_healthy
@@ -83,3 +87,7 @@ services:
 
 volumes:
   ukip_static_data:
+
+networks:
+  dokploy-network:
+    external: true
