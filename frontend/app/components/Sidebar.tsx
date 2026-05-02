@@ -108,22 +108,6 @@ export default function Sidebar() {
               </span>
             )}
           </Link>
-          {/* Desktop collapse toggle — hidden on mobile */}
-          <button
-            onClick={toggle}
-            aria-label={collapsed ? tr("sidebar.expand", "Expand sidebar") : tr("sidebar.collapse", "Collapse sidebar")}
-            className={`hidden rounded-lg p-1.5 text-[var(--ukip-muted)] transition-colors hover:bg-[var(--ukip-panel-strong)] hover:text-[var(--ukip-text-strong)] lg:block ${
-              compactDesktop ? "absolute right-1 top-1/2 -translate-y-1/2" : ""
-            }`}
-          >
-            <svg className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              {collapsed ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-              )}
-            </svg>
-          </button>
           {/* Mobile close button */}
           <button
             onClick={closeMobile}
