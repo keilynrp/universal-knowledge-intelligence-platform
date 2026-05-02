@@ -1,578 +1,438 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
 import { useLanguage } from "../../contexts/LanguageContext";
-import { PageHeader, StatCard } from "../../components/ui";
 
-// ── Export helpers ────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-type ExportFormat = "graphml" | "cytoscape" | "jsonld";
-
-const EXPORT_FORMATS: { value: ExportFormat; label: string; ext: string; desc: string; color: string }[] = [
-  {
-    value: "graphml",
-    label: "GraphML",
-    ext: "graphml",
-    desc: "Gephi · yEd · igraph",
-    color: "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:border-emerald-500/30 dark:text-emerald-400",
-  },
-  {
-    value: "cytoscape",
-    label: "Cytoscape JSON",
-    ext: "json",
-    desc: "Cytoscape.js · Cytoscape Desktop",
-    color: "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:border-indigo-500/30 dark:text-indigo-400",
-  },
-  {
-    value: "jsonld",
-    label: "JSON-LD",
-    ext: "jsonld",
-    desc: "Semantic web · Linked Data",
-    color: "bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100 dark:bg-violet-500/10 dark:border-violet-500/30 dark:text-violet-400",
-  },
-];
-
-async function downloadGraph(format: ExportFormat, domain: string) {
-  const params = new URLSearchParams({ format });
-  if (domain.trim()) params.set("domain", domain.trim());
-  const res = await apiFetch(`/export/graph?${params.toString()}`);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Export failed" }));
-    throw new Error(err.detail ?? `HTTP ${res.status}`);
-  }
-  const blob = await res.blob();
-  const fmt = EXPORT_FORMATS.find((f) => f.value === format)!;
-  const domainSlug = domain.trim() ? `_${domain.trim()}` : "";
-  const filename = `ukip_graph${domainSlug}.${fmt.ext}`;
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-interface GraphStats {
-  total_nodes: number;
-  total_edges: number;
-  total_components: number;
-  largest_component_size: number;
-  top_pagerank: Array<{ entity_id: number; primary_label: string | null; score: number }>;
-  top_degree:   Array<{ entity_id: number; primary_label: string | null; total_degree: number }>;
-}
-
-interface PathResult {
-  found: boolean;
-  length?: number;
-  relations?: string[];
-  steps?: Array<{ entity_id: number; primary_label: string | null }>;
-}
-
-interface CommunitySummary {
-  community_id: number;
-  size: number;
-  internal_edges: number;
-  density: number;
-  entity_ids: number[];
-  top_relations: Array<{ relation_type: string; count: number }>;
-  leader: {
-    entity_id: number;
-    primary_label: string | null;
-    total_degree: number;
-  };
-}
-
-interface CommunityResponse {
+interface GNode { id: number; label: string; community: number; pagerank: number; degree: number; }
+interface GLink { source: number; target: number; type: string; }
+interface GraphData {
+  nodes: GNode[];
+  links: GLink[];
+  edge_types: string[];
   total_communities: number;
-  communities: CommunitySummary[];
+  stats: { visible_nodes: number; visible_edges: number; top_pagerank_leader: string | null; top_pagerank_score: number; };
+}
+interface PathResult { found: boolean; length?: number; relations?: string[]; steps?: Array<{ entity_id: number; primary_label: string | null }>; }
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const COMMUNITY_COLORS = ["#8b5cf6","#06b6d4","#10b981","#f59e0b","#f43f5e","#3b82f6","#84cc16","#ec4899","#a78bfa","#22d3ee"];
+const EDGE_TYPE_COLORS: Record<string, string> = { cites: "#8b5cf6", "authored-by": "#06b6d4", "belongs-to": "#10b981", "related-to": "#f59e0b" };
+
+function edgeColor(type: string) {
+  return EDGE_TYPE_COLORS[type] ?? "#94a3b8";
 }
 
-export default function GraphAnalyticsPage() {
-  const { t } = useLanguage();
-  const [stats, setStats] = useState<GraphStats | null>(null);
-  const [loadingStats, setLoadingStats] = useState(true);
-  const [errorStats, setErrorStats] = useState<string | null>(null);
+// ── Force Graph Canvas ────────────────────────────────────────────────────────
 
-  // Path finder state
+interface ForceGraphProps { nodes: GNode[]; links: GLink[]; highlightIds?: Set<number>; }
+
+function ForceGraph({ nodes, links, highlightIds }: ForceGraphProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const stateRef = useRef<{ running: boolean; nodes: (GNode & { x: number; y: number; vx: number; vy: number })[]; links: { s: number; t: number; type: string }[]; transform: { x: number; y: number; k: number }; drag: { active: boolean; lastX: number; lastY: number } }>({ running: false, nodes: [], links: [], transform: { x: 0, y: 0, k: 1 }, drag: { active: false, lastX: 0, lastY: 0 } });
+  const [hovered, setHovered] = useState<GNode | null>(null);
+  const hoverPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container || nodes.length === 0) return;
+
+    const w = container.clientWidth || 600;
+    const h = container.clientHeight || 500;
+    canvas.width = w;
+    canvas.height = h;
+
+    const state = stateRef.current;
+    state.running = true;
+    state.transform = { x: 0, y: 0, k: 1 };
+
+    const nodeMap = new Map<number, typeof state.nodes[0]>();
+    state.nodes = nodes.map(n => {
+      const sn = { ...n, x: w / 2 + (Math.random() - 0.5) * 200, y: h / 2 + (Math.random() - 0.5) * 200, vx: 0, vy: 0 };
+      nodeMap.set(n.id, sn);
+      return sn;
+    });
+    state.links = links.filter(l => nodeMap.has(l.source) && nodeMap.has(l.target))
+      .map(l => ({ s: l.source, t: l.target, type: l.type }));
+
+    let iter = 0;
+
+    function tick() {
+      if (!state.running) return;
+      const ns = state.nodes;
+      const alpha = iter < 150 ? 1 - iter / 200 : 0.02;
+      iter++;
+
+      // Center gravity
+      for (const n of ns) {
+        n.vx += (w / 2 - n.x) * 0.002 * alpha;
+        n.vy += (h / 2 - n.y) * 0.002 * alpha;
+      }
+
+      // Repulsion
+      for (let i = 0; i < ns.length; i++) {
+        for (let j = i + 1; j < ns.length; j++) {
+          const dx = ns[j].x - ns[i].x;
+          const dy = ns[j].y - ns[i].y;
+          const d2 = dx * dx + dy * dy + 1;
+          const f = (-400 / d2) * alpha;
+          ns[i].vx += f * dx; ns[i].vy += f * dy;
+          ns[j].vx -= f * dx; ns[j].vy -= f * dy;
+        }
+      }
+
+      // Spring forces
+      for (const lk of state.links) {
+        const a = nodeMap.get(lk.s)!;
+        const b = nodeMap.get(lk.t)!;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) + 0.01;
+        const f = (dist - 90) * 0.04 * alpha;
+        a.vx += f * dx / dist; a.vy += f * dy / dist;
+        b.vx -= f * dx / dist; b.vy -= f * dy / dist;
+      }
+
+      for (const n of ns) {
+        n.vx *= 0.75; n.vy *= 0.75;
+        n.x += n.vx; n.y += n.vy;
+      }
+
+      render();
+      requestAnimationFrame(tick);
+    }
+
+    function render() {
+      const ctx = canvas!.getContext("2d");
+      if (!ctx) return;
+      ctx.clearRect(0, 0, w, h);
+
+      // Grid background
+      ctx.save();
+      ctx.strokeStyle = "rgba(148,163,184,0.08)";
+      ctx.lineWidth = 1;
+      const step = 40;
+      for (let x = 0; x < w; x += step) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+      for (let y = 0; y < h; y += step) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(state.transform.x, state.transform.y);
+      ctx.scale(state.transform.k, state.transform.k);
+
+      // Edges
+      for (const lk of state.links) {
+        const a = nodeMap.get(lk.s)!;
+        const b = nodeMap.get(lk.t)!;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.strokeStyle = edgeColor(lk.type) + "55";
+        ctx.lineWidth = 1 / state.transform.k;
+        ctx.stroke();
+      }
+
+      // Nodes
+      for (const n of state.nodes) {
+        const color = COMMUNITY_COLORS[n.community % COMMUNITY_COLORS.length];
+        const r = Math.max(4, 4 + Math.log(n.degree + 1) * 1.5);
+        const isHighlighted = highlightIds?.has(n.id);
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, isHighlighted ? r + 3 : r, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.globalAlpha = isHighlighted ? 1 : (highlightIds && highlightIds.size > 0 ? 0.4 : 0.85);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        if (isHighlighted) {
+          ctx.strokeStyle = "#fff";
+          ctx.lineWidth = 2 / state.transform.k;
+          ctx.stroke();
+        }
+      }
+
+      ctx.restore();
+    }
+
+    tick();
+    return () => { state.running = false; };
+  }, [nodes, links, highlightIds]);
+
+  // Zoom
+  const onWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const state = stateRef.current;
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    state.transform.k = Math.min(4, Math.max(0.2, state.transform.k * factor));
+  }, []);
+
+  // Pan
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    stateRef.current.drag = { active: true, lastX: e.clientX, lastY: e.clientY };
+  }, []);
+  const onMouseMove = useCallback((e: React.MouseEvent) => {
+    hoverPos.current = { x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY };
+    const state = stateRef.current;
+    if (state.drag.active) {
+      state.transform.x += e.clientX - state.drag.lastX;
+      state.transform.y += e.clientY - state.drag.lastY;
+      state.drag.lastX = e.clientX;
+      state.drag.lastY = e.clientY;
+    }
+    // Hover detection
+    const mx = (hoverPos.current.x - state.transform.x) / state.transform.k;
+    const my = (hoverPos.current.y - state.transform.y) / state.transform.k;
+    const hit = state.nodes.find(n => {
+      const r = Math.max(4, 4 + Math.log(n.degree + 1) * 1.5) + 4;
+      return (n.x - mx) ** 2 + (n.y - my) ** 2 < r * r;
+    });
+    setHovered(hit ?? null);
+  }, []);
+  const onMouseUp = useCallback(() => { stateRef.current.drag.active = false; }, []);
+
+  return (
+    <div ref={containerRef} className="relative h-full w-full cursor-grab active:cursor-grabbing" onWheel={onWheel} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}>
+      <canvas ref={canvasRef} className="h-full w-full" />
+      {hovered && (
+        <div className="pointer-events-none absolute left-3 top-3 rounded-lg border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-3 py-2 shadow-lg">
+          <p className="text-xs font-semibold text-[var(--ukip-text-strong)]">{hovered.label}</p>
+          <p className="mt-0.5 text-[11px] text-[var(--ukip-muted)]">C{hovered.community + 1} · PageRank {hovered.pagerank.toFixed(3)} · Degree {hovered.degree}</p>
+        </div>
+      )}
+      {/* Zoom controls */}
+      <div className="absolute bottom-3 left-3 flex flex-col gap-1">
+        {[["＋", 1.2], ["－", 0.8]].map(([label, f]) => (
+          <button key={label as string} onClick={() => { stateRef.current.transform.k = Math.min(4, Math.max(0.2, stateRef.current.transform.k * (f as number))); }}
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--ukip-border)] bg-[var(--ukip-panel)] text-sm text-[var(--ukip-muted)] hover:text-[var(--ukip-text-strong)]">
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+
+export default function GraphExplorerPage() {
+  const { t } = useLanguage();
+  const [data, setData] = useState<GraphData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Path finder
+  const [showPath, setShowPath] = useState(false);
   const [fromId, setFromId] = useState("");
   const [toId, setToId] = useState("");
   const [pathResult, setPathResult] = useState<PathResult | null>(null);
   const [loadingPath, setLoadingPath] = useState(false);
   const [pathError, setPathError] = useState<string | null>(null);
-  const [communities, setCommunities] = useState<CommunityResponse | null>(null);
-  const [loadingCommunities, setLoadingCommunities] = useState(true);
-  const [communityError, setCommunityError] = useState<string | null>(null);
+  const [highlightIds, setHighlightIds] = useState<Set<number>>(new Set());
 
-  // Export state
-  const [exportDomain, setExportDomain] = useState("");
-  const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null);
-  const [exportError, setExportError] = useState<string | null>(null);
+  // Export
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    setLoadingStats(true);
-    apiFetch("/graph/stats")
-      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then((data) => setStats(data))
-      .catch((e) => setErrorStats(`${t("page.graph.error_load_stats")} (${e})`))
-      .finally(() => setLoadingStats(false));
-  }, [t]);
-
-  useEffect(() => {
-    setLoadingCommunities(true);
-    apiFetch("/graph/communities?limit=8")
-      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then((data) => setCommunities(data))
-      .catch((e) => setCommunityError(`${t("page.graph.error_load_communities")} (${e})`))
-      .finally(() => setLoadingCommunities(false));
-  }, [t]);
-
-  async function handleExport(format: ExportFormat) {
-    setExportingFormat(format);
-    setExportError(null);
-    try {
-      await downloadGraph(format, exportDomain);
-    } catch (e: unknown) {
-      setExportError(e instanceof Error ? e.message : t("page.graph.export_failed"));
-    } finally {
-      setExportingFormat(null);
-    }
-  }
+    apiFetch("/graph/visualization?limit=500")
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(setData)
+      .catch(e => setError(`Failed to load graph (${e})`))
+      .finally(() => setLoading(false));
+  }, []);
 
   async function findPath() {
     if (!fromId || !toId) return;
-    setLoadingPath(true);
-    setPathResult(null);
-    setPathError(null);
+    setLoadingPath(true); setPathResult(null); setPathError(null); setHighlightIds(new Set());
     try {
       const r = await apiFetch(`/graph/path?from_id=${fromId}&to_id=${toId}`);
-      if (r.ok) {
-        setPathResult(await r.json());
-      } else {
-        const body = await r.json().catch(() => ({}));
-        setPathError(body.detail ?? `Error ${r.status}`);
-      }
-    } catch {
-      setPathError(t("page.graph.network_error"));
-    } finally {
-      setLoadingPath(false);
-    }
+      const result: PathResult = await r.json();
+      setPathResult(result);
+      if (result.found && result.steps) setHighlightIds(new Set(result.steps.map(s => s.entity_id)));
+    } catch { setPathError(t("page.graph.network_error")); }
+    finally { setLoadingPath(false); }
   }
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const r = await apiFetch("/export/graph?format=graphml");
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = "ukip_graph.graphml"; a.click();
+      URL.revokeObjectURL(url);
+    } finally { setExporting(false); }
+  }
+
+  const stats = data?.stats;
+  const edgeTypeLabels: Record<string, string> = { cites: t("page.graph.edge_cites") || "Cita", "authored-by": t("page.graph.edge_authored") || "Autoría", "belongs-to": t("page.graph.edge_belongs") || "Afiliación", "related-to": t("page.graph.edge_related") || "Relacionado" };
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        <PageHeader
-          title={t("page.graph.title")}
-          description={t("page.graph.description")}
-        />
+    <div className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden bg-[var(--ukip-bg)]">
+      {/* Header */}
+      <div className="flex shrink-0 items-center justify-between border-b border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-6 py-4">
+        <div>
+          <div className="flex items-center gap-2 text-xs text-[var(--ukip-muted)]">
+            <span>Intelligence</span><span>/</span><span className="text-[var(--ukip-text-strong)]">{t("page.graph.title") || "Grafo"}</span>
+          </div>
+          <h1 className="mt-1 text-2xl font-bold text-[var(--ukip-text-strong)]">{t("page.graph.explorer_title") || "Graph Explorer"}</h1>
+          <p className="mt-0.5 text-sm text-[var(--ukip-muted)]">{t("page.graph.explorer_description") || "Grafo de conocimiento interactivo con comunidades Leiden y PageRank."}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {[["RENDER", "Canvas 2D"], ["LAYOUT", "Force-directed"], ["NODES", stats ? `${stats.visible_nodes}` : "—"], ["EDGES", stats ? `${stats.visible_edges}` : "—"]].map(([k, v]) => (
+              <span key={k} className="rounded-md border border-[var(--ukip-border)] bg-[var(--ukip-panel-strong)] px-2 py-0.5 text-[11px] font-mono text-[var(--ukip-muted)]">
+                <span className="mr-1 text-[var(--ukip-muted-soft)]">{k}</span>{v}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => { setShowPath(p => !p); setPathResult(null); setHighlightIds(new Set()); }}
+            className="flex items-center gap-2 rounded-xl bg-[var(--ukip-primary-soft)] px-4 py-2 text-sm font-semibold text-[var(--ukip-primary-strong)] transition hover:opacity-90">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
+            Path Finder
+          </button>
+          <button onClick={handleExport} disabled={exporting}
+            className="flex items-center gap-2 rounded-xl border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-4 py-2 text-sm font-semibold text-[var(--ukip-text-strong)] transition hover:bg-[var(--ukip-panel-strong)] disabled:opacity-50">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+            {exporting ? "Exportando..." : "Exportar"}
+          </button>
+        </div>
+      </div>
 
-        {/* Stats cards */}
-        {loadingStats ? (
-          <div className="flex h-32 items-center justify-center">
-            <svg className="h-6 w-6 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          </div>
-        ) : errorStats ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
-            {errorStats}
-          </div>
-        ) : stats ? (
-          <>
-            <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <StatCard
-                label={t("page.graph.total_nodes")}
-                value={stats.total_nodes.toLocaleString()}
-                icon={
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                      d="M12 18a6 6 0 100-12 6 6 0 000 12z" />
-                  </svg>
-                }
-              />
-              <StatCard
-                label={t("page.graph.total_edges")}
-                value={stats.total_edges.toLocaleString()}
-                icon={
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                      d="M5 12h14" />
-                  </svg>
-                }
-              />
-              <StatCard
-                label={t("page.graph.components")}
-                value={stats.total_components.toLocaleString()}
-                icon={
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                      d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6z" />
-                  </svg>
-                }
-              />
-              <StatCard
-                label={t("page.graph.largest_component")}
-                value={stats.largest_component_size.toLocaleString()}
-                icon={
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                      d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5z" />
-                  </svg>
-                }
-              />
+      {/* KPI Row */}
+      {stats && (
+        <div className="grid shrink-0 grid-cols-4 divide-x divide-[var(--ukip-border)] border-b border-[var(--ukip-border)] bg-[var(--ukip-panel)]">
+          {[
+            { label: t("page.graph.total_nodes") || "Nodos visibles", value: stats.visible_nodes.toLocaleString(), sub: `filtrados por comunidad`, icon: "M12 18a6 6 0 100-12 6 6 0 000 12z" },
+            { label: t("page.graph.total_edges") || "Aristas tipadas", value: stats.visible_edges.toLocaleString(), sub: data?.edge_types.join(" · ") || "", icon: "M5 12h14M12 5l7 7-7 7" },
+            { label: "PageRank líder", value: stats.top_pagerank_score.toFixed(2), sub: stats.top_pagerank_leader || "—", icon: "M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" },
+            { label: "Comunidades", value: data ? `${data.total_communities}/${data.total_communities}` : "—", sub: "Leiden", icon: "M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6z" },
+          ].map(kpi => (
+            <div key={kpi.label} className="px-6 py-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-[var(--ukip-muted)]">{kpi.label}</p>
+                <svg className="h-4 w-4 text-[var(--ukip-muted-soft)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={kpi.icon} /></svg>
+              </div>
+              <p className="mt-2 text-3xl font-bold tabular-nums text-[var(--ukip-text-strong)]">{kpi.value}</p>
+              <p className="mt-1 truncate text-[11px] text-[var(--ukip-muted-soft)]">{kpi.sub}</p>
             </div>
+          ))}
+        </div>
+      )}
 
-            {stats.total_nodes === 0 ? (
-              <div className="mt-8 rounded-xl border border-gray-200 bg-white p-12 text-center dark:border-gray-800 dark:bg-gray-900">
-                <svg className="mx-auto mb-3 h-10 w-10 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                    d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" />
-                </svg>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t("page.graph.no_relationships")}</p>
-                <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                  {t("page.graph.add_relationships_hint")}
-                </p>
-              </div>
-            ) : (
-              <>
-              <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-                {/* Top by PageRank */}
-                <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-                  <h2 className="mb-4 text-sm font-semibold text-gray-900 dark:text-white">
-                    {t("page.graph.top_by_pagerank")}
-                  </h2>
-                  {stats.top_pagerank.length === 0 ? (
-                    <p className="text-xs text-gray-400">{t("common.no_data")}</p>
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-gray-100 dark:border-gray-800">
-                          <th className="pb-2 text-left text-xs font-medium text-gray-400">#</th>
-                          <th className="pb-2 text-left text-xs font-medium text-gray-400">{t("page.graph.entity")}</th>
-                          <th className="pb-2 text-right text-xs font-medium text-gray-400">{t("page.graph.score")}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
-                        {stats.top_pagerank.map((row, idx) => (
-                          <tr key={row.entity_id}>
-                            <td className="py-2 text-xs text-gray-400">{idx + 1}</td>
-                            <td className="py-2">
-                              <Link
-                                href={`/entities/${row.entity_id}`}
-                                className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
-                              >
-                                {row.primary_label ?? `#${row.entity_id}`}
-                              </Link>
-                            </td>
-                            <td className="py-2 text-right text-xs tabular-nums text-gray-700 dark:text-gray-300">
-                              {row.score.toFixed(4)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-
-                {/* Top by Degree */}
-                <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-                  <h2 className="mb-4 text-sm font-semibold text-gray-900 dark:text-white">
-                    {t("page.graph.top_by_degree")}
-                  </h2>
-                  {stats.top_degree.length === 0 ? (
-                    <p className="text-xs text-gray-400">{t("common.no_data")}</p>
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-gray-100 dark:border-gray-800">
-                          <th className="pb-2 text-left text-xs font-medium text-gray-400">#</th>
-                          <th className="pb-2 text-left text-xs font-medium text-gray-400">{t("page.graph.entity")}</th>
-                          <th className="pb-2 text-right text-xs font-medium text-gray-400">{t("page.graph.degree")}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
-                        {stats.top_degree.map((row, idx) => (
-                          <tr key={row.entity_id}>
-                            <td className="py-2 text-xs text-gray-400">{idx + 1}</td>
-                            <td className="py-2">
-                              <Link
-                                href={`/entities/${row.entity_id}`}
-                                className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
-                              >
-                                {row.primary_label ?? `#${row.entity_id}`}
-                              </Link>
-                            </td>
-                            <td className="py-2 text-right text-xs tabular-nums text-gray-700 dark:text-gray-300">
-                              {row.total_degree}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
-                      {t("page.graph.research_communities")}
-                    </h2>
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      {t("page.graph.research_communities_description")}
-                    </p>
-                  </div>
-                  {communities && (
-                    <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">
-                      {communities.total_communities} {t("page.graph.detected")}
-                    </span>
-                  )}
-                </div>
-
-                {loadingCommunities ? (
-                  <div className="flex h-20 items-center justify-center">
-                    <svg className="h-5 w-5 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  </div>
-                ) : communityError ? (
-                  <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
-                    {communityError}
-                  </div>
-                ) : communities && communities.communities.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                    {communities.communities.map((community) => (
-                      <div key={community.community_id} className="rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-gray-950/60">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">
-                              {t("page.graph.community")} {community.community_id + 1}
-                            </p>
-                            <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">
-                              {t("page.graph.leader")}: {community.leader.primary_label ?? `Entity #${community.leader.entity_id}`}
-                            </p>
-                          </div>
-                          <span className="rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-semibold text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">
-                            {community.size} {t("page.graph.nodes")}
-                          </span>
-                        </div>
-                        <div className="mt-4 grid grid-cols-3 gap-3 text-center">
-                          <div className="rounded-xl bg-white p-3 dark:bg-gray-900">
-                            <p className="text-xs text-gray-500 dark:text-gray-400">{t("page.graph.density")}</p>
-                            <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{community.density}</p>
-                          </div>
-                          <div className="rounded-xl bg-white p-3 dark:bg-gray-900">
-                            <p className="text-xs text-gray-500 dark:text-gray-400">{t("page.graph.edges")}</p>
-                            <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{community.internal_edges}</p>
-                          </div>
-                          <div className="rounded-xl bg-white p-3 dark:bg-gray-900">
-                            <p className="text-xs text-gray-500 dark:text-gray-400">{t("page.graph.leader_degree")}</p>
-                            <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{community.leader.total_degree}</p>
-                          </div>
-                        </div>
-                        {community.top_relations.length > 0 && (
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            {community.top_relations.map((relation) => (
-                              <span
-                                key={`${community.community_id}-${relation.relation_type}`}
-                                className="rounded-full bg-white px-3 py-1 text-xs font-medium text-gray-700 dark:bg-gray-900 dark:text-gray-300"
-                              >
-                                {relation.relation_type} · {relation.count}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {t("page.graph.no_communities")}
-                  </p>
-                )}
-              </div>
-              </>
-            )}
-          </>
-        ) : null}
-
-        {/* Path Finder */}
-        <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-          <h2 className="mb-1 text-sm font-semibold text-gray-900 dark:text-white">{t("page.graph.path_finder")}</h2>
-          <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
-            {t("page.graph.path_finder_description")}
-          </p>
+      {/* Path Finder Panel */}
+      {showPath && (
+        <div className="shrink-0 border-b border-[var(--ukip-border)] bg-[var(--ukip-surface)] px-6 py-3">
           <div className="flex flex-wrap items-end gap-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
-                {t("page.graph.from_entity_id")}
-              </label>
-              <input
-                type="number"
-                min={1}
-                value={fromId}
-                onChange={(e) => setFromId(e.target.value)}
-                className="w-36 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                placeholder={t("page.graph.entity_id_example_1")}
-              />
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--ukip-muted)]">{t("page.graph.from_entity_id") || "Desde (ID)"}</label>
+              <input type="number" min={1} value={fromId} onChange={e => setFromId(e.target.value)} placeholder="1"
+                className="w-28 rounded-lg border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-3 py-1.5 text-sm text-[var(--ukip-text-strong)] outline-none focus:border-[var(--ukip-primary)]" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
-                {t("page.graph.to_entity_id")}
-              </label>
-              <input
-                type="number"
-                min={1}
-                value={toId}
-                onChange={(e) => setToId(e.target.value)}
-                className="w-36 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                placeholder={t("page.graph.entity_id_example_5")}
-              />
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[var(--ukip-muted)]">{t("page.graph.to_entity_id") || "Hasta (ID)"}</label>
+              <input type="number" min={1} value={toId} onChange={e => setToId(e.target.value)} placeholder="5"
+                className="w-28 rounded-lg border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-3 py-1.5 text-sm text-[var(--ukip-text-strong)] outline-none focus:border-[var(--ukip-primary)]" />
             </div>
-            <button
-              onClick={findPath}
-              disabled={loadingPath || !fromId || !toId}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loadingPath ? t("page.graph.searching") : t("page.graph.find_path")}
+            <button onClick={findPath} disabled={loadingPath || !fromId || !toId}
+              className="rounded-lg bg-[var(--ukip-primary)] px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50">
+              {loadingPath ? "Buscando..." : t("page.graph.find_path") || "Encontrar ruta"}
             </button>
+            {pathResult && !pathResult.found && <span className="text-xs text-amber-500">Sin ruta directa</span>}
+            {pathResult?.found && pathResult.steps && (
+              <div className="flex flex-wrap items-center gap-1">
+                {pathResult.steps.map((s, i) => (
+                  <span key={s.entity_id} className="flex items-center gap-1">
+                    <span className="rounded-md bg-[var(--ukip-primary-soft)] px-2 py-0.5 text-xs font-medium text-[var(--ukip-primary-strong)]">{s.primary_label ?? `#${s.entity_id}`}</span>
+                    {i < (pathResult.steps?.length ?? 0) - 1 && <svg className="h-3 w-3 text-[var(--ukip-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>}
+                  </span>
+                ))}
+              </div>
+            )}
+            {pathError && <span className="text-xs text-red-500">{pathError}</span>}
           </div>
-
-          {pathError && (
-            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
-              {pathError}
-            </div>
-          )}
-
-          {pathResult && (
-            <div className="mt-4">
-              {!pathResult.found ? (
-                <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400">
-                  <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                      d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                  </svg>
-                  {t("page.graph.no_directed_path")} {fromId} {t("page.graph.to_entity")} {toId}.
-                </div>
-              ) : (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-900/10">
-                  <div className="mb-3 flex items-center gap-3 text-xs">
-                    <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                      {t("page.graph.path_found")}
-                    </span>
-                    <span className="text-emerald-600 dark:text-emerald-500">
-                      {t("page.graph.length")}: {pathResult.length} {pathResult.length !== 1 ? t("page.graph.hops") : t("page.graph.hop")}
-                    </span>
-                    {pathResult.relations && pathResult.relations.length > 0 && (
-                      <span className="text-emerald-600 dark:text-emerald-500">
-                        {t("page.graph.via")}: {pathResult.relations.join(" → ")}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1">
-                    {pathResult.steps?.map((step, idx) => (
-                      <span key={step.entity_id} className="flex items-center gap-1">
-                        <Link
-                          href={`/entities/${step.entity_id}`}
-                          className="rounded-md bg-white px-2 py-1 text-xs font-medium text-indigo-700 shadow-sm ring-1 ring-indigo-200 hover:ring-indigo-400 dark:bg-gray-800 dark:text-indigo-300 dark:ring-indigo-800"
-                        >
-                          {step.primary_label ?? `#${step.entity_id}`}
-                        </Link>
-                        {idx < (pathResult.steps?.length ?? 0) - 1 && (
-                          <span className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
-                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                            <span className="text-[10px] text-indigo-500 dark:text-indigo-400">
-                              {pathResult.relations?.[idx]}
-                            </span>
-                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </span>
-                        )}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
+      )}
 
-        {/* Export Graph */}
-        <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-          <h2 className="mb-1 text-sm font-semibold text-gray-900 dark:text-white">{t("page.graph.export_graph")}</h2>
-          <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
-            {t("page.graph.export_graph_description")}
-          </p>
-
-          {/* Domain filter */}
-          <div className="mb-4">
-            <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
-              {t("page.graph.domain_filter")} <span className="font-normal text-gray-400">({t("page.graph.leave_blank_all_domains")})</span>
-            </label>
-            <input
-              type="text"
-              value={exportDomain}
-              onChange={(e) => setExportDomain(e.target.value)}
-              placeholder={t("page.graph.domain_example")}
-              className="w-56 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-            />
-          </div>
-
-          {/* Format buttons */}
-          <div className="flex flex-wrap gap-3">
-            {EXPORT_FORMATS.map((fmt) => {
-              const isLoading = exportingFormat === fmt.value;
-              return (
-                <button
-                  key={fmt.value}
-                  onClick={() => handleExport(fmt.value)}
-                  disabled={exportingFormat !== null}
-                  className={`flex items-center gap-2 rounded-xl border px-4 py-3 text-left transition-colors disabled:opacity-60 ${fmt.color}`}
-                >
-                  {isLoading ? (
-                    <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  ) : (
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                        d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                    </svg>
-                  )}
-                  <div>
-                    <p className="text-xs font-semibold">{isLoading ? t("page.graph.exporting") : fmt.label}</p>
-                    <p className="text-[10px] opacity-70">{fmt.desc}</p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {exportError && (
-            <div className="mt-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 dark:border-red-800 dark:bg-red-900/20">
-              <svg className="h-4 w-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      {/* Main content */}
+      <div className="flex min-h-0 flex-1">
+        {/* Graph canvas */}
+        <div className="relative min-h-0 flex-1 border-r border-[var(--ukip-border)] bg-[var(--ukip-bg)]">
+          {loading && (
+            <div className="flex h-full items-center justify-center">
+              <svg className="h-8 w-8 animate-spin text-[var(--ukip-primary)]" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              <p className="text-xs text-red-700 dark:text-red-400">{exportError}</p>
-              <button onClick={() => setExportError(null)} className="ml-auto text-red-400 hover:text-red-600">
-                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
             </div>
+          )}
+          {error && <div className="flex h-full items-center justify-center p-8 text-sm text-red-500">{error}</div>}
+          {!loading && !error && data && data.nodes.length === 0 && (
+            <div className="flex h-full flex-col items-center justify-center gap-3 text-[var(--ukip-muted)]">
+              <svg className="h-12 w-12 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5z" /></svg>
+              <p className="text-sm">{t("page.graph.no_relationships") || "Sin relaciones. Añade relaciones entre entidades para visualizar el grafo."}</p>
+            </div>
+          )}
+          {!loading && !error && data && data.nodes.length > 0 && (
+            <ForceGraph nodes={data.nodes} links={data.links} highlightIds={highlightIds.size > 0 ? highlightIds : undefined} />
           )}
         </div>
 
+        {/* Right info panel */}
+        <div className="flex w-64 shrink-0 flex-col gap-4 overflow-y-auto bg-[var(--ukip-panel)] p-4">
+          {/* Edge types */}
+          {data && data.edge_types.length > 0 && (
+            <div>
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--ukip-muted-soft)]">Tipos de arista</p>
+              <div className="space-y-1.5">
+                {data.edge_types.map(t => (
+                  <div key={t} className="flex items-center justify-between rounded-lg border border-[var(--ukip-border)] px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: edgeColor(t) }} />
+                      <span className="text-xs font-medium text-[var(--ukip-text-strong)]">{t}</span>
+                    </div>
+                    <span className="text-[11px] text-[var(--ukip-muted)]">{edgeTypeLabels[t] ?? t}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Communities */}
+          {data && data.total_communities > 0 && (
+            <div>
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--ukip-muted-soft)]">Comunidades (Leiden)</p>
+              <div className="flex flex-wrap gap-1.5">
+                {Array.from({ length: data.total_communities }, (_, i) => (
+                  <span key={i} className="flex items-center gap-1.5 rounded-full border border-[var(--ukip-border)] px-2.5 py-1 text-xs font-semibold text-[var(--ukip-text-strong)]">
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: COMMUNITY_COLORS[i % COMMUNITY_COLORS.length] }} />
+                    C{i + 1}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Top PageRank */}
+          {data && data.nodes.length > 0 && (
+            <div>
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--ukip-muted-soft)]">Top PageRank</p>
+              <div className="space-y-1">
+                {[...data.nodes].sort((a, b) => b.pagerank - a.pagerank).slice(0, 8).map((n, i) => (
+                  <div key={n.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-[var(--ukip-panel-strong)]">
+                    <span className="w-4 text-[11px] tabular-nums text-[var(--ukip-muted-soft)]">{i + 1}</span>
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: COMMUNITY_COLORS[n.community % COMMUNITY_COLORS.length] }} />
+                    <span className="min-w-0 flex-1 truncate text-xs text-[var(--ukip-text-strong)]">{n.label}</span>
+                    <span className="shrink-0 text-[11px] tabular-nums text-[var(--ukip-muted)]">{n.pagerank.toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

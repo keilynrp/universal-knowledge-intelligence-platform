@@ -216,6 +216,72 @@ def get_graph_communities(
     }
 
 
+@router.get("/graph/visualization")
+def get_graph_visualization(
+    limit: int = Query(default=500, ge=10, le=2000),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Return nodes + edges for interactive graph visualization canvas."""
+    org_id = resolve_request_org_id(db, current_user)
+    edges_raw = graph_analytics.fetch_edges(db, org_id=org_id)
+
+    empty = {
+        "nodes": [], "links": [], "edge_types": [], "total_communities": 0,
+        "stats": {"visible_nodes": 0, "visible_edges": 0,
+                  "top_pagerank_leader": None, "top_pagerank_score": 0.0},
+    }
+    if not edges_raw:
+        return empty
+
+    communities = graph_analytics.detect_communities(edges_raw)
+    pr = graph_analytics.pagerank(edges_raw)
+
+    degree_map: dict[int, int] = defaultdict(int)
+    for src, dst, _, _ in edges_raw:
+        degree_map[src] += 1
+        degree_map[dst] += 1
+
+    top_nodes = {nid for nid, _ in sorted(degree_map.items(), key=lambda x: x[1], reverse=True)[:limit]}
+    filtered_edges = [(s, d, r, w) for s, d, r, w in edges_raw if s in top_nodes and d in top_nodes]
+
+    label_map = {
+        e.id: e.primary_label
+        for e in scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
+        .filter(models.RawEntity.id.in_(top_nodes))
+        .all()
+    }
+
+    edge_types = sorted({r for _, _, r, _ in filtered_edges})
+
+    pr_filtered = {nid: s for nid, s in pr.items() if nid in top_nodes}
+    leader_id = max(pr_filtered, key=lambda x: pr_filtered[x]) if pr_filtered else None
+
+    visible_communities = {communities.get(nid) for nid in top_nodes if communities.get(nid) is not None}
+
+    return {
+        "nodes": [
+            {
+                "id": nid,
+                "label": label_map.get(nid) or f"#{nid}",
+                "community": communities.get(nid, 0),
+                "pagerank": round(pr.get(nid, 0.0), 4),
+                "degree": degree_map[nid],
+            }
+            for nid in top_nodes
+        ],
+        "links": [{"source": s, "target": d, "type": r} for s, d, r, _ in filtered_edges],
+        "edge_types": edge_types,
+        "total_communities": len(visible_communities),
+        "stats": {
+            "visible_nodes": len(top_nodes),
+            "visible_edges": len(filtered_edges),
+            "top_pagerank_leader": label_map.get(leader_id) if leader_id else None,
+            "top_pagerank_score": round(pr_filtered[leader_id], 2) if leader_id else 0.0,
+        },
+    }
+
+
 @router.get("/entities/{entity_id}/graph/metrics")
 def get_entity_graph_metrics(
     entity_id: int = Path(..., ge=1),
