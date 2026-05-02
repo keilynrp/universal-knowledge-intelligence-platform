@@ -10,6 +10,7 @@ version: "3.9"
 services:
   ukip-backend:
     image: ${UKIP_BACKEND_IMAGE:?Set UKIP_BACKEND_IMAGE}
+    pull_policy: always
     restart: unless-stopped
     environment:
       PORT: 8000
@@ -52,6 +53,7 @@ services:
 
   ukip-frontend:
     image: ${UKIP_FRONTEND_IMAGE:?Set UKIP_FRONTEND_IMAGE}
+    pull_policy: always
     restart: unless-stopped
     depends_on:
       ukip-backend:
