@@ -46,26 +46,36 @@ def ensure_bootstrap_super_admin(db: Session) -> None:
     )
 
     if bootstrap_user:
-        if existing_super_admin is None and bootstrap_user.role != "super_admin":
+        # Always sync: role, active status, password hash, and unlock account
+        changed = False
+        if bootstrap_user.role != "super_admin":
             bootstrap_user.role = "super_admin"
+            changed = True
+        if not bootstrap_user.is_active:
             bootstrap_user.is_active = True
+            changed = True
+        if bootstrap_user.failed_attempts:
+            bootstrap_user.failed_attempts = 0
+            changed = True
+        if bootstrap_user.locked_until:
+            bootstrap_user.locked_until = None
+            changed = True
+
+        # Sync password from env var on every startup
+        plain_password = os.environ.get("ADMIN_PASSWORD", "").strip()
+        if plain_password and not verify_password(plain_password, bootstrap_user.password_hash):
             bootstrap_user.password_hash = bootstrap_hash
-            db.commit()
-            logger.info("Bootstrap repair: user '%s' promoted to super_admin", bootstrap_username)
-        elif existing_super_admin is None and bootstrap_user.role == "super_admin" and not bootstrap_user.is_active:
-            bootstrap_user.is_active = True
+            changed = True
+            logger.info("Bootstrap: password synced from env for '%s'", bootstrap_username)
+        elif not plain_password and os.environ.get("ADMIN_PASSWORD_HASH", "").strip():
+            # Using ADMIN_PASSWORD_HASH directly — always overwrite
             bootstrap_user.password_hash = bootstrap_hash
+            changed = True
+            logger.info("Bootstrap: password hash synced from env for '%s'", bootstrap_username)
+
+        if changed:
             db.commit()
-            logger.info("Bootstrap repair: super_admin '%s' re-activated", bootstrap_username)
-        elif (
-            bootstrap_user.role == "super_admin"
-            and bootstrap_user.is_active
-            and not verify_password(os.environ.get("ADMIN_PASSWORD", "").strip(), bootstrap_user.password_hash)
-            and bootstrap_user.password_hash != bootstrap_hash
-        ):
-            bootstrap_user.password_hash = bootstrap_hash
-            db.commit()
-            logger.info("Bootstrap repair: password hash refreshed for super_admin '%s'", bootstrap_username)
+            logger.info("Bootstrap: super_admin '%s' synced", bootstrap_username)
         return
 
     if existing_super_admin is None:
