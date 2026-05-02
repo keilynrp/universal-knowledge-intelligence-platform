@@ -10,7 +10,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Build-time env (injected by docker-compose args)
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ARG NEXT_PUBLIC_API_URL=https://api.ukip.inbounduxd.com
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 COPY --from=deps /app/node_modules ./node_modules
