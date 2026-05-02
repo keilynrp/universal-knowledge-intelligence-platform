@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+// Server-side rewrite target: use Docker-internal URL in production to avoid
+// hairpin NAT issues when the Next.js container tries to reach the public URL.
+const BACKEND_INTERNAL = process.env.BACKEND_INTERNAL_URL ?? BACKEND_URL;
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -38,7 +41,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/backend/:path*",
-        destination: `${BACKEND_URL}/:path*`,
+        destination: `${BACKEND_INTERNAL}/:path*`,
       },
     ];
   },

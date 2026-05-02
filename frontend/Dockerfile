@@ -11,7 +11,9 @@ WORKDIR /app
 
 # Build-time env (injected by docker-compose args)
 ARG NEXT_PUBLIC_API_URL=https://api.ukip.inbounduxd.com
+ARG BACKEND_INTERNAL_URL=http://ukip-backend:8000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV BACKEND_INTERNAL_URL=$BACKEND_INTERNAL_URL
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
