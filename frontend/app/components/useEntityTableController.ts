@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLanguage } from "../contexts/LanguageContext";
+import { useEnrichment } from "../contexts/EnrichmentContext";
 import type { ActiveFacets } from "./FacetPanel";
 import type { EditableFields, Entity } from "./EntityTable.types";
 import type { ToastVariant } from "./ui";
@@ -19,6 +20,7 @@ interface CatalogPortalSummary {
 
 export function useEntityTableController({ toast }: UseEntityTableControllerOptions) {
     const { t } = useLanguage();
+    const { startPolling: startEnrichmentStatsPolling } = useEnrichment();
     const searchParams = useSearchParams();
     const readFacetParams = useCallback((): ActiveFacets => ({
         entity_type: searchParams.get("ft_entity_type"),
@@ -58,6 +60,7 @@ export function useEntityTableController({ toast }: UseEntityTableControllerOpti
     const [facetRefreshKey, setFacetRefreshKey] = useState(0);
     const [scrollTop, setScrollTop] = useState(0);
     const [portalByBatchId, setPortalByBatchId] = useState<Record<number, string>>({});
+    const enrichmentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const paramSignature = searchParams.toString();
 
     useEffect(() => {
@@ -137,6 +140,14 @@ export function useEntityTableController({ toast }: UseEntityTableControllerOpti
     useEffect(() => {
         fetchCatalogPortals();
     }, [fetchCatalogPortals]);
+
+    useEffect(() => {
+        return () => {
+            if (enrichmentPollRef.current) {
+                clearInterval(enrichmentPollRef.current);
+            }
+        };
+    }, []);
 
     function handleFacetChange(field: string, value: string | null) {
         setActiveFacets((prev) => ({ ...prev, [field]: value }));
@@ -257,6 +268,25 @@ export function useEntityTableController({ toast }: UseEntityTableControllerOpti
         }
     }
 
+    function startRowPolling() {
+        if (enrichmentPollRef.current) return; // already polling
+        enrichmentPollRef.current = setInterval(async () => {
+            await fetchEntities();
+            // Stop row polling when no entity on the current page is still active
+            setEntities((current) => {
+                const stillActive = current.some(
+                    (e) => e.enrichment_status === "pending" || e.enrichment_status === "processing",
+                );
+                if (!stillActive && enrichmentPollRef.current) {
+                    clearInterval(enrichmentPollRef.current);
+                    enrichmentPollRef.current = null;
+                    refreshFacets();
+                }
+                return current;
+            });
+        }, 5000);
+    }
+
     async function handleBulkEnrich() {
         setBulkEnriching(true);
         try {
@@ -267,9 +297,12 @@ export function useEntityTableController({ toast }: UseEntityTableControllerOpti
             });
             if (!res.ok) throw new Error(t("page.entity_table.bulk_enrich_failed"));
             const data = await res.json();
-            refreshFacets();
-            toast(t("page.entity_table.bulk_enrich_success", { count: data.queued }), "success");
             setSelectedIds(new Set());
+            toast(t("page.entity_table.bulk_enrich_success", { count: data.queued }), "success");
+            // Refresh entity rows immediately, then poll rows + global stats
+            await fetchEntities();
+            startRowPolling();
+            startEnrichmentStatsPolling();
         } catch {
             toast(t("page.entity_table.bulk_enrich_failed"), "error");
         } finally {

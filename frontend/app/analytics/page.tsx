@@ -7,18 +7,18 @@ import { apiFetch } from "@/lib/api";
 import { PageHeader } from "../components/ui";
 import { useLanguage } from "../contexts/LanguageContext";
 import { useDomain } from "../contexts/DomainContext";
+import { useEnrichment } from "../contexts/EnrichmentContext";
 
 import { AnalyticsEnrichmentSection } from "./AnalyticsEnrichmentSection";
 import { AnalyticsOverviewSection } from "./AnalyticsOverviewSection";
-import type { EnrichStats, Stats } from "./analyticsTypes";
+import type { Stats } from "./analyticsTypes";
 
 export default function AnalyticsPage() {
   const { t } = useLanguage();
   const { activeDomainId } = useDomain();
+  const { enrichStats, startPolling, refreshStats } = useEnrichment();
   const [stats, setStats] = useState<Stats | null>(null);
-  const [enrichStats, setEnrichStats] = useState<EnrichStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [enrichLoading, setEnrichLoading] = useState(true);
   const [bulkQueuing, setBulkQueuing] = useState(false);
   const [bulkResult, setBulkResult] = useState<{ queued_records: number } | null>(null);
 
@@ -36,24 +36,9 @@ export default function AnalyticsPage() {
     }
   }, [activeDomainId]);
 
-  const fetchEnrichStats = useCallback(async () => {
-    try {
-      const response = await apiFetch("/enrich/stats");
-      if (!response.ok) {
-        throw new Error("Failed");
-      }
-      setEnrichStats(await response.json());
-    } catch {
-      // Keep current UX unchanged: silent fail with partial page rendering.
-    } finally {
-      setEnrichLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
     void fetchStats();
-    void fetchEnrichStats();
-  }, [fetchStats, fetchEnrichStats]);
+  }, [fetchStats]);
 
   const handleBulkEnrich = async () => {
     setBulkQueuing(true);
@@ -65,9 +50,8 @@ export default function AnalyticsPage() {
       }
       const data = await response.json();
       setBulkResult(data);
-      setTimeout(() => {
-        void fetchEnrichStats();
-      }, 1500);
+      await refreshStats();
+      startPolling();
     } catch {
       // Keep current UX unchanged.
     } finally {
@@ -75,7 +59,7 @@ export default function AnalyticsPage() {
     }
   };
 
-  if (loading && enrichLoading) {
+  if (loading && !enrichStats) {
     return (
       <div className="flex h-64 items-center justify-center">
         <svg className="h-8 w-8 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24">
@@ -99,7 +83,7 @@ export default function AnalyticsPage() {
       <AnalyticsOverviewSection stats={stats} totalCount={totalCount} t={t} />
       <AnalyticsEnrichmentSection
         enrichStats={enrichStats}
-        enrichLoading={enrichLoading}
+        enrichLoading={loading}
         totalCount={totalCount}
         bulkQueuing={bulkQueuing}
         bulkResult={bulkResult}

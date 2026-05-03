@@ -13,8 +13,6 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func
 
-_DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite")
-_IS_POSTGRES = _DATABASE_URL.startswith("postgresql") or _DATABASE_URL.startswith("postgres")
 from sqlalchemy.orm import Session
 from thefuzz import fuzz, process
 
@@ -75,7 +73,8 @@ def _build_disambig_groups(
         entries = query.all()
         values = [v[0] for v in entries if v[0] and str(v[0]).strip()]
     else:
-        if _IS_POSTGRES:
+        from backend.database import engine as _engine
+        if _engine.dialect.name == "postgresql":
             from sqlalchemy import cast
             from sqlalchemy.dialects.postgresql import JSONB
             json_col = cast(models.RawEntity.normalized_json, JSONB)[field].astext

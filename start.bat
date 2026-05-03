@@ -86,12 +86,19 @@ goto :eof
 
 :checkdb
 if not "%REQUIRES_LOCAL_PG%"=="1" goto :eof
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5432 " ^| findstr "LISTENING"') do (
-    set "PG_READY=1"
-)
+set "PG_READY=0"
+set "_RETRY=0"
+:checkdb_loop
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5432 " ^| findstr "LISTENING"') do set "PG_READY=1"
 if "%PG_READY%"=="1" goto :eof
+set /a "_RETRY+=1"
+if %_RETRY% GEQ 12 goto checkdb_fail
+echo  [INFO] Waiting for PostgreSQL on port 5432... ^(attempt %_RETRY%/12^)
+timeout /t 5 /nobreak >nul
+goto checkdb_loop
+:checkdb_fail
 echo.
-echo  [ERROR] Local PostgreSQL is not reachable on port 5432.
+echo  [ERROR] Local PostgreSQL is not reachable on port 5432 after 60 seconds.
 if "%DOCKER_READY%"=="0" (
     echo  [ERROR] Docker Desktop is not ready, so UKIP could not auto-start the local database.
     echo  [ERROR] Start Docker Desktop and try again.

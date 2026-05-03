@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useEnrichment } from "./contexts/EnrichmentContext";
 import Link from "next/link";
 import {
   Area,
@@ -63,7 +64,7 @@ function MetricIcon({ path }: { path: string }) {
 
 export default function Home() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [enrichPct, setEnrichPct] = useState<number>(0);
+  const { enrichPct } = useEnrichment();
   const [domainCount, setDomainCount] = useState<number>(0);
   const [demoStatus, setDemoStatus] = useState<DemoStatus | null>(null);
   const [demoLoading, setDemoLoading] = useState(false);
@@ -186,10 +187,7 @@ export default function Home() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const [statsRes, enrichRes] = await Promise.all([
-        apiFetch("/stats"),
-        apiFetch("/enrich/stats").catch(() => null),
-      ]);
+      const statsRes = await apiFetch("/stats");
       const s = await statsRes.json();
       setStats(s);
       setDomainCount(
@@ -197,10 +195,6 @@ export default function Home() {
           ? s.domain_distribution.filter((item: { count: number }) => item.count > 0).length
           : 0,
       );
-      if (enrichRes && enrichRes.ok) {
-        const e = await enrichRes.json();
-        setEnrichPct(e.enrichment_coverage_pct ?? 0);
-      }
     } catch {
       // stats are non-critical
     }
