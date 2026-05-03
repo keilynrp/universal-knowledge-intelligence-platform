@@ -3,21 +3,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useEnrichment } from "./contexts/EnrichmentContext";
 import Link from "next/link";
-import {
-  Area,
-  AreaChart,
-  Cell,
-  Pie,
-  PieChart,
-  PolarAngleAxis,
-  PolarGrid,
-  Radar,
-  RadarChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import EntityTable from "./components/EntityTable";
 import ActivityFeed from "./components/ActivityFeed";
 import GuidedTour, { resetTour } from "./components/GuidedTour";
@@ -251,82 +236,32 @@ export default function Home() {
     { label: tr("page.home.pipeline.answers", "Respuestas"), group: "Intelligence", href: "/rag", status: enrichPct >= 60 ? "current" : "upcoming", icon: "M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337L3 21l1.087-5.445A7.94 7.94 0 013 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" },
     { label: tr("page.home.pipeline.delivery", "Entrega"), group: "Delivery", href: `/reports?preset=pilot-brief&${stakeholderQuery}`, status: enrichPct >= 60 ? "current" : "upcoming", icon: "M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5A3.375 3.375 0 0010.125 2.25H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-8.25 6.75h13.5A2.25 2.25 0 0021 15.75V9.75a2.25 2.25 0 00-.659-1.591l-5.25-5.25A2.25 2.25 0 0013.5 2.25H5.25A2.25 2.25 0 003 4.5v15a2.25 2.25 0 002.25 2.25z" },
   ];
-  const pillarProgress = [
-    { label: "Knowledge", value: hasEntities ? Math.max(35, Math.min(100, Math.round(45 + enrichPct * 0.45))) : 8, count: 3, icon: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" },
-    { label: "Intelligence", value: hasEntities ? Math.max(12, Math.min(100, Math.round(enrichPct * 0.75))) : 0, count: 3, icon: "M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" },
-    { label: "Delivery", value: enrichPct >= 60 ? 42 : hasEntities ? 12 : 0, count: 1, icon: "M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5A3.375 3.375 0 0010.125 2.25H8.25m.75 12l3 3m0 0l3-3m-3 3v-6" },
-  ];
-  const sourceMix = [
-    { label: "OpenAlex", value: 45, color: "#7c3aed" },
-    { label: "Crossref", value: 25, color: "#228be6" },
-    { label: "Scopus", value: 20, color: "#f2a72b" },
-    { label: "WoS", value: 10, color: "#2fad72" },
-  ];
-  const authorityPercent = hasEntities ? Math.min(99, Math.max(0, Math.round(62 + enrichPct * 0.2))) : 0;
-  const graphEdges = hasEntities
-    ? Math.max(0, Math.round((stats?.total_entities ?? 0) * Math.max(4, domainCount || 4) * 1.95))
-    : 0;
   const metricCards = [
     {
       label: tr("page.home.metric_total_entities", "Entidades"),
-      value: stats?.total_entities?.toLocaleString() ?? "-",
+      value: stats?.total_entities?.toLocaleString() ?? "—",
       tone: "violet" as const,
-      deltaValue: "+19.7%",
-      deltaLabel: "vs mes anterior",
-      deltaDirection: "up" as const,
       icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
     },
     {
-      label: tr("page.home.pipeline.authority", "Autoridad"),
-      value: `${authorityPercent}%`,
-      tone: "violet" as const,
-      deltaValue: "+4.2%",
-      deltaLabel: "objetivo 80%",
-      deltaDirection: "up" as const,
-      icon: "M9 12.75 11.25 15 15 9.75m-3-7.036A11.95 11.95 0 0 1 20.25 6c0 5.25-3.503 9.66-8.25 10.99C7.253 15.66 3.75 11.25 3.75 6A11.95 11.95 0 0 1 12 2.714Z",
-    },
-    {
       label: tr("page.home.metric_enrichment_coverage", "Enriquecimiento"),
-      value: `${Math.round(enrichPct)}%`,
+      value: hasEntities ? `${Math.round(enrichPct)}%` : "—",
       tone: "sky" as const,
-      deltaValue: "+8.1%",
-      deltaLabel: "5 fuentes activas",
-      deltaDirection: "up" as const,
       icon: "M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z",
     },
     {
-      label: tr("page.home.metric_graph_edges", "Aristas grafo"),
-      value: graphEdges >= 1000 ? `${(graphEdges / 1000).toFixed(1)}K` : graphEdges.toLocaleString(),
+      label: tr("page.home.metric_entity_types", "Tipos de entidad"),
+      value: stats?.unique_entity_types?.toLocaleString() ?? "—",
+      tone: "violet" as const,
+      icon: "M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z",
+    },
+    {
+      label: tr("page.home.metric_active_domains", "Dominios activos"),
+      value: domainCount > 0 ? domainCount.toLocaleString() : "—",
       tone: "sky" as const,
-      deltaValue: "-1.3%",
-      deltaLabel: "citaciones · autoria",
-      deltaDirection: "down" as const,
-      icon: "M7.5 7.5h.008v.008H7.5V7.5Zm9 0h.008v.008H16.5V7.5Zm-9 9h.008v.008H7.5v-.008Zm9 0h.008v.008H16.5v-.008ZM8 8l8 8m0-8-8 8",
+      icon: "M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418",
     },
   ];
-  const totalEntities = stats?.total_entities ?? 0;
-  const enrichedEntities = Math.round(totalEntities * (Math.max(0, enrichPct) / 100));
-  const chartMax = Math.max(totalEntities, enrichedEntities, 100);
-  const growthData = ["Jul", "Ago", "Sep", "Oct", "Nov", "Dic", "Ene", "Feb"].map((month, index) => {
-    const factor = [0.2, 0.28, 0.31, 0.45, 0.58, 0.7, 0.86, 1][index];
-    return {
-      month,
-      entidades: Math.round(totalEntities * factor),
-      enriquecidas: Math.round(enrichedEntities * factor),
-    };
-  });
-  const domainCoverage = [
-    { subject: "Biomed", value: 72 },
-    { subject: "CS", value: 68 },
-    { subject: "Fisica", value: 54 },
-    { subject: "Quimica", value: 70 },
-    { subject: "Social", value: 42 },
-    { subject: "Ing.", value: 64 },
-  ];
-  const pipelineHealth = Math.round(
-    (Math.min(98, hasEntities ? 98 : 12) + Math.min(100, 40 + enrichPct * 0.55) + Math.min(100, enrichPct)) / 3,
-  );
-  const gaugeOffset = 220 - (Math.max(0, Math.min(100, pipelineHealth)) / 100) * 220;
   const narrativeRole =
     pilotPersona === "research"
       ? "research_office"
@@ -386,93 +321,39 @@ export default function Home() {
               value={metric.value}
               icon={<MetricIcon path={metric.icon} />}
               tone={metric.tone}
-              deltaValue={metric.deltaValue}
-              deltaDirection={metric.deltaDirection}
-              deltaLabel={metric.deltaLabel}
             />
           ))}
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
+        {stats?.domain_distribution && stats.domain_distribution.filter((d) => d.count > 0).length > 0 && (
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-base font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">{tr("page.home.catalog_growth", "Crecimiento del catálogo")}</h2>
-                <div className="mt-3 flex flex-wrap gap-5 text-sm">
-                  <span className="flex items-center gap-2 font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">
-                    <span className="h-2 w-2 rounded-full bg-violet-600" />
-                    {(stats?.total_entities ?? 0).toLocaleString()} <span className="text-xs font-medium text-slate-500">entidades</span>
-                  </span>
-                  <span className="flex items-center gap-2 font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">
-                    <span className="h-2 w-2 rounded-full bg-blue-500" />
-                    {enrichedEntities.toLocaleString()} <span className="text-xs font-medium text-slate-500">enriquecidas</span>
-                  </span>
-                </div>
-              </div>
-              <div className="flex gap-2 text-slate-500">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M7.5 12L12 16.5m0 0l4.5-4.5M12 16.5V3" />
-                </svg>
-                <span className="text-lg leading-none">...</span>
-              </div>
-            </div>
-            <div className="mt-5 h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={growthData} margin={{ top: 10, right: 18, left: -18, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="homeEntitiesGradient" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.24} />
-                      <stop offset="95%" stopColor="#7c3aed" stopOpacity={0.02} />
-                    </linearGradient>
-                    <linearGradient id="homeEnrichedGradient" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="5%" stopColor="#228be6" stopOpacity={0.18} />
-                      <stop offset="95%" stopColor="#228be6" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} />
-                  <YAxis axisLine={false} domain={[0, chartMax]} tickLine={false} tick={{ fill: "#64748b", fontSize: 12 }} />
-                  <Tooltip
-                    contentStyle={{ background: "#0f172a", border: "0", borderRadius: 14, color: "#fff", boxShadow: "0 18px 40px rgba(15, 23, 42, 0.25)" }}
-                    labelStyle={{ color: "#cbd5e1", fontWeight: 700 }}
-                  />
-                  <Area type="monotone" dataKey="entidades" stroke="#7c3aed" strokeWidth={2.5} fill="url(#homeEntitiesGradient)" />
-                  <Area type="monotone" dataKey="enriquecidas" stroke="#228be6" strokeWidth={2.5} fill="url(#homeEnrichedGradient)" />
-                </AreaChart>
-              </ResponsiveContainer>
+            <h2 className="text-base font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">
+              {tr("page.home.domain_distribution", "Distribución por dominio")}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-[var(--ukip-muted)]">
+              {tr("page.home.domain_distribution_sub", "Entidades por dominio activo")}
+            </p>
+            <div className="mt-5 space-y-3">
+              {(() => {
+                const active = stats.domain_distribution!.filter((d) => d.count > 0).sort((a, b) => b.count - a.count);
+                const max = active[0]?.count ?? 1;
+                return active.map((d) => (
+                  <div key={d.domain ?? "unknown"} className="flex items-center gap-3">
+                    <span className="w-28 shrink-0 truncate text-sm font-medium text-slate-700 dark:text-[var(--ukip-muted)]">
+                      {d.domain ?? tr("page.home.domain_unknown", "Sin dominio")}
+                    </span>
+                    <div className="flex-1 h-2 rounded-full bg-slate-100 dark:bg-white/10">
+                      <div className="h-2 rounded-full bg-violet-500 transition-all" style={{ width: `${Math.round((d.count / max) * 100)}%` }} />
+                    </div>
+                    <span className="w-16 text-right text-sm font-semibold tabular-nums text-slate-950 dark:text-[var(--ukip-text-strong)]">
+                      {d.count.toLocaleString()}
+                    </span>
+                  </div>
+                ));
+              })()}
             </div>
           </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
-            <h2 className="text-base font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">{tr("page.home.source_mix", "Mezcla de fuentes")}</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-[var(--ukip-muted)]">Cobertura por proveedor</p>
-            <div className="relative mt-5 h-52">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={sourceMix} dataKey="value" innerRadius={62} outerRadius={88} paddingAngle={3}>
-                    {sourceMix.map((entry) => (
-                      <Cell key={entry.label} fill={entry.color} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <span className="font-mono text-2xl font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">100%</span>
-                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">cobertura</span>
-              </div>
-            </div>
-            <div className="mt-3 space-y-2">
-              {sourceMix.map((source) => (
-                <div key={source.label} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="flex items-center gap-2 text-slate-700 dark:text-[var(--ukip-muted)]">
-                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: source.color }} />
-                    {source.label}
-                  </span>
-                  <span className="font-medium text-slate-600 dark:text-[var(--ukip-muted)]">{source.value}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        )}
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
           <div className="flex items-center justify-between gap-3">
@@ -498,102 +379,6 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
-            <h2 className="text-base font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">{tr("page.home.pillar_progress", "Avance por pilar")}</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-[var(--ukip-muted)]">Knowledge · Intelligence · Delivery</p>
-            <div className="mt-6 space-y-6">
-              {pillarProgress.map((pillar, index) => (
-                <div key={pillar.label}>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="flex items-center gap-3 text-sm font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">
-                      <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${
-                        index === 0
-                          ? "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-200"
-                          : index === 1
-                            ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-200"
-                            : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200"
-                      }`}>
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={pillar.icon} />
-                        </svg>
-                      </span>
-                      <span>
-                        {pillar.label}
-                        <span className="block text-xs font-medium text-slate-500">{pillar.count} etapas</span>
-                      </span>
-                    </span>
-                    <span className="font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">{pillar.value}%</span>
-                  </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
-                    <div className="h-full rounded-full bg-violet-600 dark:bg-violet-400" style={{ width: `${pillar.value}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-base font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">Cobertura por dominio</h2>
-                <p className="mt-1 text-sm text-slate-500 dark:text-[var(--ukip-muted)]">Calidad de metadatos</p>
-              </div>
-              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">6 áreas</span>
-            </div>
-            <div className="mt-5 h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={domainCoverage} outerRadius={94}>
-                  <PolarGrid stroke="#e2e8f0" />
-                  <PolarAngleAxis dataKey="subject" tick={{ fill: "#64748b", fontSize: 12 }} />
-                  <Radar dataKey="value" stroke="#7c3aed" strokeWidth={2} fill="#7c3aed" fillOpacity={0.22} />
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-base font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">Salud del pipeline</h2>
-                <p className="mt-1 text-sm text-slate-500 dark:text-[var(--ukip-muted)]">Score global</p>
-              </div>
-              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">Live</span>
-            </div>
-            <div className="relative mx-auto mt-8 h-44 max-w-[260px]">
-              <svg className="h-full w-full" viewBox="0 0 220 140">
-                <path d="M30 110a80 80 0 0 1 160 0" fill="none" stroke="#f1f5f9" strokeLinecap="round" strokeWidth="28" />
-                <path
-                  d="M30 110a80 80 0 0 1 160 0"
-                  fill="none"
-                  stroke="#7c3aed"
-                  strokeDasharray="220"
-                  strokeDashoffset={gaugeOffset}
-                  strokeLinecap="round"
-                  strokeWidth="28"
-                />
-              </svg>
-              <div className="absolute inset-x-0 bottom-5 text-center">
-                <p className="font-mono text-4xl font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">{pipelineHealth}</p>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">de 100</p>
-              </div>
-            </div>
-            <div className="mt-4 grid grid-cols-3 border-t border-slate-200 pt-4 text-center dark:border-white/10">
-              <div>
-                <p className="font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">{hasEntities ? "98%" : "12%"}</p>
-                <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Ingesta</p>
-              </div>
-              <div>
-                <p className="font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">{Math.min(100, 40 + enrichPct * 0.55).toFixed(0)}%</p>
-                <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Calidad</p>
-              </div>
-              <div>
-                <p className="font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">{Math.round(enrichPct)}%</p>
-                <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Enriq.</p>
-              </div>
-            </div>
-          </div>
-        </div>
       </section>
 
       {/* Demo mode banner */}

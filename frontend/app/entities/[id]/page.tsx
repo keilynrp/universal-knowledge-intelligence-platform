@@ -11,6 +11,7 @@ import EntityGraph from "../../components/EntityGraph";
 import RelationshipManager from "../../components/RelationshipManager";
 import PresenceAvatars from "../../components/PresenceAvatars";
 import { useWebSocket } from "@/lib/useWebSocket";
+import { useLanguage } from "../../contexts/LanguageContext";
 
 type EntityValue =
     | string
@@ -87,12 +88,21 @@ const CORE_FIELDS: (keyof Entity)[] = [
     "gtin", "barcode", "unit_of_measure", "measure", "creation_date",
 ];
 
-const FIELD_LABELS: Record<string, string> = {
-    entity_name: "Entity Name", brand_capitalized: "Primary Label", model: "Secondary Label",
-    sku: "SKU", variant: "Variant", classification: "Classification",
-    entity_type: "Entity Type", status: "Status", validation_status: "Validation",
-    gtin: "GTIN", barcode: "Barcode", unit_of_measure: "Unit of Measure",
-    measure: "Measure", creation_date: "Creation Date",
+const FIELD_TRANSLATION_KEYS: Record<string, string> = {
+    entity_name: "entities.detail.field.entity_name",
+    brand_capitalized: "entities.detail.field.brand_capitalized",
+    model: "entities.detail.field.model",
+    sku: "entities.detail.field.sku",
+    variant: "entities.detail.field.variant",
+    classification: "entities.detail.field.classification",
+    entity_type: "entities.detail.field.entity_type",
+    status: "entities.detail.field.status",
+    validation_status: "entities.detail.field.validation_status",
+    gtin: "entities.detail.field.gtin",
+    barcode: "entities.detail.field.barcode",
+    unit_of_measure: "entities.detail.field.unit_of_measure",
+    measure: "entities.detail.field.measure",
+    creation_date: "entities.detail.field.creation_date",
 };
 
 function sourceVariant(source: string) {
@@ -125,6 +135,7 @@ export default function EntityDetailPage() {
     const params = useParams();
     const entityId = params.id as string;
     const { toast } = useToast();
+    const { t } = useLanguage();
 
     // Real-time presence (Sprint 91)
     const { presence, isConnected, send: wsSend } = useWebSocket(
@@ -305,9 +316,9 @@ export default function EntityDetailPage() {
     if (!entity) {
         return (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 py-20 dark:border-gray-700">
-                <p className="text-lg font-semibold text-gray-500 dark:text-gray-400">Entity not found</p>
+                <p className="text-lg font-semibold text-gray-500 dark:text-gray-400">{t("entities.detail.not_found")}</p>
                 <Link href="/" className="mt-3 text-sm text-blue-600 hover:underline dark:text-blue-400">
-                    ← Back to Knowledge Explorer
+                    {t("entities.detail.back")}
                 </Link>
             </div>
         );
@@ -324,8 +335,8 @@ export default function EntityDetailPage() {
         <div className="space-y-6">
             <PageHeader
                 breadcrumbs={[
-                    { label: "Home", href: "/" },
-                    { label: "Knowledge Explorer", href: "/" },
+                    { label: t("entities.detail.breadcrumb.home"), href: "/" },
+                    { label: t("entities.detail.breadcrumb.explorer"), href: "/" },
                     { label: entity.entity_name ?? `Entity #${entityId}` },
                 ]}
                 title={entity.entity_name ?? `Entity #${entityId}`}
@@ -341,13 +352,13 @@ export default function EntityDetailPage() {
                                     className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                                 >
                                     {saving ? <Spinner /> : null}
-                                    Save Changes
+                                    {t("entities.detail.btn.save")}
                                 </button>
                                 <button
                                     onClick={cancelEdit}
                                     className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
                                 >
-                                    Cancel
+                                    {t("entities.detail.btn.cancel")}
                                 </button>
                             </>
                         ) : (
@@ -358,7 +369,7 @@ export default function EntityDetailPage() {
                                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                 </svg>
-                                Edit
+                                {t("entities.detail.btn.edit")}
                             </button>
                         )}
                         <button
@@ -371,7 +382,7 @@ export default function EntityDetailPage() {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
                                 </svg>
                             )}
-                            {enriching ? "Enriching..." : "Enrich"}
+                            {enriching ? t("entities.detail.btn.enriching") : t("entities.detail.btn.enrich")}
                         </button>
                     </div>
                 }
@@ -379,11 +390,11 @@ export default function EntityDetailPage() {
 
             <TabNav
                 tabs={[
-                    { id: "overview", label: "Overview" },
-                    { id: "enrichment", label: "Enrichment" },
-                    { id: "authority", label: "Authority" },
-                    { id: "graph", label: "Graph" },
-                    { id: "comments", label: "Comments", badge: commentCount > 0 ? commentCount : undefined },
+                    { id: "overview", label: t("entities.detail.tab.overview") },
+                    { id: "enrichment", label: t("entities.detail.tab.enrichment") },
+                    { id: "authority", label: t("entities.detail.tab.authority") },
+                    { id: "graph", label: t("entities.detail.tab.graph") },
+                    { id: "comments", label: t("entities.detail.tab.comments"), badge: commentCount > 0 ? commentCount : undefined },
                 ]}
                 activeTab={tab}
                 onTabChange={(id) => setTab(id as Tab)}
@@ -396,7 +407,7 @@ export default function EntityDetailPage() {
                     {qualityData && (
                         <div className="rounded-2xl border border-indigo-100 bg-white p-6 shadow-sm dark:border-indigo-500/20 dark:bg-gray-900">
                             <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-indigo-500 dark:text-indigo-400">
-                                Quality Score
+                                {t("entities.detail.section.quality")}
                             </h3>
                             <div className="flex items-center gap-6 mb-5">
                                 <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-4 border-indigo-100 dark:border-indigo-500/20 bg-indigo-50 dark:bg-indigo-500/10">
@@ -405,7 +416,7 @@ export default function EntityDetailPage() {
                                     </span>
                                 </div>
                                 <div>
-                                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Overall Quality Index</p>
+                                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t("entities.detail.quality.overall")}</p>
                                     <div className="mt-1 w-48 h-2 rounded-full bg-gray-100 dark:bg-gray-800">
                                         <div
                                             className={`h-2 rounded-full ${qualityData.score >= 0.7 ? "bg-emerald-500" : qualityData.score >= 0.3 ? "bg-amber-400" : "bg-red-500"}`}
@@ -413,17 +424,17 @@ export default function EntityDetailPage() {
                                         />
                                     </div>
                                     {qualityData.stored_score != null && (
-                                        <p className="mt-1 text-xs text-gray-400">Stored: {Math.round(qualityData.stored_score * 100)}%</p>
+                                        <p className="mt-1 text-xs text-gray-400">{t("entities.detail.quality.stored")} {Math.round(qualityData.stored_score * 100)}%</p>
                                     )}
                                 </div>
                             </div>
                             <table className="w-full text-sm">
                                 <thead>
                                     <tr className="border-b border-gray-100 dark:border-gray-800">
-                                        <th className="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-400">Dimension</th>
-                                        <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-400">Weight</th>
-                                        <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-400">Contribution</th>
-                                        <th className="pb-2 pl-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400">Progress</th>
+                                        <th className="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-400">{t("entities.detail.quality.dimension")}</th>
+                                        <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-400">{t("entities.detail.quality.weight")}</th>
+                                        <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-400">{t("entities.detail.quality.contribution")}</th>
+                                        <th className="pb-2 pl-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400">{t("entities.detail.quality.progress")}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
@@ -456,11 +467,11 @@ export default function EntityDetailPage() {
                     )}
                     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                         <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                            Core Fields
+                            {t("entities.detail.section.core_fields")}
                         </h3>
                         <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2">
                             {CORE_FIELDS.map((field) => {
-                                const label = FIELD_LABELS[field as string] ?? field;
+                                const label = t(FIELD_TRANSLATION_KEYS[field as string] ?? field as string);
                                 const value = isEditing ? editData[field] : entity[field];
                                 const isStatus = field === "validation_status";
                                 const isEnrichStatus = field === "enrichment_status";
@@ -498,7 +509,7 @@ export default function EntityDetailPage() {
                     {Object.keys(extendedAttrs).length > 0 && (
                         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                             <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                                Extended Attributes
+                                {t("entities.detail.section.extended_attrs")}
                             </h3>
                             <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2">
                                 {Object.entries(extendedAttrs).map(([key, val]) => (
@@ -522,10 +533,10 @@ export default function EntityDetailPage() {
                 <div className="space-y-6">
                     <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                         {[
-                            { label: "Status", value: <Badge variant={enrichmentVariant(entity.enrichment_status)}>{entity.enrichment_status}</Badge> },
-                            { label: "Citations", value: entity.enrichment_citation_count || "—" },
-                            { label: "Source", value: entity.enrichment_source || "—" },
-                            { label: "DOI", value: entity.enrichment_doi ? (
+                            { label: t("entities.detail.enrichment.status"), value: <Badge variant={enrichmentVariant(entity.enrichment_status)}>{entity.enrichment_status}</Badge> },
+                            { label: t("entities.detail.enrichment.citations"), value: entity.enrichment_citation_count || "—" },
+                            { label: t("entities.detail.enrichment.source"), value: entity.enrichment_source || "—" },
+                            { label: t("entities.detail.enrichment.doi"), value: entity.enrichment_doi ? (
                                 <a href={`https://doi.org/${entity.enrichment_doi}`} target="_blank" rel="noopener noreferrer" className="truncate text-blue-600 hover:underline dark:text-blue-400">
                                     {entity.enrichment_doi}
                                 </a>
@@ -541,7 +552,7 @@ export default function EntityDetailPage() {
                     {entity.enrichment_concepts && (
                         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                             <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                                Concepts
+                                {t("entities.detail.section.concepts")}
                             </p>
                             <div className="flex flex-wrap gap-2">
                                 {entity.enrichment_concepts.split(",").map((c) => c.trim()).filter(Boolean).map((concept) => (
@@ -562,10 +573,10 @@ export default function EntityDetailPage() {
                             </svg>
                             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                                 {entity.enrichment_status === "none"
-                                    ? "Not enriched yet"
+                                    ? t("entities.detail.enrichment.not_started")
                                     : entity.enrichment_status === "failed"
-                                    ? "Enrichment failed"
-                                    : "Enrichment in progress..."}
+                                    ? t("entities.detail.enrichment.failed")
+                                    : t("entities.detail.enrichment.in_progress")}
                             </p>
                             {entity.enrichment_status !== "pending" && (
                                 <button
@@ -574,7 +585,7 @@ export default function EntityDetailPage() {
                                     className="mt-4 flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700 disabled:opacity-50"
                                 >
                                     {enriching ? <Spinner /> : null}
-                                    {enriching ? "Enriching..." : "Enrich Now"}
+                                    {enriching ? t("entities.detail.btn.enriching") : t("entities.detail.btn.enrich_now")}
                                 </button>
                             )}
                         </div>
@@ -587,13 +598,13 @@ export default function EntityDetailPage() {
                 <div className="space-y-6">
                     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                         <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                            Relationship Graph
+                            {t("entities.detail.section.relationship_graph")}
                         </h3>
                         <EntityGraph key={graphKey} entityId={entity.id} />
                     </div>
                     <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                         <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                            Manage Relationships
+                            {t("entities.detail.section.manage_relationships")}
                         </h3>
                         <RelationshipManager
                             entityId={entity.id}
@@ -625,9 +636,9 @@ export default function EntityDetailPage() {
                             <svg className="mb-3 h-10 w-10 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064" />
                             </svg>
-                            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No authority records for this entity</p>
+                            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t("entities.detail.authority.empty")}</p>
                             <Link href="/disambiguation" className="mt-3 text-sm text-blue-600 hover:underline dark:text-blue-400">
-                                Resolve via Disambiguation Tool →
+                                {t("entities.detail.authority.resolve_link")}
                             </Link>
                         </div>
                     ) : (
@@ -677,7 +688,7 @@ export default function EntityDetailPage() {
                                                         <div className="h-1.5 rounded-full bg-blue-500"
                                                             style={{ width: `${Math.round(rec.confidence * 100)}%` }} />
                                                     </div>
-                                                    <span className="text-xs text-gray-500">{Math.round(rec.confidence * 100)}% confidence</span>
+                                                    <span className="text-xs text-gray-500">{t("entities.detail.authority.confidence", { pct: Math.round(rec.confidence * 100) })}</span>
                                                 </div>
                                             </div>
                                             {rec.status === "pending" && (
@@ -687,14 +698,14 @@ export default function EntityDetailPage() {
                                                         disabled={isActing}
                                                         className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
                                                     >
-                                                        {isActing ? "..." : "Confirm"}
+                                                        {isActing ? "..." : t("entities.detail.authority.confirm")}
                                                     </button>
                                                     <button
                                                         onClick={() => rejectAuthority(rec.id)}
                                                         disabled={isActing}
                                                         className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
                                                     >
-                                                        {isActing ? "..." : "Reject"}
+                                                        {isActing ? "..." : t("entities.detail.authority.reject")}
                                                     </button>
                                                 </div>
                                             )}
