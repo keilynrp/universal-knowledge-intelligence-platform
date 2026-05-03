@@ -5,12 +5,16 @@ import hashlib
 import hmac
 import json
 import logging
+import os
 import re
 import threading
 import urllib.request as _urllib_req
 from datetime import datetime, timezone
 
 from sqlalchemy import func
+
+_DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite")
+_IS_POSTGRES = _DATABASE_URL.startswith("postgresql") or _DATABASE_URL.startswith("postgres")
 from sqlalchemy.orm import Session
 from thefuzz import fuzz, process
 
@@ -71,7 +75,12 @@ def _build_disambig_groups(
         entries = query.all()
         values = [v[0] for v in entries if v[0] and str(v[0]).strip()]
     else:
-        json_col = func.json_extract(models.RawEntity.normalized_json, f"$.{field}")
+        if _IS_POSTGRES:
+            from sqlalchemy import cast
+            from sqlalchemy.dialects.postgresql import JSONB
+            json_col = cast(models.RawEntity.normalized_json, JSONB)[field].astext
+        else:
+            json_col = func.json_extract(models.RawEntity.normalized_json, f"$.{field}")
         query = scope_query_to_org(
             db.query(json_col).distinct().filter(
                 models.RawEntity.normalized_json != None,
