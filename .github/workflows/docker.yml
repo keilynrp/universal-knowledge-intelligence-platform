@@ -93,3 +93,12 @@ jobs:
             NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://api.ukip.inbounduxd.com' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    needs: [build-backend, build-frontend]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Trigger Dokploy deploy
+        run: |
+          curl -sf "${{ secrets.DOKPLOY_WEBHOOK_URL }}" || echo "Webhook failed"
