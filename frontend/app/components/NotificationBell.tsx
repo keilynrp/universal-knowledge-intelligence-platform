@@ -214,8 +214,8 @@ export default function NotificationBell() {
             d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
         </svg>
         {unread > 0 && (
-          <span className="absolute right-1.5 top-1.5 flex h-2 w-2 items-center justify-center rounded-full bg-violet-500 text-[0px] font-bold text-white ring-2 ring-white dark:ring-[var(--ukip-header-bg)]">
-            {unread > 9 ? "9+" : unread}
+          <span className="absolute -right-1 -top-1 flex min-w-[1.1rem] h-[1.1rem] items-center justify-center rounded-full bg-violet-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white dark:ring-[var(--ukip-header-bg)]">
+            {unread > 99 ? "99+" : unread}
           </span>
         )}
       </button>
