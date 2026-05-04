@@ -97,7 +97,7 @@ export default function ActivityFeed() {
   }, [fetchFeed]);
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-gray-900 dark:text-white">{t("dashboard.activity.title")}</h2>
         <button
@@ -129,7 +129,7 @@ export default function ActivityFeed() {
                 <div className="flex items-start gap-2">
                   <span className="mt-0.5 text-base leading-none">{entry.icon}</span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    <p className="break-words text-sm font-medium text-gray-900 dark:text-white">
                       {label}
                     </p>
                     {detail && (
