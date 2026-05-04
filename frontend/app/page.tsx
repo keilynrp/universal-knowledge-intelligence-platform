@@ -290,17 +290,40 @@ export default function Home() {
               {tr("page.home.research_intelligence", "Research Intelligence")}
             </h1>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={handleLaunchDemo}
-              disabled={demoLoading}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-950 shadow-sm transition hover:border-violet-300 hover:text-violet-700 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text-strong)]"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
-              </svg>
-              Demo
-            </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {demoStatus?.demo_seeded ? (
+              <div className="inline-flex items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 py-1 pl-3 pr-1 dark:border-amber-700/40 dark:bg-amber-900/20">
+                <span className="h-2 w-2 rounded-full bg-amber-500" />
+                <span className="px-1 text-sm font-semibold text-amber-800 dark:text-amber-300">
+                  {t('page.home.demo_active_title')}
+                </span>
+                <button
+                  onClick={handleClearDemo}
+                  disabled={demoLoading}
+                  className="rounded-lg px-2 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-50 dark:text-amber-400 dark:hover:bg-amber-800/30"
+                >
+                  {demoLoading ? t('page.home.demo_clearing') : t('page.home.demo_clear_button')}
+                </button>
+              </div>
+            ) : demoStatus !== null ? (
+              <button
+                onClick={handleLaunchDemo}
+                disabled={demoLoading}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-950 shadow-sm transition hover:border-violet-300 hover:text-violet-700 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text-strong)]"
+              >
+                {demoLoading ? (
+                  <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                ) : (
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
+                  </svg>
+                )}
+                Demo
+              </button>
+            ) : null}
             <Link
               href="/import-export"
               className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-violet-500/20 transition hover:bg-violet-700"
@@ -381,53 +404,6 @@ export default function Home() {
 
       </section>
 
-      {/* Demo mode banner */}
-      {demoStatus !== null && (
-        !demoStatus.demo_seeded ? (
-          <div className="flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-4 dark:border-indigo-900/40 dark:bg-indigo-900/10">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400">
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-indigo-900 dark:text-indigo-200">{t('page.home.demo_banner_title')}</p>
-                <p className="text-xs text-indigo-600 dark:text-indigo-400">{t('page.home.demo_banner_description')}</p>
-              </div>
-            </div>
-            <button
-              onClick={handleLaunchDemo}
-              disabled={demoLoading}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors disabled:opacity-50"
-            >
-              {demoLoading ? (
-                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-              ) : t('page.home.demo_launch_button')}
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-5 py-3.5 dark:border-amber-900/40 dark:bg-amber-900/10">
-            <div className="flex items-center gap-3">
-              <span className="text-lg">demo</span>
-              <div>
-                <p className="text-sm font-medium text-amber-900 dark:text-amber-200">{t('page.home.demo_active_title')}</p>
-                <p className="text-xs text-amber-600 dark:text-amber-400">{demoStatus.demo_entity_count.toLocaleString()} {t('page.home.demo_active_description')}</p>
-              </div>
-            </div>
-            <button
-              onClick={handleClearDemo}
-              disabled={demoLoading}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-50 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
-            >
-              {demoLoading ? t('page.home.demo_clearing') : t('page.home.demo_clear_button')}
-            </button>
-          </div>
-        )
-      )}
 
       <AdaptiveNarrativeBlock
         progress={guidedProgress.percent}
