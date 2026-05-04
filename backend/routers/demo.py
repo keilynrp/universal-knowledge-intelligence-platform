@@ -89,6 +89,18 @@ def _row_to_raw_entity_kwargs(row: dict) -> dict:
     if legacy_attributes:
         kwargs["attributes_json"] = json.dumps(legacy_attributes)
 
+    # Any remaining columns that are not known model fields go into
+    # normalized_json so the disambiguation engine can find them.
+    _known = (
+        set(_CURRENT_FIELD_MAP.keys())
+        | set(_LEGACY_FALLBACKS.values())
+        | set(_LEGACY_ATTRIBUTE_COLUMNS)
+        | {"entity_name", "brand_capitalized", "sku"}  # legacy label columns
+    )
+    extra = {k: str(v) for k, v in row.items() if k not in _known and _is_present(v)}
+    if extra:
+        kwargs["normalized_json"] = json.dumps(extra, ensure_ascii=False)
+
     return kwargs
 
 

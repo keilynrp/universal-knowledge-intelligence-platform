@@ -86,6 +86,8 @@ export default function DisambiguationTool() {
     const [groups, setGroups] = useState<VariationGroup[]>([]);
     const [loading, setLoading] = useState(false);
     const [totalGroups, setTotalGroups] = useState(0);
+    const [hasSearched, setHasSearched] = useState(false);
+    const [searchedField, setSearchedField] = useState("");
 
     // AI resolution state
     const [resolvingIdx, setResolvingIdx] = useState<number | null>(null);
@@ -128,7 +130,9 @@ export default function DisambiguationTool() {
     }
 
     async function analyze() {
+        if (!field) return;
         setLoading(true);
+        setHasSearched(false);
         try {
             const res = await apiFetch(`/disambiguate/${field}?threshold=${threshold}&algorithm=${algorithm}`);
             if (!res.ok) throw new Error("Failed to fetch analysis");
@@ -136,6 +140,8 @@ export default function DisambiguationTool() {
             setGroups(data.groups);
             setTotalGroups(data.total_groups);
             setAuthorityCandidates({});
+            setSearchedField(fieldLabel);
+            setHasSearched(true);
         } catch {
             toast("Error analyzing data", "error");
         } finally {
@@ -422,11 +428,27 @@ export default function DisambiguationTool() {
                 ))}
                 {groups.length === 0 && !loading && (
                     <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 py-16 dark:border-gray-700">
-                        <svg className="mb-3 h-12 w-12 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                        </svg>
-                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Ready for Ontological Analysis</p>
-                        <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Pick an entity attribute to find naming inconsistencies in the repository</p>
+                        {hasSearched ? (
+                            <>
+                                <svg className="mb-3 h-12 w-12 text-emerald-300 dark:text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    {t('disambiguation.no_groups_found') || `No inconsistencies found for "${searchedField}"`}
+                                </p>
+                                <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                                    {t('disambiguation.no_groups_hint') || 'Try lowering the threshold or switching algorithm'}
+                                </p>
+                            </>
+                        ) : (
+                            <>
+                                <svg className="mb-3 h-12 w-12 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                </svg>
+                                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Ready for Ontological Analysis</p>
+                                <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Pick an entity attribute to find naming inconsistencies in the repository</p>
+                            </>
+                        )}
                     </div>
                 )}
             </div>

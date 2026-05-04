@@ -573,6 +573,8 @@ export const translations = {
         'disambiguation.variants': 'Variants',
         'disambiguation.confidence': 'Confidence',
         'disambiguation.empty': 'No clusters found for this field',
+        'disambiguation.no_groups_found': 'No inconsistencies found for this attribute',
+        'disambiguation.no_groups_hint': 'Try lowering the threshold or switching to a different algorithm',
         'disambiguation.loading': 'Analyzing field clusters...',
         'disambiguation.resolved': 'Resolved successfully',
 
@@ -3144,6 +3146,8 @@ export const translations = {
         'disambiguation.variants': 'Variantes',
         'disambiguation.confidence': 'Confianza',
         'disambiguation.empty': 'No se encontraron clusters para este campo',
+        'disambiguation.no_groups_found': 'No se encontraron inconsistencias para este atributo',
+        'disambiguation.no_groups_hint': 'Prueba reducir el threshold o cambiar de algoritmo',
         'disambiguation.loading': 'Analizando clusters del campo...',
         'disambiguation.resolved': 'Resuelto exitosamente',
 

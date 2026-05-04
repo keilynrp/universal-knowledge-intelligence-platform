@@ -35,6 +35,30 @@ OUTPUT_PATH = Path(__file__).parent.parent / "data" / "demo" / "demo_entities.xl
 TOTAL = 1_000
 SEED  = 42
 
+# Author name pool with deliberate variations so disambiguation has something
+# meaningful to cluster (token_sort, phonetic, n-gram all tested).
+_AUTHOR_POOL = [
+    # Same person, different formats
+    ("J. Smith", "John Smith", "Smith, J.", "Smith J"),
+    ("A. García", "Ana García", "Garcia, Ana", "A. Garcia"),
+    ("L. Chen", "Li Chen", "Chen, L.", "Chen Li"),
+    ("M. Müller", "Max Müller", "Mueller, Max", "M. Mueller"),
+    ("S. Patel", "Sunita Patel", "Patel, S.", "S Patel"),
+    ("R. Johnson", "Robert Johnson", "Johnson, R.", "Johnson Robert"),
+    ("C. Nakamura", "Chiaki Nakamura", "Nakamura C.", "C Nakamura"),
+    ("F. Dubois", "François Dubois", "Dubois, F.", "F. Dubois"),
+    ("P. Kim", "Park Kim", "Kim, P.", "P Kim"),
+    ("T. Okonkwo", "Taiwo Okonkwo", "Okonkwo, T.", "T. Okonkwo"),
+]
+
+_JOURNALS = [
+    "Nature", "Science", "Physical Review Letters", "Journal of Chemical Physics",
+    "Astrophysical Journal", "Environmental Science & Technology",
+    "Nature Communications", "PNAS", "PLOS ONE", "Scientific Reports",
+]
+
+_DOI_PREFIXES = ["10.1038", "10.1126", "10.1103", "10.1021", "10.3847", "10.1021", "10.1073"]
+
 random.seed(SEED)
 np.random.seed(SEED)
 fake = Faker()
@@ -130,7 +154,7 @@ for cat in CATEGORIES:
         month = random.randint(1, 12)
         day   = random.randint(1, 28)
 
-        rows.append({
+        row = {
             "primary_label":           f"{brand} {cat['classifications'][idx % len(cat['classifications'])]} {idx:04d}",
             "secondary_label":         brand,
             "canonical_id":            f"DEMO-{cat['name'][:3].upper()}-{idx:05d}",
@@ -146,7 +170,17 @@ for cat in CATEGORIES:
             "enrichment_doi":          None,
             "brand_lower":             brand.lower(),
             "classification":          cat["classifications"][idx % len(cat["classifications"])],
-        })
+        }
+        # Science-domain entities get publication-style fields so that the
+        # disambiguation module can find author/journal/keyword inconsistencies.
+        if cat["name"] == "Science":
+            author_group = _AUTHOR_POOL[idx % len(_AUTHOR_POOL)]
+            row["authors"]  = random.choice(author_group)
+            row["journal"]  = random.choice(_JOURNALS)
+            row["year"]     = str(year)
+            row["doi"]      = f"{random.choice(_DOI_PREFIXES)}/demo.{idx:05d}"
+            row["keywords"] = random.choice(cat["concepts"])
+        rows.append(row)
 
 # Shuffle so categories are mixed
 random.shuffle(rows)
