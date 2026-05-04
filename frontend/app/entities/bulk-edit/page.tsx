@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { PageHeader, Badge, useToast } from "../../components/ui";
 import { apiFetch } from "@/lib/api";
+import { useLanguage } from "../../contexts/LanguageContext";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -40,6 +41,7 @@ function Spinner({ className = "h-4 w-4" }: { className?: string }) {
 // ── Main Page ────────────────────────────────────────────────────────────────
 
 export default function BulkEditPage() {
+    const { t } = useLanguage();
     const { toast } = useToast();
     const [entities, setEntities] = useState<Entity[]>([]);
     const [loading, setLoading] = useState(true);
@@ -93,8 +95,8 @@ export default function BulkEditPage() {
     };
 
     const handleBulkUpdate = async () => {
-        if (selected.size === 0) { toast("Select at least one entity", "warning"); return; }
-        if (!bulkValue.trim()) { toast("Enter a value", "warning"); return; }
+        if (selected.size === 0) { toast(t("page.bulk_edit.validation_select_entity"), "warning"); return; }
+        if (!bulkValue.trim()) { toast(t("page.bulk_edit.validation_enter_value"), "warning"); return; }
         setBulkSaving(true);
         try {
             const res = await apiFetch("/entities/bulk-update", {
@@ -107,14 +109,14 @@ export default function BulkEditPage() {
             });
             if (res.ok) {
                 const data = await res.json();
-                toast(`Updated ${data.updated} entities`, "success");
+                toast(`${data.updated} ${t("page.bulk_edit.update_success")}`, "success");
                 setSelected(new Set());
                 setShowBulkEdit(false);
                 setBulkValue("");
                 load();
             } else {
                 const err = await res.json();
-                toast(err.detail || "Update failed", "error");
+                toast(err.detail || t("page.bulk_edit.update_failed"), "error");
             }
         } finally {
             setBulkSaving(false);
@@ -122,8 +124,8 @@ export default function BulkEditPage() {
     };
 
     const handleBulkDelete = async () => {
-        if (selected.size === 0) { toast("Select at least one entity", "warning"); return; }
-        if (!confirm(`Delete ${selected.size} entities? This cannot be undone.`)) return;
+        if (selected.size === 0) { toast(t("page.bulk_edit.validation_select_entity"), "warning"); return; }
+        if (!confirm(`${selected.size} — ${t("page.bulk_edit.delete_confirm")}`)) return;
         const res = await apiFetch("/entities/bulk", {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
@@ -131,7 +133,7 @@ export default function BulkEditPage() {
         });
         if (res.ok) {
             const data = await res.json();
-            toast(`Deleted ${data.deleted} entities`, "success");
+            toast(`${data.deleted} ${t("page.bulk_edit.delete_success")}`, "success");
             setSelected(new Set());
             load();
         }
@@ -143,12 +145,12 @@ export default function BulkEditPage() {
         <div className="space-y-5">
             <PageHeader
                 breadcrumbs={[
-                    { label: "Home", href: "/" },
-                    { label: "Knowledge Explorer", href: "/" },
-                    { label: "Bulk Editor" },
+                    { label: t("common.home"), href: "/" },
+                    { label: t("nav.home"), href: "/" },
+                    { label: t("page.bulk_edit.breadcrumb") },
                 ]}
-                title="Bulk Entity Editor"
-                description="Select multiple entities for batch field updates or bulk deletion"
+                title={t("page.bulk_edit.title")}
+                description={t("page.bulk_edit.description")}
             />
 
             {/* Search + actions bar */}
@@ -159,20 +161,20 @@ export default function BulkEditPage() {
                     </svg>
                     <input
                         type="text"
-                        placeholder="Search entities…"
+                        placeholder={t("page.bulk_edit.search_placeholder")}
                         value={search}
                         onChange={e => { setSearch(e.target.value); setPage(0); }}
                         className="h-10 w-full rounded-xl border border-gray-200 bg-white pl-10 pr-4 text-sm text-gray-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
                     />
                 </div>
-                <span className="text-sm text-gray-400">{total} entities · {selected.size} selected</span>
+                <span className="text-sm text-gray-400">{total} {t("page.bulk_edit.selection_summary").split(" · ")[0]} · {selected.size} {t("page.bulk_edit.selected_count")}</span>
             </div>
 
             {/* Bulk action toolbar — visible when items selected */}
             {selected.size > 0 && (
                 <div className="flex items-center gap-3 rounded-2xl border border-indigo-200 bg-gradient-to-r from-indigo-50 to-white px-5 py-3 shadow-sm dark:border-indigo-500/20 dark:from-indigo-500/5 dark:to-gray-900">
                     <span className="text-sm font-semibold text-indigo-700 dark:text-indigo-400">
-                        {selected.size} selected
+                        {selected.size} {t("page.bulk_edit.selected_count")}
                     </span>
                     <div className="mx-2 h-5 w-px bg-indigo-200 dark:bg-indigo-500/30" />
                     <button
@@ -180,20 +182,20 @@ export default function BulkEditPage() {
                         className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-700"
                     >
                         <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                        Batch Edit
+                        {t("page.bulk_edit.batch_edit_button")}
                     </button>
                     <button
                         onClick={handleBulkDelete}
                         className="flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400"
                     >
                         <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
-                        Bulk Delete
+                        {t("page.bulk_edit.bulk_delete_button")}
                     </button>
                     <button
                         onClick={() => setSelected(new Set())}
                         className="ml-auto text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                     >
-                        Clear selection
+                        {t("page.bulk_edit.clear_selection")}
                     </button>
                 </div>
             )}
@@ -202,11 +204,11 @@ export default function BulkEditPage() {
             {showBulkEdit && selected.size > 0 && (
                 <div className="rounded-2xl border border-indigo-200 bg-indigo-50/50 p-5 dark:border-indigo-500/20 dark:bg-indigo-500/5">
                     <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">
-                        Batch update {selected.size} entities
+                        {t("page.bulk_edit.batch_update_title")} ({selected.size})
                     </h3>
                     <div className="flex items-end gap-3">
                         <div className="flex-1">
-                            <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Field</label>
+                            <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{t("page.bulk_edit.field_label")}</label>
                             <select
                                 value={bulkField}
                                 onChange={e => setBulkField(e.target.value)}
@@ -218,7 +220,7 @@ export default function BulkEditPage() {
                             </select>
                         </div>
                         <div className="flex-[2]">
-                            <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">New Value</label>
+                            <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{t("page.bulk_edit.new_value_label")}</label>
                             <input
                                 type="text"
                                 value={bulkValue}
@@ -233,7 +235,7 @@ export default function BulkEditPage() {
                             className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
                         >
                             {bulkSaving && <Spinner />}
-                            {bulkSaving ? "Updating…" : "Apply"}
+                            {bulkSaving ? t("page.bulk_edit.updating") : t("page.bulk_edit.apply_button")}
                         </button>
                     </div>
                 </div>
@@ -247,7 +249,7 @@ export default function BulkEditPage() {
                     </div>
                 ) : entities.length === 0 ? (
                     <div className="py-16 text-center text-sm text-gray-400 dark:text-gray-500">
-                        {search ? "No entities match your search" : "No entities available"}
+                        {search ? t("page.bulk_edit.no_search_results") : t("page.bulk_edit.no_entities")}
                     </div>
                 ) : (
                     <table className="w-full min-w-[700px] text-sm">
@@ -261,12 +263,12 @@ export default function BulkEditPage() {
                                         className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                                     />
                                 </th>
-                                <th className="px-4 py-3">ID</th>
-                                <th className="px-4 py-3">Primary Label</th>
-                                <th className="px-4 py-3">Secondary Label</th>
-                                <th className="px-4 py-3">Canonical ID</th>
-                                <th className="px-4 py-3">Entity Type</th>
-                                <th className="px-4 py-3">Validation Status</th>
+                                <th className="px-4 py-3">{t("page.bulk_edit.table_id_header")}</th>
+                                <th className="px-4 py-3">{t("page.bulk_edit.table_primary_label_header")}</th>
+                                <th className="px-4 py-3">{t("page.bulk_edit.table_secondary_label_header")}</th>
+                                <th className="px-4 py-3">{t("page.bulk_edit.table_canonical_id_header")}</th>
+                                <th className="px-4 py-3">{t("page.bulk_edit.table_entity_type_header")}</th>
+                                <th className="px-4 py-3">{t("page.bulk_edit.table_validation_status_header")}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
@@ -325,17 +327,17 @@ export default function BulkEditPage() {
                         onClick={() => setPage(p => p - 1)}
                         className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-400"
                     >
-                        ← Previous
+                        {t("page.bulk_edit.pagination_previous")}
                     </button>
                     <span className="text-xs text-gray-400">
-                        Page {page + 1} of {totalPages}
+                        {t("page.bulk_edit.pagination").split(" ")[0]} {page + 1} {t("page.bulk_edit.pagination").split(" ")[1]} {totalPages}
                     </span>
                     <button
                         disabled={page >= totalPages - 1}
                         onClick={() => setPage(p => p + 1)}
                         className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-400"
                     >
-                        Next →
+                        {t("page.bulk_edit.pagination_next")}
                     </button>
                 </div>
             )}
