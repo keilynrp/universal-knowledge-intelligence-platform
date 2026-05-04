@@ -238,6 +238,25 @@ export default function ReviewQueueRecordsTable({
                                                 />
                                             )}
 
+                                            {queueMode !== "authors" && statusFilter === "pending" && (
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => onReviewRecord(rec, "confirm")}
+                                                        disabled={rowActionId === rec.id}
+                                                        className="inline-flex h-7 items-center rounded-md bg-green-600 px-3 text-xs font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50"
+                                                    >
+                                                        {rowActionId === rec.id ? t("page.authority.saving") : t("page.authority.confirm_button")}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => onReviewRecord(rec, "reject")}
+                                                        disabled={rowActionId === rec.id}
+                                                        className="inline-flex h-7 items-center rounded-md bg-red-600 px-3 text-xs font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                                                    >
+                                                        {t("page.authority.reject_button")}
+                                                    </button>
+                                                </div>
+                                            )}
+
                                             <AnnotationThread authorityId={rec.id} />
                                         </div>
                                     </td>
