@@ -8,6 +8,7 @@ import type { ToastVariant } from "../components/ui";
 import { apiFetch } from "@/lib/api";
 import FaviconDropZone from "./FaviconDropZone";
 import LogoDropZone from "./LogoDropZone";
+import { BrandLockup } from "../components/ukip";
 
 function getErrorMessage(error: unknown, fallback: string) {
     return error instanceof Error ? error.message : fallback;
@@ -89,10 +90,13 @@ export default function BrandingTab({ toast }: { toast: (msg: string, v?: ToastV
     const fld = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
         setForm(prev => ({ ...prev, [k]: e.target.value }));
 
-    const apiBase = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
-    const previewLogoUrl = form.logo_url?.startsWith("/static/")
-        ? `${apiBase}${form.logo_url}`
-        : form.logo_url;
+    const previewBranding = {
+        platform_name: form.platform_name,
+        logo_url: form.logo_url,
+        favicon_url: form.favicon_url,
+        accent_color: form.accent_color,
+        footer_text: form.footer_text,
+    };
 
     return (
         <div className="space-y-4">
@@ -157,22 +161,7 @@ export default function BrandingTab({ toast }: { toast: (msg: string, v?: ToastV
                     </span>
                 </div>
                 <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-800/50">
-                    <div
-                        className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg"
-                        style={{ backgroundColor: form.accent_color }}
-                    >
-                        {previewLogoUrl ? (
-                            <img src={previewLogoUrl} alt="" className="h-full w-full object-contain p-0.5" onError={e => (e.currentTarget.hidden = true)} />
-                        ) : (
-                            <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
-                            </svg>
-                        )}
-                    </div>
-                    <div>
-                        <p className="text-sm font-semibold text-gray-900 dark:text-white">{form.platform_name || "UKIP"}</p>
-                        <p className="text-xs text-gray-400">{form.footer_text}</p>
-                    </div>
+                    <BrandLockup branding={previewBranding} size="sm" className="max-w-full" />
                 </div>
                 <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
                     {tr("settings.branding.preview_help", "This preview reflects the changes currently in the form. Save when you are ready to apply them across the workspace.")}

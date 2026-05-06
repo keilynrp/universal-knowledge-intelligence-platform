@@ -1,44 +1,13 @@
-/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useSidebar } from "./SidebarProvider";
 import { useLanguage } from "../contexts/LanguageContext";
-import { useBranding, type BrandingSettings } from "../contexts/BrandingContext";
+import { useBranding } from "../contexts/BrandingContext";
 import { usePilotMode } from "../contexts/PilotModeContext";
+import { BrandLockup } from "./ukip";
 import { navSections } from "./sidebarNav";
-
-// ── Logo icon — shows uploaded image or default DB icon ───────────────────────
-
-function LogoIcon({ branding, size = 8 }: { branding: BrandingSettings; size?: number }) {
-  const apiBase = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
-  const logoSrc = branding.logo_url?.startsWith("/static/")
-    ? `${apiBase}${branding.logo_url}`
-    : branding.logo_url || "";
-  const px = `h-${size} w-${size}`;
-
-  return (
-    <div
-      className={`flex ${px} items-center justify-center overflow-hidden rounded-lg`}
-      style={{ backgroundColor: branding.accent_color || "#6366f1" }}
-    >
-      {logoSrc ? (
-        <img
-          src={logoSrc}
-          alt={branding.platform_name}
-          className="h-full w-full object-contain p-1"
-          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-        />
-      ) : (
-        <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
-        </svg>
-      )}
-    </div>
-  );
-}
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -101,12 +70,7 @@ export default function Sidebar() {
             onClick={closeMobile}
             aria-label={branding.platform_name}
           >
-            <LogoIcon branding={branding} size={8} />
-            {!compactDesktop && (
-              <span className="truncate text-base font-semibold text-[var(--ukip-text-strong)] transition-opacity duration-200">
-                {branding.platform_name}
-              </span>
-            )}
+            <BrandLockup branding={branding} showText={!compactDesktop} size="sm" className="max-w-full" />
           </Link>
           {/* Mobile close button */}
           <button
@@ -212,9 +176,7 @@ export default function Sidebar() {
             </div>
           ) : (
             <div className="flex justify-center">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[var(--ukip-panel-strong)] text-xs font-bold text-[var(--ukip-muted)]">
-                U
-              </span>
+              <BrandLockup branding={branding} showText={false} size="sm" />
             </div>
           )}
         </div>
@@ -222,4 +184,3 @@ export default function Sidebar() {
     </>
   );
 }
-

@@ -1,5 +1,6 @@
 export { default as AdaptiveNarrativeBlock } from "./AdaptiveNarrativeBlock";
 export type { AdaptiveNarrativeBlockProps } from "./AdaptiveNarrativeBlock";
+export { default as BrandLockup } from "./BrandLockup";
 export { default as CognitiveKpi } from "./CognitiveKpi";
 export { default as DashboardInsightMetrics } from "./DashboardInsightMetrics";
 export type { DashboardInsightMetricsProps } from "./DashboardInsightMetrics";

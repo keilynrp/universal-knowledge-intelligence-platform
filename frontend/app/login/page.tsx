@@ -3,10 +3,13 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "../contexts/AuthContext";
+import { useBranding } from "../contexts/BrandingContext";
+import { BrandLockup } from "../components/ukip";
 import { API_BASE } from "../../lib/api";
 
 function LoginPageContent() {
   const { login, isAuthenticated } = useAuth();
+  const { branding } = useBranding();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
@@ -102,17 +105,13 @@ function LoginPageContent() {
         <div className="flex items-center justify-center px-6 py-10 sm:px-10 lg:px-16">
           <div className="w-full max-w-sm">
             <div className="mb-10">
-              <div className="mb-8 flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-600 text-white shadow-[var(--ukip-glow-violet)]">
-                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M13 2L4 14h6l-1 8 10-13h-6l0-7Z" fill="currentColor" />
-                </svg>
-              </div>
+              <BrandLockup branding={branding} size="md" className="mb-8" />
               <p className="ukip-kicker text-violet-700 dark:text-violet-300">Semantic Intelligence</p>
               <h1 className="mt-3 text-3xl font-black tracking-[-0.06em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
                 Iniciar sesión
               </h1>
               <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-[var(--ukip-muted)]">
-                Accede a UKIP para gestionar catálogos, enriquecimiento y portafolios de investigación.
+                Accede a {branding.platform_name || "UKIP"} para gestionar catálogos, enriquecimiento y portafolios de investigación.
               </p>
             </div>
 
@@ -208,12 +207,12 @@ function LoginPageContent() {
                 disabled={loading}
                 className="ukip-focus h-12 w-full rounded-full border border-transparent bg-[var(--ukip-primary)] px-5 text-sm font-black text-white shadow-[var(--ukip-glow-violet)] transition hover:bg-[var(--ukip-primary-strong)] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {loading ? "Ingresando..." : "Entrar a UKIP"}
+                {loading ? "Ingresando..." : `Entrar a ${branding.platform_name || "UKIP"}`}
               </button>
             </form>
 
             <p className="mt-8 text-center text-xs text-slate-400 dark:text-[var(--ukip-muted)]">
-              © 2026 UKIP. Research Intelligence Platform.
+              © 2026 {branding.platform_name || "UKIP"}. {branding.footer_text || "Research Intelligence Platform"}.
             </p>
           </div>
         </div>
