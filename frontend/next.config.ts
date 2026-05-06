@@ -13,6 +13,17 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Keep route payloads fresh after Dokploy redeploys. Static chunks remain
+        // content-hashed under /_next/static and can still be cached aggressively.
+        source: "/((?!_next/static|favicon.ico).*)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-store, max-age=0, must-revalidate",
+          },
+        ],
+      },
+      {
         source: "/(.*)",
         headers: [
           { key: "X-Frame-Options",           value: "DENY" },
