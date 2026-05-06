@@ -1,6 +1,8 @@
 export { default as AdaptiveNarrativeBlock } from "./AdaptiveNarrativeBlock";
 export type { AdaptiveNarrativeBlockProps } from "./AdaptiveNarrativeBlock";
 export { default as CognitiveKpi } from "./CognitiveKpi";
+export { default as DashboardInsightMetrics } from "./DashboardInsightMetrics";
+export type { DashboardInsightMetricsProps } from "./DashboardInsightMetrics";
 export { default as EnrichmentMeter } from "./EnrichmentMeter";
 export { default as KnowledgeCard } from "./KnowledgeCard";
 export { default as PortalRecordCard } from "./PortalRecordCard";

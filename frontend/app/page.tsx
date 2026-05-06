@@ -7,7 +7,7 @@ import EntityTable from "./components/EntityTable";
 import ActivityFeed from "./components/ActivityFeed";
 import GuidedTour, { resetTour } from "./components/GuidedTour";
 import WelcomeModal from "./components/WelcomeModal";
-import { AdaptiveNarrativeBlock } from "./components/ukip";
+import { AdaptiveNarrativeBlock, DashboardInsightMetrics } from "./components/ukip";
 import { KpiSummaryCard } from "./components/ui";
 import { apiFetch } from "../lib/api";
 import { useAuth } from "./contexts/AuthContext";
@@ -45,6 +45,11 @@ function MetricIcon({ path, className = "h-4 w-4" }: { path: string; className?:
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d={path} />
     </svg>
   );
+}
+
+function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
 }
 
 export default function Home() {
@@ -340,6 +345,58 @@ export default function Home() {
       iconPath: "M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z",
     },
   ];
+  const activeDomains = (stats?.domain_distribution ?? [])
+    .filter((domain) => domain.count > 0)
+    .sort((a, b) => b.count - a.count);
+  const topDomains = activeDomains.slice(0, 6);
+  const maxDomainCount = topDomains[0]?.count ?? 1;
+  const domainCoverage = topDomains.map((domain) => ({
+    label: domain.domain ?? t("page.home.domain_unknown"),
+    percent: clampPercent((domain.count / maxDomainCount) * 100),
+  }));
+  const ingestionScore = hasEntities ? 100 : 0;
+  const domainDiversityScore = clampPercent((Math.min(domainCount, 6) / 6) * 100);
+  const entityTypeScore = clampPercent((Math.min(stats?.unique_entity_types ?? 0, 8) / 8) * 100);
+  const qualityScore = hasEntities ? clampPercent((domainDiversityScore + entityTypeScore) / 2) : 0;
+  const enrichmentScore = hasEntities ? clampPercent(enrichPct) : 0;
+  const knowledgePercent = clampPercent((ingestionScore + qualityScore + enrichmentScore) / 3);
+  const intelligencePercent = clampPercent((enrichmentScore + domainDiversityScore + guidedProgress.percent) / 3);
+  const deliveryPercent = clampPercent(Math.min(guidedProgress.percent, enrichmentScore));
+  const pipelineHealthScore = clampPercent((ingestionScore + qualityScore + enrichmentScore) / 3);
+  const insightPillars = [
+    {
+      id: "knowledge",
+      label: t("page.home.insights.knowledge"),
+      subtitle: t("page.home.insights.knowledge_subtitle"),
+      percent: knowledgePercent,
+      tags: [t("page.home.pipeline.ingest"), t("page.home.pipeline.authority"), t("page.home.pipeline.enrichment")],
+      tone: "violet" as const,
+      icon: <MetricIcon className="h-5 w-5" path="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625Z" />,
+    },
+    {
+      id: "intelligence",
+      label: t("page.home.insights.intelligence"),
+      subtitle: t("page.home.insights.intelligence_subtitle"),
+      percent: intelligencePercent,
+      tags: [t("page.home.pipeline.graph"), t("page.home.pipeline.analysis"), t("page.home.pipeline.answers")],
+      tone: "sky" as const,
+      icon: <MetricIcon className="h-5 w-5" path="M7.5 7.5h.008v.008H7.5V7.5zm9 0h.008v.008H16.5V7.5zm-9 9h.008v.008H7.5V16.5zm9 0h.008v.008H16.5V16.5zM8 8l8 8m0-8l-8 8" />,
+    },
+    {
+      id: "delivery",
+      label: t("page.home.insights.delivery"),
+      subtitle: t("page.home.insights.delivery_subtitle"),
+      percent: deliveryPercent,
+      tags: [t("page.home.pipeline.delivery")],
+      tone: "emerald" as const,
+      icon: <MetricIcon className="h-5 w-5" path="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />,
+    },
+  ];
+  const healthMetrics = [
+    { label: t("page.home.insights.ingest_short"), value: ingestionScore },
+    { label: t("page.home.insights.quality_short"), value: qualityScore },
+    { label: t("page.home.insights.enrichment_short"), value: enrichmentScore },
+  ];
 
   return (
     <div className="space-y-6">
@@ -494,6 +551,22 @@ export default function Home() {
           t("page.home.narrative.flow.brief"),
         ]}
         quickActions={narrativeQuickActions}
+      />
+
+      <DashboardInsightMetrics
+        pillarTitle={t("page.home.insights.pillar_title")}
+        pillarSubtitle={t("page.home.insights.pillar_subtitle")}
+        domainTitle={t("page.home.insights.domain_title")}
+        domainSubtitle={t("page.home.insights.domain_subtitle")}
+        domainAreaLabel={t("page.home.insights.domain_area_label")}
+        healthTitle={t("page.home.insights.health_title")}
+        healthSubtitle={t("page.home.insights.health_subtitle")}
+        liveLabel={t("page.home.insights.live")}
+        scoreSuffix={t("page.home.insights.score_suffix")}
+        pillars={insightPillars}
+        domains={domainCoverage}
+        healthScore={pipelineHealthScore}
+        healthMetrics={healthMetrics}
       />
 
       {/* Activity feed + Entity browser */}
