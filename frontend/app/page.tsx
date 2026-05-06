@@ -39,9 +39,9 @@ type GuidedStage = {
 
 type GuidedReadiness = "starting" | "building" | "review" | "briefing";
 
-function MetricIcon({ path }: { path: string }) {
+function MetricIcon({ path, className = "h-4 w-4" }: { path: string; className?: string }) {
   return (
-    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d={path} />
     </svg>
   );
@@ -272,6 +272,74 @@ export default function Home() {
     1,
     guidedStages.findIndex((stage) => stage.id === guidedProgress.currentStage.id) + 1,
   );
+  const pipelineLabelKeyByStage: Record<GuidedStage["id"], string> = {
+    import: "page.home.pipeline.ingest",
+    enrich: "page.home.pipeline.enrichment",
+    review: "page.home.pipeline.authority",
+    brief: "page.home.pipeline.delivery",
+  };
+  const narrativeStages = guidedStages.map((stage) => ({
+    ...stage,
+    label: t(pipelineLabelKeyByStage[stage.id]),
+  }));
+  const narrativeCopy = {
+    brandLabel: t("page.home.narrative.brand"),
+    eyebrow: t("page.home.guided.eyebrow"),
+    title: t("page.home.narrative.title"),
+    body: t("page.home.narrative.body"),
+    progressLabel: t("page.home.narrative.progress"),
+    stepLabel: t("page.home.narrative.step", { current: narrativeCurrentStep, total: guidedStages.length }),
+    flowLabel: t("page.home.narrative.current_flow"),
+    whyTitle: t("page.home.guided.why_now"),
+    context: nextGuidedAction.description,
+    info: t(`page.home.guided.readiness.${guidedProgress.readiness}`),
+    quickToolsTitle: t("page.home.narrative.quick_tools_title"),
+    quickToolsDescription: t("page.home.narrative.quick_tools_description"),
+    nextActionEyebrow: t("page.home.narrative.next_best_action"),
+  };
+  const narrativeMetrics = [
+    {
+      id: "coverage",
+      label: t("page.home.narrative.coverage"),
+      value: hasEntities ? "100%" : "0%",
+      description: t("page.home.narrative.coverage_description"),
+      percent: hasEntities ? 100 : 0,
+      tone: "emerald" as const,
+      icon: <MetricIcon className="h-7 w-7" path="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-5.25 0a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />,
+    },
+    {
+      id: "enrichment",
+      label: t("page.home.narrative.enrichment"),
+      value: hasEntities ? `${Math.round(enrichPct)}%` : "0%",
+      description: t("page.home.narrative.enrichment_description"),
+      percent: hasEntities ? enrichPct : 0,
+      tone: "sky" as const,
+      icon: <MetricIcon className="h-7 w-7" path="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.456-2.456L14.25 6l1.035-.259a3.375 3.375 0 0 0 2.456-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />,
+    },
+  ];
+  const narrativeQuickActions = [
+    {
+      title: t("page.home.cta_import_title"),
+      description: t("page.home.cta_import_desc"),
+      href: "/import-export",
+      tone: "blue" as const,
+      iconPath: "M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5",
+    },
+    {
+      title: t("page.home.cta_authority_title"),
+      description: t("page.home.cta_authority_desc"),
+      href: "/authority",
+      tone: "violet" as const,
+      iconPath: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253",
+    },
+    {
+      title: t("page.home.cta_olap_title"),
+      description: t("page.home.cta_olap_desc"),
+      href: "/analytics/olap",
+      tone: "emerald" as const,
+      iconPath: "M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z",
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -414,44 +482,19 @@ export default function Home() {
         enrichmentCoverage={enrichPct}
         recommendedActionLabel={nextGuidedAction.cta}
         recommendedActionHref={nextGuidedAction.href}
+        recommendedActionTitle={nextGuidedAction.title}
+        recommendedActionReason={nextGuidedAction.hint}
+        copy={narrativeCopy}
+        stages={narrativeStages}
+        metrics={narrativeMetrics}
+        flowItems={[
+          t("page.home.narrative.flow.dataset"),
+          t("page.home.pipeline.enrichment"),
+          t("page.home.pipeline.authority"),
+          t("page.home.narrative.flow.brief"),
+        ]}
+        quickActions={narrativeQuickActions}
       />
-
-      {/* Quick action cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Link href="/import-export" className="group rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-500 p-5 text-white shadow-sm transition-shadow hover:shadow-md">
-          <div className="flex items-center gap-3">
-            <svg className="h-8 w-8 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-            </svg>
-            <div>
-              <p className="font-semibold">{t('page.home.cta_import_title')}</p>
-              <p className="text-sm text-white/70">{t('page.home.cta_import_desc')}</p>
-            </div>
-          </div>
-        </Link>
-        <Link href="/authority" className="group rounded-2xl bg-gradient-to-br from-violet-600 to-purple-500 p-5 text-white shadow-sm transition-shadow hover:shadow-md">
-          <div className="flex items-center gap-3">
-            <svg className="h-8 w-8 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-            </svg>
-            <div>
-              <p className="font-semibold">{t('page.home.cta_authority_title')}</p>
-              <p className="text-sm text-white/70">{t('page.home.cta_authority_desc')}</p>
-            </div>
-          </div>
-        </Link>
-        <Link href="/analytics/olap" className="group rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-500 p-5 text-white shadow-sm transition-shadow hover:shadow-md">
-          <div className="flex items-center gap-3">
-            <svg className="h-8 w-8 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-            </svg>
-            <div>
-              <p className="font-semibold">{t('page.home.cta_olap_title')}</p>
-              <p className="text-sm text-white/70">{t('page.home.cta_olap_desc')}</p>
-            </div>
-          </div>
-        </Link>
-      </div>
 
       {/* Activity feed + Entity browser */}
       <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1fr_280px]">
