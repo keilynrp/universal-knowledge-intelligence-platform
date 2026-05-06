@@ -113,6 +113,7 @@ export default function CatalogPortalsPage() {
   const [candidates, setCandidates] = useState<CatalogImportCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletingSlug, setDeletingSlug] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: searchParams.get("title") ?? "",
@@ -262,6 +263,44 @@ export default function CatalogPortalsPage() {
       toast(`${tr("catalogs.create_failed_title", "Unable to create portal")}: ${message}`, "error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeletePortal = async (portal: CatalogPortal) => {
+    const confirmed = window.confirm(
+      tr(
+        "catalogs.delete_confirm",
+        `Delete "${portal.title}"? This only removes the catalog portal. Imported records and ingestion data will stay intact.`,
+      ),
+    );
+    if (!confirmed) return;
+
+    setDeletingSlug(portal.slug);
+    setError(null);
+    try {
+      const res = await apiFetch(`/catalogs/${portal.slug}`, { method: "DELETE" });
+      if (!res.ok) {
+        throw new Error(
+          await readCatalogError(
+            res,
+            tr("catalogs.delete_failed", "Could not delete the catalog portal. Please try again."),
+          ),
+        );
+      }
+      setPortals((current) => current.filter((item) => item.slug !== portal.slug));
+      toast(
+        `${tr("catalogs.delete_success_title", "Catalog portal deleted")}: ${tr("catalogs.delete_success_body", "The portal was removed without touching ingestion data.")}`,
+        "success",
+      );
+    } catch (deleteError) {
+      const message = normalizeFeedback(
+        deleteError instanceof Error ? deleteError.message : null,
+        tr("catalogs.delete_failed", "Could not delete the catalog portal. Please try again."),
+      );
+      setError(message);
+      toast(`${tr("catalogs.delete_failed_title", "Unable to delete portal")}: ${message}`, "error");
+    } finally {
+      setDeletingSlug(null);
     }
   };
 
@@ -437,13 +476,12 @@ export default function CatalogPortalsPage() {
           ) : (
             <div className="space-y-3">
               {portals.map((portal) => (
-                <Link
+                <article
                   key={portal.id}
-                  href={`/catalogs/${portal.slug}`}
-                  className="block rounded-2xl border border-gray-200 p-4 transition hover:border-blue-300 hover:bg-blue-50/50 dark:border-gray-800 dark:hover:border-blue-700 dark:hover:bg-blue-950/20"
+                  className="rounded-2xl border border-gray-200 p-4 transition hover:border-blue-300 hover:bg-blue-50/50 dark:border-gray-800 dark:hover:border-blue-700 dark:hover:bg-blue-950/20"
                 >
                   <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-2">
+                    <div className="min-w-0 space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-base font-semibold text-gray-900 dark:text-white">{portal.title}</h3>
                         <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
@@ -462,11 +500,26 @@ export default function CatalogPortalsPage() {
                         {portal.description || tr("catalogs.no_description", "No description yet.")}
                       </p>
                     </div>
-                    <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                      {tr("catalogs.open", "Open")} →
-                    </span>
+                    <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                      <Link
+                        href={`/catalogs/${portal.slug}`}
+                        className="inline-flex items-center justify-center rounded-xl border border-blue-200 px-3 py-2 text-sm font-medium text-blue-700 transition hover:border-blue-300 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-300 dark:hover:bg-blue-950/40"
+                      >
+                        {tr("catalogs.open", "Open")} →
+                      </Link>
+                      <button
+                        type="button"
+                        disabled={deletingSlug === portal.slug}
+                        onClick={() => void handleDeletePortal(portal)}
+                        className="inline-flex items-center justify-center rounded-xl border border-red-200 px-3 py-2 text-sm font-medium text-red-700 transition hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/80 dark:text-red-300 dark:hover:bg-red-950/30"
+                      >
+                        {deletingSlug === portal.slug
+                          ? tr("catalogs.deleting", "Deleting...")
+                          : tr("catalogs.delete", "Delete")}
+                      </button>
+                    </div>
                   </div>
-                </Link>
+                </article>
               ))}
             </div>
           )}
