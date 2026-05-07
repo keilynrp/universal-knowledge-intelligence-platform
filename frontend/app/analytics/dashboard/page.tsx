@@ -225,20 +225,6 @@ export default function ExecutiveDashboardPage() {
   const translateRuleLabel = (ruleId: string, fallback: string) => (
     tr(`page.exec_dashboard.benchmark_rule_label.${ruleId}`, fallback)
   );
-  const translateRuleMessage = (
-    profileId: string,
-    ruleId: string,
-    passed: boolean,
-    fallback: string,
-  ) => {
-    const stateKey = passed ? "pass" : "fail";
-    const profileSpecific = t(`page.exec_dashboard.benchmark_rule_message.${profileId}.${ruleId}.${stateKey}`);
-    if (profileSpecific !== `page.exec_dashboard.benchmark_rule_message.${profileId}.${ruleId}.${stateKey}`) {
-      return profileSpecific;
-    }
-    const generic = t(`page.exec_dashboard.benchmark_rule_message.${ruleId}.${stateKey}`);
-    return generic === `page.exec_dashboard.benchmark_rule_message.${ruleId}.${stateKey}` ? fallback : generic;
-  };
   const translateBenchmarkEvidence = (profileId: string, gap: BenchmarkGap) => (
     t("page.exec_dashboard.benchmark_evidence", {
       label: translateRuleLabel(gap.id, gap.label),
