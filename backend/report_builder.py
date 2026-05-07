@@ -15,6 +15,7 @@ from backend import models
 from backend.analyzers.topic_modeling import TopicAnalyzer
 from backend.schema_registry import registry
 from backend.services.analytics_service import AnalyticsService
+from backend.services.pattern_discovery import PatternDiscoveryService
 from backend.tenant_access import scope_query_to_org
 
 _STAKEHOLDER_PROFILES = {
@@ -458,6 +459,53 @@ def _section_impact_projection(
     </div>
 </section>"""
 
+
+def _section_hidden_patterns(
+    db: Session,
+    domain_id: str,
+    org_id: int | None,
+    benchmark_org: models.Organization | None = None,
+) -> str:
+    result = PatternDiscoveryService.discover(
+        db,
+        domain_id=domain_id,
+        org_id=org_id,
+        limit=6,
+    )
+    patterns = result.get("patterns") or []
+    if not patterns:
+        return """<section>
+    <h2>Hidden Patterns</h2>
+    <p style="color:#9ca3af;padding:12px 0">No hidden patterns detected yet. Import or enrich more records to surface stronger signals.</p>
+</section>"""
+
+    cards = "".join(
+        f"""
+        <div class="stat-card">
+            <div style="display:flex;justify-content:space-between;gap:12px;align-items:center">
+                <div class="label">{pattern["type"].replace("_", " ")}</div>
+                <span class="badge {'badge-green' if pattern['confidence'] == 'high' else 'badge-blue' if pattern['confidence'] == 'medium' else 'badge-gray'}">{pattern["confidence"].title()}</span>
+            </div>
+            <div style="font-size:16px;font-weight:700;color:#111827;margin-top:8px">{pattern["label"]}</div>
+            <div style="margin-top:8px;font-size:13px;color:#4b5563;line-height:1.5">{pattern["evidence"]}</div>
+            <div style="margin-top:10px;font-size:12px;color:#6b7280"><b>Action:</b> {pattern["recommended_action"]}</div>
+            <div style="margin-top:10px" class="bar-wrap">
+                <div class="bar-bg"><div class="bar" style="width:{int(pattern["impact_score"])}%"></div></div>
+                <span>{int(pattern["impact_score"])}</span>
+            </div>
+        </div>"""
+        for pattern in patterns
+    )
+
+    return f"""<section>
+    <h2>Hidden Patterns</h2>
+    <div class="callout">
+        <h3>Executive reading</h3>
+        <p>UKIP scanned the portfolio for non-obvious concentrations, outliers, quality risks, source imbalance and graph bridge signals.</p>
+    </div>
+    <div class="grid">{cards}</div>
+</section>"""
+
     def _priority_badge(priority: str) -> str:
         if priority == "high":
             return '<span class="badge badge-red">High priority</span>'
@@ -603,6 +651,51 @@ def _section_institutional_benchmark(
     </table>
 </section>"""
 
+
+def _section_agentic_trace(db: Session, domain_id: str, org_id: int | None) -> str:
+    traces = (
+        db.query(models.AnalysisContext)
+        .filter(
+            models.AnalysisContext.domain_id == domain_id,
+            models.AnalysisContext.label.like("agentic-chat:%"),
+        )
+        .order_by(models.AnalysisContext.created_at.desc())
+        .limit(5)
+        .all()
+    )
+    if not traces:
+        return """<section><h2>Agentic Research Trace</h2>
+        <p style="color:#9ca3af;padding:12px 0">No saved agentic chat traces are available yet. Ask a question from the research assistant and save the trace to include it in this brief.</p></section>"""
+
+    cards = []
+    for trace in traces:
+        try:
+            payload = json.loads(trace.context_snapshot or "{}")
+        except Exception:
+            payload = {}
+        question = payload.get("question") or trace.label.replace("agentic-chat:", "").strip()
+        answer = payload.get("answer") or ""
+        trace_meta = payload.get("trace") or {}
+        sources = payload.get("sources") or []
+        tool_list = ", ".join(trace_meta.get("tools_used") or []) or "No tools"
+        source_list = ", ".join(
+            str(s.get("label") or s.get("entity_id") or "source") for s in sources[:4] if isinstance(s, dict)
+        ) or "No explicit sources"
+        cards.append(f"""
+        <div class="card" style="margin-bottom:12px">
+            <div class="muted">Saved question</div>
+            <h3 style="margin:4px 0 8px">{question}</h3>
+            <p>{answer[:900]}</p>
+            <p class="muted"><strong>Tools:</strong> {tool_list}</p>
+            <p class="muted"><strong>Sources:</strong> {source_list}</p>
+        </div>
+        """)
+
+    return f"""<section><h2>Agentic Research Trace</h2>
+    <p>Esta seccion resume respuestas asistidas por IA generadas sobre datos del portafolio UKIP. Las fuentes y herramientas usadas quedan registradas para auditoria.</p>
+    {''.join(cards)}
+</section>"""
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 SECTION_BUILDERS = {
@@ -610,6 +703,8 @@ SECTION_BUILDERS = {
     "enrichment_coverage": _section_enrichment_coverage,
     "decision_recommendations": _section_decision_recommendations,
     "impact_projection": _section_impact_projection,
+    "hidden_patterns": _section_hidden_patterns,
+    "agentic_trace": _section_agentic_trace,
     "institutional_benchmark": _section_institutional_benchmark,
     "top_brands": _section_top_brands,
     "topic_clusters": _section_topic_clusters,
@@ -621,6 +716,8 @@ SECTION_LABELS = {
     "enrichment_coverage": "Enrichment Coverage",
     "decision_recommendations": "Suggested Next Actions",
     "impact_projection": "Impact Projection",
+    "hidden_patterns": "Hidden Patterns",
+    "agentic_trace": "Agentic Research Trace",
     "institutional_benchmark": "Institutional Benchmark",
     "top_brands": "Top Brands / Classifications",
     "topic_clusters": "Topic Clusters",
@@ -680,7 +777,7 @@ def build(
             try:
                 if sec == "institutional_benchmark":
                     body_sections.append(builder(db, domain_id, org_id, benchmark_profile_id, benchmark_org))
-                elif sec in {"decision_recommendations", "impact_projection"}:
+                elif sec in {"decision_recommendations", "impact_projection", "hidden_patterns"}:
                     body_sections.append(builder(db, domain_id, org_id, benchmark_org))
                 else:
                     body_sections.append(builder(db, domain_id, org_id))

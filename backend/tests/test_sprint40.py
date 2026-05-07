@@ -62,6 +62,7 @@ def test_reports_sections_include_decision_recommendations(client, auth_headers)
     ids = {section["id"] for section in resp.json()}
     assert "decision_recommendations" in ids
     assert "impact_projection" in ids
+    assert "hidden_patterns" in ids
     assert "institutional_benchmark" in ids
 
 
@@ -100,6 +101,30 @@ def test_html_report_accepts_impact_projection_section(client, auth_headers, db_
     assert "Monte Carlo" in resp.text
 
 
+def test_html_report_accepts_hidden_patterns_section(client, auth_headers, db_session):
+    from backend import models
+
+    for idx in range(3):
+        db_session.add(models.RawEntity(
+            primary_label=f"Knowledge graph signal {idx}",
+            domain="default",
+            enrichment_status="completed",
+            enrichment_concepts="knowledge graph; semantic intelligence",
+            enrichment_citation_count=100 + idx,
+            quality_score=0.8,
+        ))
+    db_session.commit()
+
+    payload = {
+        "domain_id": "default",
+        "sections": ["hidden_patterns"],
+        "title": "Hidden Signals Brief",
+    }
+    resp = client.post("/reports/generate", json=payload, headers=auth_headers)
+    assert resp.status_code == 200
+    assert "Hidden Patterns" in resp.text
+
+
 def test_pdf_accepts_full_pilot_sections(client, auth_headers):
     payload = {
         "domain_id": "default",
@@ -107,6 +132,7 @@ def test_pdf_accepts_full_pilot_sections(client, auth_headers):
             "entity_stats",
             "enrichment_coverage",
             "impact_projection",
+            "hidden_patterns",
             "decision_recommendations",
             "institutional_benchmark",
             "top_brands",

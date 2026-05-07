@@ -34,6 +34,7 @@ from backend.telemetry import telemetry_status
 from backend.tenant_scoping import get_tenant_scoping_report
 from backend.tenant_access import resolve_request_org_id, scope_query_to_org, scope_tag
 from backend.services.analytics_service import AnalyticsService
+from backend.services.pattern_discovery import PatternDiscoveryService
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
 from threading import Lock
@@ -287,6 +288,29 @@ def dashboard_summary(
     )
     _dashboard_cache.set(_key, result)
     return result
+
+
+@router.get("/analytics/patterns", tags=["analytics"])
+def discover_hidden_patterns(
+    domain_id: str = Query(default="default", min_length=1, max_length=64),
+    import_batch_id: int | None = Query(default=None, ge=1),
+    provider: str | None = Query(default=None, min_length=2, max_length=80),
+    portal_slug: str | None = Query(default=None, min_length=3, max_length=120),
+    limit: int = Query(default=6, ge=1, le=12),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Discover explainable hidden patterns for a domain, import batch, provider, or catalog portal."""
+    org_id = resolve_request_org_id(db, current_user)
+    return PatternDiscoveryService.discover(
+        db,
+        domain_id=domain_id,
+        org_id=org_id,
+        import_batch_id=import_batch_id,
+        provider=provider,
+        portal_slug=portal_slug,
+        limit=limit,
+    )
 
 
 @router.get("/dashboard/compare", tags=["analytics"])

@@ -18,6 +18,7 @@ import { useDomain } from "../../contexts/DomainContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { apiFetch } from "@/lib/api";
 import { Analytics } from "@/lib/analytics";
+import { AgenticResearchChat } from "../../components/ukip";
 
 const REFRESH_INTERVAL_SEC = 5 * 60; // 5 minutes
 
@@ -109,6 +110,19 @@ interface DashboardData {
     brief_angle: string;
     explanation: string;
     simulations: number;
+  };
+  hidden_patterns?: {
+    summary: { records_analyzed: number; patterns_found: number; highest_impact_score: number };
+    patterns: {
+      id: string;
+      type: string;
+      label: string;
+      confidence: "high" | "medium" | "low";
+      impact_score: number;
+      evidence: string;
+      recommended_action: string;
+      entities: { id: number; label: string; entity_type?: string | null }[];
+    }[];
   };
 }
 
@@ -862,6 +876,60 @@ export default function ExecutiveDashboardPage() {
           </div>
         </div>
       )}
+
+      {data?.hidden_patterns && data.hidden_patterns.patterns.length > 0 && (
+        <div className="ukip-panel-soft p-6">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="ukip-kicker">{tr("page.exec_dashboard.hidden_patterns_eyebrow", "Pattern discovery")}</p>
+              <h3 className="mt-1 text-lg font-bold text-[var(--ukip-text-strong)]">
+                {tr("page.exec_dashboard.hidden_patterns_title", "Hidden Patterns")}
+              </h3>
+              <p className="mt-2 max-w-2xl text-sm text-[var(--ukip-muted)]">
+                {tr("page.exec_dashboard.hidden_patterns_body", "Non-obvious clusters, outliers, gaps and graph signals detected from the current portfolio.")}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-4 py-3 text-sm font-bold text-[var(--ukip-text-strong)]">
+              {data.hidden_patterns.summary.patterns_found} {tr("page.exec_dashboard.hidden_patterns_found", "signals")}
+            </div>
+          </div>
+          <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
+            {data.hidden_patterns.patterns.slice(0, 6).map((pattern) => (
+              <div key={pattern.id} className="rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-panel)] p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--ukip-muted)]">
+                      {pattern.type.replaceAll("_", " ")}
+                    </p>
+                    <h4 className="mt-1 text-sm font-bold text-[var(--ukip-text-strong)]">{pattern.label}</h4>
+                  </div>
+                  <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-bold text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
+                    {pattern.confidence}
+                  </span>
+                </div>
+                <p className="mt-3 text-xs leading-5 text-[var(--ukip-muted)]">{pattern.evidence}</p>
+                <div className="mt-4">
+                  <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--ukip-muted)]">
+                    <span>{tr("page.exec_dashboard.hidden_patterns_impact", "Impact")}</span>
+                    <span>{pattern.impact_score}</span>
+                  </div>
+                  <div className="mt-2 h-2 rounded-full bg-gray-200 dark:bg-gray-800">
+                    <div className="h-2 rounded-full bg-violet-500" style={{ width: `${pattern.impact_score}%` }} />
+                  </div>
+                </div>
+                <p className="mt-4 text-xs font-semibold text-[var(--ukip-text-strong)]">
+                  {pattern.recommended_action}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <AgenticResearchChat
+        domainId={activeDomainId}
+        title={tr("page.exec_dashboard.agentic_chat_title", "Ask your research portfolio")}
+      />
 
       {/* ── Section 2: Impact Over Time ── */}
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">

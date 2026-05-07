@@ -27,6 +27,7 @@ from backend.routers.limiter import limiter
 # ── Domain routers ────────────────────────────────────────────────────────────
 from backend.routers import (
     ai_rag,
+    agentic_chat,
     alert_channels,
     analytics,
     annotations,
@@ -317,6 +318,7 @@ app.include_router(harmonization.router)
 app.include_router(authority.router)
 app.include_router(stores.router)
 app.include_router(ai_rag.router)
+app.include_router(agentic_chat.router)
 app.include_router(reports.router)
 app.include_router(webhooks.router)
 app.include_router(demo.router)

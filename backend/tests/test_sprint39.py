@@ -54,6 +54,7 @@ def test_dashboard_summary_returns_shape(client, auth_headers, db_session):
     assert "recommended_actions" in data
     assert "institutional_benchmark" in data
     assert "impact_projection" in data
+    assert "hidden_patterns" in data
 
     # KPI shape
     kpis = data["kpis"]
@@ -64,6 +65,9 @@ def test_dashboard_summary_returns_shape(client, auth_headers, db_session):
     assert projection["method"] == "monte_carlo"
     assert projection["range"]["p10"] <= projection["range"]["p50"] <= projection["range"]["p90"]
     assert projection["brief_angle"]
+
+    assert "patterns" in data["hidden_patterns"]
+    assert "summary" in data["hidden_patterns"]
 
     # Matrix shape
     matrix = data["brand_year_matrix"]

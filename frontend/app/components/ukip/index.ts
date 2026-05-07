@@ -1,5 +1,7 @@
 export { default as AdaptiveNarrativeBlock } from "./AdaptiveNarrativeBlock";
 export type { AdaptiveNarrativeBlockProps } from "./AdaptiveNarrativeBlock";
+export { default as AgenticResearchChat } from "./AgenticResearchChat";
+export type { AgenticResearchChatProps } from "./AgenticResearchChat";
 export { default as BrandLockup } from "./BrandLockup";
 export { default as CognitiveKpi } from "./CognitiveKpi";
 export { default as DashboardInsightMetrics } from "./DashboardInsightMetrics";
