@@ -108,22 +108,30 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -z "${{ secrets.DOKPLOY_API_URL }}" ] || [ -z "${{ secrets.DOKPLOY_API_KEY }}" ] || [ -z "${{ secrets.DOKPLOY_COMPOSE_ID }}" ]; then
+          dokploy_api_url="$(printf '%s' '${{ secrets.DOKPLOY_API_URL }}' | tr -d '\r\n' | sed 's:/*$::')"
+          dokploy_api_key="$(printf '%s' '${{ secrets.DOKPLOY_API_KEY }}' | tr -d '\r\n')"
+          dokploy_compose_id="$(printf '%s' '${{ secrets.DOKPLOY_COMPOSE_ID }}' | tr -d '\r\n')"
+
+          if [ -z "$dokploy_api_url" ] || [ -z "$dokploy_api_key" ] || [ -z "$dokploy_compose_id" ]; then
             echo "Missing Dokploy API secrets. Set DOKPLOY_API_URL, DOKPLOY_API_KEY, and DOKPLOY_COMPOSE_ID."
             exit 1
           fi
 
+          payload="$(
+            jq -n \
+              --arg composeId "$dokploy_compose_id" \
+              --arg title "UKIP CI deploy" \
+              --arg description "GitHub Actions deploy for ${{ github.sha }}" \
+              '{composeId: $composeId, title: $title, description: $description}'
+          )"
+
           response_file="$(mktemp)"
           http_code="$(
             curl -sS -o "$response_file" -w "%{http_code}" \
-              -X POST "${{ secrets.DOKPLOY_API_URL }}/api/compose.redeploy" \
+              -X POST "$dokploy_api_url/api/compose.redeploy" \
               -H "Content-Type: application/json" \
-              -H "x-api-key: ${{ secrets.DOKPLOY_API_KEY }}" \
-              -d '{
-                "composeId": "${{ secrets.DOKPLOY_COMPOSE_ID }}",
-                "title": "UKIP CI deploy",
-                "description": "GitHub Actions deploy for ${{ github.sha }}"
-              }'
+              -H "x-api-key: $dokploy_api_key" \
+              --data "$payload"
           )"
 
           echo "Dokploy HTTP status: $http_code"
