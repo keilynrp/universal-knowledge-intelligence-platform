@@ -261,9 +261,18 @@ export default function Header() {
           </button>
           <div className="hidden h-6 w-px bg-slate-200 dark:bg-[var(--ukip-border)] lg:block" />
           <nav className="hidden min-w-0 items-center gap-2 text-sm md:flex" aria-label="Breadcrumb">
-            <span className="text-slate-500 dark:text-[var(--ukip-muted)]">
-              {tr("page.home.breadcrumb", "Workspace")}
-            </span>
+            {pathname === "/" ? (
+              <span className="text-slate-500 dark:text-[var(--ukip-muted)]">
+                {tr("page.home.breadcrumb", "Workspace")}
+              </span>
+            ) : (
+              <Link
+                href="/"
+                className="rounded-md text-slate-500 transition-colors hover:text-violet-600 focus:outline-none focus:ring-2 focus:ring-violet-500/40 dark:text-[var(--ukip-muted)] dark:hover:text-violet-300"
+              >
+                {tr("page.home.breadcrumb", "Workspace")}
+              </Link>
+            )}
             <span className="text-slate-300 dark:text-[var(--ukip-muted-soft)]">/</span>
             <span className="max-w-[12rem] truncate font-semibold text-slate-900 dark:text-[var(--ukip-text-strong)]">
               {pathname === "/" ? tr("page.home.summary_title", "Resumen") : currentTitle}
