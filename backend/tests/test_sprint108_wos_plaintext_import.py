@@ -139,9 +139,24 @@ class TestWosPlaintextPreviewAndUpload:
         assert data["format"] == "wos_plaintext"
         assert data["provider"] == "wos"
         assert data["domain"] == "science"
+        assert data["graph"]["publications"] == 2
+        assert data["graph"]["nodes_created"] > 0
+        assert data["graph"]["relationships_created"] > 0
 
-        entities = db_session.query(models.RawEntity).order_by(models.RawEntity.id.asc()).all()
+        entities = (
+            db_session.query(models.RawEntity)
+            .filter(models.RawEntity.source != "graph_materializer")
+            .order_by(models.RawEntity.id.asc())
+            .all()
+        )
         assert len(entities) == 2
         assert entities[0].primary_label == "Linked Data - The Story So Far"
         assert entities[0].canonical_id == "10.4018/jswis.2009081901"
         assert entities[0].enrichment_citation_count == 4551
+
+        derived_count = (
+            db_session.query(models.RawEntity)
+            .filter(models.RawEntity.source == "graph_materializer")
+            .count()
+        )
+        assert derived_count == data["graph"]["nodes_created"]

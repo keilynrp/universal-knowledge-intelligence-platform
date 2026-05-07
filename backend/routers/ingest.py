@@ -33,6 +33,7 @@ from backend.datasource_analyzer import DataSourceAnalyzer
 from backend.importers.scientific import ScientificImportResult, detect_scientific_import
 from backend.routers.column_maps import COLUMN_MAPPING, EXPORT_COLUMN_MAPPING
 from backend.routers.deps import _audit, _dispatch_webhook, _get_active_integration
+from backend.services.graph_materializer import materialize_scientific_import_graph
 from backend.tenant_access import persisted_org_id, resolve_request_org_id, scope_query_to_org
 
 logger = logging.getLogger(__name__)
@@ -512,15 +513,20 @@ async def upload_file(
 
         for i in range(0, len(objects), _CHUNK_SIZE):
             db.bulk_save_objects(objects[i : i + _CHUNK_SIZE])
-        _audit(db, "upload", user_id=current_user.id,
-               details={
-                   "filename": file.filename,
-                   "rows": len(objects),
-                   "format": science_import.format,
-                   "provider": science_import.provider,
-                   "import_batch_id": import_batch.id,
-               })
+        audit_details = {
+            "filename": file.filename,
+            "rows": len(objects),
+            "format": science_import.format,
+            "provider": science_import.provider,
+            "import_batch_id": import_batch.id,
+        }
+        _audit(db, "upload", user_id=current_user.id, details=audit_details)
         db.commit()
+        graph_result = materialize_scientific_import_graph(
+            db,
+            import_batch.id,
+            org_id=stored_org_id,
+        )
         _dispatch_webhook("upload", {"filename": file.filename, "rows": len(objects), "import_batch_id": import_batch.id},
                           database.SessionLocal)
         return {
@@ -533,6 +539,7 @@ async def upload_file(
             "source_label": import_batch.source_label,
             "matched_columns": list(_SCIENCE_AUTO_MAPPING.keys()),
             "unmatched_columns": [],
+            "graph": graph_result,
         }
 
     # ── Tabular formats ────────────────────────────────────────────────────────

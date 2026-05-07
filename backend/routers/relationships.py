@@ -17,6 +17,7 @@ from collections import defaultdict, deque
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from backend import graph_analytics, models, schemas
@@ -219,15 +220,87 @@ def get_graph_communities(
 @router.get("/graph/visualization")
 def get_graph_visualization(
     limit: int = Query(default=500, ge=10, le=2000),
+    import_batch_id: int | None = Query(default=None, ge=1),
+    provider: str | None = Query(default=None, min_length=2, max_length=80),
+    domain: str | None = Query(default=None, min_length=1, max_length=80),
+    portal: str | None = Query(default=None, min_length=3, max_length=120),
+    portal_slug: str | None = Query(default=None, min_length=3, max_length=120),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
     """Return nodes + edges for interactive graph visualization canvas."""
     org_id = resolve_request_org_id(db, current_user)
-    edges_raw = graph_analytics.fetch_edges(db, org_id=org_id)
+    portal_ref = portal_slug or portal
+    scoped_import_batch_id = import_batch_id
+    scoped_domain = domain
+
+    if portal_ref:
+        portal_record = (
+            scope_query_to_org(db.query(models.CatalogPortal), models.CatalogPortal, org_id)
+            .filter(models.CatalogPortal.slug == portal_ref)
+            .first()
+        )
+        if not portal_record:
+            raise HTTPException(status_code=404, detail="Catalog portal not found")
+        scoped_import_batch_id = scoped_import_batch_id or portal_record.source_batch_id
+        scoped_domain = scoped_domain or portal_record.domain_id
+
+    filters_active = bool(scoped_import_batch_id or provider or scoped_domain)
+    if not filters_active:
+        edges_raw = graph_analytics.fetch_edges(db, org_id=org_id)
+    else:
+        entity_query = scope_query_to_org(db.query(models.RawEntity.id), models.RawEntity, org_id)
+        if scoped_import_batch_id:
+            entity_query = entity_query.filter(models.RawEntity.import_batch_id == scoped_import_batch_id)
+        if scoped_domain:
+            entity_query = entity_query.filter(models.RawEntity.domain == scoped_domain)
+        if provider:
+            provider_value = provider.strip().lower()
+            batch_ids = [
+                row[0]
+                for row in scope_query_to_org(db.query(models.ImportBatch.id), models.ImportBatch, org_id)
+                .filter(models.ImportBatch.source_type == f"science_upload:{provider_value}")
+                .all()
+            ]
+            provider_filters = [
+                models.RawEntity.enrichment_source == provider_value,
+                models.RawEntity.attributes_json.contains(f'"provider": "{provider_value}"'),
+            ]
+            if batch_ids:
+                provider_filters.append(models.RawEntity.import_batch_id.in_(batch_ids))
+            entity_query = entity_query.filter(or_(*provider_filters))
+
+        filtered_node_ids = {row[0] for row in entity_query.all()}
+        if not filtered_node_ids:
+            edges_raw = []
+        else:
+            edge_rows = (
+                scope_query_to_org(
+                    db.query(
+                        models.EntityRelationship.source_id,
+                        models.EntityRelationship.target_id,
+                        models.EntityRelationship.relation_type,
+                        models.EntityRelationship.weight,
+                    ),
+                    models.EntityRelationship,
+                    org_id,
+                )
+                .filter(
+                    models.EntityRelationship.source_id.in_(filtered_node_ids),
+                    models.EntityRelationship.target_id.in_(filtered_node_ids),
+                )
+                .all()
+            )
+            edges_raw = [(r[0], r[1], r[2], r[3]) for r in edge_rows]
 
     empty = {
         "nodes": [], "links": [], "edge_types": [], "total_communities": 0,
+        "filters": {
+            "import_batch_id": scoped_import_batch_id,
+            "provider": provider,
+            "domain": scoped_domain,
+            "portal": portal_ref,
+        },
         "stats": {"visible_nodes": 0, "visible_edges": 0,
                   "top_pagerank_leader": None, "top_pagerank_score": 0.0},
     }
@@ -273,6 +346,12 @@ def get_graph_visualization(
         "links": [{"source": s, "target": d, "type": r} for s, d, r, _ in filtered_edges],
         "edge_types": edge_types,
         "total_communities": len(visible_communities),
+        "filters": {
+            "import_batch_id": scoped_import_batch_id,
+            "provider": provider,
+            "domain": scoped_domain,
+            "portal": portal_ref,
+        },
         "stats": {
             "visible_nodes": len(top_nodes),
             "visible_edges": len(filtered_edges),

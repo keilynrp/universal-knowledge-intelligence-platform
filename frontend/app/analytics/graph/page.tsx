@@ -13,6 +13,7 @@ interface GraphData {
   links: GLink[];
   edge_types: string[];
   total_communities: number;
+  filters?: { import_batch_id?: number | null; provider?: string | null; domain?: string | null; portal?: string | null };
   stats: { visible_nodes: number; visible_edges: number; top_pagerank_leader: string | null; top_pagerank_score: number; };
 }
 interface PathResult { found: boolean; length?: number; relations?: string[]; steps?: Array<{ entity_id: number; primary_label: string | null }>; }
@@ -237,7 +238,14 @@ export default function GraphExplorerPage() {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    apiFetch("/graph/visualization?limit=500")
+    const query = new URLSearchParams({ limit: "500" });
+    const current = new URLSearchParams(window.location.search);
+    ["import_batch_id", "provider", "domain", "portal", "portal_slug"].forEach((key) => {
+      const value = current.get(key);
+      if (value) query.set(key, value);
+    });
+
+    apiFetch(`/graph/visualization?${query.toString()}`)
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(setData)
       .catch(e => setError(`Failed to load graph (${e})`))
@@ -268,7 +276,17 @@ export default function GraphExplorerPage() {
   }
 
   const stats = data?.stats;
-  const edgeTypeLabels: Record<string, string> = { cites: t("page.graph.edge_cites") || "Cita", "authored-by": t("page.graph.edge_authored") || "Autoría", "belongs-to": t("page.graph.edge_belongs") || "Afiliación", "related-to": t("page.graph.edge_related") || "Relacionado" };
+  const activeFilters = data?.filters ? Object.entries(data.filters).filter(([, value]) => value !== null && value !== undefined && value !== "") : [];
+  const edgeTypeLabels: Record<string, string> = {
+    cites: t("page.graph.edge_cites") || "Cita",
+    "authored-by": t("page.graph.edge_authored") || "Autoría",
+    "belongs-to": t("page.graph.edge_belongs") || "Afiliación",
+    "published-in": "Publicación",
+    "has-concept": "Concepto",
+    "identified-by": "Identificador",
+    "coauthor-with": "Coautoría",
+    "related-to": t("page.graph.edge_related") || "Relacionado",
+  };
 
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden bg-[var(--ukip-bg)]">
@@ -284,6 +302,11 @@ export default function GraphExplorerPage() {
             {[["RENDER", "Canvas 2D"], ["LAYOUT", "Force-directed"], ["NODES", stats ? `${stats.visible_nodes}` : "—"], ["EDGES", stats ? `${stats.visible_edges}` : "—"]].map(([k, v]) => (
               <span key={k} className="rounded-md border border-[var(--ukip-border)] bg-[var(--ukip-panel-strong)] px-2 py-0.5 text-[11px] font-mono text-[var(--ukip-muted)]">
                 <span className="mr-1 text-[var(--ukip-muted-soft)]">{k}</span>{v}
+              </span>
+            ))}
+            {activeFilters.map(([key, value]) => (
+              <span key={key} className="rounded-md border border-[var(--ukip-primary-soft)] bg-[var(--ukip-primary-soft)] px-2 py-0.5 text-[11px] font-mono text-[var(--ukip-primary-strong)]">
+                <span className="mr-1 uppercase opacity-70">{key}</span>{String(value)}
               </span>
             ))}
           </div>
