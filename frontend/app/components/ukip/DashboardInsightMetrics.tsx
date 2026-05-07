@@ -147,7 +147,7 @@ function HealthGauge({ value }: { value: number }) {
         />
       </svg>
       <div className="absolute inset-x-0 bottom-0 text-center">
-        <p className="font-mono text-4xl font-black tracking-[-0.08em] text-slate-950 dark:text-[var(--ukip-text-strong)]">{score}</p>
+        <p className="font-mono text-4xl font-semibold tracking-[-0.03em] text-slate-950 dark:text-[var(--ukip-text-strong)]">{score}</p>
       </div>
     </div>
   );
@@ -173,7 +173,7 @@ export default function DashboardInsightMetrics({
       <MetricPanel>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-base font-black tracking-[-0.04em] text-slate-950 dark:text-[var(--ukip-text-strong)]">{pillarTitle}</h3>
+            <h3 className="text-base font-semibold tracking-[-0.02em] text-slate-950 dark:text-[var(--ukip-text-strong)]">{pillarTitle}</h3>
             <p className="mt-1 text-sm text-slate-500 dark:text-[var(--ukip-muted)]">{pillarSubtitle}</p>
           </div>
           <span className="text-xs text-slate-500 dark:text-[var(--ukip-muted)]">%</span>
@@ -188,10 +188,10 @@ export default function DashboardInsightMetrics({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-end justify-between gap-3">
                     <div>
-                      <p className="font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">{pillar.label}</p>
+                      <p className="font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">{pillar.label}</p>
                       <p className="text-xs uppercase tracking-[0.12em] text-slate-500 dark:text-[var(--ukip-muted)]">{pillar.subtitle}</p>
                     </div>
-                    <span className="font-mono text-xl font-black text-slate-950 dark:text-[var(--ukip-text-strong)]">{percent}%</span>
+                    <span className="font-mono text-xl font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">{percent}%</span>
                   </div>
                   <div className="mt-3 h-2 rounded-full bg-slate-100 dark:bg-white/10">
                     <div className={`h-2 rounded-full ${tone.bar}`} style={{ width: `${percent}%` }} />
@@ -213,7 +213,7 @@ export default function DashboardInsightMetrics({
       <MetricPanel>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-base font-black tracking-[-0.04em] text-slate-950 dark:text-[var(--ukip-text-strong)]">{domainTitle}</h3>
+            <h3 className="text-base font-semibold tracking-[-0.02em] text-slate-950 dark:text-[var(--ukip-text-strong)]">{domainTitle}</h3>
             <p className="mt-1 text-sm text-slate-500 dark:text-[var(--ukip-muted)]">{domainSubtitle}</p>
           </div>
           <span className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-[var(--ukip-muted)]">
@@ -226,7 +226,7 @@ export default function DashboardInsightMetrics({
       <MetricPanel>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-base font-black tracking-[-0.04em] text-slate-950 dark:text-[var(--ukip-text-strong)]">{healthTitle}</h3>
+            <h3 className="text-base font-semibold tracking-[-0.02em] text-slate-950 dark:text-[var(--ukip-text-strong)]">{healthTitle}</h3>
             <p className="mt-1 text-sm text-slate-500 dark:text-[var(--ukip-muted)]">{healthSubtitle}</p>
           </div>
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-200">
@@ -239,7 +239,7 @@ export default function DashboardInsightMetrics({
         <div className="mt-6 grid grid-cols-3 border-t border-slate-200 pt-4 dark:border-white/10">
           {healthMetrics.map((metric) => (
             <div key={metric.label} className="text-center">
-              <p className="font-mono text-lg font-black text-slate-950 dark:text-[var(--ukip-text-strong)]">{clampPercent(metric.value)}%</p>
+              <p className="font-mono text-lg font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">{clampPercent(metric.value)}%</p>
               <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500 dark:text-[var(--ukip-muted)]">{metric.label}</p>
             </div>
           ))}

@@ -148,7 +148,7 @@ export default function AdaptiveNarrativeBlock({
           <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
             <div className="max-w-3xl">
               <div className="flex flex-wrap items-center gap-3">
-                <span className="inline-flex items-center gap-2 text-xl font-black tracking-[-0.04em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
+                <span className="inline-flex items-center gap-2 text-xl font-semibold tracking-[-0.02em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
                   <span className="h-5 w-5 rounded-[0.35rem] bg-gradient-to-br from-violet-500 to-blue-500 shadow-[var(--ukip-glow-violet)]" />
                   {copy.brandLabel}
                 </span>
@@ -156,7 +156,7 @@ export default function AdaptiveNarrativeBlock({
                   {copy.eyebrow}
                 </span>
               </div>
-              <h2 className="mt-8 max-w-2xl text-4xl font-black leading-[1.08] tracking-[-0.06em] text-slate-950 dark:text-[var(--ukip-text-strong)] sm:text-5xl">
+              <h2 className="mt-8 max-w-2xl text-4xl font-semibold leading-[1.12] tracking-[-0.025em] text-slate-950 dark:text-[var(--ukip-text-strong)] sm:text-5xl">
                 {copy.title}
               </h2>
               <p className="mt-5 max-w-3xl text-base leading-8 text-slate-600 dark:text-[var(--ukip-muted)]">
@@ -168,7 +168,7 @@ export default function AdaptiveNarrativeBlock({
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-[var(--ukip-muted)]">
                 {copy.progressLabel}
               </p>
-              <p className="mt-3 font-mono text-3xl font-black tracking-[-0.08em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
+              <p className="mt-3 font-mono text-3xl font-semibold tracking-[-0.03em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
                 {safeProgress}%
               </p>
               <div className="mt-4">
@@ -193,7 +193,7 @@ export default function AdaptiveNarrativeBlock({
                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-violet-600 dark:text-violet-200">
                     {copy.flowLabel}
                   </p>
-                  <p className="mt-2 text-base font-bold leading-7 text-slate-950 dark:text-[var(--ukip-text-strong)]">
+                  <p className="mt-2 text-base font-semibold leading-7 text-slate-950 dark:text-[var(--ukip-text-strong)]">
                     {flowText}
                   </p>
                   <span className="mt-4 inline-flex rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-sm font-semibold text-violet-700 dark:border-violet-400/25 dark:bg-violet-500/10 dark:text-violet-200">
@@ -213,7 +213,7 @@ export default function AdaptiveNarrativeBlock({
                     <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-[var(--ukip-muted)]">
                       {metric.label}
                     </p>
-                    <p className="mt-3 font-mono text-3xl font-black tracking-[-0.08em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
+                    <p className="mt-3 font-mono text-3xl font-semibold tracking-[-0.03em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
                       {metric.value}
                     </p>
                     {metric.description ? (
@@ -231,7 +231,7 @@ export default function AdaptiveNarrativeBlock({
           </div>
 
           <div className="flex gap-4 rounded-[var(--ukip-radius-xl)] border border-violet-200 bg-violet-50/60 p-5 text-slate-700 dark:border-violet-400/25 dark:bg-violet-500/10 dark:text-[var(--ukip-text)]">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-600 text-lg font-black text-white">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-600 text-lg font-semibold text-white">
               i
             </span>
             <p className="max-w-5xl text-sm leading-7">{copy.info}</p>
@@ -240,17 +240,17 @@ export default function AdaptiveNarrativeBlock({
 
         <aside className="border-t border-slate-200 bg-slate-50/70 p-6 dark:border-white/10 dark:bg-white/[0.03] lg:border-l lg:border-t-0 lg:p-8">
           <div className="sticky top-24">
-            <p className="flex items-center gap-3 text-xs font-black uppercase tracking-[0.2em] text-violet-600 dark:text-violet-200">
+            <p className="flex items-center gap-3 text-xs font-bold uppercase tracking-[0.2em] text-violet-600 dark:text-violet-200">
               <svg className="h-7 w-7" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 2l1.55 5.33L19 9l-5.45 1.67L12 16l-1.55-5.33L5 9l5.45-1.67L12 2zm6.5 11l.82 2.68L22 16.5l-2.68.82L18.5 20l-.82-2.68L15 16.5l2.68-.82L18.5 13zM5.5 13l.82 2.68L9 16.5l-2.68.82L5.5 20l-.82-2.68L2 16.5l2.68-.82L5.5 13z" />
               </svg>
               {copy.nextActionEyebrow}
             </p>
-            <h3 className="mt-8 text-3xl font-black leading-tight tracking-[-0.05em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
+            <h3 className="mt-8 text-3xl font-semibold leading-tight tracking-[-0.025em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
               {actionTitle}
             </h3>
             <div className="mt-8 rounded-[var(--ukip-radius-xl)] border border-violet-200 bg-white p-5 shadow-sm dark:border-violet-400/25 dark:bg-[var(--ukip-panel)]">
-              <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-violet-600 dark:text-violet-200">
+              <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-violet-600 dark:text-violet-200">
                 <IconFromPath path="M12 18h.01M9.75 15.75h4.5m-4.5-3.375a2.25 2.25 0 1 1 4.5 0c0 1.125-1.125 1.688-1.688 2.25-.337.337-.562.787-.562 1.125" className="h-5 w-5" />
                 {copy.whyTitle}
               </p>
@@ -278,7 +278,7 @@ export default function AdaptiveNarrativeBlock({
       {quickActions.length > 0 ? (
         <div className="grid gap-4 border-t border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-[var(--ukip-panel)] lg:grid-cols-[minmax(220px,0.65fr)_1fr] lg:p-8">
           <div>
-            <h3 className="text-lg font-black tracking-[-0.04em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
+            <h3 className="text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
               {copy.quickToolsTitle}
             </h3>
             <p className="mt-2 max-w-sm text-sm leading-6 text-slate-600 dark:text-[var(--ukip-muted)]">

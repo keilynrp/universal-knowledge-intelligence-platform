@@ -107,7 +107,7 @@ function LoginPageContent() {
             <div className="mb-10">
               <BrandLockup branding={branding} size="md" className="mb-8" />
               <p className="ukip-kicker text-violet-700 dark:text-violet-300">Semantic Intelligence</p>
-              <h1 className="mt-3 text-3xl font-black tracking-[-0.06em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
+              <h1 className="mt-3 text-3xl font-semibold tracking-[-0.025em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
                 Iniciar sesión
               </h1>
               <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-[var(--ukip-muted)]">
@@ -205,7 +205,7 @@ function LoginPageContent() {
               <button
                 type="submit"
                 disabled={loading}
-                className="ukip-focus h-12 w-full rounded-full border border-transparent bg-[var(--ukip-primary)] px-5 text-sm font-black text-white shadow-[var(--ukip-glow-violet)] transition hover:bg-[var(--ukip-primary-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="ukip-focus h-12 w-full rounded-full border border-transparent bg-[var(--ukip-primary)] px-5 text-sm font-semibold text-white shadow-[var(--ukip-glow-violet)] transition hover:bg-[var(--ukip-primary-strong)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? "Ingresando..." : `Entrar a ${branding.platform_name || "UKIP"}`}
               </button>
@@ -227,7 +227,7 @@ function LoginPageContent() {
           <div className="relative flex h-full min-h-[560px] flex-col">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.24em] text-white/60">UKIP Narrative</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/60">UKIP Narrative</p>
                 <p className="mt-1 text-sm font-semibold text-white/80">Research intelligence by stakeholder</p>
               </div>
               <div className="flex gap-2">
@@ -257,10 +257,10 @@ function LoginPageContent() {
                   <div className="relative rounded-[1.75rem] border border-white/20 bg-white/95 p-6 text-slate-950 shadow-2xl">
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">{currentSlide.metricLabel}</p>
-                        <p className="mt-2 font-mono text-4xl font-black tracking-[-0.08em]">{currentSlide.metricValue}</p>
+                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{currentSlide.metricLabel}</p>
+                        <p className="mt-2 font-mono text-4xl font-semibold tracking-[-0.035em]">{currentSlide.metricValue}</p>
                       </div>
-                      <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">{currentSlide.metricDelta}</span>
+                      <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{currentSlide.metricDelta}</span>
                     </div>
 
                     <div className="mt-8 grid grid-cols-[1fr_auto] items-end gap-5">
@@ -277,17 +277,17 @@ function LoginPageContent() {
                       </svg>
                       <div className="rounded-2xl bg-slate-950 px-4 py-3 text-white shadow-xl">
                         <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/50">{currentSlide.insightLabel}</p>
-                        <p className="mt-1 font-mono text-2xl font-black">{currentSlide.insightValue}</p>
+                        <p className="mt-1 font-mono text-2xl font-semibold">{currentSlide.insightValue}</p>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 <div className="mx-auto max-w-md text-center">
-                  <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.2em] text-white/75">
+                  <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-white/75">
                     {currentSlide.eyebrow}
                   </span>
-                  <h2 className="mt-5 text-3xl font-black leading-tight tracking-[-0.06em]">
+                  <h2 className="mt-5 text-3xl font-semibold leading-tight tracking-[-0.025em]">
                     {currentSlide.title}
                   </h2>
                   <p className="mt-4 text-sm leading-6 text-white/75">

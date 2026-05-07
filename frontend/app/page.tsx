@@ -411,7 +411,7 @@ export default function Home() {
                 {personaLabel}
               </span>
             </div>
-            <h1 className="mt-3 text-3xl font-bold tracking-[-0.04em] text-slate-950 dark:text-[var(--ukip-text-strong)] sm:text-4xl">
+            <h1 className="mt-3 text-3xl font-semibold tracking-[-0.025em] text-slate-950 dark:text-[var(--ukip-text-strong)] sm:text-4xl">
               {tr("page.home.research_intelligence", "Research Intelligence")}
             </h1>
           </div>
@@ -475,7 +475,7 @@ export default function Home() {
 
         {stats?.domain_distribution && stats.domain_distribution.filter((d) => d.count > 0).length > 0 && (
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
-            <h2 className="text-base font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">
+            <h2 className="text-base font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">
               {tr("page.home.domain_distribution", "Distribución por dominio")}
             </h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-[var(--ukip-muted)]">
