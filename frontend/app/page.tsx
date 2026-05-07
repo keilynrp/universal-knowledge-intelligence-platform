@@ -569,8 +569,8 @@ export default function Home() {
         healthMetrics={healthMetrics}
       />
 
-      {/* Activity feed + Entity browser */}
-      <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1fr_280px]">
+      {/* Entity browser + Activity feed */}
+      <div className="grid grid-cols-1 gap-6">
         <div>
           {stats?.total_entities === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 py-16 dark:border-gray-700 dark:bg-gray-900/20">
@@ -600,7 +600,7 @@ export default function Home() {
             </div>
           ) : <EntityTable />}
         </div>
-        <div>
+        <div className="w-full max-w-full">
           <ActivityFeed />
         </div>
       </div>
