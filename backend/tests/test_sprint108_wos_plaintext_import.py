@@ -11,6 +11,7 @@ import json
 
 from backend.parsers.science_mapper import science_record_to_entity
 from backend.parsers.wos_plaintext_parser import looks_like_wos_plaintext, parse_wos_plaintext
+from backend.importers.scientific import detect_scientific_import
 
 
 WOS_PLAINTEXT_SAMPLE = """\
@@ -95,6 +96,20 @@ class TestWosPlaintextParser:
         assert attrs["_source_version"] == "1.0"
         assert attrs["raw_au"] == "Christian Bizer; Tom Heath"
 
+    def test_wos_import_adapter_returns_canonical_publications(self):
+        result = detect_scientific_import("works.txt", WOS_PLAINTEXT_SAMPLE)
+        assert result is not None
+        assert result.format == "wos_plaintext"
+        assert result.provider == "wos"
+        assert result.records[0].title == "Linked Data - The Story So Far"
+        assert result.records[0].doi == "10.4018/jswis.2009081901"
+        assert result.records[0].authors[0].name == "Christian Bizer"
+        entity = result.records[0].to_entity_kwargs()
+        attrs = json.loads(entity["attributes_json"])
+        assert attrs["provider"] == "OpenAlex"
+        assert attrs["mapping_version"] == "ukip-science-v1"
+        assert attrs["canonical_authors"][0]["name"] == "Christian Bizer"
+
 
 class TestWosPlaintextPreviewAndUpload:
     def test_preview_txt_as_science_format(self, client, editor_headers):
@@ -122,6 +137,7 @@ class TestWosPlaintextPreviewAndUpload:
         data = response.json()
         assert data["total_rows"] == 2
         assert data["format"] == "wos_plaintext"
+        assert data["provider"] == "wos"
         assert data["domain"] == "science"
 
         entities = db_session.query(models.RawEntity).order_by(models.RawEntity.id.asc()).all()

@@ -30,10 +30,7 @@ from backend.auth import get_current_user, require_role
 from backend.database import get_db
 from backend.routers.limiter import limiter
 from backend.datasource_analyzer import DataSourceAnalyzer
-from backend.parsers.bibtex_parser import parse_bibtex
-from backend.parsers.ris_parser import parse_ris
-from backend.parsers.science_mapper import science_record_to_entity
-from backend.parsers.wos_plaintext_parser import looks_like_wos_plaintext, parse_wos_plaintext
+from backend.importers.scientific import ScientificImportResult, detect_scientific_import
 from backend.routers.column_maps import COLUMN_MAPPING, EXPORT_COLUMN_MAPPING
 from backend.routers.deps import _audit, _dispatch_webhook, _get_active_integration
 from backend.tenant_access import persisted_org_id, resolve_request_org_id, scope_query_to_org
@@ -194,15 +191,22 @@ def _parse_file_to_records(filename: str, contents: bytes) -> tuple[str, list[di
         raise HTTPException(status_code=400, detail="Unsupported file format for tabular parsing.")
 
 
-def _parse_science_records(filename: str, contents: bytes) -> tuple[str, list[dict]]:
+def _parse_science_import(filename: str, contents: bytes) -> ScientificImportResult:
     text = contents.decode("utf-8", errors="replace")
-    if filename.endswith(".bib"):
-        return "bibtex", parse_bibtex(text)
-    if filename.endswith(".ris"):
-        return "ris", parse_ris(text)
-    if filename.endswith(".txt") and looks_like_wos_plaintext(text):
-        return "wos_plaintext", parse_wos_plaintext(text)
+    result = detect_scientific_import(filename, text)
+    if result is not None:
+        return result
     raise HTTPException(status_code=400, detail="Unsupported science import format.")
+
+
+def _try_parse_science_import(filename: str, contents: bytes) -> ScientificImportResult | None:
+    text = contents.decode("utf-8", errors="replace")
+    return detect_scientific_import(filename, text)
+
+
+def _parse_science_records(filename: str, contents: bytes) -> tuple[str, list[dict]]:
+    result = _parse_science_import(filename, contents)
+    return result.format, result.to_legacy_records()
 
 
 def _record_virtual_field(target: dict, field_name: str, value) -> None:
@@ -357,10 +361,12 @@ async def preview_upload(
 
     # Science formats have fixed semantic mapping
     try:
-        if filename.endswith(".bib") or filename.endswith(".ris") or filename.endswith(".txt"):
-            fmt, records = _parse_science_records(filename, contents)
+        science_import = _try_parse_science_import(filename, contents)
+        if science_import is not None:
+            records = science_import.to_legacy_records()
             return {
-                "format": fmt,
+                "format": science_import.format,
+                "provider": science_import.provider,
                 "row_count": len(records),
                 "columns": list(_SCIENCE_AUTO_MAPPING.keys()),
                 "sample_rows": [
@@ -370,7 +376,11 @@ async def preview_upload(
                 "auto_mapping": _SCIENCE_AUTO_MAPPING,
                 "is_science_format": True,
             }
+        if filename.endswith(".bib") or filename.endswith(".ris"):
+            raise HTTPException(status_code=400, detail="Unsupported science import format.")
     except Exception as exc:
+        if isinstance(exc, HTTPException):
+            raise exc
         raise HTTPException(status_code=400, detail=f"Failed to parse file: {exc}")
 
     try:
@@ -473,29 +483,28 @@ async def upload_file(
         custom_mapping = {}
 
     # ── Science formats: fixed mapping ────────────────────────────────────────
-    if filename.endswith(".bib") or filename.endswith(".ris") or filename.endswith(".txt"):
+    science_import = _try_parse_science_import(filename, contents)
+    if science_import is None and (filename.endswith(".bib") or filename.endswith(".ris")):
+        raise HTTPException(status_code=400, detail="Unsupported science import format.")
+    if science_import is not None:
         # Science formats default to "science" domain when none is specified
         effective_domain = domain if domain and domain != "default" else "science"
-        try:
-            fmt, science_records = _parse_science_records(filename, contents)
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Failed to parse file: {exc}")
 
         import_batch = _create_import_batch(
             db,
             org_id=stored_org_id,
             domain_id=effective_domain,
-            source_type="science_upload",
+            source_type=f"science_upload:{science_import.provider}",
             file_name=file.filename,
-            file_format=fmt,
-            total_rows=len(science_records),
+            file_format=science_import.format,
+            total_rows=science_import.total_rows,
             entity_type_hint="publication",
             created_by=current_user.id,
-            source_label=f"{file.filename} · {fmt.upper()}",
+            source_label=f"{file.filename} · {science_import.provider.upper()} · {science_import.format.upper()}",
         )
         objects = []
-        for r in science_records:
-            entity_data = science_record_to_entity(r)
+        for publication in science_import.records:
+            entity_data = publication.to_entity_kwargs(domain=effective_domain)
             entity_data["domain"] = effective_domain
             entity_data["org_id"] = stored_org_id
             entity_data["import_batch_id"] = import_batch.id
@@ -504,14 +513,21 @@ async def upload_file(
         for i in range(0, len(objects), _CHUNK_SIZE):
             db.bulk_save_objects(objects[i : i + _CHUNK_SIZE])
         _audit(db, "upload", user_id=current_user.id,
-               details={"filename": file.filename, "rows": len(objects), "format": fmt, "import_batch_id": import_batch.id})
+               details={
+                   "filename": file.filename,
+                   "rows": len(objects),
+                   "format": science_import.format,
+                   "provider": science_import.provider,
+                   "import_batch_id": import_batch.id,
+               })
         db.commit()
         _dispatch_webhook("upload", {"filename": file.filename, "rows": len(objects), "import_batch_id": import_batch.id},
                           database.SessionLocal)
         return {
-            "message": f"Successfully imported {len(objects)} publications from {fmt.upper()}",
+            "message": f"Successfully imported {len(objects)} publications from {science_import.provider.upper()}",
             "total_rows": len(objects),
-            "format": fmt,
+            "format": science_import.format,
+            "provider": science_import.provider,
             "domain": effective_domain,
             "import_batch_id": import_batch.id,
             "source_label": import_batch.source_label,
