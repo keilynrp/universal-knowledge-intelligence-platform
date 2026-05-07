@@ -96,6 +96,20 @@ interface DashboardData {
       evidence: string;
     }[];
   };
+  impact_projection?: {
+    score: number;
+    expected: number;
+    conservative: number;
+    optimistic: number;
+    confidence: "high" | "medium" | "low";
+    confidence_score: number;
+    range: { p10: number; p50: number; p90: number };
+    drivers: { coverage: number; quality: number; citation_signal: number; concentration: number };
+    recommendation: string;
+    brief_angle: string;
+    explanation: string;
+    simulations: number;
+  };
 }
 
 interface BenchmarkProfile {
@@ -776,6 +790,78 @@ export default function ExecutiveDashboardPage() {
           </>
         ) : null}
       </div>
+
+      {data?.impact_projection && (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="ukip-panel-soft overflow-hidden p-6">
+            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="ukip-kicker">{tr("page.exec_dashboard.impact_projection_eyebrow", "Monte Carlo projection")}</p>
+                <h3 className="mt-1 text-lg font-bold text-[var(--ukip-text-strong)]">
+                  {tr("page.exec_dashboard.impact_projection_title", "Impact Projection")}
+                </h3>
+                <p className="mt-2 max-w-2xl text-sm text-[var(--ukip-muted)]">
+                  {data.impact_projection.explanation}
+                </p>
+              </div>
+              <div className="rounded-3xl border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-7 py-5 text-center shadow-sm">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--ukip-muted)]">
+                  {tr("page.exec_dashboard.impact_expected", "Expected")}
+                </p>
+                <p className="mt-1 text-4xl font-black text-[var(--ukip-text-strong)]">
+                  {data.impact_projection.score}
+                </p>
+                <p className="text-xs text-[var(--ukip-muted)]">/100</p>
+              </div>
+            </div>
+            <div className="mt-6">
+              <div className="relative h-3 rounded-full bg-gray-200 dark:bg-gray-800">
+                <div
+                  className="absolute top-0 h-3 rounded-full bg-violet-300/40"
+                  style={{
+                    left: `${data.impact_projection.range.p10}%`,
+                    width: `${Math.max(2, data.impact_projection.range.p90 - data.impact_projection.range.p10)}%`,
+                  }}
+                />
+                <div
+                  className="absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full border-4 border-white bg-violet-600 shadow-lg dark:border-gray-950"
+                  style={{ left: `calc(${data.impact_projection.score}% - 10px)` }}
+                />
+              </div>
+              <div className="mt-3 flex items-center justify-between text-xs text-[var(--ukip-muted)]">
+                <span>{tr("page.exec_dashboard.impact_conservative", "Conservative")} {data.impact_projection.conservative}</span>
+                <span>{tr("page.exec_dashboard.impact_probable_range", "Probable range")} {data.impact_projection.range.p10}–{data.impact_projection.range.p90}</span>
+                <span>{tr("page.exec_dashboard.impact_optimistic", "Optimistic")} {data.impact_projection.optimistic}</span>
+              </div>
+            </div>
+          </div>
+          <div className="ukip-panel-soft p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="ukip-kicker">{tr("page.exec_dashboard.impact_brief_connection", "Brief connection")}</p>
+                <h3 className="mt-1 text-base font-bold text-[var(--ukip-text-strong)]">
+                  {tr("page.exec_dashboard.impact_brief_angle", "Narrative angle")}
+                </h3>
+              </div>
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                {data.impact_projection.confidence} · {data.impact_projection.confidence_score}/100
+              </span>
+            </div>
+            <p className="mt-4 text-sm font-semibold text-[var(--ukip-text-strong)]">
+              {data.impact_projection.recommendation}
+            </p>
+            <p className="mt-3 text-sm text-[var(--ukip-muted)]">
+              {data.impact_projection.brief_angle}
+            </p>
+            <Link
+              href={briefBuilderHref}
+              className="mt-5 inline-flex rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-violet-500"
+            >
+              {tr("page.exec_dashboard.open_brief_with_projection", "Open brief with projection")}
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* ── Section 2: Impact Over Time ── */}
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">

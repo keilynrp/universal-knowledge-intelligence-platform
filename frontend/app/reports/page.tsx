@@ -44,6 +44,7 @@ interface BenchmarkProfile {
 
 const SECTION_ICONS: Record<string, string> = {
   institutional_benchmark: "🏛️",
+  impact_projection: "📈",
   entity_stats:         "📊",
   enrichment_coverage:  "🔬",
   decision_recommendations: "🧭",
@@ -100,12 +101,13 @@ export default function ReportsPage() {
       return explicit.split(",").map((value) => value.trim()).filter(Boolean);
     }
     if (preset === "pilot-brief") {
-      return ["entity_stats", "enrichment_coverage", "decision_recommendations", "institutional_benchmark", "top_brands", "topic_clusters"];
+      return ["entity_stats", "enrichment_coverage", "impact_projection", "decision_recommendations", "institutional_benchmark", "top_brands", "topic_clusters"];
     }
     return [];
   }, [preset, searchParams]);
   const sectionDescriptions = useMemo<Record<string, string>>(() => ({
     institutional_benchmark: tr("page.reports.section.institutional_benchmark", "Institutional readiness baseline with explicit framework gaps"),
+    impact_projection: tr("page.reports.section.impact_projection", "Monte Carlo impact projection with probable range and brief angle"),
     entity_stats: tr("page.reports.section.entity_stats", "Total entities, validation status breakdown, distribution chart"),
     enrichment_coverage: tr("page.reports.section.enrichment_coverage", "Coverage %, average citations, top enriched entities"),
     decision_recommendations: tr("page.reports.section.decision_recommendations", "Short, explainable next actions derived from current KPI signals"),

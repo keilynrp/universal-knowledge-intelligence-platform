@@ -61,6 +61,7 @@ def test_reports_sections_include_decision_recommendations(client, auth_headers)
     assert resp.status_code == 200
     ids = {section["id"] for section in resp.json()}
     assert "decision_recommendations" in ids
+    assert "impact_projection" in ids
     assert "institutional_benchmark" in ids
 
 
@@ -75,12 +76,37 @@ def test_html_report_accepts_decision_recommendations_section(client, auth_heade
     assert "Suggested Next Actions" in resp.text
 
 
+def test_html_report_accepts_impact_projection_section(client, auth_headers, db_session):
+    from backend import models
+
+    db_session.add(models.RawEntity(
+        primary_label="High impact publication",
+        domain="default",
+        enrichment_status="completed",
+        enrichment_citation_count=240,
+        enrichment_source="openalex",
+        quality_score=0.82,
+    ))
+    db_session.commit()
+
+    payload = {
+        "domain_id": "default",
+        "sections": ["impact_projection"],
+        "title": "Impact Brief",
+    }
+    resp = client.post("/reports/generate", json=payload, headers=auth_headers)
+    assert resp.status_code == 200
+    assert "Impact Projection" in resp.text
+    assert "Monte Carlo" in resp.text
+
+
 def test_pdf_accepts_full_pilot_sections(client, auth_headers):
     payload = {
         "domain_id": "default",
         "sections": [
             "entity_stats",
             "enrichment_coverage",
+            "impact_projection",
             "decision_recommendations",
             "institutional_benchmark",
             "top_brands",

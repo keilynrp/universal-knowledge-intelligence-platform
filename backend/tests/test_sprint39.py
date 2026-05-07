@@ -53,11 +53,17 @@ def test_dashboard_summary_returns_shape(client, auth_headers, db_session):
     assert "top_entities" in data
     assert "recommended_actions" in data
     assert "institutional_benchmark" in data
+    assert "impact_projection" in data
 
     # KPI shape
     kpis = data["kpis"]
     for key in ("total_entities", "enriched_count", "enrichment_pct", "avg_citations", "total_concepts"):
         assert key in kpis
+
+    projection = data["impact_projection"]
+    assert projection["method"] == "monte_carlo"
+    assert projection["range"]["p10"] <= projection["range"]["p50"] <= projection["range"]["p90"]
+    assert projection["brief_angle"]
 
     # Matrix shape
     matrix = data["brand_year_matrix"]

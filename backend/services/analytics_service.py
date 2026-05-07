@@ -9,6 +9,7 @@ from backend import models
 from backend.analyzers.topic_modeling import TopicAnalyzer
 from backend.institutional_benchmarks import evaluate_benchmark
 from backend.quality_scorer import _fetch_lookups, score_entity
+from backend.services.impact_projection import ImpactProjectionService
 from backend.tenant_access import scope_query_to_org
 
 
@@ -375,6 +376,7 @@ class AnalyticsService:
             "top_entities":       top_entities,
             "quality": {"average": avg_quality, "distribution": quality_dist},
         }
+        snapshot["impact_projection"] = ImpactProjectionService.build_from_snapshot(snapshot)
         snapshot["recommended_actions"] = cls.build_recommended_actions(snapshot)
         snapshot["institutional_benchmark"] = evaluate_benchmark(
             snapshot,

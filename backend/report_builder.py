@@ -93,11 +93,14 @@ def _section_stakeholder_reading(
     kpis = snapshot.get("kpis") or {}
     actions = snapshot.get("recommended_actions") or []
     top_entity = (snapshot.get("top_entities") or [None])[0]
+    impact_projection = snapshot.get("impact_projection") or {}
 
     benchmark_status = benchmark.get("status", "watch")
     readiness_pct = round(float(benchmark.get("readiness_pct") or 0))
     quality_avg = round(float(quality.get("average") or 0))
     coverage_pct = round(float(kpis.get("enrichment_pct") or 0))
+    impact_score = round(float(impact_projection.get("score") or 0))
+    impact_range = impact_projection.get("range") or {}
 
     if benchmark_status == "ready":
         stance = "The dataset is already in a comparatively strong position for a first stakeholder-facing conversation."
@@ -121,6 +124,7 @@ def _section_stakeholder_reading(
         <p>This brief is being framed for {stakeholder["focus"]}. {stakeholder["brief_hint"]}</p>
         <p style="margin-top:8px">{stance}</p>
         <p style="margin-top:8px">Current benchmark readiness is <b>{readiness_pct}%</b>, average quality is <b>{quality_avg}%</b>, and enrichment coverage is <b>{coverage_pct}%</b>.</p>
+        <p style="margin-top:8px">The current Monte Carlo impact projection is <b>{impact_score}/100</b>, with a probable range of <b>{impact_range.get("p10", 0)}–{impact_range.get("p90", 0)}</b>.</p>
         {'<p style="margin-top:8px">' + top_entity_text + '</p>' if top_entity_text else ''}
         <p style="margin-top:8px"><b>Recommended emphasis:</b> {action_text}</p>
         <p style="margin-top:10px"><b>How to read this brief for this audience:</b></p>
@@ -385,6 +389,75 @@ def _section_decision_recommendations(
     <p style="color:#9ca3af;padding:12px 0">No recommendation signals yet — import or enrich more records to generate a prioritized action list.</p>
 </section>"""
 
+
+def _section_impact_projection(
+    db: Session,
+    domain_id: str,
+    org_id: int | None,
+    benchmark_org: models.Organization | None = None,
+) -> str:
+    snapshot = AnalyticsService.get_domain_snapshot(
+        db,
+        TopicAnalyzer(),
+        domain_id,
+        org_id=org_id,
+        benchmark_org=benchmark_org,
+        top_n_concepts=10,
+        top_n_entities=10,
+    )
+    projection = snapshot.get("impact_projection") or {}
+    score = int(projection.get("score") or 0)
+    p10 = int((projection.get("range") or {}).get("p10") or 0)
+    p50 = int((projection.get("range") or {}).get("p50") or score)
+    p90 = int((projection.get("range") or {}).get("p90") or 0)
+    confidence = str(projection.get("confidence") or "low").title()
+    confidence_score = int(projection.get("confidence_score") or 0)
+    drivers = projection.get("drivers") or {}
+
+    def _bar(label: str, value: float) -> str:
+        pct = max(0, min(100, round(float(value or 0))))
+        return f"""
+        <div style="margin-top:10px">
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:#4b5563">
+                <span>{label}</span><b>{pct}%</b>
+            </div>
+            <div class="bar-bg" style="margin-top:5px"><div class="bar" style="width:{pct}%"></div></div>
+        </div>"""
+
+    return f"""<section>
+    <h2>Impact Projection</h2>
+    <div class="grid">
+        <div class="stat-card">
+            <div class="label">Expected Impact</div>
+            <div class="value">{score}/100</div>
+            <div class="sub">Monte Carlo median projection</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Probable Range</div>
+            <div class="value" style="font-size:24px">{p10}–{p90}</div>
+            <div class="sub">P10 to P90 · expected {p50}</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Confidence</div>
+            <div class="value" style="font-size:24px">{confidence}</div>
+            <div class="sub">{confidence_score}/100 stability score</div>
+        </div>
+    </div>
+    <div class="callout">
+        <h3>Executive interpretation</h3>
+        <p>{projection.get("recommendation", "No impact projection is available yet.")}</p>
+        <p style="margin-top:8px"><b>Brief angle:</b> {projection.get("brief_angle", "Use this as a directional signal only.")}</p>
+        <p style="margin-top:8px;color:#6b7280">{projection.get("explanation", "")}</p>
+    </div>
+    <div class="stat-card">
+        <div class="label">Projection drivers</div>
+        {_bar("Coverage", drivers.get("coverage", 0))}
+        {_bar("Quality", drivers.get("quality", 0))}
+        {_bar("Citation signal", drivers.get("citation_signal", 0))}
+        {_bar("Concentration", drivers.get("concentration", 0))}
+    </div>
+</section>"""
+
     def _priority_badge(priority: str) -> str:
         if priority == "high":
             return '<span class="badge badge-red">High priority</span>'
@@ -536,6 +609,7 @@ SECTION_BUILDERS = {
     "entity_stats": _section_entity_stats,
     "enrichment_coverage": _section_enrichment_coverage,
     "decision_recommendations": _section_decision_recommendations,
+    "impact_projection": _section_impact_projection,
     "institutional_benchmark": _section_institutional_benchmark,
     "top_brands": _section_top_brands,
     "topic_clusters": _section_topic_clusters,
@@ -546,6 +620,7 @@ SECTION_LABELS = {
     "entity_stats": "Entity Statistics",
     "enrichment_coverage": "Enrichment Coverage",
     "decision_recommendations": "Suggested Next Actions",
+    "impact_projection": "Impact Projection",
     "institutional_benchmark": "Institutional Benchmark",
     "top_brands": "Top Brands / Classifications",
     "topic_clusters": "Topic Clusters",
@@ -605,7 +680,7 @@ def build(
             try:
                 if sec == "institutional_benchmark":
                     body_sections.append(builder(db, domain_id, org_id, benchmark_profile_id, benchmark_org))
-                elif sec == "decision_recommendations":
+                elif sec in {"decision_recommendations", "impact_projection"}:
                     body_sections.append(builder(db, domain_id, org_id, benchmark_org))
                 else:
                     body_sections.append(builder(db, domain_id, org_id))
