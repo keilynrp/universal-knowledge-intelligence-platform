@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { PageHeader, TabNav, Badge, useToast } from "../../components/ui";
+import { Badge, useToast } from "../../components/ui";
 import MonteCarloChart from "../../components/MonteCarloChart";
 import AnnotationThread from "../../components/AnnotationThread";
 import EntityGraph from "../../components/EntityGraph";
@@ -40,27 +40,21 @@ interface EntityQualityData {
 
 interface Entity {
     id: number;
-    entity_name: string | null;
-    brand_capitalized: string | null;
-    brand_lower: string | null;
-    model: string | null;
-    sku: string | null;
-    variant: string | null;
-    classification: string | null;
+    import_batch_id: number | null;
+    primary_label: string | null;
+    secondary_label: string | null;
+    canonical_id: string | null;
     entity_type: string | null;
-    status: string | null;
-    validation_status: string;
-    barcode: string | null;
-    gtin: string | null;
-    gtin_reason: string | null;
-    unit_of_measure: string | null;
-    measure: string | null;
-    creation_date: string | null;
-    enrichment_status: string;
+    domain: string | null;
+    validation_status: string | null;
+    enrichment_status: string | null;
     enrichment_doi: string | null;
-    enrichment_citation_count: number;
+    enrichment_citation_count: number | null;
     enrichment_concepts: string | null;
     enrichment_source: string | null;
+    quality_score: number | null;
+    source: string | null;
+    attributes_json: string | null;
     normalized_json: string | null;
     [key: string]: EntityValue;
 }
@@ -83,27 +77,12 @@ interface AuthorityRecord {
 type Tab = "overview" | "enrichment" | "authority" | "graph" | "comments";
 
 const CORE_FIELDS: (keyof Entity)[] = [
-    "entity_name", "brand_capitalized", "model", "sku", "variant",
-    "classification", "entity_type", "status", "validation_status",
-    "gtin", "barcode", "unit_of_measure", "measure", "creation_date",
+    "primary_label",
+    "secondary_label",
+    "canonical_id",
+    "entity_type",
+    "domain",
 ];
-
-const FIELD_TRANSLATION_KEYS: Record<string, string> = {
-    entity_name: "entities.detail.field.entity_name",
-    brand_capitalized: "entities.detail.field.brand_capitalized",
-    model: "entities.detail.field.model",
-    sku: "entities.detail.field.sku",
-    variant: "entities.detail.field.variant",
-    classification: "entities.detail.field.classification",
-    entity_type: "entities.detail.field.entity_type",
-    status: "entities.detail.field.status",
-    validation_status: "entities.detail.field.validation_status",
-    gtin: "entities.detail.field.gtin",
-    barcode: "entities.detail.field.barcode",
-    unit_of_measure: "entities.detail.field.unit_of_measure",
-    measure: "entities.detail.field.measure",
-    creation_date: "entities.detail.field.creation_date",
-};
 
 function sourceVariant(source: string) {
     return source === "wikidata" ? "warning" as const :
@@ -113,15 +92,40 @@ function sourceVariant(source: string) {
            source === "openalex" ? "purple" as const : "default" as const;
 }
 
-function validationVariant(status: string) {
+function validationVariant(status: string | null) {
     return status === "valid" ? "success" as const :
            status === "invalid" ? "error" as const : "warning" as const;
 }
 
-function enrichmentVariant(status: string) {
+function enrichmentVariant(status: string | null) {
     return status === "completed" ? "success" as const :
            status === "pending" ? "warning" as const :
            status === "failed" ? "error" as const : "default" as const;
+}
+
+function parseJsonObject(raw: string | null): Record<string, unknown> {
+    if (!raw) return {};
+    try {
+        const parsed = JSON.parse(raw) as unknown;
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+            ? parsed as Record<string, unknown>
+            : {};
+    } catch {
+        return {};
+    }
+}
+
+function formatValue(value: unknown): React.ReactNode {
+    if (value === null || value === undefined || value === "") {
+        return <span className="italic text-gray-300 dark:text-gray-600">—</span>;
+    }
+    if (Array.isArray(value)) {
+        return value.length > 0 ? value.map((item) => String(item)).join(", ") : <span className="italic text-gray-300 dark:text-gray-600">—</span>;
+    }
+    if (typeof value === "object") {
+        return JSON.stringify(value);
+    }
+    return String(value);
 }
 
 const Spinner = () => (
@@ -130,6 +134,249 @@ const Spinner = () => (
         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
 );
+
+const DETAIL_TABS: { id: Tab; labelKey: string }[] = [
+    { id: "overview", labelKey: "entities.detail.tab.overview" },
+    { id: "enrichment", labelKey: "entities.detail.tab.enrichment" },
+    { id: "authority", labelKey: "entities.detail.tab.authority" },
+    { id: "graph", labelKey: "entities.detail.tab.graph" },
+    { id: "comments", labelKey: "entities.detail.tab.comments" },
+];
+
+const DETAIL_CARD =
+    "rounded-[1.35rem] border border-slate-200/80 bg-white/90 shadow-[0_18px_55px_rgba(79,70,229,0.08)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/80 dark:shadow-[0_18px_55px_rgba(15,23,42,0.35)]";
+
+const DETAIL_ROW =
+    "grid gap-1 border-b border-slate-100 pb-4 last:border-b-0 dark:border-white/10";
+
+const QUALITY_FALLBACK_DIMENSIONS = [
+    { key: "primary_label", label: "Primary Label", weight: 0.15, icon: "type" },
+    { key: "secondary_label", label: "Secondary Label", weight: 0.10, icon: "tag" },
+    { key: "canonical_id", label: "Canonical Id", weight: 0.10, icon: "link" },
+    { key: "entity_type", label: "Entity Type", weight: 0.05, icon: "cube" },
+    { key: "enrichment_status", label: "Enrichment Status", weight: 0.25, icon: "spark" },
+    { key: "enrichment_doi", label: "Enrichment DOI", weight: 0.05, icon: "file" },
+    { key: "authority_confirmed", label: "Authority Confirmed", weight: 0.20, icon: "shield" },
+    { key: "relationships", label: "Relationships", weight: 0.10, icon: "nodes" },
+];
+
+function normalizePercent(value: number | null | undefined): number {
+    if (value === null || value === undefined || Number.isNaN(value)) return 0;
+    return Math.max(0, Math.min(100, value > 1 ? value : value * 100));
+}
+
+function labelize(value: string): string {
+    return value
+        .replace(/[_-]/g, " ")
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function fieldLabel(key: string, fallback?: string): string {
+    return fallback || labelize(key);
+}
+
+function hasMeaningfulValue(value: unknown): boolean {
+    if (value === null || value === undefined || value === "") return false;
+    if (Array.isArray(value)) return value.length > 0;
+    return true;
+}
+
+function IconGlyph({ name, className = "h-5 w-5" }: { name: string; className?: string }) {
+    const common = {
+        className,
+        fill: "none",
+        stroke: "currentColor",
+        strokeWidth: 1.8,
+        strokeLinecap: "round" as const,
+        strokeLinejoin: "round" as const,
+        viewBox: "0 0 24 24",
+    };
+
+    if (name === "bookmark") {
+        return (
+            <svg {...common}>
+                <path d="M6 4.75A2.25 2.25 0 018.25 2.5h7.5A2.25 2.25 0 0118 4.75v16l-6-3.75L6 20.75v-16z" />
+            </svg>
+        );
+    }
+    if (name === "edit") {
+        return (
+            <svg {...common}>
+                <path d="M4 20h4.5L19 9.5a2.8 2.8 0 00-4-4L4.5 16 4 20z" />
+                <path d="M13.5 7L17 10.5" />
+            </svg>
+        );
+    }
+    if (name === "spark" || name === "quality") {
+        return (
+            <svg {...common}>
+                <path d="M13 2l-1.6 5.2L6 9l5.4 1.8L13 16l1.6-5.2L20 9l-5.4-1.8L13 2z" />
+                <path d="M5 15l-.8 2.4L2 18.2l2.2.8L5 21.5l.8-2.5 2.2-.8-2.2-.8L5 15z" />
+            </svg>
+        );
+    }
+    if (name === "type") {
+        return (
+            <svg {...common}>
+                <path d="M4 6h16" />
+                <path d="M12 6v12" />
+                <path d="M9 18h6" />
+            </svg>
+        );
+    }
+    if (name === "tag") {
+        return (
+            <svg {...common}>
+                <path d="M20 12l-8 8-8-8V4h8l8 8z" />
+                <path d="M7.5 7.5h.01" />
+            </svg>
+        );
+    }
+    if (name === "link") {
+        return (
+            <svg {...common}>
+                <path d="M10 13a5 5 0 007.1 0l1.4-1.4a5 5 0 00-7.1-7.1L10.5 5.4" />
+                <path d="M14 11a5 5 0 00-7.1 0l-1.4 1.4a5 5 0 007.1 7.1l.9-.9" />
+            </svg>
+        );
+    }
+    if (name === "cube") {
+        return (
+            <svg {...common}>
+                <path d="M12 2.75l8 4.5v9.5l-8 4.5-8-4.5v-9.5l8-4.5z" />
+                <path d="M4.5 7.5L12 12l7.5-4.5" />
+                <path d="M12 21v-9" />
+            </svg>
+        );
+    }
+    if (name === "file") {
+        return (
+            <svg {...common}>
+                <path d="M7 3.5h6l4 4v13H7a2 2 0 01-2-2v-13a2 2 0 012-2z" />
+                <path d="M13 3.5v4h4" />
+            </svg>
+        );
+    }
+    if (name === "shield") {
+        return (
+            <svg {...common}>
+                <path d="M12 21s7-3.5 7-10V5.5L12 3 5 5.5V11c0 6.5 7 10 7 10z" />
+                <path d="M9 12l2 2 4-5" />
+            </svg>
+        );
+    }
+    if (name === "nodes") {
+        return (
+            <svg {...common}>
+                <circle cx="6" cy="7" r="2.25" />
+                <circle cx="18" cy="7" r="2.25" />
+                <circle cx="12" cy="18" r="2.25" />
+                <path d="M8 8l3 7" />
+                <path d="M16 8l-3 7" />
+            </svg>
+        );
+    }
+    if (name === "user") {
+        return (
+            <svg {...common}>
+                <path d="M12 12a4 4 0 100-8 4 4 0 000 8z" />
+                <path d="M4.5 20a7.5 7.5 0 0115 0" />
+            </svg>
+        );
+    }
+    if (name === "database") {
+        return (
+            <svg {...common}>
+                <ellipse cx="12" cy="5" rx="7" ry="3" />
+                <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5" />
+                <path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
+            </svg>
+        );
+    }
+    if (name === "star") {
+        return (
+            <svg {...common}>
+                <path d="M12 3l2.6 5.3 5.9.9-4.2 4.1 1 5.8L12 16.3 6.7 19.1l1-5.8-4.2-4.1 5.9-.9L12 3z" />
+            </svg>
+        );
+    }
+    if (name === "quote") {
+        return (
+            <svg {...common}>
+                <path d="M8 11H5.5A3.5 3.5 0 009 7.5V6a5 5 0 00-5 5v5h4v-5z" />
+                <path d="M19 11h-2.5A3.5 3.5 0 0020 7.5V6a5 5 0 00-5 5v5h4v-5z" />
+            </svg>
+        );
+    }
+    if (name === "globe") {
+        return (
+            <svg {...common}>
+                <circle cx="12" cy="12" r="9" />
+                <path d="M3 12h18" />
+                <path d="M12 3c2.2 2.4 3.3 5.4 3.3 9S14.2 18.6 12 21c-2.2-2.4-3.3-5.4-3.3-9S9.8 5.4 12 3z" />
+            </svg>
+        );
+    }
+    if (name === "calendar") {
+        return (
+            <svg {...common}>
+                <path d="M7 3v3" />
+                <path d="M17 3v3" />
+                <rect x="4" y="5" width="16" height="16" rx="2" />
+                <path d="M4 10h16" />
+            </svg>
+        );
+    }
+    if (name === "institution") {
+        return (
+            <svg {...common}>
+                <path d="M3 9l9-5 9 5" />
+                <path d="M5 10h14" />
+                <path d="M6 10v8" />
+                <path d="M10 10v8" />
+                <path d="M14 10v8" />
+                <path d="M18 10v8" />
+                <path d="M4 18h16" />
+            </svg>
+        );
+    }
+    if (name === "chart") {
+        return (
+            <svg {...common}>
+                <path d="M4 19h16" />
+                <path d="M7 16l4-4 3 2 5-7" />
+                <path d="M7 16v3" />
+                <path d="M14 14v5" />
+                <path d="M19 7v12" />
+            </svg>
+        );
+    }
+
+    return (
+        <svg {...common}>
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 8v4l2.5 2.5" />
+        </svg>
+    );
+}
+
+function QualityRing({ percent }: { percent: number }) {
+    const safePercent = Math.round(Math.max(0, Math.min(100, percent)));
+    return (
+        <div
+            className="relative flex h-36 w-36 shrink-0 items-center justify-center rounded-full shadow-[inset_0_0_0_1px_rgba(124,58,237,0.12)]"
+            style={{
+                background: `conic-gradient(#7c3aed ${safePercent * 3.6}deg, #e8e4ff ${safePercent * 3.6}deg)`,
+            }}
+            aria-label={`Quality score ${safePercent}%`}
+        >
+            <div className="absolute inset-4 rounded-full bg-white dark:bg-slate-950" />
+            <span className="relative text-4xl font-black tracking-tight text-violet-600 dark:text-violet-300">
+                {safePercent}%
+            </span>
+        </div>
+    );
+}
 
 export default function EntityDetailPage() {
     const params = useParams();
@@ -199,7 +446,7 @@ export default function EntityDetailPage() {
             if (res.ok) {
                 const data = await res.json();
                 const records: AuthorityRecord[] = data.records ?? data;
-                const name = (entity.entity_name ?? "").toLowerCase();
+                const name = (entity.primary_label ?? "").toLowerCase();
                 setAuthorityRecords(
                     records.filter((r: AuthorityRecord) =>
                         r.original_value.toLowerCase().includes(name) ||
@@ -231,6 +478,7 @@ export default function EntityDetailPage() {
         if (!entity) return;
         const data: Partial<Entity> = {};
         CORE_FIELDS.forEach((f) => { data[f] = entity[f]; });
+        data.validation_status = entity.validation_status;
         setEditData(data);
         setIsEditing(true);
         wsSend("entity.editing", { entity_id: Number(entityId), editing: true });
@@ -324,206 +572,414 @@ export default function EntityDetailPage() {
         );
     }
 
-    const extendedAttrs: Record<string, unknown> = (() => {
-        try { return entity.normalized_json ? JSON.parse(entity.normalized_json) : {}; }
-        catch { return {}; }
-    })();
+    const sourceAttributes = parseJsonObject(entity.attributes_json);
+    const normalizedAttributes = parseJsonObject(entity.normalized_json);
+    const mergedAttributes: Record<string, unknown> = {
+        ...sourceAttributes,
+        ...normalizedAttributes,
+    };
+    const displayTitle = entity.primary_label || String(mergedAttributes.title || mergedAttributes.name || `Entity #${entityId}`);
+    const description = [
+        entity.secondary_label,
+        mergedAttributes.journal || mergedAttributes.venue,
+        mergedAttributes.year || mergedAttributes.publication_year,
+    ].filter(Boolean).map(String).join(" · ");
+    const tr = (key: string, fallback: string) => {
+        const value = t(key);
+        return value === key ? fallback : value;
+    };
+    const qualityPercent = normalizePercent(qualityData?.score ?? entity.quality_score);
+    const qualityRows = qualityData
+        ? Object.entries(qualityData.breakdown).map(([key, dim]) => ({
+            key,
+            label: dim.label || fieldLabel(key),
+            weight: normalizePercent(dim.weight),
+            contribution: normalizePercent(dim.contribution),
+            icon: QUALITY_FALLBACK_DIMENSIONS.find((item) => item.key === key)?.icon || "quality",
+        }))
+        : QUALITY_FALLBACK_DIMENSIONS.map((item) => {
+            const value =
+                item.key === "authority_confirmed"
+                    ? entity.validation_status === "valid"
+                    : item.key === "relationships"
+                    ? false
+                    : entity[item.key];
+            const contribution = hasMeaningfulValue(value) ? item.weight : 0;
+            return {
+                key: item.key,
+                label: item.label,
+                weight: item.weight * 100,
+                contribution: contribution * 100,
+                icon: item.icon,
+            };
+        });
+    const primaryFields = [
+        { key: "primary_label", label: "Etiqueta principal", value: entity.primary_label, icon: "type" },
+        { key: "secondary_label", label: "Etiqueta secundaria (marca / autor)", value: entity.secondary_label, icon: "tag" },
+        { key: "canonical_id", label: "ID canonico (SKU / DOI / codigo)", value: entity.canonical_id, icon: "link", copyable: true },
+        { key: "entity_type", label: "Tipo de entidad", value: entity.entity_type, icon: "cube" },
+        { key: "domain", label: "Dominio", value: entity.domain, icon: "globe" },
+    ];
+    const systemFields = [
+        { key: "validation_status", label: "Validacion", value: entity.validation_status, badge: "validation", icon: "quality" },
+        { key: "enrichment_status", label: "Estado de enriquecimiento", value: entity.enrichment_status, badge: "enrichment", icon: "shield" },
+        { key: "source", label: "Fuente", value: entity.source, icon: "user" },
+        { key: "import_batch_id", label: "Import batch id", value: entity.import_batch_id, icon: "database" },
+        { key: "quality_score", label: "Puntuacion de calidad", value: qualityPercent > 0 ? `${Math.round(qualityPercent)}%` : null, icon: "star" },
+        { key: "enrichment_citation_count", label: "Citas", value: entity.enrichment_citation_count ?? 0, icon: "quote" },
+        { key: "enrichment_source", label: "Fuente de enrichment", value: entity.enrichment_source, icon: "cube" },
+        { key: "enrichment_doi", label: "DOI", value: entity.enrichment_doi, icon: "link", copyable: true },
+    ];
+    const enrichmentPercent =
+        entity.enrichment_status === "completed" ? 100 :
+        entity.enrichment_status === "pending" ? 45 :
+        entity.enrichment_status === "failed" ? 12 :
+        0;
+    const enrichmentConcepts = entity.enrichment_concepts
+        ? entity.enrichment_concepts.split(",").map((concept) => concept.trim()).filter(Boolean)
+        : [];
+    const shortSource = entity.enrichment_source || entity.source || String(mergedAttributes.source_name || mergedAttributes.source || "");
+    const enrichmentSignals = [
+        { label: "Estado", value: entity.enrichment_status, badge: "enrichment", icon: "shield" },
+        { label: "Citas detectadas", value: entity.enrichment_citation_count ?? 0, icon: "quote" },
+        { label: "Fuente academica", value: entity.enrichment_source || shortSource || "—", icon: "database" },
+        { label: "DOI normalizado", value: entity.enrichment_doi || entity.canonical_id, icon: "link", href: entity.enrichment_doi ? `https://doi.org/${entity.enrichment_doi}` : undefined },
+    ];
+    const extendedEntries = Object.entries(mergedAttributes).filter(
+        ([key]) => !["primary_label", "secondary_label", "canonical_id", "entity_type", "domain"].includes(key)
+    );
 
-    const description = [entity.brand_capitalized, entity.model].filter(Boolean).join(" · ");
+    async function copyValue(value: unknown) {
+        if (!value) return;
+        await navigator.clipboard.writeText(String(value));
+        toast("Copiado al portapapeles", "success");
+    }
 
     return (
-        <div className="space-y-6">
-            <PageHeader
-                breadcrumbs={[
-                    { label: t("entities.detail.breadcrumb.home"), href: "/" },
-                    { label: t("entities.detail.breadcrumb.explorer"), href: "/" },
-                    { label: entity.entity_name ?? `Entity #${entityId}` },
-                ]}
-                title={entity.entity_name ?? `Entity #${entityId}`}
-                description={description || undefined}
-                actions={
-                    <div className="flex items-center gap-3">
-                        <PresenceAvatars presence={presence} isConnected={isConnected} />
-                        {isEditing ? (
-                            <>
-                                <button
-                                    onClick={handleSave}
-                                    disabled={saving}
-                                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-                                >
-                                    {saving ? <Spinner /> : null}
-                                    {t("entities.detail.btn.save")}
-                                </button>
-                                <button
-                                    onClick={cancelEdit}
-                                    className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-                                >
-                                    {t("entities.detail.btn.cancel")}
-                                </button>
-                            </>
-                        ) : (
-                            <button
-                                onClick={startEdit}
-                                className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-                            >
-                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                </svg>
-                                {t("entities.detail.btn.edit")}
-                            </button>
-                        )}
-                        <button
-                            onClick={handleEnrich}
-                            disabled={enriching}
-                            className="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700 disabled:opacity-50"
-                        >
-                            {enriching ? <Spinner /> : (
-                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                                </svg>
-                            )}
-                            {enriching ? t("entities.detail.btn.enriching") : t("entities.detail.btn.enrich")}
-                        </button>
+        <div className="-m-4 min-h-screen space-y-6 bg-[radial-gradient(circle_at_8%_0%,rgba(124,58,237,0.13),transparent_30%),radial-gradient(circle_at_100%_18%,rgba(59,130,246,0.10),transparent_28%),linear-gradient(180deg,#fbfcff_0%,#f7f8fc_100%)] p-4 text-slate-950 dark:bg-[radial-gradient(circle_at_8%_0%,rgba(124,58,237,0.20),transparent_30%),radial-gradient(circle_at_100%_18%,rgba(59,130,246,0.14),transparent_28%),linear-gradient(180deg,#020617_0%,#0f172a_100%)] dark:text-white sm:-m-6 sm:p-6 lg:-m-8 lg:p-8">
+            <div className="mx-auto max-w-7xl space-y-6">
+                <header className="space-y-6">
+                    <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+                        <Link href="/" className="transition-colors hover:text-violet-600 dark:hover:text-violet-300">
+                            {tr("entities.detail.breadcrumb.home", "Inicio")}
+                        </Link>
+                        <span>/</span>
+                        <Link href="/" className="transition-colors hover:text-violet-600 dark:hover:text-violet-300">
+                            {tr("entities.detail.breadcrumb.explorer", "Explorador de Conocimiento")}
+                        </Link>
+                        <span>/</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-200">{displayTitle}</span>
                     </div>
-                }
-            />
 
-            <TabNav
-                tabs={[
-                    { id: "overview", label: t("entities.detail.tab.overview") },
-                    { id: "enrichment", label: t("entities.detail.tab.enrichment") },
-                    { id: "authority", label: t("entities.detail.tab.authority") },
-                    { id: "graph", label: t("entities.detail.tab.graph") },
-                    { id: "comments", label: t("entities.detail.tab.comments"), badge: commentCount > 0 ? commentCount : undefined },
-                ]}
-                activeTab={tab}
-                onTabChange={(id) => setTab(id as Tab)}
-            />
+                    <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0 space-y-2">
+                            <div className="flex items-center gap-3">
+                                <h1 className="text-3xl font-black tracking-tight text-slate-950 dark:text-white md:text-4xl">
+                                    {displayTitle}
+                                </h1>
+                                <button
+                                    type="button"
+                                    className="rounded-xl p-2 text-slate-400 transition-colors hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-white/10 dark:hover:text-violet-200"
+                                    aria-label="Guardar registro"
+                                >
+                                    <IconGlyph name="bookmark" className="h-5 w-5" />
+                                </button>
+                            </div>
+                            {description ? (
+                                <p className="text-base font-medium text-slate-500 dark:text-slate-400">{description}</p>
+                            ) : null}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3">
+                            <div className="flex items-center gap-2 rounded-full bg-white/80 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200 dark:bg-white/10 dark:text-slate-200 dark:ring-white/10">
+                                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                                <PresenceAvatars presence={presence} isConnected={isConnected} />
+                            </div>
+                            {isEditing ? (
+                                <>
+                                    <button
+                                        onClick={handleSave}
+                                        disabled={saving}
+                                        className="flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-bold text-white shadow-[0_14px_35px_rgba(124,58,237,0.28)] transition hover:bg-violet-700 disabled:opacity-50"
+                                    >
+                                        {saving ? <Spinner /> : null}
+                                        {tr("entities.detail.btn.save", "Guardar")}
+                                    </button>
+                                    <button
+                                        onClick={cancelEdit}
+                                        className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
+                                    >
+                                        {tr("entities.detail.btn.cancel", "Cancelar")}
+                                    </button>
+                                </>
+                            ) : (
+                                <button
+                                    onClick={startEdit}
+                                    className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
+                                >
+                                    <IconGlyph name="edit" className="h-4 w-4" />
+                                    {tr("entities.detail.btn.edit", "Editar")}
+                                </button>
+                            )}
+                            <button
+                                onClick={handleEnrich}
+                                disabled={enriching}
+                                className="flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-bold text-white shadow-[0_14px_35px_rgba(124,58,237,0.28)] transition hover:bg-violet-700 disabled:opacity-50"
+                            >
+                                {enriching ? <Spinner /> : <IconGlyph name="spark" className="h-4 w-4" />}
+                                {enriching ? tr("entities.detail.btn.enriching", "Enriqueciendo") : tr("entities.detail.btn.enrich", "Enriquecer")}
+                            </button>
+                        </div>
+                    </div>
+
+                    <nav className="flex gap-7 overflow-x-auto border-b border-slate-200 dark:border-white/10">
+                        {DETAIL_TABS.map((item) => (
+                            <button
+                                key={item.id}
+                                onClick={() => setTab(item.id)}
+                                className={`relative whitespace-nowrap pb-4 text-sm font-bold transition-colors ${
+                                    tab === item.id
+                                        ? "text-violet-600 dark:text-violet-300"
+                                        : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                                }`}
+                            >
+                                {tr(item.labelKey, labelize(item.id))}
+                                {item.id === "comments" && commentCount > 0 ? (
+                                    <span className="ml-2 rounded-full bg-violet-100 px-2 py-0.5 text-xs text-violet-700 dark:bg-violet-500/20 dark:text-violet-200">
+                                        {commentCount}
+                                    </span>
+                                ) : null}
+                                {tab === item.id ? (
+                                    <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-violet-600 dark:bg-violet-300" />
+                                ) : null}
+                            </button>
+                        ))}
+                    </nav>
+                </header>
 
             {/* ── Overview ── */}
             {tab === "overview" && (
                 <div className="space-y-6">
-                    {/* Quality Score section */}
-                    {qualityData && (
-                        <div className="rounded-2xl border border-indigo-100 bg-white p-6 shadow-sm dark:border-indigo-500/20 dark:bg-gray-900">
-                            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-indigo-500 dark:text-indigo-400">
-                                {t("entities.detail.section.quality")}
-                            </h3>
-                            <div className="flex items-center gap-6 mb-5">
-                                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-4 border-indigo-100 dark:border-indigo-500/20 bg-indigo-50 dark:bg-indigo-500/10">
-                                    <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-                                        {Math.round(qualityData.score * 100)}%
-                                    </span>
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t("entities.detail.quality.overall")}</p>
-                                    <div className="mt-1 w-48 h-2 rounded-full bg-gray-100 dark:bg-gray-800">
-                                        <div
-                                            className={`h-2 rounded-full ${qualityData.score >= 0.7 ? "bg-emerald-500" : qualityData.score >= 0.3 ? "bg-amber-400" : "bg-red-500"}`}
-                                            style={{ width: `${Math.round(qualityData.score * 100)}%` }}
-                                        />
+                    <section className={`${DETAIL_CARD} overflow-hidden p-6 md:p-8`}>
+                        <div className="grid gap-8 lg:grid-cols-[0.95fr_1.25fr] lg:divide-x lg:divide-slate-200 dark:lg:divide-white/10">
+                            <div className="space-y-8 lg:pr-8">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-200">
+                                        <IconGlyph name="quality" className="h-6 w-6" />
                                     </div>
-                                    {qualityData.stored_score != null && (
-                                        <p className="mt-1 text-xs text-gray-400">{t("entities.detail.quality.stored")} {Math.round(qualityData.stored_score * 100)}%</p>
-                                    )}
+                                    <h2 className="text-sm font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
+                                        Puntuacion de calidad
+                                    </h2>
+                                </div>
+                                <div className="flex flex-col gap-8 sm:flex-row sm:items-center">
+                                    <QualityRing percent={qualityPercent} />
+                                    <div className="min-w-0 flex-1 space-y-3">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                                                Indice de Calidad Global
+                                            </span>
+                                            <span className="flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-xs text-slate-400 dark:border-white/10">
+                                                i
+                                            </span>
+                                        </div>
+                                        <div className="h-3 max-w-xs rounded-full bg-slate-100 dark:bg-white/10">
+                                            <div
+                                                className="h-3 rounded-full bg-emerald-500"
+                                                style={{ width: `${qualityPercent}%` }}
+                                            />
+                                        </div>
+                                        {qualityData?.stored_score != null ? (
+                                            <p className="text-xs font-medium text-slate-400">
+                                                Score almacenado {Math.round(normalizePercent(qualityData.stored_score))}%
+                                            </p>
+                                        ) : null}
+                                    </div>
                                 </div>
                             </div>
-                            <table className="w-full text-sm">
-                                <thead>
-                                    <tr className="border-b border-gray-100 dark:border-gray-800">
-                                        <th className="pb-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-400">{t("entities.detail.quality.dimension")}</th>
-                                        <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-400">{t("entities.detail.quality.weight")}</th>
-                                        <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-400">{t("entities.detail.quality.contribution")}</th>
-                                        <th className="pb-2 pl-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-400">{t("entities.detail.quality.progress")}</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                                    {Object.entries(qualityData.breakdown).map(([key, dim]) => {
-                                        const weight = dim.weight ?? 0;
-                                        const contribution = dim.contribution ?? 0;
-                                        return (
-                                        <tr key={key}>
-                                            <td className="py-2 text-xs font-medium text-gray-600 dark:text-gray-300">
-                                                {key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-                                            </td>
-                                            <td className="py-2 text-right text-xs text-gray-500">{Math.round(weight * 100)}%</td>
-                                            <td className="py-2 text-right text-xs font-semibold text-indigo-600 dark:text-indigo-400">
-                                                +{Math.round(contribution * 100)}%
-                                            </td>
-                                            <td className="py-2 pl-4">
-                                                <div className="w-24 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800">
-                                                    <div
-                                                        className="h-1.5 rounded-full bg-indigo-400"
-                                                        style={{ width: weight > 0 ? `${(contribution / weight) * 100}%` : "0%" }}
-                                                    />
-                                                </div>
-                                            </td>
+                            <div className="overflow-x-auto lg:pl-8">
+                                <table className="w-full min-w-[560px] text-sm">
+                                    <thead>
+                                        <tr className="border-b border-slate-200 text-xs font-black uppercase tracking-[0.13em] text-slate-400 dark:border-white/10">
+                                            <th className="pb-4 text-left">Dimension</th>
+                                            <th className="pb-4 text-right">Peso</th>
+                                            <th className="pb-4 text-right">Contribucion</th>
+                                            <th className="pb-4 pl-8 text-left">Progreso</th>
                                         </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-white/10">
+                                        {qualityRows.map((row) => {
+                                            const progress = row.weight > 0 ? Math.min(100, (row.contribution / row.weight) * 100) : 0;
+                                            return (
+                                                <tr key={row.key}>
+                                                    <td className="py-3.5">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-violet-600 dark:text-violet-300">
+                                                                <IconGlyph name={row.icon} className="h-5 w-5" />
+                                                            </span>
+                                                            <span className="font-bold text-slate-700 dark:text-slate-200">{row.label}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3.5 text-right font-semibold text-slate-500 dark:text-slate-400">{Math.round(row.weight)}%</td>
+                                                    <td className="py-3.5 text-right font-black text-violet-600 dark:text-violet-300">+{Math.round(row.contribution)}%</td>
+                                                    <td className="py-3.5 pl-8">
+                                                        <div className="h-2 w-36 rounded-full bg-slate-100 dark:bg-white/10">
+                                                            <div className="h-2 rounded-full bg-violet-500" style={{ width: `${progress}%` }} />
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                    )}
-                    <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                            {t("entities.detail.section.core_fields")}
-                        </h3>
-                        <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2">
-                            {CORE_FIELDS.map((field) => {
-                                const label = t(FIELD_TRANSLATION_KEYS[field as string] ?? field as string);
-                                const value = isEditing ? editData[field] : entity[field];
-                                const isStatus = field === "validation_status";
-                                const isEnrichStatus = field === "enrichment_status";
+                    </section>
+
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <section className={`${DETAIL_CARD} p-6 md:p-8`}>
+                            <div className="mb-7 flex items-center gap-4">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-200">
+                                    <IconGlyph name="file" className="h-6 w-6" />
+                                </div>
+                                <h2 className="text-sm font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
+                                    Campos principales
+                                </h2>
+                            </div>
+                            <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2">
+                                {primaryFields.map((field) => {
+                                    const value = isEditing && CORE_FIELDS.includes(field.key as keyof Entity)
+                                        ? editData[field.key as keyof Entity]
+                                        : field.value;
 
                                 return (
-                                    <div key={field as string} className="flex flex-col gap-1.5 border-b border-gray-50 pb-4 dark:border-gray-800/50">
-                                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                                            {label}
-                                        </span>
-                                        {isEditing && !isStatus && !isEnrichStatus ? (
-                                            <input
-                                                value={(editData[field] as string) ?? ""}
-                                                onChange={(e) => setEditData({ ...editData, [field]: e.target.value })}
-                                                className="h-8 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                                            />
-                                        ) : isStatus ? (
-                                            <Badge variant={validationVariant(entity.validation_status)}>
-                                                {entity.validation_status}
-                                            </Badge>
-                                        ) : isEnrichStatus ? (
-                                            <Badge variant={enrichmentVariant(entity.enrichment_status)}>
-                                                {entity.enrichment_status}
-                                            </Badge>
-                                        ) : (
-                                            <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
-                                                {value ? String(value) : <span className="italic text-gray-300 dark:text-gray-600">—</span>}
+                                    <div key={field.key} className={DETAIL_ROW}>
+                                        <div className="flex items-center gap-3 text-violet-600 dark:text-violet-300">
+                                            <IconGlyph name={field.icon} className="h-5 w-5" />
+                                            <span className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400">
+                                                {field.label}
                                             </span>
+                                        </div>
+                                        {isEditing ? (
+                                            <input
+                                                value={(value as string) ?? ""}
+                                                onChange={(e) => setEditData({ ...editData, [field.key]: e.target.value })}
+                                                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-white/10 dark:text-white"
+                                            />
+                                        ) : (
+                                            <div className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200">
+                                                <span className="break-words">{formatValue(value)}</span>
+                                                {field.copyable && hasMeaningfulValue(value) ? (
+                                                    <button
+                                                        onClick={() => copyValue(value)}
+                                                        className="rounded-lg p-1 text-slate-400 transition hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-white/10"
+                                                        aria-label={`Copiar ${field.label}`}
+                                                    >
+                                                        <IconGlyph name="link" className="h-4 w-4" />
+                                                    </button>
+                                                ) : null}
+                                            </div>
                                         )}
                                     </div>
                                 );
                             })}
-                        </div>
-                    </div>
+                            </div>
+                        </section>
 
-                    {Object.keys(extendedAttrs).length > 0 && (
-                        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                                {t("entities.detail.section.extended_attrs")}
-                            </h3>
+                        <section className={`${DETAIL_CARD} p-6 md:p-8`}>
+                            <div className="mb-7 flex items-center gap-4">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-200">
+                                    <IconGlyph name="spark" className="h-6 w-6" />
+                                </div>
+                                <h2 className="text-sm font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
+                                    Senales del sistema
+                                </h2>
+                            </div>
                             <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2">
-                                {Object.entries(extendedAttrs).map(([key, val]) => (
-                                    <div key={key} className="flex flex-col gap-1.5 border-b border-gray-50 pb-4 dark:border-gray-800/50">
-                                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                                            {key.replace(/_/g, " ")}
-                                        </span>
-                                        <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
-                                            {val !== null && val !== "" ? String(val) : <span className="italic text-gray-300 dark:text-gray-600">—</span>}
-                                        </span>
+                                {systemFields.map((field) => (
+                                    <div key={field.key} className={DETAIL_ROW}>
+                                        <div className="flex items-center gap-3 text-violet-600 dark:text-violet-300">
+                                            <IconGlyph name={field.icon} className="h-5 w-5" />
+                                            <span className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400">
+                                                {field.label}
+                                            </span>
+                                        </div>
+                                        {field.badge === "validation" && entity.validation_status ? (
+                                            <Badge variant={validationVariant(entity.validation_status)}>
+                                                {entity.validation_status}
+                                            </Badge>
+                                        ) : field.badge === "enrichment" && entity.enrichment_status ? (
+                                            <Badge variant={enrichmentVariant(entity.enrichment_status)}>
+                                                {entity.enrichment_status}
+                                            </Badge>
+                                        ) : (
+                                            <div className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200">
+                                                <span className="break-words">{formatValue(field.value)}</span>
+                                                {field.copyable && hasMeaningfulValue(field.value) ? (
+                                                    <button
+                                                        onClick={() => copyValue(field.value)}
+                                                        className="rounded-lg p-1 text-slate-400 transition hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-white/10"
+                                                        aria-label={`Copiar ${field.label}`}
+                                                    >
+                                                        <IconGlyph name="link" className="h-4 w-4" />
+                                                    </button>
+                                                ) : null}
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
-                        </div>
+                        </section>
+                    </div>
+
+                    {extendedEntries.length > 0 && (
+                        <section className={`${DETAIL_CARD} p-6 md:p-8`}>
+                            <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-200">
+                                        <IconGlyph name="database" className="h-6 w-6" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-sm font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
+                                            Atributos extendidos
+                                        </h2>
+                                        {shortSource ? (
+                                            <p className="mt-1 text-xs font-semibold text-slate-400">
+                                                Fuente normalizada: {shortSource}
+                                            </p>
+                                        ) : null}
+                                    </div>
+                                </div>
+                                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500 dark:bg-white/10 dark:text-slate-300">
+                                    {extendedEntries.length} campos
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-1 gap-x-10 gap-y-5 lg:grid-cols-2">
+                                {extendedEntries.map(([key, val]) => {
+                                    const icon =
+                                        key.includes("author") || key.includes("orcid") ? "user" :
+                                        key.includes("year") || key.includes("date") || key.includes("retrieved") ? "calendar" :
+                                        key.includes("institution") || key.includes("affiliation") ? "institution" :
+                                        key.includes("citation") || key.includes("count") ? "chart" :
+                                        key.includes("doi") || key.includes("id") || key.includes("url") ? "link" :
+                                        key.includes("source") ? "database" : "file";
+                                    return (
+                                        <div key={key} className="grid grid-cols-[1.5rem_1fr] gap-x-4 border-b border-slate-100 pb-5 dark:border-white/10">
+                                            <span className="mt-1 text-violet-600 dark:text-violet-300">
+                                                <IconGlyph name={icon} className="h-5 w-5" />
+                                            </span>
+                                            <div className="min-w-0 space-y-1">
+                                                <span className="block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
+                                                    {fieldLabel(key)}
+                                                </span>
+                                                <span className="block break-words text-sm font-bold leading-6 text-slate-700 dark:text-slate-200">
+                                                    {formatValue(val)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </section>
                     )}
                 </div>
             )}
@@ -531,138 +987,290 @@ export default function EntityDetailPage() {
             {/* ── Enrichment ── */}
             {tab === "enrichment" && (
                 <div className="space-y-6">
-                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                        {[
-                            { label: t("entities.detail.enrichment.status"), value: <Badge variant={enrichmentVariant(entity.enrichment_status)}>{entity.enrichment_status}</Badge> },
-                            { label: t("entities.detail.enrichment.citations"), value: entity.enrichment_citation_count || "—" },
-                            { label: t("entities.detail.enrichment.source"), value: entity.enrichment_source || "—" },
-                            { label: t("entities.detail.enrichment.doi"), value: entity.enrichment_doi ? (
-                                <a href={`https://doi.org/${entity.enrichment_doi}`} target="_blank" rel="noopener noreferrer" className="truncate text-blue-600 hover:underline dark:text-blue-400">
-                                    {entity.enrichment_doi}
-                                </a>
-                            ) : "—" },
-                        ].map((s) => (
-                            <div key={s.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                                <p className="text-xs text-gray-500 dark:text-gray-400">{s.label}</p>
-                                <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{s.value}</div>
+                    <section className={`${DETAIL_CARD} overflow-hidden p-6 md:p-8`}>
+                        <div className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:divide-x lg:divide-slate-200 dark:lg:divide-white/10">
+                            <div className="space-y-7 lg:pr-8">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-200">
+                                        <IconGlyph name="spark" className="h-6 w-6" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
+                                            Enrichment
+                                        </p>
+                                        <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950 dark:text-white">
+                                            Cobertura academica del registro
+                                        </h2>
+                                    </div>
+                                </div>
+                                <div className="rounded-[1.25rem] bg-gradient-to-br from-violet-600 to-blue-600 p-5 text-white shadow-[0_18px_50px_rgba(99,102,241,0.28)]">
+                                    <div className="flex items-end justify-between gap-4">
+                                        <div>
+                                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/70">Progreso</p>
+                                            <p className="mt-2 text-5xl font-black tracking-tight">{enrichmentPercent}%</p>
+                                        </div>
+                                        <Badge variant={enrichmentVariant(entity.enrichment_status)}>
+                                            {entity.enrichment_status || "sin iniciar"}
+                                        </Badge>
+                                    </div>
+                                    <div className="mt-5 h-3 rounded-full bg-white/20">
+                                        <div className="h-3 rounded-full bg-white" style={{ width: `${enrichmentPercent}%` }} />
+                                    </div>
+                                    <p className="mt-4 text-sm font-medium leading-6 text-white/82">
+                                        {entity.enrichment_status === "completed"
+                                            ? "El registro ya tiene senales enriquecidas listas para analisis, impacto y brief."
+                                            : entity.enrichment_status === "pending"
+                                            ? "El enriquecimiento esta en proceso. La lectura ejecutiva debe esperar a que termine la normalizacion."
+                                            : entity.enrichment_status === "failed"
+                                            ? "El intento de enrichment fallo. Conviene reintentar o revisar DOI, fuente y metadatos base."
+                                            : "Ejecuta enrichment para conectar el registro con citas, DOI, conceptos y fuentes academicas."}
+                                    </p>
+                                </div>
                             </div>
-                        ))}
-                    </div>
 
-                    {entity.enrichment_concepts && (
-                        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                                {t("entities.detail.section.concepts")}
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                                {entity.enrichment_concepts.split(",").map((c) => c.trim()).filter(Boolean).map((concept) => (
-                                    <Badge key={concept} variant="info">{concept}</Badge>
+                            <div className="grid gap-5 sm:grid-cols-2 lg:pl-8">
+                                {enrichmentSignals.map((signal) => (
+                                    <div key={signal.label} className="grid grid-cols-[2.5rem_1fr] gap-4 rounded-2xl border border-slate-100 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/5">
+                                        <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-violet-600 shadow-sm dark:bg-white/10 dark:text-violet-200">
+                                            <IconGlyph name={signal.icon} className="h-5 w-5" />
+                                        </span>
+                                        <div className="min-w-0 space-y-1">
+                                            <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">{signal.label}</p>
+                                            {signal.badge === "enrichment" && entity.enrichment_status ? (
+                                                <Badge variant={enrichmentVariant(entity.enrichment_status)}>
+                                                    {entity.enrichment_status}
+                                                </Badge>
+                                            ) : signal.href ? (
+                                                <a href={signal.href} target="_blank" rel="noopener noreferrer" className="block truncate text-sm font-black text-violet-600 hover:underline dark:text-violet-300">
+                                                    {formatValue(signal.value)}
+                                                </a>
+                                            ) : (
+                                                <p className="break-words text-sm font-black text-slate-700 dark:text-slate-200">
+                                                    {formatValue(signal.value)}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
                                 ))}
                             </div>
                         </div>
-                    )}
+                    </section>
 
-                    {entity.enrichment_status === "completed" ? (
-                        <div className="rounded-2xl border border-purple-100 bg-white p-5 shadow-sm dark:border-purple-500/10 dark:bg-gray-900">
-                            <MonteCarloChart productId={entity.id} />
-                        </div>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 py-16 dark:border-gray-700">
-                            <svg className="mb-3 h-10 w-10 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                            </svg>
-                            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                                {entity.enrichment_status === "none"
-                                    ? t("entities.detail.enrichment.not_started")
-                                    : entity.enrichment_status === "failed"
-                                    ? t("entities.detail.enrichment.failed")
-                                    : t("entities.detail.enrichment.in_progress")}
-                            </p>
-                            {entity.enrichment_status !== "pending" && (
-                                <button
-                                    onClick={handleEnrich}
-                                    disabled={enriching}
-                                    className="mt-4 flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700 disabled:opacity-50"
-                                >
-                                    {enriching ? <Spinner /> : null}
-                                    {enriching ? t("entities.detail.btn.enriching") : t("entities.detail.btn.enrich_now")}
-                                </button>
+                    <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
+                        <section className={`${DETAIL_CARD} p-6 md:p-8`}>
+                            <div className="mb-6 flex items-center gap-4">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-200">
+                                    <IconGlyph name="nodes" className="h-6 w-6" />
+                                </div>
+                                <div>
+                                    <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
+                                        Conceptos detectados
+                                    </p>
+                                    <p className="mt-1 text-sm font-semibold text-slate-400">
+                                        {enrichmentConcepts.length} conceptos semanticos
+                                    </p>
+                                </div>
+                            </div>
+                            {enrichmentConcepts.length > 0 ? (
+                                <div className="flex flex-wrap gap-2">
+                                    {enrichmentConcepts.map((concept) => (
+                                        <Badge key={concept} variant="info">{concept}</Badge>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-6 text-sm font-semibold text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
+                                    Aun no hay conceptos enriquecidos. Ejecuta enrichment para activar esta capa semantica.
+                                </div>
                             )}
-                        </div>
-                    )}
+                        </section>
+
+                        <section className={`${DETAIL_CARD} p-6 md:p-8`}>
+                            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-200">
+                                        <IconGlyph name="chart" className="h-6 w-6" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
+                                            Proyeccion de impacto
+                                        </p>
+                                        <p className="mt-1 text-sm font-semibold text-slate-400">
+                                            Simulacion conectada al registro enriquecido
+                                        </p>
+                                    </div>
+                                </div>
+                                {entity.enrichment_status !== "pending" && entity.enrichment_status !== "completed" ? (
+                                    <button
+                                        onClick={handleEnrich}
+                                        disabled={enriching}
+                                        className="flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-bold text-white shadow-[0_14px_35px_rgba(124,58,237,0.28)] transition hover:bg-violet-700 disabled:opacity-50"
+                                    >
+                                        {enriching ? <Spinner /> : <IconGlyph name="spark" className="h-4 w-4" />}
+                                        {enriching ? tr("entities.detail.btn.enriching", "Enriqueciendo") : tr("entities.detail.btn.enrich_now", "Enriquecer ahora")}
+                                    </button>
+                                ) : null}
+                            </div>
+                            {entity.enrichment_status === "completed" ? (
+                                <MonteCarloChart productId={entity.id} />
+                            ) : (
+                                <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-8 text-center dark:border-white/10 dark:bg-white/5">
+                                    <IconGlyph name="spark" className="mb-4 h-10 w-10 text-violet-500 dark:text-violet-300" />
+                                    <p className="max-w-md text-sm font-bold leading-6 text-slate-500 dark:text-slate-400">
+                                        {entity.enrichment_status === "failed"
+                                            ? "No se pudo completar el enrichment. Reintenta para recalcular conceptos, DOI, citas y proyeccion."
+                                            : entity.enrichment_status === "pending"
+                                            ? "El enrichment sigue en proceso. La proyeccion aparecera cuando el estado cambie a completed."
+                                            : "La proyeccion se activa cuando el registro queda enriquecido con senales academicas confiables."}
+                                    </p>
+                                </div>
+                            )}
+                        </section>
+                    </div>
                 </div>
             )}
 
             {/* ── Graph ── */}
             {tab === "graph" && (
                 <div className="space-y-6">
-                    <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                            {t("entities.detail.section.relationship_graph")}
-                        </h3>
+                    <section className={`${DETAIL_CARD} overflow-hidden p-6 md:p-8`}>
+                        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+                            <div className="flex items-center gap-4">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-200">
+                                    <IconGlyph name="nodes" className="h-6 w-6" />
+                                </div>
+                                <div>
+                                    <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
+                                        Grafo de conocimiento
+                                    </p>
+                                    <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950 dark:text-white">
+                                        Relaciones activas del registro
+                                    </h2>
+                                </div>
+                            </div>
+                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500 dark:bg-white/10 dark:text-slate-300">
+                                Entity #{entity.id}
+                            </span>
+                        </div>
+                        <div className="rounded-[1.25rem] border border-slate-100 bg-slate-50/70 p-3 dark:border-white/10 dark:bg-white/5">
                         <EntityGraph key={graphKey} entityId={entity.id} />
-                    </div>
-                    <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                            {t("entities.detail.section.manage_relationships")}
-                        </h3>
+                        </div>
+                    </section>
+
+                    <section className={`${DETAIL_CARD} p-6 md:p-8`}>
+                        <div className="mb-6 flex items-center gap-4">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-200">
+                                <IconGlyph name="link" className="h-6 w-6" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
+                                    Gestion de relaciones
+                                </p>
+                                <p className="mt-1 text-sm font-semibold text-slate-400">
+                                    Crea, edita o refresca conexiones semanticas para este registro.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="rounded-[1.25rem] border border-slate-100 bg-slate-50/70 p-4 dark:border-white/10 dark:bg-white/5">
                         <RelationshipManager
                             entityId={entity.id}
                             onRefreshGraph={() => setGraphKey((k) => k + 1)}
                         />
-                    </div>
+                        </div>
+                    </section>
                 </div>
             )}
 
             {/* ── Comments ── */}
             {tab === "comments" && (
-                <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                    <AnnotationThread entityId={entity.id} />
-                </div>
+                <section className={`${DETAIL_CARD} p-6 md:p-8`}>
+                    <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-200">
+                                <IconGlyph name="quote" className="h-6 w-6" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
+                                    Comentarios y trazabilidad
+                                </p>
+                                <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950 dark:text-white">
+                                    Conversacion analitica del registro
+                                </h2>
+                            </div>
+                        </div>
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500 dark:bg-white/10 dark:text-slate-300">
+                            {commentCount} notas
+                        </span>
+                    </div>
+                    <div className="rounded-[1.25rem] border border-slate-100 bg-slate-50/70 p-4 dark:border-white/10 dark:bg-white/5">
+                        <AnnotationThread entityId={entity.id} />
+                    </div>
+                </section>
             )}
 
             {/* ── Authority ── */}
             {tab === "authority" && (
-                <div>
+                <section className={`${DETAIL_CARD} p-6 md:p-8`}>
+                    <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-200">
+                                <IconGlyph name="shield" className="h-6 w-6" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
+                                    Resolucion de autoridad
+                                </p>
+                                <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950 dark:text-white">
+                                    Coincidencias y entidades canonicas
+                                </h2>
+                            </div>
+                        </div>
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500 dark:bg-white/10 dark:text-slate-300">
+                            {authorityRecords.length} candidatos
+                        </span>
+                    </div>
+
                     {authorityLoading ? (
-                        <div className="flex h-48 items-center justify-center">
-                            <svg className="h-6 w-6 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                            </svg>
+                        <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-8 text-center dark:border-white/10 dark:bg-white/5">
+                            <Spinner />
+                            <p className="mt-4 text-sm font-bold text-slate-500 dark:text-slate-400">
+                                Buscando candidatos de autoridad para este registro...
+                            </p>
                         </div>
                     ) : authorityRecords.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 py-16 dark:border-gray-700">
-                            <svg className="mb-3 h-10 w-10 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064" />
-                            </svg>
-                            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t("entities.detail.authority.empty")}</p>
-                            <Link href="/disambiguation" className="mt-3 text-sm text-blue-600 hover:underline dark:text-blue-400">
+                        <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-8 text-center dark:border-white/10 dark:bg-white/5">
+                            <IconGlyph name="shield" className="mb-4 h-10 w-10 text-violet-500 dark:text-violet-300" />
+                            <p className="max-w-md text-sm font-bold leading-6 text-slate-500 dark:text-slate-400">
+                                {t("entities.detail.authority.empty")}
+                            </p>
+                            <Link href="/disambiguation" className="mt-4 rounded-xl bg-violet-600 px-5 py-3 text-sm font-bold text-white shadow-[0_14px_35px_rgba(124,58,237,0.28)] transition hover:bg-violet-700">
                                 {t("entities.detail.authority.resolve_link")}
                             </Link>
                         </div>
                     ) : (
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                             {authorityRecords.map((rec) => {
                                 const isActing = authorityAction === rec.id;
                                 return (
                                     <div
                                         key={rec.id}
-                                        className={`rounded-2xl border bg-white p-4 shadow-sm transition-opacity dark:bg-gray-900 ${
+                                        className={`rounded-[1.25rem] border bg-slate-50/80 p-5 transition dark:bg-white/5 ${
                                             rec.status === "rejected"
-                                                ? "border-gray-200 opacity-50 dark:border-gray-800"
-                                                : rec.status === "confirmed"
-                                                ? "border-emerald-200 dark:border-emerald-700/50"
-                                                : "border-gray-200 dark:border-gray-800"
+                                                ? "border-slate-200 opacity-60 dark:border-white/10"
+                                            : rec.status === "confirmed"
+                                                ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-500/30 dark:bg-emerald-500/10"
+                                                : "border-slate-200 dark:border-white/10"
                                         }`}
                                     >
-                                        <div className="flex items-start justify-between gap-4">
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex flex-wrap items-center gap-2">
+                                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                            <div className="min-w-0 flex-1 space-y-3">
+                                                <div className="flex flex-wrap items-center gap-3">
+                                                    <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-violet-600 shadow-sm dark:bg-white/10 dark:text-violet-200">
+                                                        <IconGlyph name="globe" className="h-5 w-5" />
+                                                    </span>
                                                     <Badge variant={sourceVariant(rec.authority_source)}>
                                                         {rec.authority_source.toUpperCase()}
                                                     </Badge>
-                                                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                                                    <span className="text-base font-black text-slate-900 dark:text-white">
                                                         {rec.canonical_label}
                                                     </span>
                                                     <Badge variant={
@@ -671,39 +1279,39 @@ export default function EntityDetailPage() {
                                                     }>{rec.status}</Badge>
                                                     {rec.uri && (
                                                         <a href={rec.uri} target="_blank" rel="noopener noreferrer"
-                                                            className="text-gray-400 hover:text-blue-500 dark:text-gray-500">
-                                                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                                            </svg>
+                                                            className="rounded-lg p-1 text-slate-400 transition hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-white/10 dark:hover:text-violet-300">
+                                                            <IconGlyph name="link" className="h-4 w-4" />
                                                         </a>
                                                     )}
                                                 </div>
                                                 {rec.description && (
-                                                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
+                                                    <p className="max-w-3xl text-sm font-semibold leading-6 text-slate-500 dark:text-slate-400">
                                                         {rec.description}
                                                     </p>
                                                 )}
-                                                <div className="mt-2 flex items-center gap-2">
-                                                    <div className="h-1.5 w-32 rounded-full bg-gray-200 dark:bg-gray-700">
-                                                        <div className="h-1.5 rounded-full bg-blue-500"
+                                                <div className="grid gap-3 sm:grid-cols-[10rem_1fr] sm:items-center">
+                                                    <span className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
+                                                        Confianza {Math.round(rec.confidence * 100)}%
+                                                    </span>
+                                                    <div className="h-2 rounded-full bg-slate-200 dark:bg-white/10">
+                                                        <div className="h-2 rounded-full bg-violet-500"
                                                             style={{ width: `${Math.round(rec.confidence * 100)}%` }} />
                                                     </div>
-                                                    <span className="text-xs text-gray-500">{t("entities.detail.authority.confidence", { pct: Math.round(rec.confidence * 100) })}</span>
                                                 </div>
                                             </div>
                                             {rec.status === "pending" && (
-                                                <div className="flex shrink-0 gap-2">
+                                                <div className="flex shrink-0 flex-wrap gap-2">
                                                     <button
                                                         onClick={() => confirmAuthority(rec.id)}
                                                         disabled={isActing}
-                                                        className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                                                        className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
                                                     >
                                                         {isActing ? "..." : t("entities.detail.authority.confirm")}
                                                     </button>
                                                     <button
                                                         onClick={() => rejectAuthority(rec.id)}
                                                         disabled={isActing}
-                                                        className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                                                        className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
                                                     >
                                                         {isActing ? "..." : t("entities.detail.authority.reject")}
                                                     </button>
@@ -715,8 +1323,9 @@ export default function EntityDetailPage() {
                             })}
                         </div>
                     )}
-                </div>
+                </section>
             )}
+            </div>
         </div>
     );
 }
