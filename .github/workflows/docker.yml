@@ -1,6 +1,7 @@
 name: Docker Images
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
@@ -101,8 +102,34 @@ jobs:
   deploy:
     needs: [build-backend, build-frontend]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     steps:
       - name: Trigger Dokploy deploy
         run: |
-          curl -sf "${{ secrets.DOKPLOY_WEBHOOK_URL }}" || echo "Webhook failed"
+          set -euo pipefail
+
+          if [ -z "${{ secrets.DOKPLOY_API_URL }}" ] || [ -z "${{ secrets.DOKPLOY_API_KEY }}" ] || [ -z "${{ secrets.DOKPLOY_COMPOSE_ID }}" ]; then
+            echo "Missing Dokploy API secrets. Set DOKPLOY_API_URL, DOKPLOY_API_KEY, and DOKPLOY_COMPOSE_ID."
+            exit 1
+          fi
+
+          response_file="$(mktemp)"
+          http_code="$(
+            curl -sS -o "$response_file" -w "%{http_code}" \
+              -X POST "${{ secrets.DOKPLOY_API_URL }}/api/compose.redeploy" \
+              -H "Content-Type: application/json" \
+              -H "x-api-key: ${{ secrets.DOKPLOY_API_KEY }}" \
+              -d '{
+                "composeId": "${{ secrets.DOKPLOY_COMPOSE_ID }}",
+                "title": "UKIP CI deploy",
+                "description": "GitHub Actions deploy for ${{ github.sha }}"
+              }'
+          )"
+
+          echo "Dokploy HTTP status: $http_code"
+          cat "$response_file"
+
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "Dokploy redeploy request failed."
+            exit 1
+          fi
