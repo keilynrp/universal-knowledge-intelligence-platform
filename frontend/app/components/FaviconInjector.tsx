@@ -2,11 +2,12 @@
 
 import { useEffect } from "react";
 import { useBranding } from "../contexts/BrandingContext";
+import { DEFAULT_FAVICON_PATH } from "../lib/brandingAssets";
 
 /**
  * Reads favicon_url from BrandingContext and dynamically updates
  * <link rel="icon"> in the browser <head>.
- * When no custom favicon is set, the default app/favicon.ico is used.
+ * When no custom favicon is set, the default UKIP favicon asset is used.
  */
 export default function FaviconInjector() {
   const { branding } = useBranding();
@@ -17,7 +18,7 @@ export default function FaviconInjector() {
       ? branding.favicon_url.startsWith("/static/")
         ? `${apiBase}${branding.favicon_url}`
         : branding.favicon_url
-      : "/favicon.ico";
+      : DEFAULT_FAVICON_PATH;
 
     // Remove existing favicon links
     document.querySelectorAll("link[rel~='icon']").forEach((el) => el.remove());

@@ -12,6 +12,7 @@ import { PilotModeProvider } from "./contexts/PilotModeContext";
 import { EnrichmentProvider } from "./contexts/EnrichmentContext";
 import FaviconInjector from "./components/FaviconInjector";
 import { ToastProvider } from "./components/ui/Toast";
+import { DEFAULT_FAVICON_PATH } from "./lib/brandingAssets";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,6 +27,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "UKIP — Universal Knowledge Intelligence Platform",
   description: "Ingest, harmonize, enrich, analyze, and deliver high-value knowledge for decision-making across science, health, business, and humanities domains.",
+  icons: {
+    icon: [{ url: DEFAULT_FAVICON_PATH, type: "image/svg+xml" }],
+    shortcut: [DEFAULT_FAVICON_PATH],
+  },
 };
 
 // Inline script to set dark class before first paint to prevent flash
