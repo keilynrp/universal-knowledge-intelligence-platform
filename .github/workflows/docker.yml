@@ -48,8 +48,10 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          pull: true
+          no-cache: true
+          build-args: |
+            APP_VERSION=${{ github.sha }}
 
   build-frontend:
     runs-on: ubuntu-latest
@@ -89,10 +91,12 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          pull: true
+          no-cache: true
           build-args: |
             NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://api.ukip.inbounduxd.com' }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            NEXT_PUBLIC_APP_VERSION=${{ github.sha }}
+            APP_VERSION=${{ github.sha }}
 
   deploy:
     needs: [build-backend, build-frontend]

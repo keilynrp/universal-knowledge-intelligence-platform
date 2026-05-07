@@ -2,6 +2,10 @@ import { test, expect } from "@playwright/test";
 import { API_BASE, MOCK_TOKEN, MOCK_USER } from "./helpers";
 
 test.describe("Login flow", () => {
+  const usernameInput = (page: import("@playwright/test").Page) => page.getByPlaceholder(/superadmin/i);
+  const passwordInput = (page: import("@playwright/test").Page) => page.getByPlaceholder(/min\.?\s*8 caracteres/i);
+  const submitButton = (page: import("@playwright/test").Page) => page.getByRole("button", { name: /entrar a ukip/i });
+
   test.beforeEach(async ({ page }) => {
     // Ensure no stored token so we land on the login page
     await page.addInitScript(() => localStorage.clear());
@@ -15,12 +19,13 @@ test.describe("Login flow", () => {
 
     await page.goto("/login");
 
-    await expect(page.getByPlaceholder(/username/i)).toBeVisible();
-    await expect(page.getByPlaceholder(/password/i)).toBeVisible();
-    await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
+    await expect(usernameInput(page)).toBeVisible();
+    await expect(passwordInput(page)).toBeVisible();
+    await expect(submitButton(page)).toBeVisible();
   });
 
   test("successful login redirects to home", async ({ page }) => {
+    await page.route(`${API_BASE}/**`, (route) => route.fulfill({ json: [] }));
     await page.route(`${API_BASE}/auth/token`, (route) =>
       route.fulfill({
         json: { access_token: MOCK_TOKEN, token_type: "bearer" },
@@ -51,9 +56,9 @@ test.describe("Login flow", () => {
 
     await page.goto("/login");
 
-    await page.getByPlaceholder(/username/i).fill("admin");
-    await page.getByPlaceholder(/password/i).fill("password");
-    await page.getByRole("button", { name: /sign in/i }).click();
+    await usernameInput(page).fill("admin");
+    await passwordInput(page).fill("password");
+    await submitButton(page).click();
 
     await expect(page).toHaveURL("/");
   });
@@ -68,9 +73,9 @@ test.describe("Login flow", () => {
 
     await page.goto("/login");
 
-    await page.getByPlaceholder(/username/i).fill("wrong");
-    await page.getByPlaceholder(/password/i).fill("wrong");
-    await page.getByRole("button", { name: /sign in/i }).click();
+    await usernameInput(page).fill("wrong");
+    await passwordInput(page).fill("wrong");
+    await submitButton(page).click();
 
     await expect(
       page.getByText(/invalid username or password/i)

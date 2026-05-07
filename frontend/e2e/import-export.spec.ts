@@ -19,22 +19,16 @@ test.describe("Import / Export page", () => {
   test("shows Import tab content", async ({ page }) => {
     await page.goto("/import-export");
 
-    // The import tab should contain a file input or drop zone
     await expect(
-      page.getByRole("tab", { name: /import/i }).or(
-        page.getByText(/upload|drag.*drop|choose.*file/i).first()
-      )
+      page.getByRole("heading", { name: "Importar Datos", exact: true })
     ).toBeVisible({ timeout: 10_000 });
   });
 
   test("shows Export section", async ({ page }) => {
     await page.goto("/import-export");
 
-    // Export button or section should be present
     await expect(
-      page.getByRole("button", { name: /export/i }).or(
-        page.getByText(/export entities/i).first()
-      )
+      page.getByRole("heading", { name: "Exportar Datos", exact: true })
     ).toBeVisible({ timeout: 10_000 });
   });
 });

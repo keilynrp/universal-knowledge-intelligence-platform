@@ -1,23 +1,22 @@
 import { test, expect } from "@playwright/test";
-import { injectAuth, mockUserMe, mockHomeDashboard, API_BASE } from "./helpers";
+import { injectAuth, mockUserMe, mockHomeDashboard, mockExecutiveDashboard, API_BASE } from "./helpers";
 
 test.describe("Sidebar navigation", () => {
   test.beforeEach(async ({ page }) => {
     await injectAuth(page);
-    await mockUserMe(page);
-    await mockHomeDashboard(page);
-    // Generic fallback for all API calls on sub-pages
     await page.route(`${API_BASE}/**`, (route) => {
-      // Only fulfil routes not already handled
       route.fulfill({ json: [] });
     });
+    await mockUserMe(page);
+    await mockHomeDashboard(page);
+    await mockExecutiveDashboard(page);
   });
 
   test("navigates to Import/Export page", async ({ page }) => {
     await page.goto("/");
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("link", { name: /import/i }).first().click();
+    await page.getByRole("link", { name: /sincronización de entidades/i }).first().click();
     await expect(page).toHaveURL(/import-export/);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible({
       timeout: 10_000,
@@ -28,8 +27,8 @@ test.describe("Sidebar navigation", () => {
     await page.goto("/");
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("link", { name: /analytics/i }).first().click();
-    await expect(page).toHaveURL(/analytics/);
+    await page.locator('a[href="/analytics/dashboard"]').first().click();
+    await expect(page).toHaveURL(/analytics\/dashboard/);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible({
       timeout: 10_000,
     });
@@ -39,7 +38,7 @@ test.describe("Sidebar navigation", () => {
     await page.goto("/");
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("link", { name: /rag|knowledge base|semantic/i }).first().click();
+    await page.getByRole("link", { name: /respuestas/i }).first().click();
     await expect(page).toHaveURL(/rag/);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible({
       timeout: 10_000,

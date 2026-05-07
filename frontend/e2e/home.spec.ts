@@ -1,9 +1,10 @@
 import { test, expect } from "@playwright/test";
-import { injectAuth, mockUserMe, mockHomeDashboard } from "./helpers";
+import { API_BASE, injectAuth, mockUserMe, mockHomeDashboard } from "./helpers";
 
 test.describe("Home dashboard", () => {
   test.beforeEach(async ({ page }) => {
     await injectAuth(page);
+    await page.route(`${API_BASE}/**`, (route) => route.fulfill({ json: [] }));
     await mockUserMe(page);
     await mockHomeDashboard(page);
   });
@@ -14,16 +15,15 @@ test.describe("Home dashboard", () => {
     // Wait for the page to hydrate
     await expect(page.locator("h1")).toBeVisible({ timeout: 10_000 });
 
-    // StatCards should appear (4 cards: Entities, Enriched, Domains, Indexed)
-    // At minimum the heading and some numeric values render
-    await expect(page.getByText("120")).toBeVisible();
+    await expect(page.getByText(/total de entidades/i)).toBeVisible();
+    await expect(page.getByText(/pipeline ukip/i)).toBeVisible();
   });
 
-  test("home page shows Knowledge Dashboard heading", async ({ page }) => {
+  test("home page shows research intelligence heading", async ({ page }) => {
     await page.goto("/");
 
     await expect(
-      page.getByRole("heading", { name: /knowledge dashboard/i })
+      page.getByRole("heading", { name: "Inteligencia de Investigación", exact: true })
     ).toBeVisible({ timeout: 10_000 });
   });
 
@@ -31,9 +31,9 @@ test.describe("Home dashboard", () => {
     await page.goto("/");
 
     // Sidebar should contain key navigation items
-    await expect(page.getByRole("link", { name: /entities/i }).first()).toBeVisible({
+    await expect(page.getByRole("link", { name: /explorador de conocimiento/i }).first()).toBeVisible({
       timeout: 10_000,
     });
-    await expect(page.getByRole("link", { name: /import/i }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: /asistente de importación/i }).first()).toBeVisible();
   });
 });

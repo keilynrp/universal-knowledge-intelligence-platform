@@ -4,11 +4,13 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 // Server-side rewrite target: use Docker-internal URL in production to avoid
 // hairpin NAT issues when the Next.js container tries to reach the public URL.
 const BACKEND_INTERNAL = process.env.BACKEND_INTERNAL_URL ?? BACKEND_URL;
+const BUILD_ID = process.env.NEXT_PUBLIC_APP_VERSION || process.env.UKIP_APP_VERSION || "local";
 
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   compress: true,
+  generateBuildId: async () => BUILD_ID,
 
   async headers() {
     return [
@@ -20,6 +22,10 @@ const nextConfig: NextConfig = {
           {
             key: "Cache-Control",
             value: "no-store, max-age=0, must-revalidate",
+          },
+          {
+            key: "X-UKIP-Build",
+            value: BUILD_ID,
           },
         ],
       },
