@@ -1,58 +1,54 @@
 "use client";
 
 import { useState } from "react";
+import { useLanguage } from "../contexts/LanguageContext";
 import { Analytics } from "@/lib/analytics";
 
 // ── Tour step definition ───────────────────────────────────────────────────────
 
 interface TourStep {
-  title: string;
-  description: string;
+  titleKey: string;
+  descriptionKey: string;
   icon: string;
-  tip?: string;
+  tipKey?: string;
   /** Which area of the screen to highlight: top-left | top-right | center | bottom-left | bottom-right */
   position: "top-left" | "top-right" | "center" | "bottom-left" | "bottom-right";
 }
 
 const TOUR_STEPS: TourStep[] = [
   {
-    title: "Welcome to UKIP!",
-    description:
-      "Your demo dataset with 1,000 scientific publications is loaded. This quick tour shows you the key features in under 2 minutes.",
+    titleKey: "guided_tour.step.welcome.title",
+    descriptionKey: "guided_tour.step.welcome.description",
     icon: "🚀",
-    tip: "You can skip the tour at any time.",
+    tipKey: "guided_tour.step.welcome.tip",
     position: "center",
   },
   {
-    title: "Knowledge Dashboard",
-    description:
-      "This is your main hub. Browse entities, filter by status, and manage your data. The stat cards at the top show live KPIs.",
+    titleKey: "guided_tour.step.dashboard.title",
+    descriptionKey: "guided_tour.step.dashboard.description",
     icon: "📊",
-    tip: "Try switching between Table View and Variant Groups.",
+    tipKey: "guided_tour.step.dashboard.tip",
     position: "top-left",
   },
   {
-    title: "Executive Analytics",
-    description:
-      "Go to Analytics → Executive Dashboard for high-level KPIs, temporal trends, and a concept cloud. Perfect for C-level presentations.",
+    titleKey: "guided_tour.step.analytics.title",
+    descriptionKey: "guided_tour.step.analytics.description",
     icon: "📈",
-    tip: "Use the 'Export PDF' button to generate a branded report in one click.",
+    tipKey: "guided_tour.step.analytics.tip",
     position: "top-right",
   },
   {
-    title: "OLAP Cube Explorer",
-    description:
-      "Slice your data by any dimension — year, country, field, or institution. Click '↳ Drill' on any row to go deeper.",
+    titleKey: "guided_tour.step.olap.title",
+    descriptionKey: "guided_tour.step.olap.description",
     icon: "🧮",
-    tip: "Try combining two dimensions for a cross-tab analysis.",
+    tipKey: "guided_tour.step.olap.tip",
     position: "bottom-left",
   },
   {
-    title: "Export & Reports",
-    description:
-      "Generate reports in Excel, PDF, or PowerPoint. Pick your sections, choose a format, and download a branded document.",
+    titleKey: "guided_tour.step.reports.title",
+    descriptionKey: "guided_tour.step.reports.description",
     icon: "📥",
-    tip: "Go to Import / Export → Report Builder to build your first report.",
+    tipKey: "guided_tour.step.reports.tip",
     position: "bottom-right",
   },
 ];
@@ -101,6 +97,7 @@ interface GuidedTourProps {
 }
 
 export default function GuidedTour({ autoStart = false, show, onClose }: GuidedTourProps) {
+  const { t } = useLanguage();
   const [step, setStep] = useState(0);
   const [dismissed, setDismissed] = useState(() => {
     if (typeof window === "undefined") {
@@ -135,6 +132,13 @@ export default function GuidedTour({ autoStart = false, show, onClose }: GuidedT
 
   const current = TOUR_STEPS[step];
   const isLast = step === TOUR_STEPS.length - 1;
+  const title = t(current.titleKey);
+  const description = t(current.descriptionKey);
+  const tip = current.tipKey ? t(current.tipKey) : "";
+  const stepLabel = t("guided_tour.step_label", {
+    current: step + 1,
+    total: TOUR_STEPS.length,
+  });
 
   return (
     <>
@@ -148,7 +152,11 @@ export default function GuidedTour({ autoStart = false, show, onClose }: GuidedT
       <div
         className={`fixed z-50 w-80 max-w-[calc(100vw-2rem)] ${CARD_POSITIONS[current.position]}`}
         role="dialog"
-        aria-label={`Tour step ${step + 1} of ${TOUR_STEPS.length}: ${current.title}`}
+        aria-label={t("guided_tour.dialog_label", {
+          current: step + 1,
+          total: TOUR_STEPS.length,
+          title,
+        })}
       >
         <div className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-2xl dark:border-violet-500/30 dark:bg-gray-900">
           {/* Header */}
@@ -156,13 +164,13 @@ export default function GuidedTour({ autoStart = false, show, onClose }: GuidedT
             <div className="flex items-center gap-2">
               <span className="text-2xl">{current.icon}</span>
               <span className="text-sm font-semibold text-white">
-                Step {step + 1} of {TOUR_STEPS.length}
+                {stepLabel}
               </span>
             </div>
             <button
               onClick={() => close(false)}
               className="rounded-full p-1 text-violet-200 transition hover:bg-white/20 hover:text-white"
-              aria-label="Skip tour"
+              aria-label={t("guided_tour.skip")}
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -173,15 +181,15 @@ export default function GuidedTour({ autoStart = false, show, onClose }: GuidedT
           {/* Body */}
           <div className="px-5 py-4">
             <h3 className="mb-2 text-base font-bold text-gray-900 dark:text-white">
-              {current.title}
+              {title}
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-300">
-              {current.description}
+              {description}
             </p>
-            {current.tip && (
+            {tip && (
               <div className="mt-3 flex items-start gap-2 rounded-lg bg-violet-50 px-3 py-2 dark:bg-violet-900/20">
                 <span className="mt-0.5 text-sm">💡</span>
-                <p className="text-xs text-violet-700 dark:text-violet-300">{current.tip}</p>
+                <p className="text-xs text-violet-700 dark:text-violet-300">{tip}</p>
               </div>
             )}
           </div>
@@ -195,14 +203,14 @@ export default function GuidedTour({ autoStart = false, show, onClose }: GuidedT
                   onClick={prev}
                   className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
                 >
-                  Back
+                  {t("guided_tour.back")}
                 </button>
               )}
               <button
                 onClick={next}
                 className="rounded-lg bg-violet-600 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-700"
               >
-                {isLast ? "Got it! 🎉" : "Next →"}
+                {isLast ? t("guided_tour.done") : t("guided_tour.next")}
               </button>
             </div>
           </div>

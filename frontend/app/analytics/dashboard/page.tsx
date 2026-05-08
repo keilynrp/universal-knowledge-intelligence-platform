@@ -236,6 +236,9 @@ export default function ExecutiveDashboardPage() {
   const translateConfidence = (confidence: "high" | "medium" | "low") => (
     tr(`page.exec_dashboard.confidence.${confidence}`, confidence)
   );
+  const translatePatternType = (type: string) => (
+    tr(`page.exec_dashboard.pattern_type.${type}`, type.replaceAll("_", " "))
+  );
   const translateActionText = useCallback((
     action: DashboardData["recommended_actions"][number],
     field: "title" | "detail" | "evidence",
@@ -844,7 +847,7 @@ export default function ExecutiveDashboardPage() {
                 </h3>
               </div>
               <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-                {data.impact_projection.confidence} · {data.impact_projection.confidence_score}/100
+                {translateConfidence(data.impact_projection.confidence)} · {data.impact_projection.confidence_score}/100
               </span>
             </div>
             <p className="mt-4 text-sm font-semibold text-[var(--ukip-text-strong)]">
@@ -885,12 +888,12 @@ export default function ExecutiveDashboardPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--ukip-muted)]">
-                      {pattern.type.replaceAll("_", " ")}
+                      {translatePatternType(pattern.type)}
                     </p>
                     <h4 className="mt-1 text-sm font-bold text-[var(--ukip-text-strong)]">{pattern.label}</h4>
                   </div>
                   <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-bold text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
-                    {pattern.confidence}
+                    {translateConfidence(pattern.confidence)}
                   </span>
                 </div>
                 <p className="mt-3 text-xs leading-5 text-[var(--ukip-muted)]">{pattern.evidence}</p>
