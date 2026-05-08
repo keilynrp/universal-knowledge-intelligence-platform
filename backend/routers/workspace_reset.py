@@ -70,7 +70,19 @@ def _scoped_query(db: Session, model: Any, org_id: int | None):
     query = db.query(model)
     org_column = getattr(model, "org_id", None)
     if org_column is None:
-        raise ValueError(f"Model {model.__name__} does not expose org_id")
+        # Model has no org_id at all — treat all rows as legacy/global.
+        if org_id is None:
+            return query
+        return query.filter(text("1=0"))
+
+    # Check if the physical column exists in the DB table.
+    table_name = model.__tablename__
+    if not _column_exists(db, table_name, "org_id"):
+        # Column not yet migrated — all rows belong to legacy workspace.
+        if org_id is None:
+            return query
+        return query.filter(text("1=0"))
+
     if org_id is None:
         return query.filter(org_column.is_(None))
     return query.filter(org_column == org_id)
@@ -98,11 +110,53 @@ def _column_exists(db: Session, table_name: str, column_name: str) -> bool:
         return False
     if table_name not in _existing_tables(db):
         return False
-    return column_name in {col["name"] for col in inspect(bind).get_columns(table_name)}
+    return column_name in _physical_columns(db, table_name)
 
 
-def _scoped_where(table_name: str, org_id: int | None) -> tuple[str, dict[str, object]]:
+def _physical_columns(db: Session, table_name: str) -> set[str]:
+    """Return the set of column names that physically exist in the DB table."""
+    bind = db.get_bind()
+    if bind is None:
+        return set()
+    if table_name not in _existing_tables(db):
+        return set()
+    return {col["name"] for col in inspect(bind).get_columns(table_name)}
+
+
+def _safe_update(
+    db: Session,
+    query: Any,
+    model: Any,
+    values: dict[Any, Any],
+) -> int:
+    """Run an ORM .update() but only include columns that physically exist."""
+    table_name = model.__tablename__
+    phys = _physical_columns(db, table_name)
+    if not phys:
+        return 0
+    safe_values = {}
+    for col_attr, val in values.items():
+        col_name = col_attr.key if hasattr(col_attr, "key") else str(col_attr)
+        if col_name in phys:
+            safe_values[col_attr] = val
+    if not safe_values:
+        return 0
+    return int(query.update(safe_values, synchronize_session=False) or 0)
+
+
+def _scoped_where(
+    db: Session,
+    table_name: str,
+    org_id: int | None,
+    *,
+    existing_tables: set[str] | None = None,
+) -> tuple[str, dict[str, object]]:
     params: dict[str, object] = {}
+    # If the physical table lacks org_id, legacy mode returns all rows.
+    if not _column_exists(db, table_name, "org_id"):
+        if org_id is None:
+            return "1=1", params
+        return "1=0", params
     if org_id is None:
         return f"{table_name}.org_id IS NULL", params
     params["org_id"] = org_id
@@ -118,7 +172,7 @@ def _count_table(
 ) -> int:
     if not _table_exists(db, table_name, existing_tables):
         return 0
-    where_sql, params = _scoped_where(table_name, org_id)
+    where_sql, params = _scoped_where(db, table_name, org_id)
     return int(
         db.execute(
             text(f"SELECT COUNT(*) FROM {table_name} WHERE {where_sql}"),
@@ -137,7 +191,7 @@ def _ids_for_table(
 ) -> list[int]:
     if not _table_exists(db, table_name, existing_tables):
         return []
-    where_sql, params = _scoped_where(table_name, org_id)
+    where_sql, params = _scoped_where(db, table_name, org_id)
     rows = db.execute(
         text(f"SELECT id FROM {table_name} WHERE {where_sql}"),
         params,
@@ -200,11 +254,14 @@ def _delete_scoped_table(
 ) -> int:
     if not _table_exists(db, table_name, existing_tables):
         return 0
-    where_sql, params = _scoped_where(table_name, org_id)
+    where_sql, params = _scoped_where(db, table_name, org_id)
     return int(db.execute(text(f"DELETE FROM {table_name} WHERE {where_sql}"), params).rowcount or 0)
 
 
 def _delete_scoped_model(db: Session, model: Any, org_id: int | None) -> int:
+    table_name = model.__tablename__
+    if table_name not in _existing_tables(db):
+        return 0
     return int(_scoped_query(db, model, org_id).delete(synchronize_session=False) or 0)
 
 
@@ -492,15 +549,14 @@ def reset_workspace_data(
 
         deleted["audit_logs"] = 0
 
-        reset_counters["store_connections"] = store_query.update(
-            {
+        reset_counters["store_connections"] = _safe_update(
+            db, store_query, models.StoreConnection, {
                 models.StoreConnection.entity_count: 0,
                 models.StoreConnection.last_sync_at: None,
             },
-            synchronize_session=False,
         )
-        reset_counters["scheduled_imports"] = scheduled_import_query.update(
-            {
+        reset_counters["scheduled_imports"] = _safe_update(
+            db, scheduled_import_query, models.ScheduledImport, {
                 models.ScheduledImport.last_run_at: None,
                 models.ScheduledImport.next_run_at: None,
                 models.ScheduledImport.last_status: None,
@@ -508,34 +564,30 @@ def reset_workspace_data(
                 models.ScheduledImport.total_runs: 0,
                 models.ScheduledImport.total_entities_imported: 0,
             },
-            synchronize_session=False,
         )
-        reset_counters["scheduled_reports"] = scheduled_report_query.update(
-            {
+        reset_counters["scheduled_reports"] = _safe_update(
+            db, scheduled_report_query, models.ScheduledReport, {
                 models.ScheduledReport.last_run_at: None,
                 models.ScheduledReport.next_run_at: None,
                 models.ScheduledReport.last_status: "pending",
                 models.ScheduledReport.last_error: None,
                 models.ScheduledReport.total_sent: 0,
             },
-            synchronize_session=False,
         )
-        reset_counters["workflows"] = workflow_query.update(
-            {
+        reset_counters["workflows"] = _safe_update(
+            db, workflow_query, models.Workflow, {
                 models.Workflow.last_run_at: None,
                 models.Workflow.run_count: 0,
                 models.Workflow.last_run_status: None,
             },
-            synchronize_session=False,
         )
-        reset_counters["web_scrapers"] = scraper_query.update(
-            {
+        reset_counters["web_scrapers"] = _safe_update(
+            db, scraper_query, models.WebScraperConfig, {
                 models.WebScraperConfig.last_run_at: None,
                 models.WebScraperConfig.last_run_status: None,
                 models.WebScraperConfig.total_runs: 0,
                 models.WebScraperConfig.total_enriched: 0,
             },
-            synchronize_session=False,
         )
 
         if store_ids:
@@ -602,7 +654,10 @@ def reset_workspace_data(
     except Exception:
         db.rollback()
         logger.exception("Workspace reset failed for scope %s (%s)", scope_label, scope_type)
-        raise
+        raise HTTPException(
+            status_code=500,
+            detail="Workspace reset failed. Check server logs for details.",
+        )
 
     logger.warning(
         "Workspace data reset executed by %s for scope %s (%s)",
