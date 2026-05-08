@@ -29,6 +29,11 @@ interface DashboardStats {
 interface DemoStatus {
   demo_seeded: boolean;
   demo_entity_count: number;
+  catalog_portal?: {
+    title: string;
+    slug: string;
+    url: string;
+  } | null;
 }
 
 type GuidedStage = {
@@ -422,6 +427,14 @@ export default function Home() {
                 <span className="px-1 text-sm font-semibold text-amber-800 dark:text-amber-300">
                   {t('page.home.demo_active_title')}
                 </span>
+                {demoStatus.catalog_portal?.url ? (
+                  <Link
+                    href={demoStatus.catalog_portal.url}
+                    className="rounded-lg px-2 py-1 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100 dark:text-violet-200 dark:hover:bg-violet-800/30"
+                  >
+                    Portal
+                  </Link>
+                ) : null}
                 <button
                   onClick={handleClearDemo}
                   disabled={demoLoading}

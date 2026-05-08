@@ -88,7 +88,7 @@ def test_demo_seed_requires_admin(client, viewer_headers):
 
 
 def test_demo_seed_loads_entities(client, auth_headers, db_session):
-    """With mocked file + DataFrame, seed must insert entities with source='demo'."""
+    """With mocked file + DataFrame, seed must insert entities and publish a demo portal."""
     df = _demo_df(5)
     with _fake_demo_file(df):
         resp = client.post("/demo/seed", headers=auth_headers)
@@ -96,7 +96,20 @@ def test_demo_seed_loads_entities(client, auth_headers, db_session):
     # Should succeed (201) or conflict (409 if already seeded by other test)
     assert resp.status_code in (201, 409)
     if resp.status_code == 201:
-        assert resp.json()["seeded"] == 5
+        payload = resp.json()
+        assert payload["seeded"] == 5
+        assert payload["catalog_portal"]["url"].startswith("/catalogs/")
+
+        portal = db_session.query(models.CatalogPortal).filter_by(slug=payload["catalog_portal"]["slug"]).first()
+        assert portal is not None
+        assert portal.source_batch_id is not None
+
+        rows = db_session.query(models.RawEntity).filter(models.RawEntity.source == "demo").all()
+        assert {row.import_batch_id for row in rows} == {portal.source_batch_id}
+
+        results = client.get(f"/catalogs/{portal.slug}/results", headers=auth_headers)
+        assert results.status_code == 200, results.text
+        assert results.json()["total"] == 5
 
 
 def test_demo_seed_conflict_if_already_seeded(client, auth_headers, db_session):
@@ -125,6 +138,10 @@ def test_demo_seed_maps_legacy_demo_columns(client, auth_headers, db_session):
     assert rows[0].secondary_label.startswith("DemoBrand")
     assert rows[0].canonical_id.startswith("DEMO-SCI-")
     assert rows[0].domain == "science"
+
+    status = client.get("/demo/status", headers=auth_headers)
+    assert status.status_code == 200
+    assert status.json()["catalog_portal"]["url"].startswith("/catalogs/")
 
 
 # ── DELETE /demo/reset ────────────────────────────────────────────────────────
@@ -156,6 +173,55 @@ def test_demo_reset_clears_only_demo_entities(client, auth_headers, db_session):
     )
     assert demo_count == 0
     assert user_count >= 1
+
+
+def test_demo_reset_clears_demo_portal_and_batch_only(client, auth_headers, db_session):
+    demo_batch = models.ImportBatch(
+        domain_id="science",
+        source_type="demo",
+        source_label="UKIP Demo Dataset",
+        total_rows=1,
+    )
+    user_batch = models.ImportBatch(
+        domain_id="science",
+        source_type="science_upload",
+        source_label="User Import",
+        total_rows=1,
+    )
+    db_session.add_all([demo_batch, user_batch])
+    db_session.flush()
+    demo_batch_id = demo_batch.id
+    user_batch_id = user_batch.id
+    db_session.add_all(
+        [
+            models.CatalogPortal(
+                title="Demo Portal",
+                slug="demo-portal-reset",
+                domain_id="science",
+                source_batch_id=demo_batch.id,
+                source_label="UKIP Demo Dataset",
+            ),
+            models.CatalogPortal(
+                title="User Portal",
+                slug="user-portal-reset",
+                domain_id="science",
+                source_batch_id=user_batch.id,
+                source_label="User Import",
+            ),
+            models.RawEntity(primary_label="Demo Entity", source="demo", import_batch_id=demo_batch.id),
+            models.RawEntity(primary_label="User Entity", source="user", import_batch_id=user_batch.id),
+        ]
+    )
+    db_session.commit()
+
+    resp = client.delete("/demo/reset", headers=auth_headers)
+    assert resp.status_code == 200
+
+    assert db_session.query(models.CatalogPortal).filter_by(slug="demo-portal-reset").first() is None
+    assert db_session.query(models.ImportBatch).filter_by(id=demo_batch_id).first() is None
+    assert db_session.query(models.CatalogPortal).filter_by(slug="user-portal-reset").first() is not None
+    assert db_session.query(models.ImportBatch).filter_by(id=user_batch_id).first() is not None
+    assert db_session.query(models.RawEntity).filter_by(source="user").count() == 1
 
 
 def test_demo_reset_returns_deleted_count(client, auth_headers, db_session):
