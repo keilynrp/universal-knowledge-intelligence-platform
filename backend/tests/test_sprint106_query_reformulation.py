@@ -48,6 +48,7 @@ class TestAuthorQueryReformulation:
             "field_name": "author_name",
             "value": value,
             "context_affiliation": "Universidad Nacional de Colombia",
+            "resolve_affiliation": False,
         }
 
     def test_feature_flag_off_keeps_deterministic_path(self, client, editor_headers, db_session, monkeypatch):

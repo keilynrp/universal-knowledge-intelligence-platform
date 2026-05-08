@@ -30,7 +30,12 @@ from backend.authority.hierarchical_fallback import apply_hierarchical_fallback
 from backend.authority.query_reformulation import run_author_query_reformulation
 from backend.authority.resolver import resolve_all as _authority_resolve_all
 from backend.database import get_db
-from backend.routers.deps import _audit, _build_disambig_groups, _serialize_authority_record
+from backend.routers.deps import (
+    _audit,
+    _build_disambig_groups,
+    _serialize_authority_record,
+    _serialize_authority_record_link,
+)
 from backend.routers.limiter import limiter
 from backend.tenant_access import (
     add_org_sql_filter,
@@ -45,9 +50,198 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["authority"])
 
 _FIELD_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_AFFILIATION_LINK_TYPE = "affiliated-with"
 
 
 # ── Authority resolution ──────────────────────────────────────────────────────
+
+def _persist_authority_candidates(
+    *,
+    db: Session,
+    org_id: int | None,
+    field_name: str,
+    original_value: str,
+    candidates: list,
+    status: str = "pending",
+    resolution_route: str | None = None,
+    complexity_score: float | None = None,
+    review_required: bool = False,
+    nil_reason: str | None = None,
+    nil_score: float | None = None,
+    reformulation_trace=None,
+) -> list[models.AuthorityRecord]:
+    records: list[models.AuthorityRecord] = []
+    for idx, c in enumerate(candidates):
+        rec = models.AuthorityRecord(
+            org_id=org_id,
+            field_name=field_name,
+            original_value=original_value,
+            authority_source=c.authority_source,
+            authority_id=c.authority_id,
+            canonical_label=c.canonical_label,
+            aliases=json.dumps(c.aliases),
+            description=c.description,
+            confidence=c.confidence,
+            uri=c.uri,
+            status=status,
+            resolution_status=c.resolution_status,
+            score_breakdown=json.dumps(c.score_breakdown),
+            evidence=json.dumps(c.evidence),
+            merged_sources=json.dumps(c.merged_sources),
+            hierarchy_distance=c.hierarchy_distance,
+            resolution_route=resolution_route,
+            complexity_score=complexity_score,
+            review_required=review_required,
+            nil_reason=nil_reason,
+            nil_score=nil_score,
+            reformulation_applied=(
+                bool(reformulation_trace.applied) if reformulation_trace is not None and idx == 0 else False
+            ),
+            reformulation_gain=(
+                reformulation_trace.retrieval_gain if reformulation_trace is not None and idx == 0 else None
+            ),
+            reformulation_cost_estimate=(
+                reformulation_trace.estimated_cost_usd if reformulation_trace is not None and idx == 0 else None
+            ),
+            reformulation_trace=(
+                reformulation_trace.to_json()
+                if reformulation_trace is not None and reformulation_trace.attempted and idx == 0
+                else None
+            ),
+        )
+        db.add(rec)
+        records.append(rec)
+    return records
+
+
+def _make_nil_authority_record(
+    *,
+    org_id: int | None,
+    field_name: str,
+    original_value: str,
+    description: str,
+    evidence: list[str],
+    resolution_route: str | None,
+    complexity_score: float | None,
+    review_required: bool,
+    nil_reason: str,
+    nil_score: float,
+    reformulation_trace=None,
+) -> models.AuthorityRecord:
+    return models.AuthorityRecord(
+        org_id=org_id,
+        field_name=field_name,
+        original_value=original_value,
+        authority_source="internal_nil",
+        authority_id="NIL",
+        canonical_label=original_value,
+        aliases="[]",
+        description=description,
+        confidence=0.0,
+        uri=None,
+        status="pending",
+        resolution_status="unresolved",
+        score_breakdown="{}",
+        evidence=json.dumps(evidence),
+        merged_sources="[]",
+        resolution_route=resolution_route,
+        complexity_score=complexity_score,
+        review_required=review_required,
+        nil_reason=nil_reason,
+        nil_score=nil_score,
+        reformulation_applied=bool(reformulation_trace.applied) if reformulation_trace is not None else False,
+        reformulation_gain=reformulation_trace.retrieval_gain if reformulation_trace is not None else None,
+        reformulation_cost_estimate=reformulation_trace.estimated_cost_usd if reformulation_trace is not None else None,
+        reformulation_trace=reformulation_trace.to_json()
+        if reformulation_trace is not None and reformulation_trace.attempted
+        else None,
+    )
+
+
+def _link_confidence(author_record: models.AuthorityRecord, institution_record: models.AuthorityRecord) -> float:
+    try:
+        author_breakdown = json.loads(author_record.score_breakdown or "{}")
+    except Exception:
+        author_breakdown = {}
+    affiliation_score = float(author_breakdown.get("affiliation") or 0.0)
+    return round(
+        0.50 * float(author_record.confidence or 0.0)
+        + 0.40 * float(institution_record.confidence or 0.0)
+        + 0.10 * affiliation_score,
+        3,
+    )
+
+
+def _resolve_author_affiliation(
+    *,
+    db: Session,
+    org_id: int | None,
+    author_record: models.AuthorityRecord | None,
+    affiliation_value: str | None,
+    affiliation_field_name: str,
+) -> dict:
+    if not affiliation_value or not affiliation_value.strip():
+        return {"attempted": False, "reason": "missing_context_affiliation"}
+    if author_record is None or author_record.authority_source == "internal_nil":
+        return {"attempted": False, "reason": "missing_author_record"}
+    if not _FIELD_RE.match(affiliation_field_name):
+        raise HTTPException(status_code=422, detail=f"Invalid affiliation field name: {affiliation_field_name!r}")
+
+    candidates = _authority_resolve_all(affiliation_value, "institution", _AuthorityContext())
+    candidates = apply_hierarchical_fallback(affiliation_value, "institution", candidates)
+    records = _persist_authority_candidates(
+        db=db,
+        org_id=org_id,
+        field_name=affiliation_field_name,
+        original_value=affiliation_value,
+        candidates=candidates,
+    )
+    if not records:
+        nil_record = _make_nil_authority_record(
+            org_id=org_id,
+            field_name=affiliation_field_name,
+            original_value=affiliation_value,
+            description="No external authority candidates were returned for this institution affiliation query.",
+            evidence=["nil_reason:no_candidates", f"context_affiliation:{affiliation_value}"],
+            resolution_route=None,
+            complexity_score=None,
+            review_required=True,
+            nil_reason="no_candidates",
+            nil_score=1.0,
+        )
+        db.add(nil_record)
+        records = [nil_record]
+
+    db.flush()
+    institution_record = records[0]
+    link = None
+    if institution_record.authority_source != "internal_nil":
+        confidence = _link_confidence(author_record, institution_record)
+        evidence = [
+            f"context_affiliation:{affiliation_value}",
+            f"author_record:{author_record.authority_source}:{author_record.authority_id}",
+            f"institution_record:{institution_record.authority_source}:{institution_record.authority_id}",
+            f"author_confidence:{float(author_record.confidence or 0.0):.3f}",
+            f"institution_confidence:{float(institution_record.confidence or 0.0):.3f}",
+            f"author_affiliation_score:{json.loads(author_record.score_breakdown or '{}').get('affiliation', 0.0)}",
+            f"institution_resolution_status:{institution_record.resolution_status or 'unresolved'}",
+        ]
+        link = models.AuthorityRecordLink(
+            org_id=org_id,
+            source_authority_record_id=author_record.id,
+            target_authority_record_id=institution_record.id,
+            link_type=_AFFILIATION_LINK_TYPE,
+            confidence=confidence,
+            status="pending",
+            evidence=json.dumps(evidence),
+        )
+        db.add(link)
+
+    return {
+        "attempted": True,
+        "records": records,
+        "link": link,
+    }
 
 @router.post("/authority/resolve", status_code=201, tags=["authority"])
 @limiter.limit("60/minute")
@@ -196,13 +390,51 @@ def resolve_author_profile(
         db.add(nil_record)
         records.append(nil_record)
 
+    db.flush()
+    affiliation_resolution = (
+        _resolve_author_affiliation(
+            db=db,
+            org_id=record_org_id,
+            author_record=records[0] if records else None,
+            affiliation_value=payload.context_affiliation,
+            affiliation_field_name=payload.affiliation_field_name,
+        )
+        if payload.resolve_affiliation
+        else {"attempted": False, "reason": "disabled"}
+    )
+
     db.commit()
     for rec in records:
         db.refresh(rec)
+    for rec in affiliation_resolution.get("records", []):
+        db.refresh(rec)
+    if affiliation_resolution.get("link") is not None:
+        db.refresh(affiliation_resolution["link"])
 
     serialized = [_serialize_authority_record(r) for r in records]
     winning = serialized[0] if serialized else None
     runner_up = serialized[1] if len(serialized) > 1 else None
+
+    if affiliation_resolution.get("attempted"):
+        affiliation_payload = {
+            "attempted": True,
+            "records_created": len(affiliation_resolution.get("records", [])),
+            "winning_record": _serialize_authority_record(affiliation_resolution["records"][0])
+            if affiliation_resolution.get("records")
+            else None,
+            "records": [
+                _serialize_authority_record(r)
+                for r in affiliation_resolution.get("records", [])
+            ],
+            "link": _serialize_authority_record_link(affiliation_resolution["link"])
+            if affiliation_resolution.get("link") is not None
+            else None,
+        }
+    else:
+        affiliation_payload = {
+            "attempted": False,
+            "reason": affiliation_resolution.get("reason", "not_attempted"),
+        }
 
     return {
         "query": {
@@ -220,6 +452,7 @@ def resolve_author_profile(
         "winning_record": winning,
         "runner_up_record": runner_up,
         "records": serialized,
+        "affiliation_resolution": affiliation_payload,
     }
 
 
@@ -600,6 +833,100 @@ def author_review_compare(
         "peers": [_serialize_authority_record(r) for r in siblings],
         "peer_count": len(siblings),
     }
+
+
+@router.get("/authority/authors/review-queue/{record_id}/affiliations", tags=["authority"])
+def author_review_affiliations(
+    record_id: int = Path(ge=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """List institution authority links attached to an author authority record."""
+    org_id = resolve_request_org_id(db, current_user)
+    subject = get_scoped_record(db, models.AuthorityRecord, record_id, org_id)
+    if subject is None or subject.resolution_route is None:
+        raise HTTPException(status_code=404, detail="Author review record not found")
+
+    links = (
+        scope_query_to_org(db.query(models.AuthorityRecordLink), models.AuthorityRecordLink, org_id)
+        .filter(
+            models.AuthorityRecordLink.source_authority_record_id == subject.id,
+            models.AuthorityRecordLink.link_type == _AFFILIATION_LINK_TYPE,
+        )
+        .order_by(models.AuthorityRecordLink.confidence.desc(), models.AuthorityRecordLink.id.desc())
+        .all()
+    )
+    target_ids = [link.target_authority_record_id for link in links]
+    targets = {
+        record.id: record
+        for record in scope_query_to_org(db.query(models.AuthorityRecord), models.AuthorityRecord, org_id)
+        .filter(models.AuthorityRecord.id.in_(target_ids))
+        .all()
+    } if target_ids else {}
+
+    return {
+        "author_record": _serialize_authority_record(subject),
+        "affiliations": [
+            {
+                "link": _serialize_authority_record_link(link),
+                "institution_record": _serialize_authority_record(targets[link.target_authority_record_id])
+                if link.target_authority_record_id in targets
+                else None,
+            }
+            for link in links
+        ],
+    }
+
+
+@router.post("/authority/links/{link_id}/confirm", tags=["authority"])
+def confirm_authority_record_link(
+    link_id: int = Path(ge=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
+):
+    """Confirm an authority-to-authority relationship without mutating either record."""
+    org_id = resolve_request_org_id(db, current_user)
+    link = get_scoped_record(db, models.AuthorityRecordLink, link_id, org_id)
+    if link is None:
+        raise HTTPException(status_code=404, detail="AuthorityRecordLink not found")
+    link.status = "confirmed"
+    link.confirmed_at = datetime.now(timezone.utc)
+    _audit(
+        db,
+        "authority.link.confirm",
+        user_id=current_user.id,
+        entity_type="authority_record_link",
+        entity_id=link.id,
+        details={"link_type": link.link_type},
+    )
+    db.commit()
+    db.refresh(link)
+    return _serialize_authority_record_link(link)
+
+
+@router.post("/authority/links/{link_id}/reject", tags=["authority"])
+def reject_authority_record_link(
+    link_id: int = Path(ge=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
+):
+    """Reject an authority-to-authority relationship without mutating either record."""
+    org_id = resolve_request_org_id(db, current_user)
+    link = get_scoped_record(db, models.AuthorityRecordLink, link_id, org_id)
+    if link is None:
+        raise HTTPException(status_code=404, detail="AuthorityRecordLink not found")
+    link.status = "rejected"
+    _audit(
+        db,
+        "authority.link.reject",
+        user_id=current_user.id,
+        entity_type="authority_record_link",
+        entity_id=link.id,
+        details={"link_type": link.link_type},
+    )
+    db.commit()
+    db.refresh(link)
+    return _serialize_authority_record_link(link)
 
 
 @router.post("/authority/records/bulk-confirm", tags=["authority"])

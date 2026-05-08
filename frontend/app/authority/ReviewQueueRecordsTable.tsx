@@ -6,6 +6,7 @@ import AnnotationThread from "../components/AnnotationThread";
 import { useLanguage } from "../contexts/LanguageContext";
 import AuthorReviewExpandedPanel from "./AuthorReviewExpandedPanel";
 import {
+    type AuthorAffiliationsResponse,
     type AuthorCompareResponse,
     type AuthorityRecord,
     SOURCE_COLORS,
@@ -25,10 +26,13 @@ interface ReviewQueueRecordsTableProps {
     rowActionId: number | null;
     expandedId: number | null;
     loadingCompareId: number | null;
+    linkActionId: number | null;
     compareMap: Record<number, AuthorCompareResponse>;
+    affiliationMap: Record<number, AuthorAffiliationsResponse>;
     onToggleSelectAll: () => void;
     onToggleSelect: (id: number) => void;
     onReviewRecord: (record: AuthorityRecord, action: "confirm" | "reject") => void;
+    onReviewAuthorityLink: (linkId: number, action: "confirm" | "reject", authorRecordId: number) => void;
     onToggleExpanded: (record: AuthorityRecord) => void;
 }
 
@@ -41,10 +45,13 @@ export default function ReviewQueueRecordsTable({
     rowActionId,
     expandedId,
     loadingCompareId,
+    linkActionId,
     compareMap,
+    affiliationMap,
     onToggleSelectAll,
     onToggleSelect,
     onReviewRecord,
+    onReviewAuthorityLink,
     onToggleExpanded,
 }: ReviewQueueRecordsTableProps) {
     const { t } = useLanguage();
@@ -234,7 +241,10 @@ export default function ReviewQueueRecordsTable({
                                                 <AuthorReviewExpandedPanel
                                                     record={rec}
                                                     compare={compareMap[rec.id] ?? null}
+                                                    affiliations={affiliationMap[rec.id] ?? null}
                                                     loadingCompare={loadingCompareId === rec.id}
+                                                    linkActionId={linkActionId}
+                                                    onReviewAuthorityLink={onReviewAuthorityLink}
                                                 />
                                             )}
 

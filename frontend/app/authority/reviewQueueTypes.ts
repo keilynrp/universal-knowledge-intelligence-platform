@@ -99,6 +99,28 @@ export interface AuthorCompareResponse {
     peer_count: number;
 }
 
+export interface AuthorityRecordLink {
+    id: number;
+    source_authority_record_id: number;
+    target_authority_record_id: number;
+    link_type: string;
+    confidence: number;
+    status: string;
+    evidence: string[];
+    created_at: string;
+    confirmed_at: string | null;
+}
+
+export interface AuthorAffiliationLink {
+    link: AuthorityRecordLink;
+    institution_record: AuthorityRecord | null;
+}
+
+export interface AuthorAffiliationsResponse {
+    author_record: AuthorityRecord;
+    affiliations: AuthorAffiliationLink[];
+}
+
 export const SOURCE_COLORS: Record<string, string> = {
     wikidata: "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
     viaf: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",

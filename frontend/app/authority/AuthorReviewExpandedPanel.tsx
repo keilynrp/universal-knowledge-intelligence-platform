@@ -1,7 +1,7 @@
 "use client";
 
 import { useLanguage } from "../contexts/LanguageContext";
-import type { AuthorityRecord, AuthorCompareResponse } from "./reviewQueueTypes";
+import type { AuthorityRecord, AuthorAffiliationsResponse, AuthorCompareResponse } from "./reviewQueueTypes";
 import { SOURCE_COLORS } from "./reviewQueueTypes";
 import {
     getNilReasonLabel,
@@ -12,13 +12,19 @@ import {
 export interface AuthorReviewExpandedPanelProps {
     record: AuthorityRecord;
     compare: AuthorCompareResponse | null;
+    affiliations: AuthorAffiliationsResponse | null;
     loadingCompare: boolean;
+    linkActionId: number | null;
+    onReviewAuthorityLink: (linkId: number, action: "confirm" | "reject", authorRecordId: number) => void;
 }
 
 export default function AuthorReviewExpandedPanel({
     record,
     compare,
+    affiliations,
     loadingCompare,
+    linkActionId,
+    onReviewAuthorityLink,
 }: AuthorReviewExpandedPanelProps) {
     const { t } = useLanguage();
 
@@ -70,6 +76,75 @@ export default function AuthorReviewExpandedPanel({
                                         <p className="uppercase tracking-wide">{t("page.authority.table_route")}</p>
                                         <p className="mt-1 font-mono text-gray-900 dark:text-white">{getRouteLabel(peer.resolution_route, t)}</p>
                                     </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ) : null}
+
+            {affiliations?.affiliations.length ? (
+                <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900/60">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                            {t("page.authority.affiliation_authority") || "Affiliation authority"}
+                        </p>
+                        <span className="text-xs text-gray-400 dark:text-gray-500">
+                            {affiliations.affiliations.length}
+                        </span>
+                    </div>
+                    <div className="space-y-3">
+                        {affiliations.affiliations.map(({ link, institution_record }) => (
+                            <div
+                                key={link.id}
+                                className="flex flex-col gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700 lg:flex-row lg:items-center lg:justify-between"
+                            >
+                                <div className="min-w-0 space-y-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="font-medium text-gray-900 dark:text-white">
+                                            {institution_record?.canonical_label || t("page.authority.unavailable_record") || "Unavailable record"}
+                                        </span>
+                                        {institution_record && (
+                                            <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${SOURCE_COLORS[institution_record.authority_source] || "bg-gray-100 text-gray-600"}`}>
+                                                {institution_record.authority_source}
+                                            </span>
+                                        )}
+                                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${link.status === "confirmed" ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400" : link.status === "rejected" ? "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400" : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"}`}>
+                                            {link.status}
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                        {link.link_type} · {(link.confidence * 100).toFixed(0)}%
+                                        {institution_record?.authority_id ? ` · ${institution_record.authority_id}` : ""}
+                                    </p>
+                                    {link.evidence.length > 0 && (
+                                        <div className="flex flex-wrap gap-1.5 pt-1">
+                                            {link.evidence.slice(0, 4).map(item => (
+                                                <span
+                                                    key={item}
+                                                    className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                                                >
+                                                    {item}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex shrink-0 items-center gap-2">
+                                    <button
+                                        onClick={() => onReviewAuthorityLink(link.id, "confirm", record.id)}
+                                        disabled={linkActionId === link.id || link.status === "confirmed"}
+                                        className="inline-flex h-7 items-center rounded-md bg-green-600 px-2.5 text-[11px] font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50"
+                                    >
+                                        {t("page.authority.confirm_button")}
+                                    </button>
+                                    <button
+                                        onClick={() => onReviewAuthorityLink(link.id, "reject", record.id)}
+                                        disabled={linkActionId === link.id || link.status === "rejected"}
+                                        className="inline-flex h-7 items-center rounded-md bg-red-600 px-2.5 text-[11px] font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                                    >
+                                        {t("page.authority.reject_button")}
+                                    </button>
                                 </div>
                             </div>
                         ))}

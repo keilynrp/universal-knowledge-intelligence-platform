@@ -57,10 +57,13 @@ export default function ReviewQueueTab({ activeDomain }: { activeDomain: DomainS
                     rowActionId={controller.rowActionId}
                     expandedId={controller.expandedId}
                     loadingCompareId={controller.loadingCompareId}
+                    linkActionId={controller.linkActionId}
                     compareMap={controller.compareMap}
+                    affiliationMap={controller.affiliationMap}
                     onToggleSelectAll={controller.toggleSelectAll}
                     onToggleSelect={controller.toggleSelect}
                     onReviewRecord={controller.reviewRecord}
+                    onReviewAuthorityLink={controller.reviewAuthorityLink}
                     onToggleExpanded={controller.toggleExpanded}
                 />
             </div>

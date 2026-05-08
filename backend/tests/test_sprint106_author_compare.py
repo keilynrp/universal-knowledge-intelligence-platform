@@ -45,6 +45,7 @@ class TestAuthorReviewCompare:
             "field_name": "author_name",
             "value": value,
             "context_affiliation": "Universidad Nacional de Colombia",
+            "resolve_affiliation": False,
         }
 
     def test_compare_returns_subject_and_peer_candidates(self, client, editor_headers):

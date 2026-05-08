@@ -5,6 +5,7 @@ import { useToast } from "../components/ui";
 import { apiFetch } from "@/lib/api";
 import type { DomainAttribute, DomainSchema } from "../contexts/DomainContext";
 import type {
+    AuthorAffiliationsResponse,
     AuthorCompareResponse,
     AuthorMetrics,
     AuthorQueueResponse,
@@ -36,7 +37,9 @@ export default function useReviewQueueController(activeDomain: DomainSchema | nu
     const [resolveResult, setResolveResult] = useState<string | null>(null);
     const [expandedId, setExpandedId] = useState<number | null>(null);
     const [compareMap, setCompareMap] = useState<Record<number, AuthorCompareResponse>>({});
+    const [affiliationMap, setAffiliationMap] = useState<Record<number, AuthorAffiliationsResponse>>({});
     const [loadingCompareId, setLoadingCompareId] = useState<number | null>(null);
+    const [linkActionId, setLinkActionId] = useState<number | null>(null);
 
     useEffect(() => {
         if (activeDomain && !batchField) {
@@ -212,20 +215,61 @@ export default function useReviewQueueController(activeDomain: DomainSchema | nu
     async function toggleExpanded(rec: AuthorityRecord) {
         const nextExpanded = expandedId === rec.id ? null : rec.id;
         setExpandedId(nextExpanded);
-        if (queueMode !== "authors" || nextExpanded === null || compareMap[rec.id]) {
+        if (queueMode !== "authors" || nextExpanded === null) {
+            return;
+        }
+
+        if (compareMap[rec.id] && affiliationMap[rec.id]) {
             return;
         }
 
         setLoadingCompareId(rec.id);
         try {
-            const res = await apiFetch(`/authority/authors/review-queue/${rec.id}/compare`);
-            if (res.ok) {
-                const payload: AuthorCompareResponse = await res.json();
+            const [compareRes, affiliationsRes] = await Promise.all([
+                compareMap[rec.id] ? null : apiFetch(`/authority/authors/review-queue/${rec.id}/compare`),
+                affiliationMap[rec.id] ? null : apiFetch(`/authority/authors/review-queue/${rec.id}/affiliations`),
+            ]);
+            if (compareRes?.ok) {
+                const payload: AuthorCompareResponse = await compareRes.json();
                 setCompareMap(prev => ({ ...prev, [rec.id]: payload }));
+            }
+            if (affiliationsRes?.ok) {
+                const payload: AuthorAffiliationsResponse = await affiliationsRes.json();
+                setAffiliationMap(prev => ({ ...prev, [rec.id]: payload }));
             }
         } catch {
         } finally {
             setLoadingCompareId(current => (current === rec.id ? null : current));
+        }
+    }
+
+    async function reviewAuthorityLink(linkId: number, action: "confirm" | "reject", authorRecordId: number) {
+        setLinkActionId(linkId);
+        try {
+            const res = await apiFetch(`/authority/links/${linkId}/${action}`, { method: "POST" });
+            if (!res.ok) {
+                toast(`Failed to ${action} affiliation link`, "error");
+                return;
+            }
+            const updated = await res.json();
+            setAffiliationMap(prev => {
+                const current = prev[authorRecordId];
+                if (!current) return prev;
+                return {
+                    ...prev,
+                    [authorRecordId]: {
+                        ...current,
+                        affiliations: current.affiliations.map(item =>
+                            item.link.id === linkId ? { ...item, link: updated } : item
+                        ),
+                    },
+                };
+            });
+            toast(action === "confirm" ? "Affiliation link confirmed" : "Affiliation link rejected", "success");
+        } catch {
+            toast(`Failed to ${action} affiliation link`, "error");
+        } finally {
+            setLinkActionId(null);
         }
     }
 
@@ -251,7 +295,9 @@ export default function useReviewQueueController(activeDomain: DomainSchema | nu
         resolveResult,
         expandedId,
         compareMap,
+        affiliationMap,
         loadingCompareId,
+        linkActionId,
         setQueueMode,
         setStatusFilter,
         setFieldFilter,
@@ -267,5 +313,6 @@ export default function useReviewQueueController(activeDomain: DomainSchema | nu
         batchResolve,
         reviewRecord,
         toggleExpanded,
+        reviewAuthorityLink,
     };
 }

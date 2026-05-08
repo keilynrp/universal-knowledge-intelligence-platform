@@ -258,6 +258,27 @@ class AuthorityRecord(Base):
     reformulation_trace = Column(Text, nullable=True)
 
 
+class AuthorityRecordLink(Base):
+    """
+    Auditable links between authority records.
+
+    Used for external authority relationships that may exist before internal
+    RawEntity nodes are confirmed or materialized.
+    """
+    __tablename__ = "authority_record_links"
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
+    source_authority_record_id = Column(Integer, ForeignKey("authority_records.id"), index=True, nullable=False)
+    target_authority_record_id = Column(Integer, ForeignKey("authority_records.id"), index=True, nullable=False)
+    link_type = Column(String, index=True)
+    confidence = Column(Float, default=0.0)
+    status = Column(String, default="pending", index=True)
+    evidence = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    confirmed_at = Column(DateTime, nullable=True)
+
+
 class Webhook(Base):
     """
     Outbound webhook registration.

@@ -336,3 +336,20 @@ def _serialize_authority_record(r: models.AuthorityRecord) -> dict:
         "reformulation_cost_estimate": r.reformulation_cost_estimate,
         "reformulation_trace": json.loads(r.reformulation_trace) if r.reformulation_trace else None,
     }
+
+
+def _serialize_authority_record_link(link: models.AuthorityRecordLink) -> dict:
+    """Convert an AuthorityRecordLink ORM row to a response dict."""
+    created_at = link.created_at.isoformat() if hasattr(link.created_at, "isoformat") else link.created_at
+    confirmed_at = link.confirmed_at.isoformat() if hasattr(link.confirmed_at, "isoformat") else link.confirmed_at
+    return {
+        "id": link.id,
+        "source_authority_record_id": link.source_authority_record_id,
+        "target_authority_record_id": link.target_authority_record_id,
+        "link_type": link.link_type,
+        "confidence": link.confidence,
+        "status": link.status,
+        "evidence": json.loads(link.evidence or "[]"),
+        "created_at": created_at,
+        "confirmed_at": confirmed_at,
+    }

@@ -48,6 +48,7 @@ class TestExplicitNilDetection:
             "field_name": "author_name",
             "value": value,
             "context_affiliation": "Universidad Nacional de Colombia",
+            "resolve_affiliation": False,
         }
 
     def test_insufficient_coverage_is_marked_as_nil(self, client, editor_headers, db_session):

@@ -47,6 +47,7 @@ class TestAuthorReviewQueue:
             "field_name": "author_name",
             "value": value,
             "context_affiliation": "Universidad Nacional de Colombia",
+            "resolve_affiliation": False,
         }
 
     def test_unauthenticated_returns_401(self, client):

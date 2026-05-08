@@ -46,6 +46,7 @@ class TestAuthorResolutionEngine:
             "field_name": "author_name",
             "value": "Gabriel Garcia Marquez",
             "context_affiliation": "Universidad Nacional de Colombia",
+            "resolve_affiliation": False,
         }
         payload.update(overrides)
         return payload

@@ -209,6 +209,7 @@ _TABLES_TO_CLEAN = [
     "normalization_rules",
     "harmonization_logs",
     "harmonization_change_records",
+    "authority_record_links",
     "authority_records",
     "annotations",
     "notification_settings",

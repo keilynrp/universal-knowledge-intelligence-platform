@@ -92,6 +92,15 @@ def _table_exists(db: Session, table_name: str, existing_tables: set[str] | None
     return table_name in tables
 
 
+def _column_exists(db: Session, table_name: str, column_name: str) -> bool:
+    bind = db.get_bind()
+    if bind is None:
+        return False
+    if table_name not in _existing_tables(db):
+        return False
+    return column_name in {col["name"] for col in inspect(bind).get_columns(table_name)}
+
+
 def _scoped_where(table_name: str, org_id: int | None) -> tuple[str, dict[str, object]]:
     params: dict[str, object] = {}
     if org_id is None:
@@ -136,19 +145,34 @@ def _ids_for_table(
     return [int(row[0]) for row in rows]
 
 
-def _count_annotation_rows(db: Session, entity_ids: list[int], authority_ids: list[int]) -> int:
+def _count_annotation_rows(
+    db: Session,
+    entity_ids: list[int],
+    authority_ids: list[int],
+    *,
+    existing_tables: set[str] | None = None,
+) -> int:
+    if not _table_exists(db, "annotations", existing_tables):
+        return 0
     if not (entity_ids or authority_ids):
         return 0
-    return int(
-        db.query(models.Annotation)
-        .filter(
-            or_(
-                models.Annotation.entity_id.in_(entity_ids) if entity_ids else text("1=0"),
-                models.Annotation.authority_id.in_(authority_ids) if authority_ids else text("1=0"),
-            )
-        )
-        .count()
-    )
+    clauses: list[str] = []
+    params: dict[str, object] = {}
+    bind_params = []
+    if entity_ids and _column_exists(db, "annotations", "entity_id"):
+        clauses.append("entity_id IN :entity_ids")
+        params["entity_ids"] = entity_ids
+        bind_params.append(bindparam("entity_ids", expanding=True))
+    if authority_ids and _column_exists(db, "annotations", "authority_id"):
+        clauses.append("authority_id IN :authority_ids")
+        params["authority_ids"] = authority_ids
+        bind_params.append(bindparam("authority_ids", expanding=True))
+    if not clauses:
+        return 0
+    stmt = text(f"SELECT COUNT(*) FROM annotations WHERE {' OR '.join(clauses)}")
+    if bind_params:
+        stmt = stmt.bindparams(*bind_params)
+    return int(db.execute(stmt, params).scalar() or 0)
 
 
 def _delete_where_ids(
@@ -164,7 +188,24 @@ def _delete_where_ids(
     stmt = text(f"DELETE FROM {table_name} WHERE {column_name} IN :values").bindparams(
         bindparam("values", expanding=True)
     )
-    return int(db.execute(stmt, {"values": values}).rowcount or 0)
+    return int(db.connection().execute(stmt, {"values": values}).rowcount or 0)
+
+
+def _delete_scoped_table(
+    db: Session,
+    table_name: str,
+    *,
+    org_id: int | None,
+    existing_tables: set[str] | None = None,
+) -> int:
+    if not _table_exists(db, table_name, existing_tables):
+        return 0
+    where_sql, params = _scoped_where(table_name, org_id)
+    return int(db.execute(text(f"DELETE FROM {table_name} WHERE {where_sql}"), params).rowcount or 0)
+
+
+def _delete_scoped_model(db: Session, model: Any, org_id: int | None) -> int:
+    return int(_scoped_query(db, model, org_id).delete(synchronize_session=False) or 0)
 
 
 def _count_where_ids(
@@ -183,23 +224,33 @@ def _count_where_ids(
     return int(db.execute(stmt, {"values": tuple(values)}).scalar() or 0)
 
 
-def _delete_annotations(db: Session, entity_ids: list[int], authority_ids: list[int]) -> int:
+def _delete_annotations(
+    db: Session,
+    entity_ids: list[int],
+    authority_ids: list[int],
+    *,
+    existing_tables: set[str] | None = None,
+) -> int:
+    if not _table_exists(db, "annotations", existing_tables):
+        return 0
     if not (entity_ids or authority_ids):
         return 0
     clauses: list[str] = []
     params: dict[str, object] = {}
-    if entity_ids:
+    if entity_ids and _column_exists(db, "annotations", "entity_id"):
         clauses.append("entity_id IN :entity_ids")
         params["entity_ids"] = entity_ids
-    if authority_ids:
+    if authority_ids and _column_exists(db, "annotations", "authority_id"):
         clauses.append("authority_id IN :authority_ids")
         params["authority_ids"] = authority_ids
+    if not clauses:
+        return 0
 
     stmt = text(f"DELETE FROM annotations WHERE {' OR '.join(clauses)}")
     bind_params = []
-    if entity_ids:
+    if "entity_ids" in params:
         bind_params.append(bindparam("entity_ids", expanding=True))
-    if authority_ids:
+    if "authority_ids" in params:
         bind_params.append(bindparam("authority_ids", expanding=True))
     if bind_params:
         stmt = stmt.bindparams(*bind_params)
@@ -250,6 +301,17 @@ def _audit_log_query(
     return query.filter(or_(*conditions))
 
 
+def _delete_audit_logs(db: Session, audit_ids: list[int]) -> int:
+    if not audit_ids:
+        return 0
+    return int(
+        db.query(models.AuditLog)
+        .filter(models.AuditLog.id.in_(audit_ids))
+        .delete(synchronize_session=False)
+        or 0
+    )
+
+
 def _member_user_ids(db: Session, org_id: int | None) -> list[int]:
     if org_id is None:
         return []
@@ -277,7 +339,7 @@ def _preview_counts(db: Session, org_id: int | None) -> dict[str, int]:
     store_ids = _ids(store_query, models.StoreConnection.id)
     member_ids = _member_user_ids(db, org_id)
 
-    annotation_count = _count_annotation_rows(db, entity_ids, authority_ids)
+    annotation_count = _count_annotation_rows(db, entity_ids, authority_ids, existing_tables=existing_tables)
 
     sync_count = 0
     if store_ids:
@@ -288,6 +350,7 @@ def _preview_counts(db: Session, org_id: int | None) -> dict[str, int]:
 
     entity_count = _count_table(db, "raw_entities", org_id=org_id, existing_tables=existing_tables)
     authority_count = _count_table(db, "authority_records", org_id=org_id, existing_tables=existing_tables)
+    authority_link_count = _count_table(db, "authority_record_links", org_id=org_id, existing_tables=existing_tables)
     normalization_count = _count_table(db, "normalization_rules", org_id=org_id, existing_tables=existing_tables)
     harmonization_count = _count_table(db, "harmonization_logs", org_id=org_id, existing_tables=existing_tables)
     workflow_run_count = _count_table(db, "workflow_runs", org_id=org_id, existing_tables=existing_tables)
@@ -307,6 +370,7 @@ def _preview_counts(db: Session, org_id: int | None) -> dict[str, int]:
         "entities": entity_count,
         "relationships": relationship_count,
         "authority_records": authority_count,
+        "authority_record_links": authority_link_count,
         "normalization_rules": normalization_count,
         "harmonization_runs": harmonization_count,
         "annotations": annotation_count,
@@ -345,6 +409,7 @@ def reset_workspace_data(
     entity_query = _scoped_query(db, models.RawEntity, org_id)
     relationship_query = _scoped_query(db, models.EntityRelationship, org_id)
     authority_query = _scoped_query(db, models.AuthorityRecord, org_id)
+    authority_link_query = _scoped_query(db, models.AuthorityRecordLink, org_id)
     rule_query = _scoped_query(db, models.NormalizationRule, org_id)
     harmonization_query = _scoped_query(db, models.HarmonizationLog, org_id)
     store_query = _scoped_query(db, models.StoreConnection, org_id)
@@ -369,6 +434,9 @@ def reset_workspace_data(
     reset_counters: dict[str, int] = {}
 
     try:
+        db.flush()
+        db.expunge_all()
+
         if audit_ids:
             deleted["notification_reads"] = (
                 db.query(models.UserNotificationRead)
@@ -422,24 +490,7 @@ def reset_workspace_data(
         else:
             deleted["workflow_runs"] = workflow_run_query.delete(synchronize_session=False)
 
-        deleted["audit_logs"] = _delete_where_ids(db, "audit_logs", "id", audit_ids)
-        deleted["entity_relationships"] = (
-            db.execute(
-                text(
-                    "DELETE FROM entity_relationships WHERE org_id IS NULL"
-                    if org_id is None
-                    else "DELETE FROM entity_relationships WHERE org_id = :org_id"
-                ),
-                {} if org_id is None else {"org_id": org_id},
-            ).rowcount
-            if _table_exists(db, "entity_relationships", existing_tables)
-            else 0
-        ) or 0
-        deleted["authority_records"] = authority_query.delete(synchronize_session=False)
-        deleted["normalization_rules"] = rule_query.delete(synchronize_session=False)
-        deleted["harmonization_logs"] = harmonization_query.delete(synchronize_session=False)
-        deleted["raw_entities"] = entity_query.delete(synchronize_session=False)
-        deleted["annotations"] += _delete_annotations(db, entity_ids, authority_ids)
+        deleted["audit_logs"] = 0
 
         reset_counters["store_connections"] = store_query.update(
             {
@@ -530,6 +581,22 @@ def reset_workspace_data(
         except Exception:
             # FTS table exists only in SQLite test mode.
             pass
+
+        db.expunge_all()
+        with db.no_autoflush:
+            deleted["audit_logs"] = _delete_audit_logs(db, audit_ids)
+            deleted["annotations"] = _delete_annotations(
+                db,
+                entity_ids,
+                authority_ids,
+                existing_tables=existing_tables,
+            )
+            deleted["entity_relationships"] = _delete_scoped_model(db, models.EntityRelationship, org_id)
+            deleted["authority_record_links"] = _delete_scoped_model(db, models.AuthorityRecordLink, org_id)
+            deleted["authority_records"] = _delete_scoped_model(db, models.AuthorityRecord, org_id)
+            deleted["normalization_rules"] = _delete_scoped_model(db, models.NormalizationRule, org_id)
+            deleted["harmonization_logs"] = _delete_scoped_model(db, models.HarmonizationLog, org_id)
+            deleted["raw_entities"] = _delete_scoped_model(db, models.RawEntity, org_id)
 
         db.commit()
     except Exception:

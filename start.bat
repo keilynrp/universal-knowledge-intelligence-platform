@@ -71,10 +71,8 @@ echo  [ERROR] Unknown option: %MODE%
 goto usage
 
 :kill8000
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8000 " ^| findstr "LISTENING"') do (
-    echo  [INFO] Stopping process on port 8000 ^(PID %%a^)...
-    taskkill /F /PID %%a >nul 2>&1
-)
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\stop-local-backend.ps1" -Port 8000
+if errorlevel 1 exit /b 1
 goto :eof
 
 :kill3004
@@ -116,7 +114,7 @@ call :checkdb
 if errorlevel 1 goto end
 call :kill8000
 echo  [INFO] Starting Backend ^(FastAPI on port 8000^)...
-start "UKIP Backend" cmd /k "title UKIP Backend && cd /d %~dp0 && .venv\Scripts\alembic upgrade head && .venv\Scripts\python -m uvicorn backend.main:app --reload --port 8000"
+start "UKIP Backend" cmd /k "title UKIP Backend && cd /d %~dp0 && .venv\Scripts\alembic upgrade head && .venv\Scripts\python -m uvicorn backend.main:app --port 8000"
 echo.
 echo  [OK] Backend launch requested.
 goto end
@@ -136,7 +134,7 @@ if errorlevel 1 goto end
 call :kill8000
 call :kill3004
 echo  [1/2] Launching backend...
-start "UKIP Backend" cmd /k "title UKIP Backend && cd /d %~dp0 && .venv\Scripts\alembic upgrade head && .venv\Scripts\python -m uvicorn backend.main:app --reload --port 8000"
+start "UKIP Backend" cmd /k "title UKIP Backend && cd /d %~dp0 && .venv\Scripts\alembic upgrade head && .venv\Scripts\python -m uvicorn backend.main:app --port 8000"
 echo  [2/2] Launching frontend...
 start "UKIP Frontend" cmd /k "title UKIP Frontend && cd /d %~dp0\frontend && npm run dev"
 echo.

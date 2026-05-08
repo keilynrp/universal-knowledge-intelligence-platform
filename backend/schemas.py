@@ -362,6 +362,22 @@ class AuthorResolveRequest(BaseModel):
     context_orcid_hint: Optional[str] = Field(None, max_length=25)
     context_doi: Optional[str] = Field(None, max_length=200)
     context_year: Optional[int] = Field(None, ge=1000, le=2100)
+    resolve_affiliation: bool = True
+    affiliation_field_name: str = Field(default="affiliation", min_length=1, max_length=64)
+
+
+class AuthorityRecordLinkResponse(BaseModel):
+    id: int
+    source_authority_record_id: int
+    target_authority_record_id: int
+    link_type: str
+    confidence: float
+    status: str
+    evidence: List[str]
+    created_at: str
+    confirmed_at: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AuthorityConfirmRequest(BaseModel):
