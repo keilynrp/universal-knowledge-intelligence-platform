@@ -22,6 +22,7 @@
 | `engine/build.rs` | Tonic protobuf compilation |
 | `engine/Dockerfile` | Multi-stage build (rust:1.82-slim → debian:bookworm-slim) |
 | `engine/proto/ukip/engine/v1/engine.proto` | gRPC service + message definitions |
+| `engine/src/lib.rs` | Library crate: re-exports all modules + proto (integration tests import from here) |
 | `engine/src/main.rs` | Tokio runtime bootstrap, CLI health-check flag, gRPC server start |
 | `engine/src/config.rs` | Env var parsing, defaults, validation |
 | `engine/src/server.rs` | `Engine` gRPC service trait impl (5 RPCs) |
@@ -284,9 +285,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-- [ ] **Step 5: Write minimal main.rs stub**
+- [ ] **Step 5: Write lib.rs (library crate for integration tests)**
 
 ```rust
+// engine/src/lib.rs
+pub mod config;
+pub mod db;
+pub mod jobs;
+pub mod pipelines;
+pub mod progress;
+pub mod router;
+pub mod server;
+
+pub mod proto {
+    tonic::include_proto!("ukip.engine.v1");
+}
+```
+
+- [ ] **Step 6: Write minimal main.rs stub**
+
+```rust
+// engine/src/main.rs
 use std::process;
 
 fn main() {
@@ -300,14 +319,14 @@ fn main() {
 }
 ```
 
-- [ ] **Step 6: Verify it compiles**
+- [ ] **Step 7: Verify it compiles**
 
 ```bash
 cd engine && cargo build 2>&1
 ```
 Expected: Successful build, proto files compiled by tonic-build.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add engine/
@@ -600,7 +619,7 @@ pub struct PipelineInput {
     pub options: HashMap<String, String>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct PipelineOutput {
     pub nodes_created: i32,
     pub nodes_deduplicated: i32,
@@ -1033,23 +1052,36 @@ Implement `EngineService` struct that holds `Arc<Router>`, `Arc<JobManager>`, `P
 - `stream_progress` — subscribes to `ProgressTracker` broadcast, yields `ProgressEvent`s
 - `health` — returns `HealthResponse` with version, pipeline list, active job count
 
-Include auth token validation via tonic interceptor if `ENGINE_AUTH_TOKEN` is set.
+Include auth token validation via tonic interceptor if `ENGINE_AUTH_TOKEN` is set:
+
+```rust
+fn auth_interceptor(config: Arc<Config>) -> impl Fn(tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+    move |req: tonic::Request<()>| {
+        if let Some(expected) = &config.auth_token {
+            let token = req.metadata()
+                .get("x-engine-token")
+                .and_then(|v| v.to_str().ok());
+            match token {
+                Some(t) if t == expected => Ok(req),
+                _ => Err(tonic::Status::unauthenticated("invalid or missing x-engine-token")),
+            }
+        } else {
+            Ok(req) // No auth configured
+        }
+    }
+}
+```
+
+Apply in main.rs: `EngineServer::with_interceptor(svc, auth_interceptor(config.clone()))`.
+
+Also handle `RESOURCE_EXHAUSTED` in `process_async`: if `!job_manager.can_accept()`, return `Status::resource_exhausted("max concurrent jobs reached")`.
 
 - [ ] **Step 2: Update main.rs with full server bootstrap**
 
 ```rust
 // engine/src/main.rs
-mod config;
-mod db;
-mod jobs;
-mod pipelines;
-mod progress;
-mod router;
-mod server;
-
-pub mod proto {
-    tonic::include_proto!("ukip.engine.v1");
-}
+// All modules are re-exported from lib.rs — import from the library crate
+use ukip_engine::{config, db, jobs, pipelines, progress, router, server, proto};
 
 use std::process;
 
@@ -1151,9 +1183,23 @@ git commit -m "feat(engine): implement gRPC server with all 5 RPCs and graceful 
 
 **Files:**
 - Create: `engine/src/pipelines/graph/canonical.rs`
+- Modify: `engine/src/pipelines/graph/mod.rs` — add `pub mod canonical;`
 - Test: inline `#[cfg(test)]`
 
-- [ ] **Step 1: Write canonical ID tests**
+> **Note:** Each subsequent task in this phase (11-14) must also add its `pub mod <name>;` declaration to `engine/src/pipelines/graph/mod.rs`. Similarly, Tasks 16-19 must add declarations to `engine/src/pipelines/text_analysis/mod.rs`.
+
+- [ ] **Step 1: Add mod declaration to graph/mod.rs**
+
+In `engine/src/pipelines/graph/mod.rs`, add:
+```rust
+pub mod canonical;
+pub mod nodes;        // added in Task 11
+pub mod relationships; // added in Task 12
+pub mod dedup;        // added in Task 14
+```
+(Add each line as the corresponding file is created in its task.)
+
+- [ ] **Step 2: Write canonical ID tests**
 
 ```rust
 #[cfg(test)]
@@ -1194,7 +1240,7 @@ mod tests {
     fn test_slug_normalization() {
         assert_eq!(slug("Hello  World!!"), "hello-world");
         assert_eq!(slug("  spaces  "), "spaces");
-        assert_eq!(slug("café résumé"), "caf-r-sum");
+        assert_eq!(slug("café résumé"), "cafe-resume");
     }
 
     #[test]
@@ -1228,11 +1274,11 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Run test to verify it fails**
 
 Run: `cd engine && cargo test pipelines::graph::canonical::tests`
 
-- [ ] **Step 3: Implement canonical ID functions**
+- [ ] **Step 4: Implement canonical ID functions**
 
 ```rust
 // engine/src/pipelines/graph/canonical.rs
@@ -1242,7 +1288,13 @@ use std::sync::LazyLock;
 static SLUG_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[^a-z0-9]+").unwrap());
 
 pub fn slug(value: &str) -> String {
-    let lower = value.to_lowercase();
+    use unicode_normalization::UnicodeNormalization;
+    // NFD decompose then strip combining marks (diacritics) before lowercasing
+    let normalized: String = value
+        .nfd()
+        .filter(|c| !unicode_normalization::char::is_combining_mark(*c))
+        .collect();
+    let lower = normalized.to_lowercase();
     let slugged = SLUG_RE.replace_all(&lower, "-");
     slugged.trim_matches('-').to_string()
 }
@@ -1283,15 +1335,15 @@ pub fn identifier_canonical_id(scheme: &str, value: &str) -> String {
 }
 ```
 
-- [ ] **Step 4: Run tests**
+- [ ] **Step 5: Run tests**
 
 Run: `cd engine && cargo test pipelines::graph::canonical::tests`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add engine/src/pipelines/graph/canonical.rs
+git add engine/src/pipelines/graph/canonical.rs engine/src/pipelines/graph/mod.rs
 git commit -m "feat(engine): add canonical ID generation for graph nodes"
 ```
 
@@ -1623,7 +1675,18 @@ git commit -m "feat(engine): implement GraphMaterializationPipeline with full pi
 
 **Files:**
 - Create: `engine/src/pipelines/text_analysis/tokenizer.rs`
+- Modify: `engine/src/pipelines/text_analysis/mod.rs` — add submodule declarations
 - Test: inline `#[cfg(test)]`
+
+- [ ] **Step 0: Add mod declarations to text_analysis/mod.rs**
+
+```rust
+pub mod tokenizer;
+pub mod keywords;    // added in Task 17
+pub mod classifier;  // added in Task 19
+pub mod language;    // added in Task 18
+```
+(Add each line as the corresponding file is created in its task.)
 
 - [ ] **Step 1: Write tokenizer tests**
 
@@ -2234,16 +2297,39 @@ Run: `.venv/Scripts/pip install grpcio grpcio-tools protobuf`
 - [ ] **Step 3: Generate Python proto stubs**
 
 ```bash
-mkdir -p backend/proto
+mkdir -p backend/proto/ukip/engine/v1
 python -m grpc_tools.protoc \
   -Iengine/proto \
   --python_out=backend/proto \
   --grpc_python_out=backend/proto \
   engine/proto/ukip/engine/v1/engine.proto
 touch backend/proto/__init__.py
+touch backend/proto/ukip/__init__.py
+touch backend/proto/ukip/engine/__init__.py
+touch backend/proto/ukip/engine/v1/__init__.py
 ```
 
-- [ ] **Step 4: Commit**
+> **Note:** Proto stubs will be generated at `backend/proto/ukip/engine/v1/engine_pb2.py` and `engine_pb2_grpc.py`. Update imports in `engine_client.py` accordingly: `from backend.proto.ukip.engine.v1 import engine_pb2, engine_pb2_grpc`.
+
+- [ ] **Step 4: Update .env.example with engine variables**
+
+Add to `.env.example`:
+```bash
+# Engine (Rust) — only needed when running ukip-engine container
+ENGINE_DATABASE_URL=postgresql://ukip:ukip_secret@postgres:5432/ukip
+ENGINE_GRPC_PORT=50051
+ENGINE_LOG_LEVEL=info
+ENGINE_AUTH_TOKEN=change-me-in-production
+ENGINE_MAX_CONCURRENT_JOBS=4
+
+# FastAPI — engine integration
+ENGINE_GRPC_URL=                    # empty = engine disabled
+ENGINE_SYNC_THRESHOLD=500
+ENGINE_SHADOW_MODE=false
+ENGINE_FALLBACK_PYTHON=true
+```
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add requirements.txt backend/proto/
@@ -2267,7 +2353,7 @@ use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
 
 fn bench_graph_pipeline(c: &mut Criterion) {
     let mut group = c.benchmark_group("graph_materialization");
-    for size in [100, 1000, 5000] {
+    for size in [1000, 2841, 10000] {
         group.bench_with_input(
             BenchmarkId::from_parameter(size),
             &size,
