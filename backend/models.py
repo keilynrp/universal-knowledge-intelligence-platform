@@ -35,6 +35,9 @@ class UniversalEntity(Base):
     # Sprint 72 — Quality Score
     quality_score = Column(Float, nullable=True, index=True)
 
+    # Engine sync
+    updated_at = Column(DateTime, nullable=True)
+
     # Provenance
     source = Column(String, default="user")
 
