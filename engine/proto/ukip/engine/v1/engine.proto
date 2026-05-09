@@ -1,0 +1,120 @@
+syntax = "proto3";
+package ukip.engine.v1;
+
+service Engine {
+  rpc ProcessSync(ProcessRequest) returns (ProcessResponse);
+  rpc ProcessAsync(ProcessRequest) returns (JobAccepted);
+  rpc GetJobStatus(JobStatusRequest) returns (JobStatusResponse);
+  rpc StreamProgress(JobStatusRequest) returns (stream ProgressEvent);
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+message ProcessRequest {
+  string pipeline = 1;
+  string job_id = 2;
+  int64 import_batch_id = 3;
+  optional int64 org_id = 4;
+  string domain = 5;
+  repeated Publication publications = 6;
+  map<string, string> options = 7;
+}
+
+message Publication {
+  int64 entity_id = 1;
+  string title = 2;
+  optional string doi = 3;
+  optional int32 year = 4;
+  optional string abstract_text = 5;
+  optional string source_title = 6;
+  optional string publisher = 7;
+  optional string publication_type = 8;
+  optional int32 citation_count = 9;
+  optional int32 reference_count = 10;
+  repeated Author authors = 11;
+  repeated Affiliation affiliations = 12;
+  repeated Identifier identifiers = 13;
+  repeated string concepts = 14;
+  optional string enrichment_source = 15;
+  optional string attributes_json = 16;
+  optional string enrichment_doi = 17;
+}
+
+message Author {
+  string name = 1;
+  optional int32 order = 2;
+  optional string orcid = 3;
+  optional string external_id = 4;
+  repeated string affiliations = 5;
+}
+
+message Affiliation {
+  string name = 1;
+  optional string country = 2;
+  optional string external_id = 3;
+}
+
+message Identifier {
+  string scheme = 1;
+  string value = 2;
+}
+
+message ProcessResponse {
+  string job_id = 1;
+  string pipeline = 2;
+  Status status = 3;
+  ProcessResult result = 4;
+  optional string error = 5;
+  double duration_ms = 6;
+}
+
+message ProcessResult {
+  int32 nodes_created = 1;
+  int32 nodes_deduplicated = 2;
+  int32 relationships_created = 3;
+  int32 relationships_deduplicated = 4;
+  int32 keywords_extracted = 5;
+  int32 entities_classified = 6;
+  map<string, int32> counters = 10;
+}
+
+message JobAccepted {
+  string job_id = 1;
+  string pipeline = 2;
+  int64 estimated_duration_ms = 3;
+}
+
+message JobStatusRequest {
+  string job_id = 1;
+}
+
+message JobStatusResponse {
+  string job_id = 1;
+  Status status = 2;
+  float progress = 3;
+  optional ProcessResult result = 4;
+  optional string error = 5;
+}
+
+message ProgressEvent {
+  string job_id = 1;
+  float progress = 2;
+  string phase = 3;
+  string message = 4;
+  map<string, int32> counters = 5;
+}
+
+message HealthRequest {}
+message HealthResponse {
+  bool healthy = 1;
+  string version = 2;
+  repeated string pipelines = 3;
+  int32 active_jobs = 4;
+}
+
+enum Status {
+  STATUS_UNKNOWN = 0;
+  STATUS_QUEUED = 1;
+  STATUS_RUNNING = 2;
+  STATUS_COMPLETED = 3;
+  STATUS_FAILED = 4;
+}

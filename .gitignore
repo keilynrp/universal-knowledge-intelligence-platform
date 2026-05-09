@@ -79,3 +79,8 @@ htmlcov/
 .pytest_cache/
 .mypy_cache/
 .claude/worktrees/
+
+# =========================
+# Rust Engine
+# =========================
+engine/target/
