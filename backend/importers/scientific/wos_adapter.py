@@ -14,6 +14,12 @@ class WosPlaintextImportAdapter(ScientificImportAdapter):
 
     def parse(self, filename: str, content: str) -> ScientificImportResult:
         raw_records = parse_wos_plaintext(content)
+        # Detect the real source from the FN header (e.g. "OpenAlex" vs "Web of Science")
+        effective_provider = self.provider
+        if raw_records:
+            source_name = raw_records[0].get("_source_name")
+            if source_name:
+                effective_provider = source_name.lower().replace(" ", "_")
         records = [
             canonical_publication_from_legacy_record(
                 record,
@@ -22,4 +28,4 @@ class WosPlaintextImportAdapter(ScientificImportAdapter):
             )
             for record in raw_records
         ]
-        return ScientificImportResult(format=self.format, provider=self.provider, records=records)
+        return ScientificImportResult(format=self.format, provider=effective_provider, records=records)

@@ -52,13 +52,30 @@ class OpenAlexAdapter(BaseScientometricAdapter):
             if name:
                 author_list.append(name)
         
-        # 4. Extract concepts (highly valuable for predictive ML topic modeling)
+        # 4. Extract concepts from concepts, topics, and keywords fields
         concept_list = []
+        seen_concepts: set[str] = set()
         for concept in raw_openalex.get("concepts", []):
             concept_name = concept.get("display_name")
-            # Usually keep the ones with high score > 0.5
-            if concept_name and concept.get("score", 0) > 0.4:
-                concept_list.append(concept_name)
+            if concept_name and concept.get("score", 0) >= 0.4:
+                key = concept_name.lower()
+                if key not in seen_concepts:
+                    seen_concepts.add(key)
+                    concept_list.append(concept_name)
+        for topic in raw_openalex.get("topics", []):
+            topic_name = topic.get("display_name")
+            if topic_name and topic.get("score", 0) >= 0.4:
+                key = topic_name.lower()
+                if key not in seen_concepts:
+                    seen_concepts.add(key)
+                    concept_list.append(topic_name)
+        for kw in raw_openalex.get("keywords", []):
+            kw_name = kw.get("display_name") if isinstance(kw, dict) else (kw if isinstance(kw, str) else None)
+            if kw_name:
+                key = kw_name.lower()
+                if key not in seen_concepts:
+                    seen_concepts.add(key)
+                    concept_list.append(kw_name)
 
         # 5. Get publisher / venue
         publisher = None
