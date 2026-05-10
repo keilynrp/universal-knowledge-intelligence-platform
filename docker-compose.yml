@@ -40,6 +40,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      ukip-engine:
+        condition: service_started
     environment:
       DATABASE_URL:       ${DOCKER_DATABASE_URL:-}
       POSTGRES_HOST:      ${DOCKER_POSTGRES_HOST:-postgres}
@@ -57,6 +59,11 @@ services:
       ALLOWED_ORIGINS:    ${ALLOWED_ORIGINS:-http://localhost:3004}
       SESSION_SECRET_KEY: ${SESSION_SECRET_KEY:-changeit}
       LOG_LEVEL:          ${LOG_LEVEL:-INFO}
+      ENGINE_GRPC_URL:    ${ENGINE_GRPC_URL:-ukip-engine:50051}
+      ENGINE_AUTH_TOKEN:  ${ENGINE_AUTH_TOKEN:-dev-secret}
+      ENGINE_SYNC_THRESHOLD: ${ENGINE_SYNC_THRESHOLD:-500}
+      ENGINE_SHADOW_MODE: ${ENGINE_SHADOW_MODE:-false}
+      ENGINE_FALLBACK_PYTHON: ${ENGINE_FALLBACK_PYTHON:-true}
     ports:
       - "8000:8000"
     volumes:
@@ -67,6 +74,29 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+
+  # ── UKIP Engine (Rust gRPC) ─────────────────────────────────────────────────
+  ukip-engine:
+    build:
+      context: ./engine
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ENGINE_DATABASE_URL: postgresql://${DOCKER_POSTGRES_USER:-ukip}:${DOCKER_POSTGRES_PASSWORD:-ukip_secret}@postgres:5432/${DOCKER_POSTGRES_DB:-ukip}
+      ENGINE_GRPC_PORT:    ${ENGINE_GRPC_PORT:-50051}
+      ENGINE_LOG_LEVEL:    ${ENGINE_LOG_LEVEL:-info}
+      ENGINE_AUTH_TOKEN:   ${ENGINE_AUTH_TOKEN:-dev-secret}
+      ENGINE_MAX_CONCURRENT_JOBS: ${ENGINE_MAX_CONCURRENT_JOBS:-4}
+    # Port 50051 is NOT exposed to the host — only accessible within Docker network
+    healthcheck:
+      test: ["CMD", "/app/engine", "--health-check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   # ── UKIP Frontend (Next.js) ─────────────────────────────────────────────────
   ukip-frontend:
