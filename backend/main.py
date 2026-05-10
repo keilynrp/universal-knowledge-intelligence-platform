@@ -182,7 +182,22 @@ async def lifespan(app: FastAPI):
     # Start the scheduled-reports scheduler (Sprint 79)
     scheduled_reports.start_scheduler()
 
+    # ── Rust engine gRPC client ──────────────────────────────────────────────
+    engine_url = os.environ.get("ENGINE_GRPC_URL", "")
+    engine_token = os.environ.get("ENGINE_AUTH_TOKEN", "")
+    if engine_url:
+        from backend.services.engine_client import EngineClient
+        app.state.engine_client = EngineClient(engine_url, engine_token)
+        logger.info("Engine gRPC client configured: %s", engine_url)
+    else:
+        app.state.engine_client = None
+        logger.info("ENGINE_GRPC_URL not set — engine disabled, using Python fallback")
+
     yield  # Server is running
+
+    # ── Cleanup ──────────────────────────────────────────────────────────────
+    if getattr(app.state, "engine_client", None):
+        await app.state.engine_client.close()
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -349,6 +364,9 @@ app.include_router(widgets.router)
 app.include_router(workspace_reset.router)
 app.include_router(workflows.router)
 app.include_router(ws.router)
+
+from backend.routers import engine as engine_router
+app.include_router(engine_router.router)
 
 # ── Static file serving (uploaded logos etc.) ─────────────────────────────────
 _static_dir = pathlib.Path("static")
