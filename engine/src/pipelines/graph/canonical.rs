@@ -35,7 +35,25 @@ pub fn affiliation_canonical_id(aff: &crate::proto::Affiliation) -> String {
             return format!("affiliation:{ext}");
         }
     }
-    format!("affiliation:{}", slug(&aff.name))
+    affiliation_name_canonical_id(&aff.name)
+}
+
+pub fn affiliation_name_canonical_id(name: &str) -> String {
+    format!("affiliation:{}", slug(name))
+}
+
+pub fn publication_canonical_id(pub_: &crate::proto::Publication) -> String {
+    if let Some(doi) = pub_.doi.as_deref().filter(|doi| !doi.trim().is_empty()) {
+        return format!("publication:doi:{}", slug(doi));
+    }
+    if let Some(enrichment_doi) = pub_
+        .enrichment_doi
+        .as_deref()
+        .filter(|doi| !doi.trim().is_empty())
+    {
+        return format!("publication:doi:{}", slug(enrichment_doi));
+    }
+    format!("pub:{}", pub_.entity_id)
 }
 
 pub fn journal_canonical_id(source_title: &str) -> String {
@@ -99,12 +117,18 @@ mod tests {
 
     #[test]
     fn test_concept_canonical_id() {
-        assert_eq!(concept_canonical_id("Machine Learning"), "concept:machine-learning");
+        assert_eq!(
+            concept_canonical_id("Machine Learning"),
+            "concept:machine-learning"
+        );
     }
 
     #[test]
     fn test_journal_canonical_id() {
-        assert_eq!(journal_canonical_id("Nature Reviews"), "journal:nature-reviews");
+        assert_eq!(
+            journal_canonical_id("Nature Reviews"),
+            "journal:nature-reviews"
+        );
     }
 
     #[test]
@@ -127,5 +151,18 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(affiliation_canonical_id(&aff), "affiliation:mit");
+    }
+
+    #[test]
+    fn test_publication_canonical_prefers_doi() {
+        let pub_ = crate::proto::Publication {
+            entity_id: 7,
+            doi: Some("10.1234/example".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            publication_canonical_id(&pub_),
+            "publication:doi:10-1234-example"
+        );
     }
 }

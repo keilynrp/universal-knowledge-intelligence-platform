@@ -3,8 +3,8 @@ pub mod dedup;
 pub mod nodes;
 pub mod relationships;
 
-use std::collections::HashMap;
 use async_trait::async_trait;
+use std::collections::HashMap;
 
 use crate::db::bulk_writer::BulkWriter;
 use crate::db::schema::{PendingNode, PendingRelationship};
@@ -27,7 +27,9 @@ impl Pipeline for GraphMaterializationPipeline {
         let domain = &input.domain;
         let import_batch_id = input.import_batch_id;
 
-        ctx.progress.update(0.1, "extracting_nodes", "Extracting nodes").await;
+        ctx.progress
+            .update(0.1, "extracting_nodes", "Extracting nodes")
+            .await;
 
         // 1. Extract all nodes (dedup within batch by canonical_id)
         let mut node_map: HashMap<String, PendingNode> = HashMap::new();
@@ -52,10 +54,15 @@ impl Pipeline for GraphMaterializationPipeline {
         let unique_nodes: Vec<PendingNode> = node_map.into_values().collect();
         let _total_nodes = unique_nodes.len();
 
-        ctx.progress.update(0.3, "deduplicating", "Cross-batch deduplication").await;
+        ctx.progress
+            .update(0.3, "deduplicating", "Cross-batch deduplication")
+            .await;
 
         // 2. Cross-batch dedup: resolve existing nodes
-        let canonical_ids: Vec<String> = unique_nodes.iter().map(|n| n.canonical_id.clone()).collect();
+        let canonical_ids: Vec<String> = unique_nodes
+            .iter()
+            .map(|n| n.canonical_id.clone())
+            .collect();
         let existing = dedup::resolve_existing(&ctx.pool, org_id, domain, &canonical_ids)
             .await
             .map_err(PipelineError::Database)?;
@@ -68,7 +75,9 @@ impl Pipeline for GraphMaterializationPipeline {
             .filter(|n| !existing.contains_key(&n.canonical_id))
             .collect();
 
-        ctx.progress.update(0.5, "writing_nodes", "Writing nodes to DB").await;
+        ctx.progress
+            .update(0.5, "writing_nodes", "Writing nodes to DB")
+            .await;
 
         // 4. Flush new nodes and build id_map
         let writer = BulkWriter::new(
@@ -78,11 +87,16 @@ impl Pipeline for GraphMaterializationPipeline {
         );
 
         let mut id_map = existing;
-        let inserted = writer.flush_nodes(&new_nodes).await.map_err(PipelineError::Database)?;
+        let inserted = writer
+            .flush_nodes(&new_nodes)
+            .await
+            .map_err(PipelineError::Database)?;
         let nodes_created = inserted.len() as i32;
         id_map.extend(inserted);
 
-        ctx.progress.update(0.8, "writing_relationships", "Writing relationships").await;
+        ctx.progress
+            .update(0.8, "writing_relationships", "Writing relationships")
+            .await;
 
         // 5. Flush relationships
         let relationships_created = writer
@@ -90,7 +104,9 @@ impl Pipeline for GraphMaterializationPipeline {
             .await
             .map_err(PipelineError::Database)?;
 
-        ctx.progress.update(1.0, "done", "Graph materialization complete").await;
+        ctx.progress
+            .update(1.0, "done", "Graph materialization complete")
+            .await;
 
         Ok(PipelineOutput {
             nodes_created,

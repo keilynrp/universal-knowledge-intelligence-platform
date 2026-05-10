@@ -16,6 +16,7 @@ use crate::router::Router;
 
 /// gRPC auth interceptor — checks the `authorization: Bearer <token>` metadata header.
 /// When `expected_token` is `None`, all requests are allowed (useful in dev/test).
+#[allow(clippy::result_large_err)]
 pub fn auth_interceptor(
     expected_token: Option<String>,
 ) -> impl Fn(Request<()>) -> Result<Request<()>, Status> + Clone {
@@ -99,7 +100,10 @@ impl Engine for EngineService {
         let job_id = input.job_id.clone();
 
         if let Err(e) = pipeline.validate(&input) {
-            return Err(Status::invalid_argument(format!("validation failed: {}", e)));
+            return Err(Status::invalid_argument(format!(
+                "validation failed: {}",
+                e
+            )));
         }
 
         let progress = ProgressTracker::new(job_id.clone());
@@ -157,7 +161,10 @@ impl Engine for EngineService {
         let input = build_pipeline_input(&req);
 
         if let Err(e) = pipeline.validate(&input) {
-            return Err(Status::invalid_argument(format!("validation failed: {}", e)));
+            return Err(Status::invalid_argument(format!(
+                "validation failed: {}",
+                e
+            )));
         }
 
         self.job_manager.create(&job_id, &pipeline_name);
@@ -174,7 +181,11 @@ impl Engine for EngineService {
 
         tokio::spawn(async move {
             job_manager.set_running(&jid);
-            let ctx = PipelineContext { pool, config, progress: (*tracker).clone() };
+            let ctx = PipelineContext {
+                pool,
+                config,
+                progress: (*tracker).clone(),
+            };
 
             match pipeline.process(input, &ctx).await {
                 Ok(output) => job_manager.set_completed(&jid, output),
@@ -207,9 +218,7 @@ impl Engine for EngineService {
                 None,
                 job.result.as_ref().map(build_process_result),
             ),
-            JobStatus::Failed(err) => {
-                (crate::proto::Status::Failed, Some(err.clone()), None)
-            }
+            JobStatus::Failed(err) => (crate::proto::Status::Failed, Some(err.clone()), None),
         };
 
         Ok(Response::new(JobStatusResponse {

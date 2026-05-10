@@ -29,21 +29,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Init tracing
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .json()
         .init();
 
-    let config = ukip_engine::config::Config::from_env()
-        .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
+    let config =
+        ukip_engine::config::Config::from_env().map_err(Box::<dyn std::error::Error>::from)?;
     let pool = ukip_engine::db::pool::create_pool(&config.database_url).await?;
-    let job_manager = Arc::new(ukip_engine::jobs::JobManager::new(config.max_concurrent_jobs));
+    let job_manager = Arc::new(ukip_engine::jobs::JobManager::new(
+        config.max_concurrent_jobs,
+    ));
 
     // Build pipeline registry
     let mut registry = ukip_engine::pipelines::PipelineRegistry::new_empty();
-    registry.register(Arc::new(ukip_engine::pipelines::graph::GraphMaterializationPipeline));
-    registry.register(Arc::new(ukip_engine::pipelines::text_analysis::TextAnalysisPipeline));
+    registry.register(Arc::new(
+        ukip_engine::pipelines::graph::GraphMaterializationPipeline,
+    ));
+    registry.register(Arc::new(
+        ukip_engine::pipelines::text_analysis::TextAnalysisPipeline,
+    ));
 
     let router = Arc::new(ukip_engine::router::Router::new(registry));
 
@@ -51,7 +56,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!(%addr, "starting ukip-engine");
 
     let auth_token = config.auth_token.clone();
-    let svc = ukip_engine::server::EngineService::new(router, job_manager.clone(), pool.clone(), config);
+    let svc =
+        ukip_engine::server::EngineService::new(router, job_manager.clone(), pool.clone(), config);
     let interceptor = ukip_engine::server::auth_interceptor(auth_token);
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
@@ -63,7 +69,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     tonic::transport::Server::builder()
-        .add_service(ukip_engine::proto::engine_server::EngineServer::with_interceptor(svc, interceptor))
+        .add_service(
+            ukip_engine::proto::engine_server::EngineServer::with_interceptor(svc, interceptor),
+        )
         .serve_with_shutdown(addr, async {
             shutdown_rx.await.ok();
         })

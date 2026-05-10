@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use sqlx::PgPool;
 use crate::db::schema::InsertedNode;
+use sqlx::PgPool;
+use std::collections::HashMap;
 
 /// Query the DB for existing nodes matching the given canonical_ids.
 /// Returns a map of canonical_id → DB id for nodes that already exist.

@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use sqlx::PgPool;
 use crate::db::schema::{InsertedNode, PendingNode, PendingRelationship};
+use sqlx::PgPool;
+use std::collections::HashMap;
 
 pub struct BulkWriter {
     pool: PgPool,
@@ -10,7 +10,11 @@ pub struct BulkWriter {
 
 impl BulkWriter {
     pub fn new(pool: PgPool, node_chunk_size: usize, rel_chunk_size: usize) -> Self {
-        Self { pool, node_chunk_size, rel_chunk_size }
+        Self {
+            pool,
+            node_chunk_size,
+            rel_chunk_size,
+        }
     }
 
     /// Flush nodes to DB and return a canonical_id → id map covering both
@@ -108,7 +112,10 @@ impl BulkWriter {
              RETURNING id, canonical_id",
         );
 
-        Ok(builder.build_query_as::<InsertedNode>().fetch_all(&self.pool).await?)
+        builder
+            .build_query_as::<InsertedNode>()
+            .fetch_all(&self.pool)
+            .await
     }
 
     /// Upsert for rows WHERE org_id IS NULL (global / legacy entities).
@@ -125,7 +132,7 @@ impl BulkWriter {
         );
 
         builder.push_values(nodes.iter().copied(), |mut b, node| {
-            b.push_bind(node.org_id)          // NULL
+            b.push_bind(node.org_id) // NULL
                 .push_bind(node.import_batch_id)
                 .push_bind(&node.domain)
                 .push_bind(&node.entity_type)
@@ -147,7 +154,10 @@ impl BulkWriter {
              RETURNING id, canonical_id",
         );
 
-        Ok(builder.build_query_as::<InsertedNode>().fetch_all(&self.pool).await?)
+        builder
+            .build_query_as::<InsertedNode>()
+            .fetch_all(&self.pool)
+            .await
     }
 
     async fn insert_rel_chunk(
@@ -164,7 +174,13 @@ impl BulkWriter {
             .filter_map(|rel| {
                 let source_id = id_map.get(&rel.source_canonical_id)?;
                 let target_id = id_map.get(&rel.target_canonical_id)?;
-                Some((*source_id, *target_id, rel.relation_type.as_str(), rel.weight, rel.org_id))
+                Some((
+                    *source_id,
+                    *target_id,
+                    rel.relation_type.as_str(),
+                    rel.weight,
+                    rel.org_id,
+                ))
             })
             .collect();
 
@@ -172,8 +188,9 @@ impl BulkWriter {
             return Ok(0);
         }
 
-        let (with_org, without_org): (Vec<_>, Vec<_>) =
-            resolved.iter().partition(|(_, _, _, _, org_id)| org_id.is_some());
+        let (with_org, without_org): (Vec<_>, Vec<_>) = resolved
+            .iter()
+            .partition(|(_, _, _, _, org_id)| org_id.is_some());
 
         let mut total = 0i32;
         if !with_org.is_empty() {

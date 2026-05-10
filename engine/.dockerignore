@@ -1,0 +1,9 @@
+target/
+.git/
+*.md
+*.log
+*.tmp
+Cargo.lock.orig
+.env
+.env.*
+tests/

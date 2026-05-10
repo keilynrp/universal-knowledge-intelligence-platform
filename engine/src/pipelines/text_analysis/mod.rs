@@ -3,8 +3,8 @@ pub mod keywords;
 pub mod language;
 pub mod tokenizer;
 
-use std::collections::HashMap;
 use async_trait::async_trait;
+use std::collections::HashMap;
 
 use crate::pipelines::{Pipeline, PipelineContext, PipelineError, PipelineInput, PipelineOutput};
 
@@ -21,7 +21,9 @@ impl Pipeline for TextAnalysisPipeline {
         input: PipelineInput,
         ctx: &PipelineContext,
     ) -> Result<PipelineOutput, PipelineError> {
-        ctx.progress.update(0.1, "tokenizing", "Tokenizing abstracts").await;
+        ctx.progress
+            .update(0.1, "tokenizing", "Tokenizing abstracts")
+            .await;
 
         let mut all_tokens: Vec<Vec<String>> = Vec::new();
         let mut entity_ids: Vec<i64> = Vec::new();
@@ -50,7 +52,9 @@ impl Pipeline for TextAnalysisPipeline {
             classifications.push(classification);
         }
 
-        ctx.progress.update(0.4, "extracting_keywords", "Extracting keywords").await;
+        ctx.progress
+            .update(0.4, "extracting_keywords", "Extracting keywords")
+            .await;
 
         // TF-IDF over corpus
         let extractor = keywords::TfIdfExtractor::new(10, 0.0, 0.95);
@@ -58,8 +62,14 @@ impl Pipeline for TextAnalysisPipeline {
 
         let keywords_extracted = keyword_results.iter().map(|kws| kws.len() as i32).sum();
         let entities_classified = classifications.len() as i32;
+        let mut counters = HashMap::new();
+        for lang in languages.iter().flatten() {
+            *counters.entry(format!("language_{lang}")).or_insert(0) += 1;
+        }
 
-        ctx.progress.update(0.8, "writing_results", "Updating DB with analysis results").await;
+        ctx.progress
+            .update(0.8, "writing_results", "Updating DB with analysis results")
+            .await;
 
         // Write results back via batch UPDATE using unnest
         if !entity_ids.is_empty() {
@@ -96,7 +106,9 @@ impl Pipeline for TextAnalysisPipeline {
             .map_err(PipelineError::Database)?;
         }
 
-        ctx.progress.update(1.0, "done", "Text analysis complete").await;
+        ctx.progress
+            .update(1.0, "done", "Text analysis complete")
+            .await;
 
         Ok(PipelineOutput {
             nodes_created: 0,
@@ -105,7 +117,7 @@ impl Pipeline for TextAnalysisPipeline {
             relationships_deduplicated: 0,
             keywords_extracted,
             entities_classified,
-            counters: HashMap::new(),
+            counters,
         })
     }
 }

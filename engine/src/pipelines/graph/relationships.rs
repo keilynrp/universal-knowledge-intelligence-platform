@@ -1,6 +1,6 @@
+use super::canonical;
 use crate::db::schema::PendingRelationship;
 use crate::proto::Publication;
-use super::canonical;
 
 /// Compute all relationships for a single publication.
 /// Relationship types:
@@ -12,23 +12,24 @@ use super::canonical;
 /// - coauthor-with:   author ↔ author (pairs, ordered by canonical_id)
 pub fn compute_relationships(
     _entity_id: i64,
-    pub_canonical_id: &str,
+    _pub_canonical_id: &str,
     publication: &Publication,
     org_id: Option<i64>,
 ) -> Vec<PendingRelationship> {
     let mut rels = Vec::new();
+    let publication_canonical_id = canonical::publication_canonical_id(publication);
 
     let author_canonical_ids: Vec<String> = publication
         .authors
         .iter()
-        .map(|a| canonical::author_canonical_id(a))
+        .map(canonical::author_canonical_id)
         .collect();
 
     // authored-by: publication → author
     for author_cid in &author_canonical_ids {
         rels.push(PendingRelationship {
             org_id,
-            source_canonical_id: pub_canonical_id.to_string(),
+            source_canonical_id: publication_canonical_id.clone(),
             target_canonical_id: author_cid.clone(),
             relation_type: "authored-by".to_string(),
             weight: 1.0,
@@ -48,6 +49,18 @@ pub fn compute_relationships(
                 weight: 1.0,
             });
         }
+        for aff_name in &author.affiliations {
+            if !aff_name.trim().is_empty() {
+                let aff_cid = canonical::affiliation_name_canonical_id(aff_name);
+                rels.push(PendingRelationship {
+                    org_id,
+                    source_canonical_id: author_cid.clone(),
+                    target_canonical_id: aff_cid,
+                    relation_type: "belongs-to".to_string(),
+                    weight: 1.0,
+                });
+            }
+        }
     }
 
     // published-in: publication → journal
@@ -56,7 +69,7 @@ pub fn compute_relationships(
             let journal_cid = canonical::journal_canonical_id(source_title);
             rels.push(PendingRelationship {
                 org_id,
-                source_canonical_id: pub_canonical_id.to_string(),
+                source_canonical_id: publication_canonical_id.clone(),
                 target_canonical_id: journal_cid,
                 relation_type: "published-in".to_string(),
                 weight: 1.0,
@@ -70,7 +83,7 @@ pub fn compute_relationships(
             let concept_cid = canonical::concept_canonical_id(concept);
             rels.push(PendingRelationship {
                 org_id,
-                source_canonical_id: pub_canonical_id.to_string(),
+                source_canonical_id: publication_canonical_id.clone(),
                 target_canonical_id: concept_cid,
                 relation_type: "has-concept".to_string(),
                 weight: 1.0,
@@ -84,7 +97,7 @@ pub fn compute_relationships(
             let id_cid = canonical::identifier_canonical_id(&id.scheme, &id.value);
             rels.push(PendingRelationship {
                 org_id,
-                source_canonical_id: pub_canonical_id.to_string(),
+                source_canonical_id: publication_canonical_id.clone(),
                 target_canonical_id: id_cid,
                 relation_type: "identified-by".to_string(),
                 weight: 1.0,
@@ -96,7 +109,10 @@ pub fn compute_relationships(
     let n = author_canonical_ids.len();
     for i in 0..n {
         for j in (i + 1)..n {
-            let mut pair = [author_canonical_ids[i].clone(), author_canonical_ids[j].clone()];
+            let mut pair = [
+                author_canonical_ids[i].clone(),
+                author_canonical_ids[j].clone(),
+            ];
             pair.sort(); // ensure canonical ordering
             rels.push(PendingRelationship {
                 org_id,
@@ -114,7 +130,7 @@ pub fn compute_relationships(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::proto::{Author, Affiliation, Identifier};
+    use crate::proto::{Affiliation, Author, Identifier};
 
     fn two_author_pub() -> Publication {
         Publication {
@@ -133,19 +149,15 @@ mod tests {
                     ..Default::default()
                 },
             ],
-            affiliations: vec![
-                Affiliation {
-                    name: "MIT".to_string(),
-                    ..Default::default()
-                },
-            ],
+            affiliations: vec![Affiliation {
+                name: "MIT".to_string(),
+                ..Default::default()
+            }],
             concepts: vec!["AI".to_string()],
-            identifiers: vec![
-                Identifier {
-                    scheme: "doi".to_string(),
-                    value: "10.1234/test".to_string(),
-                },
-            ],
+            identifiers: vec![Identifier {
+                scheme: "doi".to_string(),
+                value: "10.1234/test".to_string(),
+            }],
             ..Default::default()
         }
     }
@@ -154,7 +166,10 @@ mod tests {
     fn test_authored_by_relationships() {
         let pub_ = two_author_pub();
         let rels = compute_relationships(42, "pub:42", &pub_, None);
-        let authored: Vec<_> = rels.iter().filter(|r| r.relation_type == "authored-by").collect();
+        let authored: Vec<_> = rels
+            .iter()
+            .filter(|r| r.relation_type == "authored-by")
+            .collect();
         assert_eq!(authored.len(), 2);
     }
 
@@ -162,7 +177,10 @@ mod tests {
     fn test_published_in_relationship() {
         let pub_ = two_author_pub();
         let rels = compute_relationships(42, "pub:42", &pub_, None);
-        let pub_in: Vec<_> = rels.iter().filter(|r| r.relation_type == "published-in").collect();
+        let pub_in: Vec<_> = rels
+            .iter()
+            .filter(|r| r.relation_type == "published-in")
+            .collect();
         assert_eq!(pub_in.len(), 1);
         assert!(pub_in[0].target_canonical_id.starts_with("journal:"));
     }
@@ -171,7 +189,10 @@ mod tests {
     fn test_has_concept_relationship() {
         let pub_ = two_author_pub();
         let rels = compute_relationships(42, "pub:42", &pub_, None);
-        let concepts: Vec<_> = rels.iter().filter(|r| r.relation_type == "has-concept").collect();
+        let concepts: Vec<_> = rels
+            .iter()
+            .filter(|r| r.relation_type == "has-concept")
+            .collect();
         assert_eq!(concepts.len(), 1);
     }
 
@@ -179,7 +200,10 @@ mod tests {
     fn test_identified_by_relationship() {
         let pub_ = two_author_pub();
         let rels = compute_relationships(42, "pub:42", &pub_, None);
-        let ids: Vec<_> = rels.iter().filter(|r| r.relation_type == "identified-by").collect();
+        let ids: Vec<_> = rels
+            .iter()
+            .filter(|r| r.relation_type == "identified-by")
+            .collect();
         assert_eq!(ids.len(), 1);
     }
 
@@ -187,7 +211,10 @@ mod tests {
     fn test_coauthor_pairs_ordered() {
         let pub_ = two_author_pub();
         let rels = compute_relationships(42, "pub:42", &pub_, None);
-        let coauthors: Vec<_> = rels.iter().filter(|r| r.relation_type == "coauthor-with").collect();
+        let coauthors: Vec<_> = rels
+            .iter()
+            .filter(|r| r.relation_type == "coauthor-with")
+            .collect();
         // 2 authors → 1 pair
         assert_eq!(coauthors.len(), 1);
         // Pair should be ordered (source_canonical_id < target_canonical_id)
@@ -202,8 +229,36 @@ mod tests {
             ..Default::default()
         });
         let rels = compute_relationships(42, "pub:42", &pub_, None);
-        let coauthors: Vec<_> = rels.iter().filter(|r| r.relation_type == "coauthor-with").collect();
+        let coauthors: Vec<_> = rels
+            .iter()
+            .filter(|r| r.relation_type == "coauthor-with")
+            .collect();
         // 3 authors → 3 pairs (3*2/2)
         assert_eq!(coauthors.len(), 3);
+    }
+
+    #[test]
+    fn test_relationships_use_publication_doi_when_available() {
+        let mut pub_ = two_author_pub();
+        pub_.doi = Some("10.1234/test".to_string());
+        let rels = compute_relationships(42, "pub:42", &pub_, None);
+        let authored = rels
+            .iter()
+            .find(|r| r.relation_type == "authored-by")
+            .unwrap();
+        assert_eq!(authored.source_canonical_id, "publication:doi:10-1234-test");
+    }
+
+    #[test]
+    fn test_author_affiliation_string_relationship() {
+        let mut pub_ = two_author_pub();
+        pub_.authors[0]
+            .affiliations
+            .push("Stanford University".to_string());
+        let rels = compute_relationships(42, "pub:42", &pub_, None);
+        assert!(rels.iter().any(|r| {
+            r.relation_type == "belongs-to"
+                && r.target_canonical_id == "affiliation:stanford-university"
+        }));
     }
 }

@@ -1,5 +1,3 @@
-version: "3.9"
-
 # UKIP production-oriented compose for Dokploy.
 # Recommended pattern:
 # - Frontend domain: https://ukip.inbounduxd.com
@@ -14,6 +12,9 @@ services:
     restart: unless-stopped
     networks:
       - dokploy-network
+    depends_on:
+      ukip-engine:
+        condition: service_started
     environment:
       PORT: 8000
       RUN_DB_MIGRATIONS_ON_START: ${RUN_DB_MIGRATIONS_ON_START:-0}
@@ -42,6 +43,11 @@ services:
       SENTRY_SEND_DEFAULT_PII: ${SENTRY_SEND_DEFAULT_PII:-0}
       SENTRY_RELEASE: ${SENTRY_RELEASE:-}
       SENTRY_DEBUG: ${SENTRY_DEBUG:-0}
+      ENGINE_GRPC_URL: ${ENGINE_GRPC_URL:-ukip-engine:50051}
+      ENGINE_AUTH_TOKEN: ${ENGINE_AUTH_TOKEN:?Set ENGINE_AUTH_TOKEN}
+      ENGINE_SYNC_THRESHOLD: ${ENGINE_SYNC_THRESHOLD:-500}
+      ENGINE_SHADOW_MODE: ${ENGINE_SHADOW_MODE:-false}
+      ENGINE_FALLBACK_PYTHON: ${ENGINE_FALLBACK_PYTHON:-true}
     volumes:
       - ukip_static_data:/app/static
     healthcheck:
@@ -52,6 +58,30 @@ services:
       start_period: 20s
     expose:
       - "8000"
+
+  ukip-engine:
+    image: ${UKIP_ENGINE_IMAGE:?Set UKIP_ENGINE_IMAGE}
+    pull_policy: always
+    restart: unless-stopped
+    networks:
+      - dokploy-network
+    environment:
+      ENGINE_DATABASE_URL: ${ENGINE_DATABASE_URL:?Set ENGINE_DATABASE_URL}
+      ENGINE_GRPC_PORT: ${ENGINE_GRPC_PORT:-50051}
+      ENGINE_LOG_LEVEL: ${ENGINE_LOG_LEVEL:-info}
+      ENGINE_AUTH_TOKEN: ${ENGINE_AUTH_TOKEN:?Set ENGINE_AUTH_TOKEN}
+      ENGINE_NODE_CHUNK_SIZE: ${ENGINE_NODE_CHUNK_SIZE:-1000}
+      ENGINE_REL_CHUNK_SIZE: ${ENGINE_REL_CHUNK_SIZE:-2000}
+      ENGINE_MAX_CONCURRENT_JOBS: ${ENGINE_MAX_CONCURRENT_JOBS:-4}
+      ENGINE_SHUTDOWN_TIMEOUT_SECS: ${ENGINE_SHUTDOWN_TIMEOUT_SECS:-60}
+    healthcheck:
+      test: ["CMD", "/app/engine", "--health-check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    expose:
+      - "50051"
 
   ukip-frontend:
     image: ${UKIP_FRONTEND_IMAGE:?Set UKIP_FRONTEND_IMAGE}
