@@ -9,9 +9,27 @@ use crate::pipelines::{PipelineContext, PipelineInput};
 use crate::progress::ProgressTracker;
 use crate::proto::{
     engine_server::Engine, HealthRequest, HealthResponse, JobAccepted, JobStatusRequest,
-    JobStatusResponse, ProcessRequest, ProcessResponse, ProcessResult, ProgressEvent,
+    JobStatusResponse, ProcessRequest, ProcessResponse, ProcessResult,
+    ProgressEvent as ProtoProgressEvent,
 };
 use crate::router::Router;
+
+/// gRPC auth interceptor — checks the `authorization: Bearer <token>` metadata header.
+/// When `expected_token` is `None`, all requests are allowed (useful in dev/test).
+pub fn auth_interceptor(
+    expected_token: Option<String>,
+) -> impl Fn(Request<()>) -> Result<Request<()>, Status> + Clone {
+    move |req: Request<()>| match &expected_token {
+        None => Ok(req),
+        Some(token) => {
+            let expected = format!("Bearer {}", token);
+            match req.metadata().get("authorization") {
+                Some(t) if t.to_str().unwrap_or("") == expected => Ok(req),
+                _ => Err(Status::unauthenticated("invalid or missing auth token")),
+            }
+        }
+    }
+}
 
 pub struct EngineService {
     router: Arc<Router>,
@@ -63,7 +81,7 @@ fn build_process_result(output: &crate::pipelines::PipelineOutput) -> ProcessRes
 
 #[tonic::async_trait]
 impl Engine for EngineService {
-    type StreamProgressStream = ReceiverStream<Result<ProgressEvent, Status>>;
+    type StreamProgressStream = ReceiverStream<Result<ProtoProgressEvent, Status>>;
 
     async fn process_sync(
         &self,
@@ -144,6 +162,10 @@ impl Engine for EngineService {
 
         self.job_manager.create(&job_id, &pipeline_name);
 
+        // Create tracker before spawning so stream_progress can subscribe immediately.
+        let tracker = Arc::new(ProgressTracker::new(job_id.clone()));
+        self.job_manager.store_tracker(&job_id, tracker.clone());
+
         // Spawn async task
         let job_manager = self.job_manager.clone();
         let pool = self.pool.clone();
@@ -152,8 +174,7 @@ impl Engine for EngineService {
 
         tokio::spawn(async move {
             job_manager.set_running(&jid);
-            let progress = ProgressTracker::new(jid.clone());
-            let ctx = PipelineContext { pool, config, progress };
+            let ctx = PipelineContext { pool, config, progress: (*tracker).clone() };
 
             match pipeline.process(input, &ctx).await {
                 Ok(output) => job_manager.set_completed(&jid, output),
@@ -204,11 +225,37 @@ impl Engine for EngineService {
         &self,
         request: Request<JobStatusRequest>,
     ) -> Result<Response<Self::StreamProgressStream>, Status> {
-        let _req = request.into_inner();
-        // Progress streaming requires the ProgressTracker to be stored alongside the job.
-        // For now, return an empty stream — full implementation requires storing trackers in JobManager.
-        let (tx, rx) = mpsc::channel(1);
-        drop(tx); // Close immediately — empty stream
+        let req = request.into_inner();
+
+        let tracker = self
+            .job_manager
+            .get_tracker(&req.job_id)
+            .ok_or_else(|| Status::not_found(format!("job '{}' not running", req.job_id)))?;
+
+        let mut broadcast_rx = tracker.subscribe();
+        let (tx, rx) = mpsc::channel::<Result<ProtoProgressEvent, Status>>(64);
+
+        tokio::spawn(async move {
+            loop {
+                match broadcast_rx.recv().await {
+                    Ok(ev) => {
+                        let proto = ProtoProgressEvent {
+                            job_id: ev.job_id,
+                            progress: ev.progress,
+                            phase: ev.phase,
+                            message: ev.message,
+                            counters: ev.counters,
+                        };
+                        if tx.send(Ok(proto)).await.is_err() {
+                            break; // client disconnected
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                }
+            }
+        });
+
         Ok(Response::new(ReceiverStream::new(rx)))
     }
 

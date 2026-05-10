@@ -1,4 +1,5 @@
 use dashmap::DashMap;
+use std::sync::Arc;
 use std::time::Instant;
 
 #[derive(Debug, Clone)]
@@ -9,13 +10,14 @@ pub enum JobStatus {
     Failed(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct JobState {
     pub pipeline: String,
     pub status: JobStatus,
     pub progress: f32,
     pub started_at: Instant,
     pub result: Option<crate::pipelines::PipelineOutput>,
+    pub tracker: Option<Arc<crate::progress::ProgressTracker>>,
 }
 
 pub struct JobManager {
@@ -40,8 +42,19 @@ impl JobManager {
                 progress: 0.0,
                 started_at: Instant::now(),
                 result: None,
+                tracker: None,
             },
         );
+    }
+
+    pub fn store_tracker(&self, job_id: &str, tracker: Arc<crate::progress::ProgressTracker>) {
+        if let Some(mut job) = self.jobs.get_mut(job_id) {
+            job.tracker = Some(tracker);
+        }
+    }
+
+    pub fn get_tracker(&self, job_id: &str) -> Option<Arc<crate::progress::ProgressTracker>> {
+        self.jobs.get(job_id).and_then(|r| r.tracker.clone())
     }
 
     pub fn get(&self, job_id: &str) -> Option<JobState> {

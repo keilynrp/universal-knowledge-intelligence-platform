@@ -31,7 +31,7 @@ class EngineClient:
         return True
 
     def _metadata(self) -> list[tuple[str, str]]:
-        return [("x-engine-token", self.auth_token)] if self.auth_token else []
+        return [("authorization", f"Bearer {self.auth_token}")] if self.auth_token else []
 
     async def health(self) -> bool:
         """Return True if the engine is reachable and healthy."""

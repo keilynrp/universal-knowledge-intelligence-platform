@@ -5,9 +5,25 @@ use std::sync::Arc;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--health-check") {
-        // TODO: implement real health check via gRPC reflection
-        println!("healthy");
-        process::exit(0);
+        // Verify the gRPC port is open with a TCP probe.
+        let port: u16 = std::env::var("ENGINE_GRPC_PORT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(50051);
+        let addr = format!("127.0.0.1:{}", port);
+        match std::net::TcpStream::connect_timeout(
+            &addr.parse().unwrap(),
+            std::time::Duration::from_secs(2),
+        ) {
+            Ok(_) => {
+                println!("healthy");
+                process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("health check failed: {}", e);
+                process::exit(1);
+            }
+        }
     }
 
     // Init tracing
@@ -34,7 +50,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = format!("0.0.0.0:{}", config.grpc_port).parse()?;
     tracing::info!(%addr, "starting ukip-engine");
 
+    let auth_token = config.auth_token.clone();
     let svc = ukip_engine::server::EngineService::new(router, job_manager.clone(), pool.clone(), config);
+    let interceptor = ukip_engine::server::auth_interceptor(auth_token);
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
@@ -45,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     tonic::transport::Server::builder()
-        .add_service(ukip_engine::proto::engine_server::EngineServer::new(svc))
+        .add_service(ukip_engine::proto::engine_server::EngineServer::with_interceptor(svc, interceptor))
         .serve_with_shutdown(addr, async {
             shutdown_rx.await.ok();
         })

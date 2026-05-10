@@ -10,8 +10,17 @@ pub struct ProgressEvent {
 }
 
 pub struct ProgressTracker {
-    job_id: String,
+    pub job_id: String,
     tx: broadcast::Sender<ProgressEvent>,
+}
+
+impl Clone for ProgressTracker {
+    fn clone(&self) -> Self {
+        Self {
+            job_id: self.job_id.clone(),
+            tx: self.tx.clone(),
+        }
+    }
 }
 
 impl ProgressTracker {

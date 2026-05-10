@@ -34,6 +34,7 @@ from backend.importers.scientific import ScientificImportResult, detect_scientif
 from backend.routers.column_maps import COLUMN_MAPPING, EXPORT_COLUMN_MAPPING
 from backend.routers.deps import _audit, _dispatch_webhook, _get_active_integration
 from backend.services.graph_materializer import materialize_scientific_import_graph
+from backend.services import engine_bridge
 from backend.tenant_access import persisted_org_id, resolve_request_org_id, scope_query_to_org
 
 logger = logging.getLogger(__name__)
@@ -446,6 +447,133 @@ async def preview_upload(
     }
 
 
+async def _materialize_graph(
+    *,
+    request: Request,
+    db,
+    import_batch_id: int,
+    org_id: int | None,
+    domain: str,
+) -> dict:
+    """
+    Route graph materialization to the Rust engine or the Python fallback.
+
+    Modes (controlled by env vars):
+    - ENGINE_SHADOW_MODE=true  → Python runs (correctness), engine fires async for comparison
+    - ENGINE_SHADOW_MODE=false → engine sync (if available), fallback to Python on failure
+    - No engine configured    → Python only (legacy behavior)
+    """
+    engine = getattr(request.app.state, "engine_client", None)
+
+    # No engine → Python fallback only
+    if not engine_bridge.should_use_engine(engine):
+        return materialize_scientific_import_graph(db, import_batch_id, org_id=org_id)
+
+    # Query saved entities to build proto Publications (need DB ids)
+    from backend import models as _models
+    entities = (
+        db.query(_models.RawEntity)
+        .filter(
+            _models.RawEntity.import_batch_id == import_batch_id,
+            _models.RawEntity.org_id == org_id,
+            _models.RawEntity.source != "graph_materializer",
+        )
+        .all()
+    )
+
+    publications = [engine_bridge.entity_to_publication(e) for e in entities]
+
+    if engine_bridge.shadow_mode_enabled():
+        # Shadow mode: Python is primary, engine fires async for telemetry
+        python_result = materialize_scientific_import_graph(db, import_batch_id, org_id=org_id)
+        import asyncio as _asyncio
+        _asyncio.ensure_future(_shadow_engine_call(
+            engine=engine,
+            import_batch_id=import_batch_id,
+            org_id=org_id,
+            domain=domain,
+            publications=publications,
+            python_result=python_result,
+        ))
+        return {**python_result, "engine_mode": "shadow"}
+
+    # Primary mode: try engine first, fall back to Python
+    import uuid as _uuid
+    job_id = f"ingest-{import_batch_id}-{_uuid.uuid4().hex[:8]}"
+    threshold = engine_bridge.sync_threshold()
+    try:
+        if len(publications) <= threshold:
+            resp = await engine.process_sync(
+                pipeline="graph_materialization",
+                job_id=job_id,
+                import_batch_id=import_batch_id,
+                domain=domain,
+                publications=publications,
+                org_id=org_id,
+            )
+        else:
+            resp = await engine.process_async(
+                pipeline="graph_materialization",
+                job_id=job_id,
+                import_batch_id=import_batch_id,
+                domain=domain,
+                publications=publications,
+                org_id=org_id,
+            )
+        if resp is not None:
+            result = resp.result if hasattr(resp, "result") and resp.result else None
+            return {
+                "publications": len(publications),
+                "nodes_created": result.nodes_created if result else 0,
+                "relationships_created": result.relationships_created if result else 0,
+                "engine_mode": "primary",
+                "engine_job_id": job_id,
+            }
+    except Exception as exc:
+        logger.warning("Engine graph materialization failed, falling back to Python: %s", exc)
+
+    if engine_bridge.fallback_enabled():
+        logger.info("Falling back to Python graph_materializer for batch %s", import_batch_id)
+        return {**materialize_scientific_import_graph(db, import_batch_id, org_id=org_id), "engine_mode": "fallback"}
+
+    return {"publications": len(publications), "nodes_created": 0, "relationships_created": 0, "engine_mode": "skipped"}
+
+
+async def _shadow_engine_call(
+    *,
+    engine,
+    import_batch_id: int,
+    org_id: int | None,
+    domain: str,
+    publications: list,
+    python_result: dict,
+) -> None:
+    """Fire-and-forget shadow call to the engine for telemetry comparison."""
+    import uuid as _uuid
+    job_id = f"shadow-{import_batch_id}-{_uuid.uuid4().hex[:8]}"
+    try:
+        resp = await engine.process_sync(
+            pipeline="graph_materialization",
+            job_id=job_id,
+            import_batch_id=import_batch_id,
+            domain=domain,
+            publications=publications,
+            org_id=org_id,
+        )
+        if resp and resp.result:
+            r = resp.result
+            logger.info(
+                "Shadow engine result for batch %s: nodes=%s rels=%s | Python: nodes=%s rels=%s",
+                import_batch_id,
+                r.nodes_created,
+                r.relationships_created,
+                python_result.get("nodes_created", "?"),
+                python_result.get("relationships_created", "?"),
+            )
+    except Exception as exc:
+        logger.debug("Shadow engine call failed (non-critical): %s", exc)
+
+
 @router.post("/upload", status_code=201)
 @limiter.limit("60/minute")
 async def upload_file(
@@ -522,11 +650,15 @@ async def upload_file(
         }
         _audit(db, "upload", user_id=current_user.id, details=audit_details)
         db.commit()
-        graph_result = materialize_scientific_import_graph(
-            db,
-            import_batch.id,
+
+        graph_result = await _materialize_graph(
+            request=request,
+            db=db,
+            import_batch_id=import_batch.id,
             org_id=stored_org_id,
+            domain=effective_domain,
         )
+
         _dispatch_webhook("upload", {"filename": file.filename, "rows": len(objects), "import_batch_id": import_batch.id},
                           database.SessionLocal)
         return {
