@@ -101,6 +101,20 @@ async fn prepare_minimal_schema(pool: &sqlx::PgPool) -> Result<(), sqlx::Error> 
     .execute(pool)
     .await?;
     sqlx::query(
+        "CREATE INDEX ix_raw_entities_canonical_lookup
+         ON raw_entities (org_id, domain, canonical_id)
+         WHERE org_id IS NOT NULL",
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "CREATE INDEX ix_raw_entities_canonical_lookup_global
+         ON raw_entities (domain, canonical_id)
+         WHERE org_id IS NULL",
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
         "CREATE UNIQUE INDEX uq_entity_relationships_pair
          ON entity_relationships (org_id, source_id, target_id, relation_type)
          WHERE org_id IS NOT NULL",

@@ -27,6 +27,16 @@ def upgrade():
         WHERE org_id IS NULL
     """)
     op.execute("""
+        CREATE INDEX IF NOT EXISTS ix_raw_entities_canonical_lookup
+        ON raw_entities (org_id, domain, canonical_id)
+        WHERE org_id IS NOT NULL
+    """)
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS ix_raw_entities_canonical_lookup_global
+        ON raw_entities (domain, canonical_id)
+        WHERE org_id IS NULL
+    """)
+    op.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS uq_entity_relationships_pair
         ON entity_relationships (org_id, source_id, target_id, relation_type)
         WHERE org_id IS NOT NULL
@@ -41,6 +51,8 @@ def upgrade():
 def downgrade():
     op.execute("DROP INDEX IF EXISTS uq_entity_relationships_pair_global")
     op.execute("DROP INDEX IF EXISTS uq_entity_relationships_pair")
+    op.execute("DROP INDEX IF EXISTS ix_raw_entities_canonical_lookup_global")
+    op.execute("DROP INDEX IF EXISTS ix_raw_entities_canonical_lookup")
     op.execute("DROP INDEX IF EXISTS uq_raw_entities_canonical_global")
     op.execute("DROP INDEX IF EXISTS uq_raw_entities_canonical")
     op.drop_column('raw_entities', 'updated_at')
