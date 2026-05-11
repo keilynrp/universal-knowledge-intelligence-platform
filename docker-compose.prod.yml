@@ -17,7 +17,7 @@ services:
         condition: service_started
     environment:
       PORT: 8000
-      RUN_DB_MIGRATIONS_ON_START: ${RUN_DB_MIGRATIONS_ON_START:-0}
+      RUN_DB_MIGRATIONS_ON_START: ${RUN_DB_MIGRATIONS_ON_START:-1}
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
       ADMIN_USERNAME: ${ADMIN_USERNAME:?Set ADMIN_USERNAME}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
@@ -54,8 +54,8 @@ services:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 20s
+      retries: 5
+      start_period: 60s
     expose:
       - "8000"
 
