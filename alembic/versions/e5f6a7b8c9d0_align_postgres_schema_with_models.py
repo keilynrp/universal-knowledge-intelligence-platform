@@ -46,31 +46,28 @@ def _table_exists(table: str) -> bool:
     return table in insp.get_table_names()
 
 
+def _is_sqlite() -> bool:
+    return op.get_bind().dialect.name == "sqlite"
+
+
 def _index_exists(index_name: str) -> bool:
     conn = op.get_bind()
-    result = conn.execute(
-        sa.text("SELECT 1 FROM pg_indexes WHERE indexname = :n"),
-        {"n": index_name},
-    )
-    return result.scalar() is not None
+    insp = sa.inspect(conn)
+    for table in insp.get_table_names():
+        if any(index.get("name") == index_name for index in insp.get_indexes(table)):
+            return True
+    return False
 
 
 def _fk_exists(table: str, column: str) -> bool:
     conn = op.get_bind()
-    result = conn.execute(
-        sa.text("""
-            SELECT 1
-            FROM information_schema.key_column_usage kcu
-            JOIN information_schema.table_constraints tc
-              ON tc.constraint_name = kcu.constraint_name
-             AND tc.table_schema = kcu.table_schema
-            WHERE tc.constraint_type = 'FOREIGN KEY'
-              AND kcu.table_name = :table
-              AND kcu.column_name = :col
-        """),
-        {"table": table, "col": column},
-    )
-    return result.scalar() is not None
+    insp = sa.inspect(conn)
+    if table not in insp.get_table_names():
+        return False
+    for fk in insp.get_foreign_keys(table):
+        if column in (fk.get("constrained_columns") or []):
+            return True
+    return False
 
 
 def _safe_add_column(table: str, column: sa.Column):
@@ -83,12 +80,21 @@ def _safe_rename_column(table: str, old: str, new: str):
         op.alter_column(table, old, new_column_name=new)
 
 
+def _safe_alter_column(table: str, column: str, **kw):
+    if _is_sqlite():
+        return
+    if _col_exists(table, column):
+        op.alter_column(table, column, **kw)
+
+
 def _safe_create_index(name: str, table: str, columns: list, **kw):
     if not _index_exists(name):
         op.create_index(name, table, columns, **kw)
 
 
 def _safe_create_fk(name: str, source_table: str, referent_table: str, local_cols, remote_cols):
+    if _is_sqlite():
+        return
     if not _fk_exists(source_table, local_cols[0]):
         op.create_foreign_key(name, source_table, referent_table, local_cols, remote_cols)
 
@@ -127,8 +133,7 @@ def upgrade() -> None:
     ))
 
     # Make api_key nullable (model says nullable=True, DB says NOT NULL)
-    if _col_exists("ai_integrations", "api_key"):
-        op.alter_column("ai_integrations", "api_key", nullable=True)
+    _safe_alter_column("ai_integrations", "api_key", nullable=True)
 
     _safe_create_index("ix_ai_integrations_provider_name", "ai_integrations", ["provider_name"], unique=True)
 
@@ -142,17 +147,28 @@ def upgrade() -> None:
     _safe_add_column("annotations", sa.Column("updated_at", sa.DateTime, nullable=True))
 
     # Backfill author_name from users table
-    op.execute(sa.text("""
-        UPDATE annotations a
-        SET author_name = COALESCE(u.display_name, u.username, '')
-        FROM users u
-        WHERE a.author_id = u.id
-          AND (a.author_name IS NULL OR a.author_name = '')
-    """))
+    if _is_sqlite():
+        op.execute(sa.text("""
+            UPDATE annotations
+            SET author_name = COALESCE(
+                (SELECT COALESCE(users.display_name, users.username, '')
+                 FROM users
+                 WHERE users.id = annotations.author_id),
+                ''
+            )
+            WHERE author_name IS NULL OR author_name = ''
+        """))
+    else:
+        op.execute(sa.text("""
+            UPDATE annotations a
+            SET author_name = COALESCE(u.display_name, u.username, '')
+            FROM users u
+            WHERE a.author_id = u.id
+              AND (a.author_name IS NULL OR a.author_name = '')
+        """))
 
     # Make entity_id nullable (model says nullable=True, DB says NOT NULL)
-    if _col_exists("annotations", "entity_id"):
-        op.alter_column("annotations", "entity_id", nullable=True)
+    _safe_alter_column("annotations", "entity_id", nullable=True)
 
     _safe_create_index("ix_annotations_entity_id", "annotations", ["entity_id"])
     _safe_create_index("ix_annotations_authority_id", "annotations", ["authority_id"])
@@ -185,7 +201,7 @@ def upgrade() -> None:
 
     # ── 6. analysis_contexts: rename + add ───────────────────────────────
     # Drop any existing FK on entity_id before renaming/retyping
-    if _col_exists("analysis_contexts", "entity_id"):
+    if not _is_sqlite() and _col_exists("analysis_contexts", "entity_id"):
         # Find and drop FK constraints referencing entity_id
         conn = op.get_bind()
         fk_rows = conn.execute(sa.text("""
@@ -207,12 +223,11 @@ def upgrade() -> None:
     _safe_add_column("analysis_contexts", sa.Column("label", sa.String, server_default=""))
 
     # domain_id was INTEGER (entity_id), model expects String — cast it
-    if _col_exists("analysis_contexts", "domain_id"):
-        op.alter_column(
-            "analysis_contexts", "domain_id",
-            type_=sa.String,
-            postgresql_using="domain_id::text",
-        )
+    _safe_alter_column(
+        "analysis_contexts", "domain_id",
+        type_=sa.String,
+        postgresql_using="domain_id::text",
+    )
 
     _safe_create_index("ix_analysis_contexts_domain_id", "analysis_contexts", ["domain_id"])
 
@@ -242,7 +257,7 @@ def upgrade() -> None:
             )
             WHERE owner_id IS NULL
         """))
-        op.alter_column("organizations", "owner_id", nullable=False)
+        _safe_alter_column("organizations", "owner_id", nullable=False)
         _safe_create_fk("fk_organizations_owner_id", "organizations", "users", ["owner_id"], ["id"])
 
     # ── 9. webhooks: add missing columns ─────────────────────────────────
@@ -252,7 +267,7 @@ def upgrade() -> None:
     # ── 10. normalization_rules: fix default ─────────────────────────────
     # DB has default 'literal', model expects 'exact'
     if _col_exists("normalization_rules", "rule_type"):
-        op.alter_column(
+        _safe_alter_column(
             "normalization_rules", "rule_type",
             server_default="exact",
         )
@@ -534,7 +549,7 @@ def downgrade() -> None:
 
     # Restore rule_type default
     if _col_exists("normalization_rules", "rule_type"):
-        op.alter_column("normalization_rules", "rule_type", server_default="literal")
+        _safe_alter_column("normalization_rules", "rule_type", server_default="literal")
         op.execute(sa.text("""
             UPDATE normalization_rules
             SET rule_type = 'literal'
