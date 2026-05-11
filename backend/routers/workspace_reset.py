@@ -262,7 +262,7 @@ def _delete_scoped_model(db: Session, model: Any, org_id: int | None) -> int:
     table_name = model.__tablename__
     if table_name not in _existing_tables(db):
         return 0
-    return int(_scoped_query(db, model, org_id).delete(synchronize_session=False) or 0)
+    return int(_scoped_query(db, model, org_id).delete(synchronize_session="fetch") or 0)
 
 
 def _count_where_ids(
@@ -312,6 +312,183 @@ def _delete_annotations(
     if bind_params:
         stmt = stmt.bindparams(*bind_params)
     return int(db.execute(stmt, params).rowcount or 0)
+
+
+def _hard_delete_reset_rows(
+    db: Session,
+    *,
+    org_id: int | None,
+    entity_ids: list[int],
+    authority_ids: list[int],
+    rule_ids: list[int],
+    harmonization_ids: list[int],
+    store_ids: list[int],
+    workflow_ids: list[int],
+    audit_ids: list[int],
+    existing_tables: set[str],
+) -> None:
+    """Run an idempotent SQL cleanup pass before committing the reset."""
+    bind = db.get_bind()
+    if bind is None:
+        return
+
+    scoped_tables = [
+        "entity_relationships",
+        "authority_record_links",
+        "authority_records",
+        "normalization_rules",
+        "harmonization_logs",
+        "workflow_runs",
+        "raw_entities",
+    ]
+    id_deletes = [
+        ("link_dismissals", "entity_a_id", entity_ids),
+        ("link_dismissals", "entity_b_id", entity_ids),
+        ("harmonization_change_records", "log_id", harmonization_ids),
+        ("store_sync_mappings", "store_id", store_ids),
+        ("sync_logs", "store_id", store_ids),
+        ("sync_queue", "store_id", store_ids),
+        ("store_sync_queue", "store_id", store_ids),
+        ("workflow_runs", "workflow_id", workflow_ids),
+        ("audit_logs", "id", audit_ids),
+        ("user_notification_reads", "audit_log_id", audit_ids),
+    ]
+
+    if _table_exists(db, "annotations", existing_tables):
+        annotation_columns = _physical_columns(db, "annotations")
+        if entity_ids and authority_ids and {"entity_id", "authority_id"}.issubset(annotation_columns):
+            for entity_id, authority_id in zip(entity_ids, authority_ids):
+                db.execute(
+                    text("DELETE FROM annotations WHERE entity_id = :entity_id OR authority_id = :authority_id"),
+                    {"entity_id": entity_id, "authority_id": authority_id},
+                )
+        elif entity_ids and "entity_id" in annotation_columns:
+            for entity_id in entity_ids:
+                db.execute(text("DELETE FROM annotations WHERE entity_id = :entity_id"), {"entity_id": entity_id})
+        elif authority_ids and "authority_id" in annotation_columns:
+            for authority_id in authority_ids:
+                db.execute(
+                    text("DELETE FROM annotations WHERE authority_id = :authority_id"),
+                    {"authority_id": authority_id},
+                )
+
+    for table_name, column_name, values in id_deletes:
+        if not values or not _table_exists(db, table_name, existing_tables):
+            continue
+        if column_name not in _physical_columns(db, table_name):
+            continue
+        stmt = text(f"DELETE FROM {table_name} WHERE {column_name} IN :values").bindparams(
+            bindparam("values", expanding=True)
+        )
+        db.execute(stmt, {"values": values})
+
+    for table_name in scoped_tables:
+        if not _table_exists(db, table_name, existing_tables):
+            continue
+        if org_id is None:
+            if _column_exists(db, table_name, "org_id"):
+                db.execute(text(f"DELETE FROM {table_name} WHERE org_id IS NULL"))
+            else:
+                db.execute(text(f"DELETE FROM {table_name}"))
+        else:
+            db.execute(text(f"DELETE FROM {table_name} WHERE org_id = :org_id"), {"org_id": org_id})
+
+
+def _delete_reset_dependencies_orm(
+    db: Session,
+    *,
+    entity_ids: list[int],
+    authority_ids: list[int],
+    harmonization_ids: list[int],
+    store_ids: list[int],
+    workflow_ids: list[int],
+    audit_ids: list[int],
+) -> None:
+    annotation_filters = []
+    if entity_ids:
+        annotation_filters.append(models.Annotation.entity_id.in_(entity_ids))
+    if authority_ids:
+        annotation_filters.append(models.Annotation.authority_id.in_(authority_ids))
+    if annotation_filters:
+        db.query(models.Annotation).filter(or_(*annotation_filters)).delete(synchronize_session=False)
+
+    if audit_ids:
+        db.query(models.UserNotificationRead).filter(
+            models.UserNotificationRead.audit_log_id.in_(audit_ids)
+        ).delete(synchronize_session=False)
+        db.query(models.AuditLog).filter(models.AuditLog.id.in_(audit_ids)).delete(synchronize_session=False)
+
+    if entity_ids:
+        db.query(models.LinkDismissal).filter(
+            or_(
+                models.LinkDismissal.entity_a_id.in_(entity_ids),
+                models.LinkDismissal.entity_b_id.in_(entity_ids),
+            )
+        ).delete(synchronize_session=False)
+
+    if harmonization_ids:
+        db.query(models.HarmonizationChangeRecord).filter(
+            models.HarmonizationChangeRecord.log_id.in_(harmonization_ids)
+        ).delete(synchronize_session=False)
+
+    if store_ids:
+        db.query(models.StoreSyncMapping).filter(
+            models.StoreSyncMapping.store_id.in_(store_ids)
+        ).delete(synchronize_session=False)
+        db.query(models.SyncLog).filter(models.SyncLog.store_id.in_(store_ids)).delete(synchronize_session=False)
+        db.query(models.SyncQueueItem).filter(models.SyncQueueItem.store_id.in_(store_ids)).delete(
+            synchronize_session=False
+        )
+
+    if workflow_ids:
+        db.query(models.WorkflowRun).filter(models.WorkflowRun.workflow_id.in_(workflow_ids)).delete(
+            synchronize_session=False
+        )
+
+
+def _reset_workspace_counters_sql(
+    db: Session,
+    *,
+    org_id: int | None,
+    store_ids: list[int],
+) -> None:
+    scope_where, scope_params = (
+        ("org_id IS NULL", {}) if org_id is None else ("org_id = :org_id", {"org_id": org_id})
+    )
+    db.execute(
+        text(f"UPDATE store_connections SET entity_count = 0, last_sync_at = NULL WHERE {scope_where}"),
+        scope_params,
+    )
+    if store_ids:
+        db.query(models.StoreConnection).filter(models.StoreConnection.id.in_(store_ids)).update(
+            {models.StoreConnection.entity_count: 0, models.StoreConnection.last_sync_at: None},
+            synchronize_session=False,
+        )
+    db.execute(
+        text(
+            "UPDATE scheduled_imports SET last_run_at = NULL, next_run_at = NULL, last_status = NULL, "
+            f"last_result = NULL, total_runs = 0, total_entities_imported = 0 WHERE {scope_where}"
+        ),
+        scope_params,
+    )
+    db.execute(
+        text(
+            "UPDATE scheduled_reports SET last_run_at = NULL, next_run_at = NULL, last_status = 'pending', "
+            f"last_error = NULL, total_sent = 0 WHERE {scope_where}"
+        ),
+        scope_params,
+    )
+    db.execute(
+        text(f"UPDATE workflows SET last_run_at = NULL, run_count = 0, last_run_status = NULL WHERE {scope_where}"),
+        scope_params,
+    )
+    db.execute(
+        text(
+            "UPDATE web_scraper_configs SET last_run_at = NULL, last_run_status = NULL, "
+            f"total_runs = 0, total_enriched = 0 WHERE {scope_where}"
+        ),
+        scope_params,
+    )
 
 
 def _delete_link_dismissals(db: Session, entity_ids: list[int]) -> int:
@@ -634,7 +811,6 @@ def reset_workspace_data(
             # FTS table exists only in SQLite test mode.
             pass
 
-        db.expunge_all()
         with db.no_autoflush:
             deleted["audit_logs"] = _delete_audit_logs(db, audit_ids)
             deleted["annotations"] = _delete_annotations(
@@ -650,6 +826,50 @@ def reset_workspace_data(
             deleted["harmonization_logs"] = _delete_scoped_model(db, models.HarmonizationLog, org_id)
             deleted["raw_entities"] = _delete_scoped_model(db, models.RawEntity, org_id)
 
+        _hard_delete_reset_rows(
+            db,
+            org_id=org_id,
+            entity_ids=entity_ids,
+            authority_ids=authority_ids,
+            rule_ids=rule_ids,
+            harmonization_ids=harmonization_ids,
+            store_ids=store_ids,
+            workflow_ids=workflow_ids,
+            audit_ids=audit_ids,
+            existing_tables=existing_tables,
+        )
+        db.commit()
+        _hard_delete_reset_rows(
+            db,
+            org_id=org_id,
+            entity_ids=entity_ids,
+            authority_ids=authority_ids,
+            rule_ids=rule_ids,
+            harmonization_ids=harmonization_ids,
+            store_ids=store_ids,
+            workflow_ids=workflow_ids,
+            audit_ids=audit_ids,
+            existing_tables=existing_tables,
+        )
+        _delete_reset_dependencies_orm(
+            db,
+            entity_ids=entity_ids,
+            authority_ids=authority_ids,
+            harmonization_ids=harmonization_ids,
+            store_ids=store_ids,
+            workflow_ids=workflow_ids,
+            audit_ids=audit_ids,
+        )
+        _reset_workspace_counters_sql(db, org_id=org_id, store_ids=store_ids)
+        _delete_reset_dependencies_orm(
+            db,
+            entity_ids=entity_ids,
+            authority_ids=authority_ids,
+            harmonization_ids=harmonization_ids,
+            store_ids=store_ids,
+            workflow_ids=workflow_ids,
+            audit_ids=audit_ids,
+        )
         db.commit()
     except Exception:
         db.rollback()

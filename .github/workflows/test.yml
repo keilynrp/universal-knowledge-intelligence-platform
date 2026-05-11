@@ -26,7 +26,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt -c requirements.lock
 
       - name: Run tests with coverage
         env:
@@ -38,7 +38,7 @@ jobs:
           DATABASE_URL: sqlite:///./test_ci.db
           ALLOWED_ORIGINS: "http://localhost:3004"
         run: |
-          pip install pytest-cov
+          pip install pytest-cov -c requirements.lock
           pytest backend/tests/ \
             --tb=short \
             --cov=backend \
