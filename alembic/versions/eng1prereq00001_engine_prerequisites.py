@@ -14,7 +14,12 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column('raw_entities', sa.Column('updated_at', sa.DateTime(), nullable=True))
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    raw_entity_columns = {column["name"] for column in inspector.get_columns("raw_entities")}
+    if "updated_at" not in raw_entity_columns:
+        op.add_column('raw_entities', sa.Column('updated_at', sa.DateTime(), nullable=True))
+
     # Partial unique indexes — PostgreSQL only (SQLite ignores WHERE clause)
     op.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS uq_raw_entities_canonical
@@ -55,4 +60,8 @@ def downgrade():
     op.execute("DROP INDEX IF EXISTS ix_raw_entities_canonical_lookup")
     op.execute("DROP INDEX IF EXISTS uq_raw_entities_canonical_global")
     op.execute("DROP INDEX IF EXISTS uq_raw_entities_canonical")
-    op.drop_column('raw_entities', 'updated_at')
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    raw_entity_columns = {column["name"] for column in inspector.get_columns("raw_entities")}
+    if "updated_at" in raw_entity_columns:
+        op.drop_column('raw_entities', 'updated_at')
