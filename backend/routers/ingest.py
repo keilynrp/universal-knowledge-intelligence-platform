@@ -761,6 +761,11 @@ async def upload_file(
             if mapped_field == "" or mapped_field is None and sk not in valid_model_keys:
                 if mapped_field != "":  # only store if not explicitly skipped
                     unmatched_data[sk] = val
+            elif mapped_field == "domain":
+                # The wizard's selected domain is authoritative for the batch.
+                # Source "domain" columns are retained as metadata so a blank or
+                # inconsistent cell cannot fragment dashboard metrics.
+                unmatched_data[sk] = val
             elif mapped_field in _VIRTUAL_MODEL_FIELDS:
                 _record_virtual_field(virtual_field_data, mapped_field, val)
             elif mapped_field:

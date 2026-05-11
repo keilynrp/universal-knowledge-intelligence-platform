@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "../contexts/AuthContext";
 import { useDomain } from "../contexts/DomainContext";
 import { useLanguage } from "../contexts/LanguageContext";
 
@@ -20,6 +21,8 @@ interface Domain {
     name: string;
     icon?: string;
     description?: string;
+    primary_entity?: string;
+    attributes?: unknown[];
 }
 
 export interface ImportResult {
@@ -97,6 +100,15 @@ function formatApiDetail(detail: unknown, fallback: string) {
 function translateOrFallback(t: (key: string) => string, key: string, fallback: string) {
     const value = t(key);
     return value === key ? fallback : value;
+}
+
+function slugifyDomainId(value: string) {
+    return value
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 64);
 }
 
 export function getSteps(t: (key: string) => string) {
@@ -515,28 +527,186 @@ export function StepDomain({
     onSelect: (id: string) => void;
 }) {
     const { t } = useLanguage();
+    const { user } = useAuth();
+    const { refreshDomains } = useDomain();
     const tr = (key: string, fallback: string) => translateOrFallback(t, key, fallback);
     const [domains, setDomains] = useState<Domain[]>([]);
+    const [showCreate, setShowCreate] = useState(false);
+    const [creating, setCreating] = useState(false);
+    const [createError, setCreateError] = useState<string | null>(null);
+    const [newName, setNewName] = useState("");
+    const [newId, setNewId] = useState("");
+    const [newDescription, setNewDescription] = useState("");
+    const [newEntity, setNewEntity] = useState("record");
+    const isAdmin = user?.role === "super_admin" || user?.role === "admin";
+
+    const selectedDomain = domains.find(domain => domain.id === selected);
+
+    const loadDomains = async () => {
+        try {
+            const response = await apiFetch("/domains");
+            if (!response.ok) {
+                return;
+            }
+            setDomains(await response.json() as Domain[]);
+        } catch {
+            // Ignore domain list failures and keep the wizard usable.
+        }
+    };
 
     useEffect(() => {
-        void (async () => {
-            try {
-                const response = await apiFetch("/domains");
-                if (!response.ok) {
-                    return;
-                }
-                setDomains(await response.json() as Domain[]);
-            } catch {
-                // Ignore domain list failures and keep the wizard usable.
-            }
-        })();
+        void loadDomains();
     }, []);
+
+    function handleNameChange(value: string) {
+        setNewName(value);
+        setNewId(current => current ? current : slugifyDomainId(value));
+    }
+
+    async function handleCreateDomain() {
+        const id = slugifyDomainId(newId || newName);
+        if (!id || !newName.trim() || !newDescription.trim() || !newEntity.trim()) {
+            setCreateError(tr("page.import.domain.create_required", "Name, ID, description, and primary entity are required."));
+            return;
+        }
+        setCreating(true);
+        setCreateError(null);
+        try {
+            const response = await apiFetch("/domains", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    id,
+                    name: newName.trim(),
+                    description: newDescription.trim(),
+                    primary_entity: newEntity.trim(),
+                    icon: "File",
+                    attributes: [
+                        { name: "primary_label", type: "string", label: "Primary Label", required: true, is_core: true },
+                        { name: "canonical_id", type: "string", label: "Canonical ID", required: false, is_core: true },
+                    ],
+                }),
+            });
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({ detail: "Could not create domain" })) as { detail?: unknown };
+                setCreateError(formatApiDetail(body.detail, tr("page.import.domain.create_failed", "Could not create domain.")));
+                return;
+            }
+            const created = await response.json() as Domain;
+            await refreshDomains();
+            await loadDomains();
+            onSelect(created.id);
+            setShowCreate(false);
+            setNewName("");
+            setNewId("");
+            setNewDescription("");
+            setNewEntity("record");
+        } catch (error: unknown) {
+            setCreateError(getErrorMessage(error, tr("page.import.domain.create_network", "Network error while creating the domain.")));
+        } finally {
+            setCreating(false);
+        }
+    }
+
+    useEffect(() => {
+        if (!selectedDomain && domains.length > 0 && !domains.some(domain => domain.id === selected)) {
+            const defaultDomain = domains.find(domain => domain.id === "default") ?? domains[0];
+            onSelect(defaultDomain.id);
+        }
+    }, [domains, onSelect, selected, selectedDomain]);
 
     return (
         <div className="space-y-4">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-                {tr("page.import.domain.help", "Select the domain to tag imported entities with. You can change this later in the entity list.")}
-            </p>
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-600 dark:text-indigo-300">
+                    {tr("page.import.domain.current_label", "Target domain")}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-indigo-950 dark:text-indigo-100">
+                    {selectedDomain ? `${selectedDomain.name} (${selectedDomain.id})` : selected}
+                </p>
+                <p className="mt-1 text-sm text-indigo-700 dark:text-indigo-300">
+                    {tr("page.import.domain.help", "Select the domain to tag imported entities with. You can change this later in the entity list.")}
+                </p>
+            </div>
+
+            {isAdmin && (
+                <div className="flex justify-end">
+                    <button
+                        type="button"
+                        onClick={() => setShowCreate(value => !value)}
+                        className="rounded-lg border border-indigo-200 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 dark:border-indigo-500/30 dark:text-indigo-300 dark:hover:bg-indigo-500/10"
+                    >
+                        {showCreate
+                            ? tr("common.cancel", "Cancel")
+                            : tr("page.import.domain.create_inline", "Create domain")}
+                    </button>
+                </div>
+            )}
+
+            {showCreate && isAdmin && (
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950/40">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">
+                            {tr("page.domains.form_name_label", "Name")}
+                            <input
+                                value={newName}
+                                onChange={event => handleNameChange(event.target.value)}
+                                className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                                placeholder={tr("page.domains.form_name_placeholder", "Research Intelligence")}
+                            />
+                        </label>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">
+                            {tr("page.domains.form_id_label", "Domain ID")}
+                            <input
+                                value={newId}
+                                onChange={event => setNewId(slugifyDomainId(event.target.value))}
+                                className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                                placeholder="research-intelligence"
+                            />
+                        </label>
+                    </div>
+                    <label className="mt-3 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                        {tr("page.domains.form_description_label", "Description")}
+                        <textarea
+                            value={newDescription}
+                            onChange={event => setNewDescription(event.target.value)}
+                            className="mt-1 min-h-20 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                            placeholder={tr("page.domains.form_description_placeholder", "What kind of dataset belongs here?")}
+                        />
+                    </label>
+                    <label className="mt-3 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                        {tr("page.domains.form_entity_label", "Primary entity")}
+                        <input
+                            value={newEntity}
+                            onChange={event => setNewEntity(event.target.value)}
+                            className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                            placeholder="publication"
+                        />
+                    </label>
+                    {createError && (
+                        <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 dark:border-red-500/30 dark:bg-red-500/5 dark:text-red-300">
+                            {createError}
+                        </p>
+                    )}
+                    <button
+                        type="button"
+                        onClick={handleCreateDomain}
+                        disabled={creating}
+                        className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                        {creating
+                            ? tr("page.domains.creating", "Creating...")
+                            : tr("page.domains.create_button", "Create domain")}
+                    </button>
+                </div>
+            )}
+
+            {!isAdmin && (
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {tr("page.import.domain.admin_only", "Need a new domain? Ask an administrator to create it before importing.")}
+                </p>
+            )}
+
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {domains.map(domain => {
                     const icon = domain.icon || DOMAIN_ICONS[domain.id] || "File";
@@ -554,6 +724,9 @@ export function StepDomain({
                             <span className="text-2xl">{icon}</span>
                             <span className={`mt-2 text-sm font-semibold ${isSelected ? "text-indigo-700 dark:text-indigo-300" : "text-gray-800 dark:text-gray-200"}`}>
                                 {domain.name}
+                            </span>
+                            <span className="mt-0.5 font-mono text-[10px] text-gray-400 dark:text-gray-500">
+                                {domain.id}
                             </span>
                             {domain.description && (
                                 <span className="mt-0.5 line-clamp-2 text-[11px] text-gray-400 dark:text-gray-500">

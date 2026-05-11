@@ -12,6 +12,7 @@ from backend.quality_scorer import _fetch_lookups, score_entity
 from backend.services.impact_projection import ImpactProjectionService
 from backend.services.pattern_discovery import PatternDiscoveryService
 from backend.tenant_access import scope_query_to_org
+from backend.schema_registry import registry
 
 
 class AnalyticsService:
@@ -35,6 +36,13 @@ class AnalyticsService:
         "production",
         "work",
     }
+
+    @staticmethod
+    def _domain_name(domain_id: str) -> str:
+        if domain_id == "all":
+            return "All domains"
+        domain = registry.get_domain(domain_id)
+        return domain.name if domain else domain_id
 
     @classmethod
     def _extract_temporal_year(
@@ -362,6 +370,7 @@ class AnalyticsService:
 
         snapshot = {
             "domain_id": domain_id,
+            "domain_name": cls._domain_name(domain_id),
             "kpis": {
                 "total_entities": total_entities,
                 "enriched_count": enriched_count,
