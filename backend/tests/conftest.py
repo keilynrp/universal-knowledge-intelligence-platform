@@ -75,12 +75,18 @@ database.SessionLocal = TestingSessionLocal
 
 # Override modules that imported engine/SessionLocal directly.
 import backend.audit as _audit_module  # noqa: E402
+import backend.analyzers.author_metrics as _author_metrics_module  # noqa: E402
+import backend.analyzers.coauthorship as _coauthorship_module  # noqa: E402
 import backend.analyzers.correlation as _correlation_module  # noqa: E402
+import backend.analyzers.geographic as _geographic_module  # noqa: E402
 import backend.analyzers.topic_modeling as _topic_modeling_module  # noqa: E402
 import backend.olap as _olap_module  # noqa: E402
 import backend.routers.analytics as _analytics_router  # noqa: E402
 _audit_module.SessionLocal = TestingSessionLocal
+_author_metrics_module.engine = test_engine
+_coauthorship_module.engine = test_engine
 _correlation_module.engine = test_engine
+_geographic_module.engine = test_engine
 _topic_modeling_module.engine = test_engine
 _olap_module.engine = test_engine
 

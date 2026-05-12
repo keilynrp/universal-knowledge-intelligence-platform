@@ -94,6 +94,35 @@ def _atomic_claim_next(db: Session) -> int | None:
     return entity_id
 
 
+def _extract_and_cache_country(entity: models.RawEntity) -> None:
+    """Extract country from affiliation in attributes_json and cache it."""
+    import json
+    from backend.analyzers.geographic import extract_country
+
+    try:
+        attrs = json.loads(entity.attributes_json or "{}") or {}
+    except (ValueError, TypeError):
+        return
+
+    if attrs.get("extracted_country"):
+        return  # Already cached
+
+    affiliation = None
+    for key in ("affiliation", "affiliations", "institution"):
+        val = attrs.get(key)
+        if val:
+            affiliation = str(val) if not isinstance(val, str) else val
+            break
+
+    if not affiliation:
+        return
+
+    country_code = extract_country(affiliation)
+    if country_code:
+        attrs["extracted_country"] = country_code
+        entity.attributes_json = json.dumps(attrs)
+
+
 def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEntity:
     """
     Synchronously enriches a single record by title or DOI.
@@ -164,6 +193,9 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
             )
             entity.enrichment_source = source
             entity.enrichment_status = "completed"
+
+            # Extract and cache country from affiliation data
+            _extract_and_cache_country(entity)
         else:
             # Fallback: try active web scraper configs
             scraped = enrich_with_web_scrapers(db, entity)

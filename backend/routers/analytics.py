@@ -23,9 +23,13 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.analyzers.author_metrics import author_detail, author_rankings
+from backend.analyzers.coauthorship import coauthorship_network
 from backend.analyzers.correlation import CorrelationAnalyzer
+from backend.analyzers.geographic import geographic_analysis, geographic_heatmap
 from backend.analyzers.roi_calculator import ROIParams, simulate as _roi_simulate
 from backend.analyzers.topic_modeling import TopicAnalyzer
+from backend.analyzers.trend_analysis import TrendAnalyzer
 from backend.enterprise_readiness import get_enterprise_readiness_report
 from backend.institutional_benchmarks import evaluate_benchmark, list_benchmark_profiles
 from backend.logging_utils import current_log_format
@@ -45,6 +49,7 @@ router = APIRouter(tags=["analytics"])
 
 _topic_analyzer = TopicAnalyzer()
 _correlation_analyzer = CorrelationAnalyzer()
+_trend_analyzer = TrendAnalyzer()
 
 # ── In-memory TTL analytics cache (Sprint 83) ─────────────────────────────────
 
@@ -257,6 +262,143 @@ def analyzer_correlation(
         raise HTTPException(status_code=500, detail="Analysis error")
 
 
+# ── Trend Topics ─────────────────────────────────────────────────────────────
+
+@router.get("/analyzers/trends/{domain_id}")
+def analyzer_trends(
+    domain_id: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    min_year: int | None = Query(default=None),
+    max_year: int | None = Query(default=None),
+    min_years: int = Query(default=3, ge=1, le=20),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Concept frequency trends with slope-based classification (emerging/declining/stable)."""
+    org_id = resolve_request_org_id(db, current_user)
+    _key = f"trends_{domain_id}_{scope_tag(org_id)}_{limit}_{min_year}_{max_year}_{min_years}"
+    cached = _analytics_cache.get(_key)
+    if cached is not None:
+        return cached
+    try:
+        result = _trend_analyzer.trends(
+            domain_id, limit=limit, min_year=min_year, max_year=max_year,
+            min_years=min_years, org_id=org_id,
+        )
+        _analytics_cache.set(_key, result)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception:
+        logger.exception("analyzer_trends error for domain '%s'", domain_id)
+        raise HTTPException(status_code=500, detail="Analysis error")
+
+
+# ── Author Productivity ──────────────────────────────────────────────────────
+
+@router.get("/analyzers/authors/{domain_id}/{record_id}")
+def analyzer_author_detail(
+    domain_id: str,
+    record_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Full productivity detail for a single author by authority record ID."""
+    org_id = resolve_request_org_id(db, current_user)
+    try:
+        result = author_detail(domain_id, record_id, org_id=org_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    if result is None:
+        raise HTTPException(status_code=404, detail="Author not found in this domain")
+    return result
+
+
+@router.get("/analyzers/authors/{domain_id}")
+def analyzer_authors(
+    domain_id: str,
+    sort_by: str = Query(default="h_index", pattern="^(h_index|total_publications|total_citations)$"),
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Ranked list of authors with h-index and productivity metrics."""
+    org_id = resolve_request_org_id(db, current_user)
+    _key = f"authors_{domain_id}_{scope_tag(org_id)}_{sort_by}_{limit}"
+    cached = _analytics_cache.get(_key)
+    if cached is not None:
+        return cached
+    try:
+        result = author_rankings(domain_id, sort_by=sort_by, limit=limit, org_id=org_id)
+        _analytics_cache.set(_key, result)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception:
+        logger.exception("analyzer_authors error for domain '%s'", domain_id)
+        raise HTTPException(status_code=500, detail="Analysis error")
+
+
+# ── Geographic / Country Analysis ────────────────────────────────────────────
+
+@router.get("/analyzers/geographic/{domain_id}")
+def analyzer_geographic(
+    domain_id: str,
+    sort_by: str = Query(default="entity_count", pattern="^(entity_count|citation_sum)$"),
+    limit: int | None = Query(default=None, ge=1, le=200),
+    include_collaboration: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Per-country aggregation with optional international collaboration analysis."""
+    org_id = resolve_request_org_id(db, current_user)
+    _key = f"geo_{domain_id}_{scope_tag(org_id)}_{sort_by}_{limit}_{include_collaboration}"
+    cached = _analytics_cache.get(_key)
+    if cached is not None:
+        return cached
+    try:
+        result = geographic_analysis(
+            domain_id, sort_by=sort_by, limit=limit,
+            include_collaboration=include_collaboration, org_id=org_id,
+        )
+        _analytics_cache.set(_key, result)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception:
+        logger.exception("analyzer_geographic error for domain '%s'", domain_id)
+        raise HTTPException(status_code=500, detail="Analysis error")
+
+
+# ── Co-authorship Network ────────────────────────────────────────────────────
+
+@router.get("/analyzers/coauthorship/{domain_id}")
+def analyzer_coauthorship(
+    domain_id: str,
+    min_weight: int = Query(default=1, ge=1),
+    limit: int | None = Query(default=None, ge=1, le=500),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Co-authorship network with degree centrality and community detection."""
+    org_id = resolve_request_org_id(db, current_user)
+    _key = f"coauth_{domain_id}_{scope_tag(org_id)}_{min_weight}_{limit}"
+    cached = _analytics_cache.get(_key)
+    if cached is not None:
+        return cached
+    try:
+        result = coauthorship_network(
+            domain_id, min_weight=min_weight, limit=limit, org_id=org_id,
+        )
+        _analytics_cache.set(_key, result)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception:
+        logger.exception("analyzer_coauthorship error for domain '%s'", domain_id)
+        raise HTTPException(status_code=500, detail="Analysis error")
+
+
 @router.get("/dashboard/summary", tags=["analytics"])
 def dashboard_summary(
     domain_id: str = Query(default="default", min_length=1, max_length=64),
@@ -286,6 +428,12 @@ def dashboard_summary(
         top_n_concepts=30,
         top_n_entities=10,
     )
+    # Enrich dashboard with geographic heatmap
+    try:
+        result["geographic_heatmap"] = geographic_heatmap(domain_id, org_id=org_id)
+    except Exception:
+        result["geographic_heatmap"] = []
+
     _dashboard_cache.set(_key, result)
     return result
 
@@ -401,6 +549,9 @@ def invalidate_analytics_for_domain(domain_id: str) -> None:
     _analytics_cache.invalidate(f"cooccurrence_{domain_id}_")
     _analytics_cache.invalidate(f"clusters_{domain_id}_")
     _analytics_cache.invalidate(f"correlation_{domain_id}_")
+    _analytics_cache.invalidate(f"trends_{domain_id}_")
+    _analytics_cache.invalidate(f"authors_{domain_id}_")
+    _analytics_cache.invalidate(f"geo_{domain_id}_")
     _dashboard_cache.invalidate(f"dashboard_{domain_id}")
 
 
