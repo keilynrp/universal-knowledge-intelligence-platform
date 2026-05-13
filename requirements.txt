@@ -18,7 +18,7 @@ pytest
 pytest-asyncio
 httpx<0.28.0
 scholarly
-sphinx-rtd-theme<3.1  # pin: 3.1+ has sphinx resolution conflict in CI
+sphinx-rtd-theme<3.1  # pin: 3.1 requires sphinx 9.1 which lacks wheels on some CI runners
 numpy
 scipy
 # ── Sprint 1: Security ──────────────────────────────────────
