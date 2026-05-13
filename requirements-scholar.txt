@@ -1,0 +1,4 @@
+# Optional: Google Scholar scraping adapter.
+# Install only when SCHOLAR_ENABLED=1 in production.
+# Not needed for tests or standard development.
+scholarly

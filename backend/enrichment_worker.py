@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.adapters.enrichment.openalex import OpenAlexAdapter
-from backend.adapters.enrichment.scholar import ScholarAdapter
 from backend.adapters.enrichment.scopus import ScopusAdapter
 from backend.adapters.enrichment.wos import WebOfScienceAdapter
 from backend.circuit_breaker import CircuitBreaker, CircuitOpenError
@@ -27,7 +26,13 @@ def _scholar_use_free_proxies() -> bool:
 adapter_wos = WebOfScienceAdapter(api_key=os.environ.get("WOS_API_KEY"))
 adapter_scopus = ScopusAdapter(api_key=os.environ.get("SCOPUS_API_KEY"))
 adapter_openalex = OpenAlexAdapter()
-adapter_scholar = ScholarAdapter(use_free_proxies=_scholar_use_free_proxies()) if _scholar_enabled() else None
+adapter_scholar = None
+if _scholar_enabled():
+    try:
+        from backend.adapters.enrichment.scholar import ScholarAdapter
+        adapter_scholar = ScholarAdapter(use_free_proxies=_scholar_use_free_proxies())
+    except ImportError:
+        logger.warning("SCHOLAR_ENABLED=1 but 'scholarly' is not installed. Install via: pip install -r requirements-scholar.txt")
 
 # Circuit breakers — trip after 3 consecutive failures; recover after 60 s
 _cb_wos = CircuitBreaker(name="wos", failure_threshold=3, recovery_timeout=60)

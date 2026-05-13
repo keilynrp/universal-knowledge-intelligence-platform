@@ -17,8 +17,8 @@ cssselect
 pytest
 pytest-asyncio
 httpx<0.28.0
-scholarly
-sphinx-rtd-theme<3.1  # pin: 3.1 requires sphinx 9.1 which lacks wheels on some CI runners
+# scholarly is installed separately via requirements-scholar.txt
+# only when SCHOLAR_ENABLED=1 (it pulls sphinx/selenium/heavy deps)
 numpy
 scipy
 # ── Sprint 1: Security ──────────────────────────────────────
