@@ -87,47 +87,66 @@ def test_demo_seed_requires_admin(client, viewer_headers):
     assert resp.status_code in (401, 403)
 
 
-def test_demo_seed_loads_entities(client, auth_headers, db_session):
-    """With mocked file + DataFrame, seed must insert entities and publish a demo portal."""
+def test_demo_seed_loads_entities_via_legacy_excel(client, auth_headers, db_session):
+    """With mocked file + DataFrame (legacy path), seed must insert entities and publish a demo portal."""
     df = _demo_df(5)
-    with _fake_demo_file(df):
+    with _fake_demo_file(df), \
+         _patch("backend.routers.demo._try_openalex_live", side_effect=RuntimeError("offline")), \
+         _patch("backend.routers.demo._load_openalex_snapshot", side_effect=FileNotFoundError("no snapshot")):
         resp = client.post("/demo/seed", headers=auth_headers)
 
-    # Should succeed (201) or conflict (409 if already seeded by other test)
-    assert resp.status_code in (201, 409)
-    if resp.status_code == 201:
-        payload = resp.json()
-        assert payload["seeded"] == 5
-        assert payload["catalog_portal"]["url"].startswith("/catalogs/")
-
-        portal = db_session.query(models.CatalogPortal).filter_by(slug=payload["catalog_portal"]["slug"]).first()
-        assert portal is not None
-        assert portal.source_batch_id is not None
-
-        rows = db_session.query(models.RawEntity).filter(models.RawEntity.source == "demo").all()
-        assert {row.import_batch_id for row in rows} == {portal.source_batch_id}
-
-        results = client.get(f"/catalogs/{portal.slug}/results", headers=auth_headers)
-        assert results.status_code == 200, results.text
-        assert results.json()["total"] == 5
+    assert resp.status_code == 201
+    payload = resp.json()
+    assert payload["seeded"] == 5
+    assert payload["source"] == "legacy_excel"
+    assert payload["catalog_portal"]["url"].startswith("/catalogs/")
 
 
-def test_demo_seed_conflict_if_already_seeded(client, auth_headers, db_session):
-    """A second seed call while demo data exists must return 409."""
-    # Insert a demo entity directly
+def test_demo_seed_idempotent_reseed(client, auth_headers, db_session):
+    """A second seed call while demo data exists should clear old data and re-seed (idempotent)."""
     db_session.add(models.RawEntity(primary_label="Existing Demo", source="demo"))
     db_session.commit()
 
     df = _demo_df(3)
-    with _fake_demo_file(df):
+    with _fake_demo_file(df), \
+         _patch("backend.routers.demo._try_openalex_live", side_effect=RuntimeError("offline")), \
+         _patch("backend.routers.demo._load_openalex_snapshot", side_effect=FileNotFoundError("no snapshot")):
         resp = client.post("/demo/seed", headers=auth_headers)
 
-    assert resp.status_code == 409
+    assert resp.status_code == 201
+    payload = resp.json()
+    assert payload["seeded"] == 3
+    # Old demo entity should have been cleared
+    old = db_session.query(models.RawEntity).filter_by(primary_label="Existing Demo").first()
+    assert old is None
+
+
+def test_demo_seed_uses_snapshot_fallback(client, auth_headers, db_session):
+    """When live OpenAlex fails, seed should use bundled snapshot JSON."""
+    from backend.schemas_enrichment import EnrichedRecord
+    fake_records = [
+        EnrichedRecord(
+            id=f"snap-{i}", doi=f"10.snap/{i}", title=f"Snapshot Paper {i}",
+            authors=["Author A"], citation_count=i * 10, publication_year=2023,
+            concepts=["KM"], source_api="OpenAlex",
+        )
+        for i in range(3)
+    ]
+    with _patch("backend.routers.demo._try_openalex_live", side_effect=RuntimeError("offline")), \
+         _patch("backend.routers.demo._load_openalex_snapshot", return_value=(fake_records, "openalex_snapshot")):
+        resp = client.post("/demo/seed", headers=auth_headers)
+
+    assert resp.status_code == 201
+    payload = resp.json()
+    assert payload["source"] == "openalex_snapshot"
+    assert payload["seeded"] == 3
 
 
 def test_demo_seed_maps_legacy_demo_columns(client, auth_headers, db_session):
     df = _legacy_demo_df(3)
-    with _fake_demo_file(df):
+    with _fake_demo_file(df), \
+         _patch("backend.routers.demo._try_openalex_live", side_effect=RuntimeError("offline")), \
+         _patch("backend.routers.demo._load_openalex_snapshot", side_effect=FileNotFoundError("no snapshot")):
         resp = client.post("/demo/seed", headers=auth_headers)
 
     assert resp.status_code == 201

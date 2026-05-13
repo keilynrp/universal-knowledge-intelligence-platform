@@ -26,6 +26,9 @@ router = APIRouter()
 
 # Relative to project root (where the process is started from)
 _DEMO_FILE = Path("data/demo/demo_entities.xlsx")
+_SNAPSHOT_FILE = Path("data/demo/openalex_snapshot.json")
+_OPENALEX_CONCEPT_ID = "C41008148"  # "Knowledge Management"
+_OPENALEX_DEMO_LIMIT = 1_000
 
 _SEED_CHUNK = 500
 _DEMO_BATCH_SOURCE_TYPE = "demo"
@@ -233,22 +236,118 @@ def demo_status(
 
 # ── POST /demo/seed ───────────────────────────────────────────────────────────
 
+def _try_openalex_live():
+    """Try fetching demo records from live OpenAlex API. Returns (records, source_label) or raises."""
+    from backend.adapters.enrichment.openalex import OpenAlexAdapter
+    adapter = OpenAlexAdapter()
+    records = adapter.search_bulk(
+        query="knowledge management",
+        filters={"concept_id": _OPENALEX_CONCEPT_ID},
+        limit=_OPENALEX_DEMO_LIMIT,
+    )
+    if not records:
+        raise RuntimeError("OpenAlex returned zero results")
+    return records, "openalex_live"
+
+
+def _load_openalex_snapshot():
+    """Load bundled snapshot JSON as EnrichedRecord objects."""
+    from backend.schemas_enrichment import EnrichedRecord
+    if not _SNAPSHOT_FILE.exists():
+        raise FileNotFoundError(f"Snapshot not found: {_SNAPSHOT_FILE}")
+    data = json.loads(_SNAPSHOT_FILE.read_text(encoding="utf-8"))
+    records = []
+    for item in data:
+        records.append(EnrichedRecord(
+            id=item.get("id", "unknown"),
+            doi=item.get("doi"),
+            title=item.get("title", "Untitled"),
+            authors=item.get("authors", []),
+            citation_count=item.get("citation_count", 0),
+            publication_year=item.get("year") or item.get("publication_year"),
+            concepts=item.get("concepts", []),
+            publisher=item.get("publisher"),
+            is_open_access=item.get("is_open_access", False),
+            source_api="OpenAlex",
+        ))
+    return records, "openalex_snapshot"
+
+
+def _seed_from_enriched_records(
+    db: Session,
+    records,
+    current_user: models.User,
+    org_id,
+) -> tuple[int, models.CatalogPortal]:
+    """Ingest EnrichedRecord list as demo entities and return (count, portal)."""
+    from backend.routers.api_import import _ingest_records
+    batch, portal = _create_demo_batch_and_portal(
+        db, current_user=current_user, total_rows=len(records),
+    )
+    inserted = _ingest_records(db, records, "science", "demo", org_id)
+    # Tag all just-inserted demo entities with the batch id
+    db.execute(
+        models.RawEntity.__table__.update()
+        .where(models.RawEntity.source == "demo")
+        .where(models.RawEntity.import_batch_id == None)  # noqa: E711
+        .values(import_batch_id=batch.id, org_id=batch.org_id)
+    )
+    db.commit()
+    return inserted, portal
+
+
 @router.post("/demo/seed", status_code=201, tags=["demo"])
 def demo_seed(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_role("super_admin", "admin")),
 ):
-    """Load the pre-generated demo dataset into the database."""
+    """
+    Seed demo data from live OpenAlex API (preferred) or bundled snapshot fallback.
+    Clears any existing demo entities first for idempotency.
+    Falls back to legacy Excel file if neither OpenAlex source is available.
+    """
+    # Idempotent: clear existing demo data before re-seeding
+    existing_count = _demo_count(db)
+    if existing_count > 0:
+        db.query(models.RawEntity).filter(models.RawEntity.source == "demo").delete(synchronize_session=False)
+        db.commit()
+        logger.info("Demo seed: cleared %d existing demo entities", existing_count)
+
+    org_id = resolve_request_org_id(db, current_user)
+
+    # Strategy 1: Live OpenAlex query
+    try:
+        records, data_source = _try_openalex_live()
+        seeded, portal = _seed_from_enriched_records(db, records, current_user, org_id)
+        logger.info("Demo seed: %d entities from %s", seeded, data_source)
+        return {
+            "seeded": seeded,
+            "source": data_source,
+            "message": f"Demo dataset loaded: {seeded} entities from live OpenAlex.",
+            "catalog_portal": {"title": portal.title, "slug": portal.slug, "url": f"/catalogs/{portal.slug}"},
+        }
+    except Exception as exc:
+        logger.info("Live OpenAlex unavailable (%s), trying snapshot fallback", exc)
+
+    # Strategy 2: Bundled snapshot JSON
+    try:
+        records, data_source = _load_openalex_snapshot()
+        seeded, portal = _seed_from_enriched_records(db, records, current_user, org_id)
+        logger.info("Demo seed: %d entities from %s", seeded, data_source)
+        return {
+            "seeded": seeded,
+            "source": data_source,
+            "message": f"Demo dataset loaded: {seeded} entities from bundled snapshot.",
+            "catalog_portal": {"title": portal.title, "slug": portal.slug, "url": f"/catalogs/{portal.slug}"},
+        }
+    except Exception as exc:
+        logger.info("Snapshot fallback unavailable (%s), trying legacy Excel", exc)
+
+    # Strategy 3: Legacy Excel file (backwards compat)
     if not _DEMO_FILE.exists():
         raise HTTPException(
             status_code=404,
-            detail=f"Demo file not found at {_DEMO_FILE}. Run scripts/generate_demo_dataset.py first.",
-        )
-
-    if _demo_count(db) > 0:
-        raise HTTPException(
-            status_code=409,
-            detail="Demo data already seeded. Call DELETE /demo/reset first.",
+            detail="No demo data source available. Provide data/demo/openalex_snapshot.json or data/demo/demo_entities.xlsx.",
         )
 
     try:
@@ -277,15 +376,12 @@ def demo_seed(
         db.commit()
         seeded += len(chunk)
 
-    logger.info("Demo seed: %d entities inserted", seeded)
+    logger.info("Demo seed: %d entities from legacy Excel", seeded)
     return {
         "seeded": seeded,
+        "source": "legacy_excel",
         "message": f"Demo dataset loaded: {seeded} entities ready.",
-        "catalog_portal": {
-            "title": portal.title,
-            "slug": portal.slug,
-            "url": f"/catalogs/{portal.slug}",
-        },
+        "catalog_portal": {"title": portal.title, "slug": portal.slug, "url": f"/catalogs/{portal.slug}"},
     }
 
 

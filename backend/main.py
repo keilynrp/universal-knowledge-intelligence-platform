@@ -29,6 +29,7 @@ from backend.routers import (
     ai_rag,
     agentic_chat,
     alert_channels,
+    api_import,
     analytics,
     annotations,
     api_keys,
@@ -358,6 +359,7 @@ app.include_router(sales_deck.router)
 app.include_router(organizations.router)
 app.include_router(transformations.router)
 app.include_router(scientific_import.router)
+app.include_router(api_import.router)
 app.include_router(scrapers.router)
 app.include_router(onboarding.router)
 app.include_router(widgets.router)

@@ -1,6 +1,7 @@
+import time
 import urllib.parse
-from typing import List, Optional
-import httpx # Installed earlier
+from typing import Dict, List, Optional
+import httpx
 import re
 
 from backend.schemas_enrichment import EnrichedRecord
@@ -141,9 +142,85 @@ class OpenAlexAdapter(BaseScientometricAdapter):
             "sort": "cited_by_count:desc" # Defaulting to their best works
         })
         response = self.client.get(self.BASE_URL, params=params)
-        
+
         if response.status_code != 200:
             return []
 
         results = response.json().get("results", [])
         return [self._parse_record(r) for r in results]
+
+    _BULK_MAX = 1_000
+    _BULK_PAGE_SIZE = 200
+    _BULK_INTER_PAGE_DELAY = 0.2  # seconds — polite pool etiquette
+
+    def search_bulk(
+        self,
+        query: str,
+        filters: Optional[Dict[str, str]] = None,
+        limit: int = 100,
+    ) -> List[EnrichedRecord]:
+        """
+        Multi-page bulk collection from OpenAlex using cursor pagination.
+
+        Supported filters:
+          - "author":      maps to filter=author.display_name.search:<value>
+          - "institution": maps to filter=authorships.institutions.display_name.search:<value>
+          - "issn":        maps to filter=primary_location.source.issn:<value>
+          - "concept_id":  maps to filter=concepts.id:<value>  (e.g. "C41008148")
+
+        Polite-pool etiquette: mailto= is already added by _build_params; a 0.2s
+        inter-page delay is applied to stay within the fast lane.
+        """
+        limit = min(limit, self._BULK_MAX)
+        filters = filters or {}
+
+        # Build filter string
+        filter_parts: List[str] = []
+        if "author" in filters:
+            filter_parts.append(f"author.display_name.search:{filters['author']}")
+        if "institution" in filters:
+            filter_parts.append(
+                f"authorships.institutions.display_name.search:{filters['institution']}"
+            )
+        if "issn" in filters:
+            filter_parts.append(f"primary_location.source.issn:{filters['issn']}")
+        if "concept_id" in filters:
+            filter_parts.append(f"concepts.id:{filters['concept_id']}")
+
+        collected: List[EnrichedRecord] = []
+        cursor = "*"
+
+        while len(collected) < limit:
+            per_page = min(self._BULK_PAGE_SIZE, limit - len(collected))
+            params = self._build_params(
+                {
+                    "search": query,
+                    "per-page": per_page,
+                    "cursor": cursor,
+                    **({"filter": ",".join(filter_parts)} if filter_parts else {}),
+                }
+            )
+
+            try:
+                response = self.client.get(self.BASE_URL, params=params)
+            except Exception:
+                break
+
+            if response.status_code != 200:
+                break
+
+            body = response.json()
+            results = body.get("results", [])
+            if not results:
+                break
+
+            collected.extend(self._parse_record(r) for r in results)
+
+            next_cursor = body.get("meta", {}).get("next_cursor")
+            if not next_cursor:
+                break
+            cursor = next_cursor
+
+            time.sleep(self._BULK_INTER_PAGE_DELAY)
+
+        return collected[:limit]
