@@ -29,6 +29,7 @@ from backend.authority.base import ResolveContext as _AuthorityContext
 from backend.authority.hierarchical_fallback import apply_hierarchical_fallback
 from backend.authority.query_reformulation import run_author_query_reformulation
 from backend.authority.resolver import resolve_all as _authority_resolve_all
+from backend.authority.resolver import resolve_all_via_engine as _authority_resolve_engine
 from backend.database import get_db
 from backend.routers.deps import (
     _audit,
@@ -263,7 +264,29 @@ def resolve_authority(
         doi=payload.context_doi,
         year=payload.context_year,
     )
-    candidates = _authority_resolve_all(payload.value, payload.entity_type.value, ctx)
+    # Try engine delegation first, fall back to Python resolvers
+    engine_client = getattr(request.app.state, "engine_client", None)
+    engine_candidates = None
+    if engine_client:
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Already in an async context — can't use run_until_complete
+                engine_candidates = None
+            else:
+                engine_candidates = loop.run_until_complete(
+                    _authority_resolve_engine(
+                        payload.value, payload.entity_type.value, ctx, engine_client
+                    )
+                )
+        except Exception:
+            engine_candidates = None
+
+    if engine_candidates is not None:
+        candidates = engine_candidates
+    else:
+        candidates = _authority_resolve_all(payload.value, payload.entity_type.value, ctx)
     candidates = apply_hierarchical_fallback(payload.value, payload.entity_type.value, candidates)
 
     records = []

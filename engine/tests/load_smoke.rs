@@ -159,6 +159,7 @@ async fn graph_materialization_large_batch_postgres_smoke() {
         domain: "science".to_string(),
         publications: make_publications(n),
         options: Default::default(),
+        payload: None,
     };
     let ctx = PipelineContext {
         pool: pool.clone(),

@@ -1,0 +1,51 @@
+{
+  "normalize": [
+    { "input": "García, José", "expected": "garcia jose" },
+    { "input": "  John   Doe  ", "expected": "john doe" },
+    { "input": "O'Brien", "expected": "o brien" },
+    { "input": "Müller", "expected": "muller" },
+    { "input": "Dr. John-Paul Smith Jr.", "expected": "dr john paul smith jr" }
+  ],
+  "reformat": [
+    { "input": "Smith, John", "expected": "John Smith" },
+    { "input": "John Smith", "expected": "John Smith" },
+    { "input": "García, José María", "expected": "José María García" }
+  ],
+  "variants": [
+    { "input": "Smith, John", "expected": ["john smith", "s john", "smith john"] },
+    { "input": "John Smith", "expected": ["j smith", "john smith"] },
+    { "input": "John Michael Smith", "expected": ["j m smith", "john michael smith"] }
+  ],
+  "scoring": [
+    {
+      "value": "John Smith", "source": "orcid", "id": "0000-0001",
+      "label": "John Smith", "orcid_hint": null, "affiliation": null, "description": null,
+      "expected_status": "exact_match",
+      "expected_total_min": 0.90,
+      "expected_breakdown": { "identifiers": 0.9, "name": 1.0, "affiliation": 0.0 }
+    },
+    {
+      "value": "John Smith", "source": "dbpedia", "id": "X",
+      "label": "Alice Jones", "orcid_hint": null, "affiliation": null, "description": null,
+      "expected_status": "unresolved",
+      "expected_total_max": 0.45,
+      "expected_breakdown": { "identifiers": 0.4 }
+    },
+    {
+      "value": "John Smith", "source": "orcid", "id": "0000-0001-2345-6789",
+      "label": "John Smith", "orcid_hint": "0000-0001-2345-6789",
+      "affiliation": null, "description": null,
+      "expected_status": "exact_match",
+      "expected_total_min": 0.99,
+      "expected_breakdown": { "identifiers": 1.0, "name": 1.0 }
+    },
+    {
+      "value": "John Smith", "source": "openalex", "id": "A1",
+      "label": "John Smith", "orcid_hint": null,
+      "affiliation": "MIT", "description": "MIT, Cambridge",
+      "expected_status": "exact_match",
+      "expected_total_min": 0.85,
+      "expected_breakdown": { "identifiers": 0.7, "name": 1.0, "affiliation": 1.0 }
+    }
+  ]
+}

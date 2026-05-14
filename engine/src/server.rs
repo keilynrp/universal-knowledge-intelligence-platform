@@ -5,11 +5,12 @@ use tonic::{Request, Response, Status};
 
 use crate::config::Config;
 use crate::jobs::{JobManager, JobStatus};
-use crate::pipelines::{PipelineContext, PipelineInput};
+use crate::pipelines::{ComputePayload, ComputeResult, PipelineCategory, PipelineContext, PipelineInput};
 use crate::progress::ProgressTracker;
 use crate::proto::{
-    engine_server::Engine, HealthRequest, HealthResponse, JobAccepted, JobStatusRequest,
-    JobStatusResponse, ProcessRequest, ProcessResponse, ProcessResult,
+    engine_server::Engine, process_request, process_response, HealthRequest, HealthResponse,
+    JobAccepted, JobStatusRequest, JobStatusResponse, JobSummary, ListJobsRequest,
+    ListJobsResponse, ProcessRequest, ProcessResponse, ProcessResult,
     ProgressEvent as ProtoProgressEvent,
 };
 use crate::router::Router;
@@ -57,6 +58,18 @@ impl EngineService {
 
 /// Build a PipelineInput from a ProcessRequest proto message.
 fn build_pipeline_input(req: &ProcessRequest) -> PipelineInput {
+    let payload = req.payload.as_ref().map(|p| match p {
+        process_request::Payload::AuthorityRequest(r) => ComputePayload::Authority(r.clone()),
+        process_request::Payload::AnalyticsRequest(r) => ComputePayload::Analytics(r.clone()),
+        process_request::Payload::DisambiguationRequest(r) => {
+            ComputePayload::Disambiguation(r.clone())
+        }
+        process_request::Payload::NormalizationRequest(r) => {
+            ComputePayload::Normalization(r.clone())
+        }
+        process_request::Payload::ConnectorRequest(r) => ComputePayload::Connector(r.clone()),
+    });
+
     PipelineInput {
         job_id: req.job_id.clone(),
         import_batch_id: req.import_batch_id,
@@ -64,6 +77,7 @@ fn build_pipeline_input(req: &ProcessRequest) -> PipelineInput {
         domain: req.domain.clone(),
         publications: req.publications.clone(),
         options: req.options.clone(),
+        payload,
     }
 }
 
@@ -77,6 +91,31 @@ fn build_process_result(output: &crate::pipelines::PipelineOutput) -> ProcessRes
         keywords_extracted: output.keywords_extracted,
         entities_classified: output.entities_classified,
         counters: output.counters.clone(),
+    }
+}
+
+/// Convert ComputeResult to the proto typed_result oneof variant.
+fn build_typed_result(result: &ComputeResult) -> process_response::TypedResult {
+    match result {
+        ComputeResult::Authority(r) => process_response::TypedResult::AuthorityResult(r.clone()),
+        ComputeResult::Analytics(r) => process_response::TypedResult::AnalyticsResult(r.clone()),
+        ComputeResult::Disambiguation(r) => {
+            process_response::TypedResult::DisambiguationResult(r.clone())
+        }
+        ComputeResult::Normalization(r) => {
+            process_response::TypedResult::NormalizationResult(r.clone())
+        }
+        ComputeResult::Connector(r) => process_response::TypedResult::ConnectorResult(r.clone()),
+    }
+}
+
+fn status_str_to_proto(s: &str) -> crate::proto::Status {
+    match s {
+        "queued" => crate::proto::Status::Queued,
+        "running" => crate::proto::Status::Running,
+        "completed" => crate::proto::Status::Completed,
+        "failed" => crate::proto::Status::Failed,
+        _ => crate::proto::Status::Unknown,
     }
 }
 
@@ -118,6 +157,7 @@ impl Engine for EngineService {
         match pipeline.process(input, &ctx).await {
             Ok(output) => {
                 let duration_ms = start.elapsed().as_millis() as f64;
+                let typed_result = output.compute_result.as_ref().map(build_typed_result);
                 Ok(Response::new(ProcessResponse {
                     job_id,
                     pipeline: pipeline_name.clone(),
@@ -125,6 +165,7 @@ impl Engine for EngineService {
                     result: Some(build_process_result(&output)),
                     error: None,
                     duration_ms,
+                    typed_result,
                 }))
             }
             Err(e) => {
@@ -136,6 +177,7 @@ impl Engine for EngineService {
                     result: None,
                     error: Some(e.to_string()),
                     duration_ms,
+                    typed_result: None,
                 }))
             }
         }
@@ -167,7 +209,7 @@ impl Engine for EngineService {
             )));
         }
 
-        self.job_manager.create(&job_id, &pipeline_name);
+        self.job_manager.create(&job_id, &pipeline_name).await;
 
         // Create tracker before spawning so stream_progress can subscribe immediately.
         let tracker = Arc::new(ProgressTracker::new(job_id.clone()));
@@ -180,7 +222,7 @@ impl Engine for EngineService {
         let jid = job_id.clone();
 
         tokio::spawn(async move {
-            job_manager.set_running(&jid);
+            job_manager.set_running(&jid).await;
             let ctx = PipelineContext {
                 pool,
                 config,
@@ -188,8 +230,8 @@ impl Engine for EngineService {
             };
 
             match pipeline.process(input, &ctx).await {
-                Ok(output) => job_manager.set_completed(&jid, output),
-                Err(e) => job_manager.set_failed(&jid, e.to_string()),
+                Ok(output) => job_manager.set_completed(&jid, output).await,
+                Err(e) => job_manager.set_failed(&jid, e.to_string()).await,
             }
         });
 
@@ -205,9 +247,12 @@ impl Engine for EngineService {
         request: Request<JobStatusRequest>,
     ) -> Result<Response<JobStatusResponse>, Status> {
         let req = request.into_inner();
+
+        // Try in-memory cache first, then fall back to Postgres
         let job = self
             .job_manager
-            .get(&req.job_id)
+            .get_or_fetch(&req.job_id)
+            .await
             .ok_or_else(|| Status::not_found(format!("job '{}' not found", req.job_id)))?;
 
         let (status, error, result) = match &job.status {
@@ -228,6 +273,41 @@ impl Engine for EngineService {
             result,
             error,
         }))
+    }
+
+    async fn list_jobs(
+        &self,
+        request: Request<ListJobsRequest>,
+    ) -> Result<Response<ListJobsResponse>, Status> {
+        let req = request.into_inner();
+        let limit = if req.limit > 0 { req.limit as i64 } else { 50 };
+        let limit = limit.min(500);
+
+        let rows = self
+            .job_manager
+            .list_jobs(
+                req.pipeline_filter.as_deref(),
+                req.status_filter.as_deref(),
+                limit,
+            )
+            .await
+            .map_err(|e| Status::internal(format!("failed to list jobs: {}", e)))?;
+
+        let jobs = rows
+            .into_iter()
+            .map(|row| JobSummary {
+                job_id: row.job_id,
+                pipeline: row.pipeline,
+                status: status_str_to_proto(&row.status) as i32,
+                progress: row.progress,
+                error: row.error,
+                created_at: row.created_at.to_rfc3339(),
+                started_at: row.started_at.map(|t| t.to_rfc3339()),
+                completed_at: row.completed_at.map(|t| t.to_rfc3339()),
+            })
+            .collect();
+
+        Ok(Response::new(ListJobsResponse { jobs }))
     }
 
     async fn stream_progress(
@@ -272,12 +352,19 @@ impl Engine for EngineService {
         &self,
         _request: Request<HealthRequest>,
     ) -> Result<Response<HealthResponse>, Status> {
-        let pipelines = self
-            .router
-            .list_pipelines()
-            .into_iter()
-            .map(|s| s.to_string())
-            .collect();
+        let grouped = self.router.list_by_category();
+        let mut pipelines: Vec<String> = Vec::new();
+
+        if let Some(import) = grouped.get(&PipelineCategory::Import) {
+            for name in import {
+                pipelines.push(format!("import:{}", name));
+            }
+        }
+        if let Some(compute) = grouped.get(&PipelineCategory::Compute) {
+            for name in compute {
+                pipelines.push(format!("compute:{}", name));
+            }
+        }
 
         Ok(Response::new(HealthResponse {
             healthy: true,

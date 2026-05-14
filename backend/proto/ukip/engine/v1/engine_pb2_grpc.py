@@ -49,6 +49,11 @@ class EngineStub(object):
                 request_serializer=ukip_dot_engine_dot_v1_dot_engine__pb2.JobStatusRequest.SerializeToString,
                 response_deserializer=ukip_dot_engine_dot_v1_dot_engine__pb2.JobStatusResponse.FromString,
                 _registered_method=True)
+        self.ListJobs = channel.unary_unary(
+                '/ukip.engine.v1.Engine/ListJobs',
+                request_serializer=ukip_dot_engine_dot_v1_dot_engine__pb2.ListJobsRequest.SerializeToString,
+                response_deserializer=ukip_dot_engine_dot_v1_dot_engine__pb2.ListJobsResponse.FromString,
+                _registered_method=True)
         self.StreamProgress = channel.unary_stream(
                 '/ukip.engine.v1.Engine/StreamProgress',
                 request_serializer=ukip_dot_engine_dot_v1_dot_engine__pb2.JobStatusRequest.SerializeToString,
@@ -77,6 +82,12 @@ class EngineServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def GetJobStatus(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListJobs(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -111,6 +122,11 @@ def add_EngineServicer_to_server(servicer, server):
                     servicer.GetJobStatus,
                     request_deserializer=ukip_dot_engine_dot_v1_dot_engine__pb2.JobStatusRequest.FromString,
                     response_serializer=ukip_dot_engine_dot_v1_dot_engine__pb2.JobStatusResponse.SerializeToString,
+            ),
+            'ListJobs': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListJobs,
+                    request_deserializer=ukip_dot_engine_dot_v1_dot_engine__pb2.ListJobsRequest.FromString,
+                    response_serializer=ukip_dot_engine_dot_v1_dot_engine__pb2.ListJobsResponse.SerializeToString,
             ),
             'StreamProgress': grpc.unary_stream_rpc_method_handler(
                     servicer.StreamProgress,
@@ -204,6 +220,33 @@ class Engine(object):
             '/ukip.engine.v1.Engine/GetJobStatus',
             ukip_dot_engine_dot_v1_dot_engine__pb2.JobStatusRequest.SerializeToString,
             ukip_dot_engine_dot_v1_dot_engine__pb2.JobStatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListJobs(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ukip.engine.v1.Engine/ListJobs',
+            ukip_dot_engine_dot_v1_dot_engine__pb2.ListJobsRequest.SerializeToString,
+            ukip_dot_engine_dot_v1_dot_engine__pb2.ListJobsResponse.FromString,
             options,
             channel_credentials,
             insecure,

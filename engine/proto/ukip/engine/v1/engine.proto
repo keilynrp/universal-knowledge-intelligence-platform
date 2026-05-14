@@ -5,6 +5,7 @@ service Engine {
   rpc ProcessSync(ProcessRequest) returns (ProcessResponse);
   rpc ProcessAsync(ProcessRequest) returns (JobAccepted);
   rpc GetJobStatus(JobStatusRequest) returns (JobStatusResponse);
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
   rpc StreamProgress(JobStatusRequest) returns (stream ProgressEvent);
   rpc Health(HealthRequest) returns (HealthResponse);
 }
@@ -17,6 +18,15 @@ message ProcessRequest {
   string domain = 5;
   repeated Publication publications = 6;
   map<string, string> options = 7;
+
+  // Pipeline-specific typed payloads (v2 extension)
+  oneof payload {
+    AuthorityRequest authority_request = 20;
+    AnalyticsRequest analytics_request = 21;
+    DisambiguationRequest disambiguation_request = 22;
+    NormalizationRequest normalization_request = 23;
+    ConnectorRequest connector_request = 24;
+  }
 }
 
 message Publication {
@@ -58,6 +68,137 @@ message Identifier {
   string value = 2;
 }
 
+// --- Authority Resolution ---
+
+message AuthorityRequest {
+  string field_name = 1;
+  repeated string values = 2;
+  string entity_type = 3;
+  optional string context_affiliation = 4;
+  optional string context_orcid_hint = 5;
+  optional string context_doi = 6;
+  optional int32 context_year = 7;
+}
+
+message AuthorityResponse {
+  repeated AuthorityCandidateGroup groups = 1;
+}
+
+message AuthorityCandidateGroup {
+  string original_value = 1;
+  repeated AuthorityCandidate candidates = 2;
+}
+
+message AuthorityCandidate {
+  string source = 1;
+  string authority_id = 2;
+  string canonical_label = 3;
+  float confidence = 4;
+  map<string, float> score_breakdown = 5;
+  string resolution_status = 6;
+  repeated string merged_sources = 7;
+  repeated string aliases = 8;
+  optional string uri = 9;
+  optional string description = 10;
+}
+
+// --- Analytics (Topics + Correlation) ---
+
+message AnalyticsRequest {
+  string domain_id = 1;
+  string mode = 2;  // "topics", "cooccurrence", "clusters", "correlation"
+  int32 limit = 3;
+  repeated string field_filters = 4;
+}
+
+message AnalyticsResponse {
+  repeated TopicEntry topics = 1;
+  repeated CooccurrencePair cooccurrences = 2;
+  repeated TopicCluster clusters = 3;
+  repeated CorrelationPair correlations = 4;
+}
+
+message TopicEntry {
+  string concept = 1;
+  int32 count = 2;
+  float frequency = 3;
+}
+
+message CooccurrencePair {
+  string concept_a = 1;
+  string concept_b = 2;
+  int32 co_count = 3;
+  float pmi = 4;
+}
+
+message TopicCluster {
+  string seed_concept = 1;
+  repeated string members = 2;
+  int32 total_count = 3;
+}
+
+message CorrelationPair {
+  string field_a = 1;
+  string field_b = 2;
+  float cramers_v = 3;
+  string strength = 4;  // "strong", "moderate", "weak"
+}
+
+// --- Disambiguation ---
+
+message DisambiguationRequest {
+  string field_name = 1;
+  repeated string values = 2;
+  float similarity_threshold = 3;  // default 0.85
+}
+
+message DisambiguationResponse {
+  repeated DisambiguationCluster clusters = 1;
+}
+
+message DisambiguationCluster {
+  string canonical_value = 1;
+  repeated string variants = 2;
+  repeated float scores = 3;
+  int32 frequency = 4;
+}
+
+// --- Normalization ---
+
+message NormalizationRequest {
+  repeated string values = 1;
+  string mode = 2;  // "unicode", "name_variants", "rules"
+  repeated NormalizationRule rules = 3;
+}
+
+message NormalizationRule {
+  string pattern = 1;
+  string replacement = 2;
+}
+
+message NormalizationResponse {
+  repeated string normalized_values = 1;
+  // For name_variants mode: one entry per input value, pipe-separated variants
+  repeated string variants = 2;
+}
+
+// --- Scientific Connectors ---
+
+message ConnectorRequest {
+  string source = 1;      // "openalex", "crossref", "pubmed"
+  string query_type = 2;  // "doi", "title", "pmid", "search"
+  repeated string queries = 3;
+  int32 limit = 4;
+  map<string, string> filters = 5;
+}
+
+message ConnectorResponse {
+  repeated Publication publications = 1;
+  int32 total_results = 2;
+}
+
+// --- Process Response ---
+
 message ProcessResponse {
   string job_id = 1;
   string pipeline = 2;
@@ -65,6 +206,15 @@ message ProcessResponse {
   ProcessResult result = 4;
   optional string error = 5;
   double duration_ms = 6;
+
+  // Extended typed result for compute pipelines (v2)
+  oneof typed_result {
+    AuthorityResponse authority_result = 20;
+    AnalyticsResponse analytics_result = 21;
+    DisambiguationResponse disambiguation_result = 22;
+    NormalizationResponse normalization_result = 23;
+    ConnectorResponse connector_result = 24;
+  }
 }
 
 message ProcessResult {
@@ -101,6 +251,27 @@ message ProgressEvent {
   string phase = 3;
   string message = 4;
   map<string, int32> counters = 5;
+}
+
+message ListJobsRequest {
+  optional string pipeline_filter = 1;
+  optional string status_filter = 2;
+  int32 limit = 3;
+}
+
+message ListJobsResponse {
+  repeated JobSummary jobs = 1;
+}
+
+message JobSummary {
+  string job_id = 1;
+  string pipeline = 2;
+  Status status = 3;
+  float progress = 4;
+  optional string error = 5;
+  string created_at = 6;
+  optional string started_at = 7;
+  optional string completed_at = 8;
 }
 
 message HealthRequest {}

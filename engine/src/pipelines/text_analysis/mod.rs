@@ -118,6 +118,7 @@ impl Pipeline for TextAnalysisPipeline {
             keywords_extracted,
             entities_classified,
             counters,
+            compute_result: None,
         })
     }
 }

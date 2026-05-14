@@ -10,12 +10,28 @@ router = APIRouter(prefix="/engine", tags=["engine"])
 
 @router.get("/health")
 async def engine_health(request: Request, _=Depends(get_current_user)):
-    """Return engine availability status."""
+    """Return engine availability and registered pipeline info."""
     engine = getattr(request.app.state, "engine_client", None)
     if not engine:
-        return {"engine_available": False, "message": "Engine not configured"}
-    healthy = await engine.health()
-    return {"engine_available": healthy}
+        return {"engine_available": False, "message": "Engine not configured", "pipelines": []}
+
+    if not await engine._ensure_channel():
+        return {"engine_available": False, "message": "Engine unreachable", "pipelines": []}
+
+    try:
+        from backend.proto.ukip.engine.v1 import engine_pb2
+        resp = await engine._stub.Health(
+            engine_pb2.HealthRequest(),
+            metadata=engine._metadata(),
+            timeout=5,
+        )
+        pipelines = list(resp.pipelines) if hasattr(resp, "pipelines") else []
+        return {
+            "engine_available": resp.healthy,
+            "pipelines": pipelines,
+        }
+    except Exception:
+        return {"engine_available": False, "pipelines": []}
 
 
 @router.get("/jobs/{job_id}")

@@ -84,6 +84,7 @@ impl Pipeline for GraphMaterializationPipeline {
             keywords_extracted: 0,
             entities_classified: 0,
             counters: HashMap::new(),
+            compute_result: None,
         })
     }
 }

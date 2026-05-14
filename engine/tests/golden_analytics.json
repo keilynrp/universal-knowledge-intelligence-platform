@@ -1,0 +1,27 @@
+{
+  "concept_lists": [
+    ["Machine Learning", "Neural Network", "Deep Learning"],
+    ["Machine Learning", "NLP", "Text Mining"],
+    ["Machine Learning", "Neural Network"],
+    ["NLP", "Text Mining", "Information Retrieval"],
+    ["Deep Learning", "Computer Vision"]
+  ],
+  "topics": [
+    { "concept": "Machine Learning", "count": 3 },
+    { "concept": "Neural Network", "count": 2 },
+    { "concept": "Deep Learning", "count": 2 },
+    { "concept": "NLP", "count": 2 },
+    { "concept": "Text Mining", "count": 2 },
+    { "concept": "Information Retrieval", "count": 1 },
+    { "concept": "Computer Vision", "count": 1 }
+  ],
+  "cooccurrences": [
+    { "a": "Machine Learning", "b": "Neural Network", "co_count": 2, "pmi_approx": 0.737 },
+    { "a": "NLP", "b": "Text Mining", "co_count": 2, "pmi_approx": 1.322 }
+  ],
+  "clustering": {
+    "n_clusters": 2,
+    "expected_seed_0": "Machine Learning",
+    "min_total_members": 6
+  }
+}

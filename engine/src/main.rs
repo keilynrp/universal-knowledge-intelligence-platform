@@ -37,9 +37,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config =
         ukip_engine::config::Config::from_env().map_err(Box::<dyn std::error::Error>::from)?;
     let pool = ukip_engine::db::pool::create_pool(&config.database_url).await?;
-    let job_manager = Arc::new(ukip_engine::jobs::JobManager::new(
+
+    // Ensure engine_jobs table exists
+    ukip_engine::db::job_store::ensure_table(&pool).await?;
+
+    // Create job manager backed by Postgres
+    let job_manager = Arc::new(ukip_engine::jobs::JobManager::with_pool(
         config.max_concurrent_jobs,
+        pool.clone(),
     ));
+
+    // Startup recovery: mark stale running/queued jobs as failed
+    job_manager.recover_stale_jobs().await?;
 
     // Build pipeline registry
     let mut registry = ukip_engine::pipelines::PipelineRegistry::new_empty();
@@ -48,6 +57,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
     registry.register(Arc::new(
         ukip_engine::pipelines::text_analysis::TextAnalysisPipeline,
+    ));
+    registry.register(Arc::new(
+        ukip_engine::pipelines::authority::AuthorityPipeline,
+    ));
+    registry.register(Arc::new(
+        ukip_engine::pipelines::analytics::AnalyticsPipeline,
+    ));
+    registry.register(Arc::new(
+        ukip_engine::pipelines::disambiguation::DisambiguationPipeline,
+    ));
+    registry.register(Arc::new(
+        ukip_engine::pipelines::normalization::NormalizationPipeline,
+    ));
+    registry.register(Arc::new(
+        ukip_engine::pipelines::connectors::ConnectorPipeline::new(),
     ));
 
     let router = Arc::new(ukip_engine::router::Router::new(registry));
@@ -59,6 +83,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let svc =
         ukip_engine::server::EngineService::new(router, job_manager.clone(), pool.clone(), config);
     let interceptor = ukip_engine::server::auth_interceptor(auth_token);
+
+    // Spawn cache eviction task: remove completed/failed jobs from DashMap after 60s
+    let eviction_mgr = job_manager.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            eviction_mgr.evict_stale_cache(60);
+        }
+    });
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
@@ -78,7 +112,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     // After server stops: mark in-flight jobs as failed, close DB pool
-    job_manager.fail_all_active("engine shutdown");
+    job_manager.fail_all_active("engine shutdown").await;
     pool.close().await;
 
     Ok(())

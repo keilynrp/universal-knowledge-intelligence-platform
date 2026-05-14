@@ -145,6 +145,204 @@ class EngineClient:
             logger.debug("Engine get_job_status failed: %s", exc)
             return None
 
+    # ── Convenience methods for compute pipelines ────────────────────────
+
+    async def process_authority(
+        self,
+        *,
+        field_name: str,
+        values: list[str],
+        entity_type: str = "person",
+        domain: str = "default",
+        context_affiliation: str | None = None,
+        context_orcid_hint: str | None = None,
+        context_doi: str | None = None,
+        context_year: int | None = None,
+    ) -> Any | None:
+        """Delegate authority resolution to the engine."""
+        if not await self._ensure_channel():
+            return None
+        try:
+            from backend.proto.ukip.engine.v1 import engine_pb2
+
+            authority_req = engine_pb2.AuthorityRequest(
+                field_name=field_name,
+                values=values,
+                entity_type=entity_type,
+            )
+            if context_affiliation:
+                authority_req.context_affiliation = context_affiliation
+            if context_orcid_hint:
+                authority_req.context_orcid_hint = context_orcid_hint
+            if context_doi:
+                authority_req.context_doi = context_doi
+            if context_year is not None:
+                authority_req.context_year = context_year
+
+            req = engine_pb2.ProcessRequest(
+                pipeline="compute_authority",
+                job_id=f"authority-{field_name}",
+                import_batch_id=0,
+                domain=domain,
+                authority_request=authority_req,
+            )
+            resp = await self._stub.ProcessSync(
+                req, metadata=self._metadata(), timeout=120
+            )
+            return resp
+        except Exception as exc:
+            logger.error("Engine process_authority failed: %s", exc)
+            return None
+
+    async def process_analytics(
+        self,
+        *,
+        domain_id: str,
+        mode: str,
+        limit: int = 30,
+        field_filters: list[str] | None = None,
+    ) -> Any | None:
+        """Delegate analytics computation to the engine."""
+        if not await self._ensure_channel():
+            return None
+        try:
+            from backend.proto.ukip.engine.v1 import engine_pb2
+
+            analytics_req = engine_pb2.AnalyticsRequest(
+                domain_id=domain_id,
+                mode=mode,
+                limit=limit,
+                field_filters=field_filters or [],
+            )
+            req = engine_pb2.ProcessRequest(
+                pipeline="compute_analytics",
+                job_id=f"analytics-{mode}-{domain_id}",
+                import_batch_id=0,
+                domain=domain_id,
+                analytics_request=analytics_req,
+            )
+            resp = await self._stub.ProcessSync(
+                req, metadata=self._metadata(), timeout=120
+            )
+            return resp
+        except Exception as exc:
+            logger.error("Engine process_analytics failed: %s", exc)
+            return None
+
+    async def process_disambiguation(
+        self,
+        *,
+        field_name: str,
+        values: list[str],
+        similarity_threshold: float = 0.85,
+        domain: str = "default",
+    ) -> Any | None:
+        """Delegate disambiguation to the engine."""
+        if not await self._ensure_channel():
+            return None
+        try:
+            from backend.proto.ukip.engine.v1 import engine_pb2
+
+            disambiguation_req = engine_pb2.DisambiguationRequest(
+                field_name=field_name,
+                values=values,
+                similarity_threshold=similarity_threshold,
+            )
+            req = engine_pb2.ProcessRequest(
+                pipeline="compute_disambiguation",
+                job_id=f"disambiguate-{field_name}",
+                import_batch_id=0,
+                domain=domain,
+                disambiguation_request=disambiguation_req,
+            )
+            resp = await self._stub.ProcessSync(
+                req, metadata=self._metadata(), timeout=120
+            )
+            return resp
+        except Exception as exc:
+            logger.error("Engine process_disambiguation failed: %s", exc)
+            return None
+
+    async def process_normalization(
+        self,
+        *,
+        values: list[str],
+        mode: str = "unicode",
+        rules: list[dict] | None = None,
+        domain: str = "default",
+    ) -> Any | None:
+        """Delegate normalization to the engine."""
+        if not await self._ensure_channel():
+            return None
+        try:
+            from backend.proto.ukip.engine.v1 import engine_pb2
+
+            proto_rules = []
+            if rules:
+                for r in rules:
+                    proto_rules.append(engine_pb2.NormalizationRule(
+                        pattern=r.get("pattern", ""),
+                        replacement=r.get("replacement", ""),
+                    ))
+
+            normalization_req = engine_pb2.NormalizationRequest(
+                values=values,
+                mode=mode,
+                rules=proto_rules,
+            )
+            req = engine_pb2.ProcessRequest(
+                pipeline="compute_normalization",
+                job_id=f"normalize-{mode}",
+                import_batch_id=0,
+                domain=domain,
+                normalization_request=normalization_req,
+            )
+            resp = await self._stub.ProcessSync(
+                req, metadata=self._metadata(), timeout=60
+            )
+            return resp
+        except Exception as exc:
+            logger.error("Engine process_normalization failed: %s", exc)
+            return None
+
+    async def process_connectors(
+        self,
+        *,
+        source: str,
+        query_type: str,
+        queries: list[str],
+        limit: int = 10,
+        filters: dict[str, str] | None = None,
+        domain: str = "default",
+    ) -> Any | None:
+        """Delegate scientific connector fetch to the engine."""
+        if not await self._ensure_channel():
+            return None
+        try:
+            from backend.proto.ukip.engine.v1 import engine_pb2
+
+            connector_req = engine_pb2.ConnectorRequest(
+                source=source,
+                query_type=query_type,
+                queries=queries,
+                limit=limit,
+                filters=filters or {},
+            )
+            req = engine_pb2.ProcessRequest(
+                pipeline="compute_connectors",
+                job_id=f"connector-{source}",
+                import_batch_id=0,
+                domain=domain,
+                connector_request=connector_req,
+            )
+            resp = await self._stub.ProcessSync(
+                req, metadata=self._metadata(), timeout=120
+            )
+            return resp
+        except Exception as exc:
+            logger.error("Engine process_connectors failed: %s", exc)
+            return None
+
     async def close(self) -> None:
         """Close the gRPC channel."""
         if self._channel:

@@ -89,6 +89,55 @@ def _deduplicate(candidates: List[AuthorityCandidate]) -> List[AuthorityCandidat
     return merged
 
 
+async def resolve_all_via_engine(
+    value: str,
+    entity_type: str,
+    context: Optional[ResolveContext] = None,
+    engine_client=None,
+) -> Optional[List[AuthorityCandidate]]:
+    """
+    Try delegating authority resolution to the Rust engine.
+
+    Returns resolved candidates on success, or None to signal fallback.
+    """
+    if engine_client is None:
+        return None
+    try:
+        resp = await engine_client.process_authority(
+            field_name="author",
+            values=[value],
+            entity_type=entity_type,
+            context_affiliation=context.affiliation if context else None,
+            context_orcid_hint=context.orcid_hint if context else None,
+            context_doi=context.doi if context else None,
+            context_year=context.year if context else None,
+        )
+        if resp is None:
+            return None
+
+        # Convert proto response to AuthorityCandidate list
+        result: List[AuthorityCandidate] = []
+        if hasattr(resp, "authority_result") and resp.authority_result.groups:
+            for group in resp.authority_result.groups:
+                for c in group.candidates:
+                    result.append(AuthorityCandidate(
+                        authority_source=c.source,
+                        authority_id=c.authority_id,
+                        canonical_label=c.canonical_label,
+                        confidence=c.confidence,
+                        score_breakdown=dict(c.score_breakdown),
+                        resolution_status=c.resolution_status,
+                        merged_sources=list(c.merged_sources),
+                        aliases=list(c.aliases),
+                        description=c.description if c.HasField("description") else None,
+                        uri=c.uri if c.HasField("uri") else None,
+                    ))
+        return result if result else None
+    except Exception as exc:
+        logger.warning("Engine authority delegation failed, falling back to Python: %s", exc)
+        return None
+
+
 def resolve_all(
     value: str,
     entity_type: str,

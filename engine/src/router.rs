@@ -1,5 +1,6 @@
+use std::collections::HashMap;
 use std::sync::Arc;
-use crate::pipelines::{Pipeline, PipelineRegistry};
+use crate::pipelines::{Pipeline, PipelineCategory, PipelineRegistry};
 
 pub struct Router {
     registry: PipelineRegistry,
@@ -16,6 +17,10 @@ impl Router {
 
     pub fn list_pipelines(&self) -> Vec<&str> {
         self.registry.list()
+    }
+
+    pub fn list_by_category(&self) -> HashMap<PipelineCategory, Vec<&str>> {
+        self.registry.list_by_category()
     }
 }
 
