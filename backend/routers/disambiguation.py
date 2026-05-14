@@ -20,6 +20,12 @@ from sqlalchemy.orm import Session
 from backend import models, schemas
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
+from backend.services.engine_delegation import (
+    ENGINE_DELEGATION_THRESHOLD,
+    _get_engine_client,
+    try_engine_disambiguation,
+    try_engine_normalization,
+)
 from backend.tenant_access import (
     get_scoped_record,
     org_scope_filter,
@@ -39,15 +45,44 @@ router = APIRouter(tags=["disambiguation"])
 # ── Disambiguation ────────────────────────────────────────────────────────────
 
 @router.get("/disambiguate/{field}")
-def disambiguate_field(
+async def disambiguate_field(
+    request: Request,
     field: str,
     threshold: int = Query(default=80, ge=0, le=100),
     algorithm: str = Query(default="token_sort", pattern="^(token_sort|fingerprint|ngram|phonetic)$"),
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
     try:
-        groups = _build_disambig_groups(field, threshold, db, algorithm=algorithm)
+        # Count unique values to decide delegation
+        org_id = resolve_request_org_id(db, current_user)
+        engine_client = _get_engine_client(request)
+        if engine_client is not None:
+            # Quick count check — extract values for engine
+            from backend.routers.deps import _FIELD_RE
+            from sqlalchemy import func as sqla_func
+            if _FIELD_RE.match(field) and hasattr(models.RawEntity, field):
+                column = getattr(models.RawEntity, field)
+                count_q = scope_query_to_org(
+                    db.query(sqla_func.count(sqla_func.distinct(column))).filter(column != None),
+                    models.RawEntity, org_id,
+                )
+                unique_count = count_q.scalar() or 0
+                if unique_count > ENGINE_DELEGATION_THRESHOLD:
+                    # Extract values for engine
+                    vals_q = scope_query_to_org(
+                        db.query(column).distinct().filter(column != None),
+                        models.RawEntity, org_id,
+                    )
+                    values = [v[0] for v in vals_q.all() if v[0] and str(v[0]).strip()]
+                    engine_groups = await try_engine_disambiguation(
+                        engine_client, field, values, threshold,
+                        similarity_threshold=threshold / 100,
+                    )
+                    if engine_groups is not None:
+                        return {"groups": engine_groups, "total_groups": len(engine_groups), "algorithm": "engine"}
+
+        groups = _build_disambig_groups(field, threshold, db, algorithm=algorithm, org_id=org_id)
         return {"groups": groups, "total_groups": len(groups), "algorithm": algorithm}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -152,7 +187,8 @@ def delete_rule(
 
 
 @router.post("/rules/apply")
-def apply_rules(
+async def apply_rules(
+    request: Request,
     field_name: str = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
@@ -163,7 +199,55 @@ def apply_rules(
         query = query.filter(models.NormalizationRule.field_name == field_name)
     rules = query.all()
 
+    # Separate exact-match and regex rules
+    exact_rules = [r for r in rules if not r.is_regex]
+    regex_rules = [r for r in rules if r.is_regex]
+
     total_updated = 0
+
+    # Try engine delegation for bulk exact-match rules
+    if exact_rules and len(exact_rules) > ENGINE_DELEGATION_THRESHOLD:
+        engine_client = _get_engine_client(request)
+        if engine_client is not None:
+            # Collect unique values that need normalization
+            values_to_normalize = [r.original_value for r in exact_rules]
+            engine_rules = [
+                {"pattern": r.original_value, "replacement": r.normalized_value}
+                for r in exact_rules
+            ]
+            mapping = await try_engine_normalization(
+                engine_client,
+                field_name=field_name or "mixed",
+                values=values_to_normalize,
+                mode="rules",
+                rules=engine_rules,
+            )
+            if mapping is not None:
+                # Apply the mapping via bulk SQL updates
+                for original, normalized in mapping.items():
+                    for rule in exact_rules:
+                        if rule.original_value == original and hasattr(models.RawEntity, rule.field_name):
+                            column = getattr(models.RawEntity, rule.field_name)
+                            filters = [column == original]
+                            org_filter = org_scope_filter(models.RawEntity.org_id, org_id)
+                            if org_filter is not None:
+                                filters.append(org_filter)
+                            result = db.execute(
+                                update(models.RawEntity)
+                                .where(*filters)
+                                .values({rule.field_name: normalized})
+                            )
+                            total_updated += result.rowcount
+                # Only process regex rules in the Python path
+                rules = regex_rules
+                if not rules:
+                    db.commit()
+                    return {
+                        "message": f"Applied {len(exact_rules)} rules (engine) + {len(regex_rules)} rules (python)",
+                        "rules_applied": len(exact_rules) + len(regex_rules),
+                        "records_updated": total_updated,
+                    }
+
     for rule in rules:
         if hasattr(models.RawEntity, rule.field_name):
             column = getattr(models.RawEntity, rule.field_name)

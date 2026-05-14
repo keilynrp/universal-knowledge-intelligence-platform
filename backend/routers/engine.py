@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from backend.auth import get_current_user
+from backend.services.engine_delegation import ENGINE_DELEGATION_THRESHOLD
 
 router = APIRouter(prefix="/engine", tags=["engine"])
 
@@ -26,12 +27,20 @@ async def engine_health(request: Request, _=Depends(get_current_user)):
             timeout=5,
         )
         pipelines = list(resp.pipelines) if hasattr(resp, "pipelines") else []
+        delegation_status = {
+            "analytics": "enabled" if resp.healthy else "fallback",
+            "disambiguation": "enabled (threshold={})".format(ENGINE_DELEGATION_THRESHOLD) if resp.healthy else "fallback",
+            "normalization": "enabled (threshold={})".format(ENGINE_DELEGATION_THRESHOLD) if resp.healthy else "fallback",
+            "connectors": "opt-in" if resp.healthy else "fallback",
+        }
         return {
             "engine_available": resp.healthy,
             "pipelines": pipelines,
+            "delegation": delegation_status,
+            "delegation_threshold": ENGINE_DELEGATION_THRESHOLD,
         }
     except Exception:
-        return {"engine_available": False, "pipelines": []}
+        return {"engine_available": False, "pipelines": [], "delegation": {}}
 
 
 @router.get("/jobs/{job_id}")

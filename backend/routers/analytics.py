@@ -38,6 +38,10 @@ from backend.telemetry import telemetry_status
 from backend.tenant_scoping import get_tenant_scoping_report
 from backend.tenant_access import resolve_request_org_id, scope_query_to_org, scope_tag
 from backend.services.analytics_service import AnalyticsService
+from backend.services.engine_delegation import (
+    _get_engine_client,
+    try_engine_analytics,
+)
 from backend.services.pattern_discovery import PatternDiscoveryService
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
@@ -167,7 +171,8 @@ def run_roi_simulation(
 # ── Topic Modeling & Correlation ──────────────────────────────────────────────
 
 @router.get("/analyzers/topics/{domain_id}")
-def analyzer_topics(
+async def analyzer_topics(
+    request: Request,
     domain_id: str,
     top_n: int = Query(default=30, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -179,6 +184,13 @@ def analyzer_topics(
     cached = _analytics_cache.get(_key)
     if cached is not None:
         return cached
+    # Try engine delegation
+    engine_result = await try_engine_analytics(
+        _get_engine_client(request), domain_id, "topics", top_n, org_id
+    )
+    if engine_result is not None:
+        _analytics_cache.set(_key, engine_result)
+        return engine_result
     try:
         result = _topic_analyzer.top_topics(domain_id, top_n=top_n, org_id=org_id)
         _analytics_cache.set(_key, result)
@@ -191,7 +203,8 @@ def analyzer_topics(
 
 
 @router.get("/analyzers/cooccurrence/{domain_id}")
-def analyzer_cooccurrence(
+async def analyzer_cooccurrence(
+    request: Request,
     domain_id: str,
     top_n: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -203,6 +216,12 @@ def analyzer_cooccurrence(
     cached = _analytics_cache.get(_key)
     if cached is not None:
         return cached
+    engine_result = await try_engine_analytics(
+        _get_engine_client(request), domain_id, "cooccurrence", top_n, org_id
+    )
+    if engine_result is not None:
+        _analytics_cache.set(_key, engine_result)
+        return engine_result
     try:
         result = _topic_analyzer.cooccurrence(domain_id, top_n=top_n, org_id=org_id)
         _analytics_cache.set(_key, result)
@@ -215,7 +234,8 @@ def analyzer_cooccurrence(
 
 
 @router.get("/analyzers/clusters/{domain_id}")
-def analyzer_clusters(
+async def analyzer_clusters(
+    request: Request,
     domain_id: str,
     n_clusters: int = Query(default=6, ge=2, le=20),
     db: Session = Depends(get_db),
@@ -227,6 +247,12 @@ def analyzer_clusters(
     cached = _analytics_cache.get(_key)
     if cached is not None:
         return cached
+    engine_result = await try_engine_analytics(
+        _get_engine_client(request), domain_id, "clusters", n_clusters, org_id
+    )
+    if engine_result is not None:
+        _analytics_cache.set(_key, engine_result)
+        return engine_result
     try:
         result = _topic_analyzer.topic_clusters(domain_id, n_clusters=n_clusters, org_id=org_id)
         _analytics_cache.set(_key, result)
@@ -239,7 +265,8 @@ def analyzer_clusters(
 
 
 @router.get("/analyzers/correlation/{domain_id}")
-def analyzer_correlation(
+async def analyzer_correlation(
+    request: Request,
     domain_id: str,
     top_n: int = Query(default=20, ge=1, le=50),
     db: Session = Depends(get_db),
@@ -251,6 +278,12 @@ def analyzer_correlation(
     cached = _analytics_cache.get(_key)
     if cached is not None:
         return cached
+    engine_result = await try_engine_analytics(
+        _get_engine_client(request), domain_id, "correlation", top_n, org_id
+    )
+    if engine_result is not None:
+        _analytics_cache.set(_key, engine_result)
+        return engine_result
     try:
         result = _correlation_analyzer.top_correlations(domain_id, top_n=top_n, org_id=org_id)
         _analytics_cache.set(_key, result)

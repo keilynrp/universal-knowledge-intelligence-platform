@@ -12,12 +12,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from fastapi import Request
+
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
 from backend import models
 from backend.adapters.scientific import get_scientific_adapter, list_sources
 from backend.adapters.scientific.base import ScientificRecord
 from backend.parsers.science_mapper import science_record_to_entity
+from backend.services.engine_delegation import _get_engine_client, try_engine_connectors
 from backend.tenant_access import resolve_request_org_id, persisted_org_id
 
 logger = logging.getLogger(__name__)
@@ -29,6 +32,7 @@ class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=500)
     max_results: int = Field(default=20, ge=1, le=100)
     config: dict = Field(default_factory=dict)
+    use_engine: bool = Field(default=False, description="Opt-in to Rust engine delegation")
 
 
 class DoiBatchRequest(BaseModel):
@@ -105,13 +109,58 @@ def _fetch_doi_records(body: DoiBatchRequest) -> list[ScientificRecord]:
         raise HTTPException(status_code=502, detail=f"Source unavailable: {e}")
 
 
+def _save_engine_publications(pubs: list[dict], db: Session, org_id: Optional[int]) -> dict:
+    """Save publications returned by the engine connector to the database."""
+    imported = 0
+    skipped = 0
+    stored_org = persisted_org_id(org_id)
+    for pub in pubs:
+        doi = pub.get("doi")
+        if doi:
+            exists_query = db.query(models.RawEntity).filter(models.RawEntity.enrichment_doi == doi)
+            if stored_org is None:
+                exists_query = exists_query.filter(models.RawEntity.org_id.is_(None))
+            else:
+                exists_query = exists_query.filter(models.RawEntity.org_id == stored_org)
+            if exists_query.first():
+                skipped += 1
+                continue
+        authors = pub.get("authors", [])
+        entity_kwargs = science_record_to_entity({
+            "title": pub.get("title"),
+            "authors": "; ".join(authors) if authors else None,
+            "doi": doi,
+            "year": str(pub["year"]) if pub.get("year") else None,
+            "abstract": pub.get("abstract"),
+            "journal": pub.get("journal"),
+        })
+        entity_kwargs["enrichment_doi"] = doi
+        entity_kwargs["enrichment_citation_count"] = pub.get("citations", 0)
+        entity_kwargs["enrichment_source"] = pub.get("source", "engine")
+        entity_kwargs["source"] = "scientific_import"
+        if stored_org is not None:
+            entity_kwargs["org_id"] = stored_org
+        db.add(models.RawEntity(**entity_kwargs))
+        imported += 1
+    db.commit()
+    return {"imported": imported, "skipped": skipped}
+
+
 @router.get("/sources")
 def get_sources(_=Depends(get_current_user)):
     return list_sources()
 
 
 @router.post("/search")
-def search_scientific(body: SearchRequest, _=Depends(get_current_user)):
+async def search_scientific(request: Request, body: SearchRequest, _=Depends(get_current_user)):
+    # Try engine delegation if opted-in
+    if body.use_engine:
+        engine_client = _get_engine_client(request)
+        engine_pubs = await try_engine_connectors(
+            engine_client, body.source, "search", [body.query], limit=body.max_results,
+        )
+        if engine_pubs is not None:
+            return engine_pubs
     try:
         adapter = get_scientific_adapter(body.source, body.config)
     except ValueError as e:
@@ -130,11 +179,21 @@ def preview_dois(body: DoiBatchRequest, _=Depends(get_current_user)):
 
 
 @router.post("/import", status_code=201)
-def import_scientific(
+async def import_scientific(
+    request: Request,
     body: SearchRequest,
     db: Session = Depends(get_db),
     current_user=Depends(require_role("super_admin", "admin", "editor")),
 ):
+    org_id = resolve_request_org_id(db, current_user)
+    # Try engine delegation if opted-in (bypasses Python rate limiter)
+    if body.use_engine:
+        engine_client = _get_engine_client(request)
+        engine_pubs = await try_engine_connectors(
+            engine_client, body.source, "search", [body.query], limit=body.max_results,
+        )
+        if engine_pubs is not None:
+            return _save_engine_publications(engine_pubs, db, org_id)
     try:
         adapter = get_scientific_adapter(body.source, body.config)
     except ValueError as e:
@@ -144,7 +203,6 @@ def import_scientific(
     except Exception as e:
         logger.exception("Scientific import failed for source=%s", body.source)
         raise HTTPException(status_code=502, detail=f"Source unavailable: {e}")
-    org_id = resolve_request_org_id(db, current_user)
     return _save_records(records, db, org_id)
 
 
