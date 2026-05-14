@@ -1,5 +1,10 @@
+use std::time::Duration;
+
 use sqlx::PgPool;
 use uuid::Uuid;
+
+/// Default timeout for job store queries.
+const QUERY_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct JobRow {
@@ -16,23 +21,27 @@ pub struct JobRow {
 }
 
 pub async fn ensure_table(pool: &PgPool) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS engine_jobs (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            job_id TEXT UNIQUE NOT NULL,
-            pipeline TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'queued',
-            progress REAL NOT NULL DEFAULT 0.0,
-            result_json TEXT NULL,
-            error TEXT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            started_at TIMESTAMPTZ NULL,
-            completed_at TIMESTAMPTZ NULL
-        )",
+    tokio::time::timeout(
+        QUERY_TIMEOUT,
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS engine_jobs (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                job_id TEXT UNIQUE NOT NULL,
+                pipeline TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'queued',
+                progress REAL NOT NULL DEFAULT 0.0,
+                result_json TEXT NULL,
+                error TEXT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                started_at TIMESTAMPTZ NULL,
+                completed_at TIMESTAMPTZ NULL
+            )",
+        )
+        .execute(pool),
     )
-    .execute(pool)
-    .await?;
-    Ok(())
+    .await
+    .map_err(|_| sqlx::Error::PoolTimedOut)?
+    .map(|_| ())
 }
 
 pub async fn insert_job(
@@ -40,15 +49,19 @@ pub async fn insert_job(
     job_id: &str,
     pipeline: &str,
 ) -> Result<JobRow, sqlx::Error> {
-    sqlx::query_as::<_, JobRow>(
-        "INSERT INTO engine_jobs (job_id, pipeline, status, progress)
-         VALUES ($1, $2, 'queued', 0.0)
-         RETURNING *",
+    tokio::time::timeout(
+        QUERY_TIMEOUT,
+        sqlx::query_as::<_, JobRow>(
+            "INSERT INTO engine_jobs (job_id, pipeline, status, progress)
+             VALUES ($1, $2, 'queued', 0.0)
+             RETURNING *",
+        )
+        .bind(job_id)
+        .bind(pipeline)
+        .fetch_one(pool),
     )
-    .bind(job_id)
-    .bind(pipeline)
-    .fetch_one(pool)
     .await
+    .map_err(|_| sqlx::Error::PoolTimedOut)?
 }
 
 pub async fn update_status(
@@ -68,13 +81,17 @@ pub async fn update_status(
          WHERE job_id = $1",
         started_at_expr
     );
-    sqlx::query(&sql)
-        .bind(job_id)
-        .bind(status)
-        .bind(progress)
-        .execute(pool)
-        .await?;
-    Ok(())
+    tokio::time::timeout(
+        QUERY_TIMEOUT,
+        sqlx::query(&sql)
+            .bind(job_id)
+            .bind(status)
+            .bind(progress)
+            .execute(pool),
+    )
+    .await
+    .map_err(|_| sqlx::Error::PoolTimedOut)?
+    .map(|_| ())
 }
 
 pub async fn update_completed(
@@ -82,16 +99,20 @@ pub async fn update_completed(
     job_id: &str,
     result_json: Option<&str>,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "UPDATE engine_jobs SET status = 'completed', progress = 1.0,
-         result_json = $2, completed_at = NOW()
-         WHERE job_id = $1",
+    tokio::time::timeout(
+        QUERY_TIMEOUT,
+        sqlx::query(
+            "UPDATE engine_jobs SET status = 'completed', progress = 1.0,
+             result_json = $2, completed_at = NOW()
+             WHERE job_id = $1",
+        )
+        .bind(job_id)
+        .bind(result_json)
+        .execute(pool),
     )
-    .bind(job_id)
-    .bind(result_json)
-    .execute(pool)
-    .await?;
-    Ok(())
+    .await
+    .map_err(|_| sqlx::Error::PoolTimedOut)?
+    .map(|_| ())
 }
 
 pub async fn update_failed(
@@ -99,27 +120,33 @@ pub async fn update_failed(
     job_id: &str,
     error: &str,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "UPDATE engine_jobs SET status = 'failed', error = $2, completed_at = NOW()
-         WHERE job_id = $1",
+    tokio::time::timeout(
+        QUERY_TIMEOUT,
+        sqlx::query(
+            "UPDATE engine_jobs SET status = 'failed', error = $2, completed_at = NOW()
+             WHERE job_id = $1",
+        )
+        .bind(job_id)
+        .bind(error)
+        .execute(pool),
     )
-    .bind(job_id)
-    .bind(error)
-    .execute(pool)
-    .await?;
-    Ok(())
+    .await
+    .map_err(|_| sqlx::Error::PoolTimedOut)?
+    .map(|_| ())
 }
 
 pub async fn find_by_job_id(
     pool: &PgPool,
     job_id: &str,
 ) -> Result<Option<JobRow>, sqlx::Error> {
-    sqlx::query_as::<_, JobRow>(
-        "SELECT * FROM engine_jobs WHERE job_id = $1",
+    tokio::time::timeout(
+        QUERY_TIMEOUT,
+        sqlx::query_as::<_, JobRow>("SELECT * FROM engine_jobs WHERE job_id = $1")
+            .bind(job_id)
+            .fetch_optional(pool),
     )
-    .bind(job_id)
-    .fetch_optional(pool)
     .await
+    .map_err(|_| sqlx::Error::PoolTimedOut)?
 }
 
 pub async fn list_jobs(
@@ -142,19 +169,25 @@ pub async fn list_jobs(
     builder.push(" ORDER BY created_at DESC LIMIT ");
     builder.push_bind(limit);
 
-    builder
-        .build_query_as::<JobRow>()
-        .fetch_all(pool)
-        .await
+    tokio::time::timeout(
+        QUERY_TIMEOUT,
+        builder.build_query_as::<JobRow>().fetch_all(pool),
+    )
+    .await
+    .map_err(|_| sqlx::Error::PoolTimedOut)?
 }
 
 pub async fn fail_stale_jobs(pool: &PgPool, error: &str) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query(
-        "UPDATE engine_jobs SET status = 'failed', error = $1, completed_at = NOW()
-         WHERE status IN ('running', 'queued')",
+    let result = tokio::time::timeout(
+        QUERY_TIMEOUT,
+        sqlx::query(
+            "UPDATE engine_jobs SET status = 'failed', error = $1, completed_at = NOW()
+             WHERE status IN ('running', 'queued')",
+        )
+        .bind(error)
+        .execute(pool),
     )
-    .bind(error)
-    .execute(pool)
-    .await?;
+    .await
+    .map_err(|_| sqlx::Error::PoolTimedOut)??;
     Ok(result.rows_affected())
 }

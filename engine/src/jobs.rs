@@ -110,7 +110,21 @@ impl JobManager {
     }
 
     pub async fn set_completed(&self, job_id: &str, result: crate::pipelines::PipelineOutput) {
-        let result_json = serde_json::to_string(&result.counters).ok();
+        // Serialize both counters and basic stats for persistence
+        let result_json = serde_json::to_value(&result.counters)
+            .ok()
+            .map(|counters| {
+                serde_json::json!({
+                    "counters": counters,
+                    "nodes_created": result.nodes_created,
+                    "nodes_deduplicated": result.nodes_deduplicated,
+                    "relationships_created": result.relationships_created,
+                    "relationships_deduplicated": result.relationships_deduplicated,
+                    "keywords_extracted": result.keywords_extracted,
+                    "entities_classified": result.entities_classified,
+                })
+            })
+            .and_then(|v| serde_json::to_string(&v).ok());
 
         if let Some(pool) = &self.pool {
             if let Err(e) =

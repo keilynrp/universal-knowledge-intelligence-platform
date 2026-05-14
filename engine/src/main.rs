@@ -11,8 +11,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .and_then(|v| v.parse().ok())
             .unwrap_or(50051);
         let addr = format!("127.0.0.1:{}", port);
+        let sock_addr: std::net::SocketAddr = match addr.parse() {
+            Ok(a) => a,
+            Err(e) => {
+                eprintln!("invalid address '{}': {}", addr, e);
+                process::exit(1);
+            }
+        };
         match std::net::TcpStream::connect_timeout(
-            &addr.parse().unwrap(),
+            &sock_addr,
             std::time::Duration::from_secs(2),
         ) {
             Ok(_) => {
@@ -71,7 +78,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ukip_engine::pipelines::normalization::NormalizationPipeline,
     ));
     registry.register(Arc::new(
-        ukip_engine::pipelines::connectors::ConnectorPipeline::new(),
+        ukip_engine::pipelines::connectors::ConnectorPipeline::new()
+            .map_err(|e| format!("failed to initialize connector pipeline: {}", e))?,
     ));
 
     let router = Arc::new(ukip_engine::router::Router::new(registry));
@@ -80,6 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!(%addr, "starting ukip-engine");
 
     let auth_token = config.auth_token.clone();
+    let shutdown_timeout = std::time::Duration::from_secs(config.shutdown_timeout_secs);
     let svc =
         ukip_engine::server::EngineService::new(router, job_manager.clone(), pool.clone(), config);
     let interceptor = ukip_engine::server::auth_interceptor(auth_token);
@@ -111,9 +120,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .await?;
 
-    // After server stops: mark in-flight jobs as failed, close DB pool
-    job_manager.fail_all_active("engine shutdown").await;
-    pool.close().await;
+    // After server stops: mark in-flight jobs as failed with timeout, close DB pool
+    tracing::info!("shutting down, waiting up to {:?} for cleanup", shutdown_timeout);
+    let cleanup = async {
+        job_manager.fail_all_active("engine shutdown").await;
+        pool.close().await;
+    };
+    if tokio::time::timeout(shutdown_timeout, cleanup).await.is_err() {
+        tracing::warn!("shutdown cleanup timed out after {:?}", shutdown_timeout);
+    }
 
     Ok(())
 }

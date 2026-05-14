@@ -114,17 +114,17 @@ fn fuzzy_cluster(values: &[String], threshold: f64) -> Vec<DisambiguationCluster
         let norm_i = normalize_name(&unique[i]);
 
         // Compare against the window
-        for j in (i + 1)..unique.len().min(i + window_size) {
-            if cluster_id.contains_key(&unique[j]) {
+        for candidate in unique.iter().take((i + window_size).min(unique.len())).skip(i + 1) {
+            if cluster_id.contains_key(candidate) {
                 continue;
             }
 
-            let norm_j = normalize_name(&unique[j]);
+            let norm_j = normalize_name(candidate);
             let sim = token_sort_ratio(&norm_i, &norm_j);
 
             if sim >= threshold {
-                clusters[cid].push(unique[j].clone());
-                cluster_id.insert(unique[j].clone(), cid);
+                clusters[cid].push(candidate.clone());
+                cluster_id.insert(candidate.clone(), cid);
             }
         }
     }

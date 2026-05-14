@@ -43,7 +43,7 @@ pub async fn fetch(
             match client.get(&url).send().await {
                 Ok(resp) => {
                     if resp.status().is_success() {
-                        match resp.json::<CrossrefResponse>().await {
+                        match super::guarded_json::<CrossrefResponse>(resp).await {
                             Ok(cr) => {
                                 if let Some(msg) = cr.message {
                                     match msg {
@@ -58,7 +58,7 @@ pub async fn fetch(
                                     }
                                 }
                             }
-                            Err(e) => last_err = format!("json parse: {}", e),
+                            Err(e) => last_err = e,
                         }
                         break;
                     } else if is_retryable(resp.status()) {
@@ -127,6 +127,7 @@ struct CrossrefAuthor {
     #[serde(default, rename = "ORCID")]
     orcid: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     sequence: Option<String>,
 }
 

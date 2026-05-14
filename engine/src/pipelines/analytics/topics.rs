@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 /// Parse a comma/semicolon/pipe-separated concept string into individual concepts.
 pub fn parse_concepts(raw: &str) -> Vec<String> {
-    raw.split(|c: char| c == ',' || c == ';' || c == '|')
+    raw.split([',', ';', '|'])
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .collect()

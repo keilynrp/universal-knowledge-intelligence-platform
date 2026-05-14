@@ -44,20 +44,20 @@ pub async fn fetch(
                 Ok(resp) => {
                     if resp.status().is_success() {
                         if query_type == "doi" {
-                            match resp.json::<OpenAlexWork>().await {
+                            match super::guarded_json::<OpenAlexWork>(resp).await {
                                 Ok(work) => {
                                     publications.push(work.into_publication());
                                 }
-                                Err(e) => last_err = format!("json parse: {}", e),
+                                Err(e) => last_err = e,
                             }
                         } else {
-                            match resp.json::<OpenAlexResults>().await {
+                            match super::guarded_json::<OpenAlexResults>(resp).await {
                                 Ok(results) => {
                                     for work in results.results {
                                         publications.push(work.into_publication());
                                     }
                                 }
-                                Err(e) => last_err = format!("json parse: {}", e),
+                                Err(e) => last_err = e,
                             }
                         }
                         break;

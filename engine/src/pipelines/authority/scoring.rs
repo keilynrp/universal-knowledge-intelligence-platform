@@ -7,8 +7,7 @@ use super::normalize::{normalize_name, reformat_surname_first};
 const W_ID: f64 = 0.35;
 const W_NAME: f64 = 0.25;
 const W_AFFIL: f64 = 0.20;
-const W_COAUTH: f64 = 0.10; // reserved
-const W_TOPIC: f64 = 0.10; // reserved
+// Reserved weights for future signals (coauthorship=0.10, topic=0.10)
 
 // Source quality priors
 fn source_quality(source: &str) -> f64 {

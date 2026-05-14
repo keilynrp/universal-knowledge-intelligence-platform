@@ -66,14 +66,14 @@ async fn search_pmids(
         match client.get(&url).send().await {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    match resp.json::<ESearchResult>().await {
+                    match super::guarded_json::<ESearchResult>(resp).await {
                         Ok(result) => {
                             return Ok(result
                                 .esearchresult
                                 .map(|r| r.idlist)
                                 .unwrap_or_default());
                         }
-                        Err(e) => return Err(format!("json parse: {}", e)),
+                        Err(e) => return Err(e),
                     }
                 } else if is_retryable(resp.status()) {
                     continue;
@@ -108,7 +108,7 @@ async fn fetch_summary(
         match client.get(&url).send().await {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    match resp.json::<ESummaryResult>().await {
+                    match super::guarded_json::<ESummaryResult>(resp).await {
                         Ok(result) => {
                             if let Some(summary) = result.result.and_then(|r| r.get(pmid).cloned())
                             {
@@ -116,7 +116,7 @@ async fn fetch_summary(
                             }
                             return Ok(None);
                         }
-                        Err(e) => return Err(format!("json parse: {}", e)),
+                        Err(e) => return Err(e),
                     }
                 } else if is_retryable(resp.status()) {
                     continue;

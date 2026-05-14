@@ -34,10 +34,10 @@ pub fn cramers_v(x: &[String], y: &[String]) -> f64 {
     }
 
     // Build category indices
-    let mut x_cats: Vec<String> = x.iter().cloned().collect();
+    let mut x_cats: Vec<String> = x.to_vec();
     x_cats.sort();
     x_cats.dedup();
-    let mut y_cats: Vec<String> = y.iter().cloned().collect();
+    let mut y_cats: Vec<String> = y.to_vec();
     y_cats.sort();
     y_cats.dedup();
 
