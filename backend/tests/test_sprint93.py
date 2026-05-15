@@ -50,6 +50,19 @@ def _make_entities(db, count=5):
     db.commit()
 
 
+def _make_entity(db, label: str, domain: str, *, concepts: str = "concept_a", quality_score: float = 0.7):
+    entity = models.RawEntity(
+        primary_label=label,
+        domain=domain,
+        enrichment_status="completed",
+        enrichment_concepts=concepts,
+        quality_score=quality_score,
+    )
+    db.add(entity)
+    db.commit()
+    return entity
+
+
 def _create_widget(client, auth_headers, widget_type="entity_stats", **kwargs):
     payload = {
         "name": f"Test {widget_type} Widget",
@@ -72,6 +85,24 @@ class TestDataProviders:
         assert "enrichment_rate" in result
         assert isinstance(result["by_domain"], list)
 
+    def test_entity_stats_respects_domain_id_config(self, db_session):
+        _make_entity(db_session, "Science Entity", "science")
+        _make_entity(db_session, "Healthcare Entity", "healthcare")
+
+        result = _data_entity_stats(db_session, {"domain_id": "science"})
+
+        assert result["total"] == 1
+        assert result["by_domain"] == [{"domain": "science", "count": 1}]
+
+    def test_entity_stats_supports_legacy_domain_config(self, db_session):
+        _make_entity(db_session, "Science Entity", "science")
+        _make_entity(db_session, "Healthcare Entity", "healthcare")
+
+        result = _data_entity_stats(db_session, {"domain": "healthcare"})
+
+        assert result["total"] == 1
+        assert result["by_domain"] == [{"domain": "healthcare", "count": 1}]
+
     def test_top_concepts(self, db_session):
         _make_entities(db_session)
         result = _data_top_concepts(db_session, {"limit": 5})
@@ -81,6 +112,14 @@ class TestDataProviders:
         labels = [c["concept"] for c in result["concepts"]]
         assert "concept_a" in labels or "concept_b" in labels
 
+    def test_top_concepts_respects_domain_id_config(self, db_session):
+        _make_entity(db_session, "Science Entity", "science", concepts="science_only")
+        _make_entity(db_session, "Healthcare Entity", "healthcare", concepts="healthcare_only")
+
+        result = _data_top_concepts(db_session, {"domain_id": "science", "limit": 5})
+
+        assert result["concepts"] == [{"concept": "science_only", "count": 1}]
+
     def test_recent_entities(self, db_session):
         _make_entities(db_session)
         result = _data_recent_entities(db_session, {"limit": 3})
@@ -88,12 +127,29 @@ class TestDataProviders:
         assert len(result["entities"]) <= 3
         assert "primary_label" in result["entities"][0]
 
+    def test_recent_entities_respects_domain_id_config(self, db_session):
+        _make_entity(db_session, "Science Entity", "science")
+        _make_entity(db_session, "Healthcare Entity", "healthcare")
+
+        result = _data_recent_entities(db_session, {"domain_id": "science", "limit": 5})
+
+        assert [entity["domain"] for entity in result["entities"]] == ["science"]
+
     def test_quality_score(self, db_session):
         _make_entities(db_session)
         result = _data_quality_score(db_session, {})
         assert result["average"] is not None
         assert result["count"] >= 5
         assert len(result["distribution"]) == 4
+
+    def test_quality_score_respects_domain_id_config(self, db_session):
+        _make_entity(db_session, "Science Entity", "science", quality_score=0.9)
+        _make_entity(db_session, "Healthcare Entity", "healthcare", quality_score=0.2)
+
+        result = _data_quality_score(db_session, {"domain_id": "science"})
+
+        assert result["average"] == 0.9
+        assert result["count"] == 1
 
 
 # ── Integration: authenticated CRUD ──────────────────────────────────────────

@@ -171,15 +171,26 @@ def delete_widget(
 
 # ── Data providers ────────────────────────────────────────────────────────────
 
+def _configured_domain(cfg: dict) -> str | None:
+    value = cfg.get("domain_id") or cfg.get("domain")
+    if value is None:
+        return None
+    domain = str(value).strip()
+    return domain or None
+
+
 def _data_entity_stats(db: Session, cfg: dict) -> dict:
-    domain = cfg.get("domain") or None
+    domain = _configured_domain(cfg)
     q = db.query(models.RawEntity)
     if domain:
         q = q.filter(models.RawEntity.domain == domain)
     total = q.count()
     enriched = q.filter(models.RawEntity.enrichment_status == "completed").count()
+    by_domain_query = db.query(models.RawEntity.domain, func.count(models.RawEntity.id))
+    if domain:
+        by_domain_query = by_domain_query.filter(models.RawEntity.domain == domain)
     by_domain = (
-        db.query(models.RawEntity.domain, func.count(models.RawEntity.id))
+        by_domain_query
         .group_by(models.RawEntity.domain)
         .order_by(func.count(models.RawEntity.id).desc())
         .limit(10).all()
@@ -193,7 +204,7 @@ def _data_entity_stats(db: Session, cfg: dict) -> dict:
 
 
 def _data_top_concepts(db: Session, cfg: dict) -> dict:
-    domain = cfg.get("domain") or None
+    domain = _configured_domain(cfg)
     limit = min(int(cfg.get("limit", 20)), 50)
     q = db.query(models.RawEntity.enrichment_concepts).filter(
         models.RawEntity.enrichment_concepts != None,
@@ -210,7 +221,7 @@ def _data_top_concepts(db: Session, cfg: dict) -> dict:
 
 
 def _data_recent_entities(db: Session, cfg: dict) -> dict:
-    domain = cfg.get("domain") or None
+    domain = _configured_domain(cfg)
     limit = min(int(cfg.get("limit", 10)), 50)
     q = db.query(models.RawEntity)
     if domain:
@@ -230,7 +241,7 @@ def _data_recent_entities(db: Session, cfg: dict) -> dict:
 
 
 def _data_quality_score(db: Session, cfg: dict) -> dict:
-    domain = cfg.get("domain") or None
+    domain = _configured_domain(cfg)
     q = db.query(models.RawEntity).filter(models.RawEntity.quality_score != None)
     if domain:
         q = q.filter(models.RawEntity.domain == domain)
