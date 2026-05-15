@@ -77,8 +77,6 @@ test.describe("Login flow", () => {
     await passwordInput(page).fill("wrong");
     await submitButton(page).click();
 
-    await expect(
-      page.getByText(/invalid username or password/i)
-    ).toBeVisible();
+    await expect(page.getByText(/usuario o contraseña incorrectos/i)).toBeVisible();
   });
 });

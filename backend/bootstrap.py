@@ -10,15 +10,15 @@ logger = logging.getLogger(__name__)
 
 
 def resolve_bootstrap_password_hash() -> str | None:
+    password = os.environ.get("ADMIN_PASSWORD", "").strip()
+    if password:
+        return hash_password(password)
+
     password_hash = os.environ.get("ADMIN_PASSWORD_HASH", "").strip()
     if password_hash:
         # Allow docker-compose escaped bcrypt hashes (`$$2b$$...`) to work in local
         # Python processes as well as in Compose-expanded environments.
         return password_hash.replace("$$", "$")
-
-    password = os.environ.get("ADMIN_PASSWORD", "").strip()
-    if password:
-        return hash_password(password)
 
     return None
 

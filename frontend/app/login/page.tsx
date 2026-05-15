@@ -1,15 +1,24 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "../contexts/AuthContext";
 import { useBranding } from "../contexts/BrandingContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { BrandLockup } from "../components/ukip";
 import { API_BASE } from "../../lib/api";
+
+type PublicSsoSettings = {
+  sso_enabled: boolean;
+  sso_login_button_visible: boolean;
+  sso_provider_label: string;
+  sso_provider_configured: boolean;
+};
 
 function LoginPageContent() {
   const { login, isAuthenticated } = useAuth();
   const { branding } = useBranding();
+  const { t } = useLanguage();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
@@ -18,43 +27,53 @@ function LoginPageContent() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [activeSlide, setActiveSlide] = useState(0);
+  const [ssoSettings, setSsoSettings] = useState<PublicSsoSettings | null>(null);
 
-  const stakeholderSlides = [
+  const platformName = branding.platform_name || "UKIP";
+  const footerText = branding.footer_text || t("auth.login.footer_fallback");
+
+  const stakeholderSlides = useMemo(() => [
     {
-      eyebrow: "Universidades",
-      title: "Convierte producción académica en inteligencia institucional.",
-      body: "Unifica publicaciones, autores, afiliaciones y citas para tomar decisiones con trazabilidad y menos trabajo manual.",
-      metricLabel: "Cobertura institucional",
+      eyebrow: t("auth.login.slide.universities.eyebrow"),
+      title: t("auth.login.slide.universities.title"),
+      body: t("auth.login.slide.universities.body"),
+      metricLabel: t("auth.login.slide.universities.metric_label"),
       metricValue: "74%",
       metricDelta: "+12pp",
-      insightLabel: "Registros armonizados",
+      insightLabel: t("auth.login.slide.universities.insight_label"),
       insightValue: "1,580",
       accent: "from-violet-500 to-cyan-400",
     },
     {
-      eyebrow: "Centros de investigación",
-      title: "Detecta capacidades, brechas y colaboración científica.",
-      body: "UKIP transforma ingestas dispersas en portafolios consultables, enriquecidos y listos para análisis por dominio.",
-      metricLabel: "Enriquecimiento",
+      eyebrow: t("auth.login.slide.research_centers.eyebrow"),
+      title: t("auth.login.slide.research_centers.title"),
+      body: t("auth.login.slide.research_centers.body"),
+      metricLabel: t("auth.login.slide.research_centers.metric_label"),
       metricValue: "61%",
       metricDelta: "+8.1%",
-      insightLabel: "Aristas de conocimiento",
+      insightLabel: t("auth.login.slide.research_centers.insight_label"),
       insightValue: "12.4K",
       accent: "from-cyan-400 to-emerald-300",
     },
     {
-      eyebrow: "Bibliotecas y repositorios",
-      title: "Publica portales de catálogo limpios para consulta real.",
-      body: "Crea experiencias tipo OPAC con facetas, registros verticales y fichas completas sin duplicar la data de ingesta.",
-      metricLabel: "Calidad promedio",
+      eyebrow: t("auth.login.slide.libraries.eyebrow"),
+      title: t("auth.login.slide.libraries.title"),
+      body: t("auth.login.slide.libraries.body"),
+      metricLabel: t("auth.login.slide.libraries.metric_label"),
       metricValue: "0.73",
       metricDelta: "+0.03",
-      insightLabel: "Portales activos",
+      insightLabel: t("auth.login.slide.libraries.insight_label"),
       insightValue: "08",
       accent: "from-violet-500 to-fuchsia-400",
     },
-  ];
+  ], [t]);
   const currentSlide = stakeholderSlides[activeSlide];
+  const showSsoButton = Boolean(
+    ssoSettings?.sso_enabled &&
+    ssoSettings.sso_login_button_visible &&
+    ssoSettings.sso_provider_configured,
+  );
+  const ssoProviderLabel = ssoSettings?.sso_provider_label || "SSO";
 
   // Handle SSO redirect token
   useEffect(() => {
@@ -79,6 +98,23 @@ function LoginPageContent() {
     return () => window.clearInterval(timer);
   }, [stakeholderSlides.length]);
 
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      try {
+        const response = await fetch(`${API_BASE}/auth/sso/settings`);
+        if (!response.ok) return;
+        const data = await response.json() as PublicSsoSettings;
+        if (mounted) setSsoSettings(data);
+      } catch {
+        if (mounted) setSsoSettings(null);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -87,7 +123,7 @@ function LoginPageContent() {
       await login(username, password);
       router.push("/");
     } catch {
-      setError("Invalid username or password.");
+      setError(t("auth.login.error"));
     } finally {
       setLoading(false);
     }
@@ -106,37 +142,41 @@ function LoginPageContent() {
           <div className="w-full max-w-sm">
             <div className="mb-10">
               <BrandLockup branding={branding} size="md" className="mb-8" />
-              <p className="ukip-kicker text-violet-700 dark:text-violet-300">Semantic Intelligence</p>
+              <p className="ukip-kicker text-violet-700 dark:text-violet-300">{t("auth.login.kicker")}</p>
               <h1 className="mt-3 text-3xl font-semibold tracking-[-0.025em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
-                Iniciar sesión
+                {t("auth.login.title")}
               </h1>
               <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-[var(--ukip-muted)]">
-                Accede a {branding.platform_name || "UKIP"} para gestionar catálogos, enriquecimiento y portafolios de investigación.
+                {t("auth.login.description", { platform: platformName })}
               </p>
             </div>
 
-            <button
-              onClick={() => window.location.href = `${API_BASE}/sso/login`}
-              className="ukip-focus flex h-12 w-full items-center justify-center gap-3 rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:border-violet-200 hover:bg-violet-50 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)] dark:hover:bg-violet-500/10"
-            >
-              <svg className="h-4 w-4 text-violet-600" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512">
-                <path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z" />
-              </svg>
-              Continuar con SSO
-            </button>
+            {showSsoButton && (
+              <>
+                <button
+                  onClick={() => window.location.href = `${API_BASE}/sso/login`}
+                  className="ukip-focus flex h-12 w-full items-center justify-center gap-3 rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:border-violet-200 hover:bg-violet-50 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)] dark:hover:bg-violet-500/10"
+                >
+                  <svg className="h-4 w-4 text-violet-600" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512">
+                    <path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z" />
+                  </svg>
+                  {t("auth.login.sso_with_provider", { provider: ssoProviderLabel })}
+                </button>
 
-            <div className="my-6 flex items-center gap-3">
-              <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
-              <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                o usar credenciales
-              </span>
-              <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
-            </div>
+                <div className="my-6 flex items-center gap-3">
+                  <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                    {t("auth.login.credentials_divider")}
+                  </span>
+                  <div className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
+                </div>
+              </>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-[0.12em] text-slate-700 dark:text-[var(--ukip-text)]">
-                  Usuario
+                  {t("auth.username")}
                 </label>
                 <input
                   type="text"
@@ -152,9 +192,9 @@ function LoginPageContent() {
               <div>
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold uppercase tracking-[0.12em] text-slate-700 dark:text-[var(--ukip-text)]">
-                    Contraseña
+                    {t("auth.password")}
                   </label>
-                  <span className="text-xs font-semibold text-violet-600 dark:text-violet-300">Acceso seguro</span>
+                  <span className="text-xs font-semibold text-violet-600 dark:text-violet-300">{t("auth.login.secure_access")}</span>
                 </div>
                 <div className="relative mt-2">
                   <input
@@ -163,14 +203,14 @@ function LoginPageContent() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     autoComplete="current-password"
-                    placeholder="Min. 8 caracteres"
+                    placeholder={t("auth.login.password_placeholder")}
                     className="ukip-focus h-12 w-full rounded-full border border-slate-200 bg-slate-50 px-5 pr-12 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-violet-300 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)] dark:focus:bg-white/10"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-slate-400 transition hover:text-violet-600 dark:text-white/40 dark:hover:text-violet-300"
-                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    aria-label={showPassword ? t("auth.login.hide_password") : t("auth.login.show_password")}
                   >
                     {showPassword ? (
                       <svg className="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -191,9 +231,9 @@ function LoginPageContent() {
               <div className="flex items-center justify-between text-xs">
                 <label className="flex items-center gap-2 font-semibold text-slate-600 dark:text-[var(--ukip-muted)]">
                   <input type="checkbox" defaultChecked className="h-4 w-4 rounded border-violet-300 accent-violet-600" />
-                  Recordarme
+                  {t("auth.login.remember_me")}
                 </label>
-                <span className="font-semibold text-violet-600 dark:text-violet-300">¿Olvidaste tu contraseña?</span>
+                <span className="font-semibold text-violet-600 dark:text-violet-300">{t("auth.login.forgot_password")}</span>
               </div>
 
               {error && (
@@ -207,12 +247,12 @@ function LoginPageContent() {
                 disabled={loading}
                 className="ukip-focus h-12 w-full rounded-full border border-transparent bg-[var(--ukip-primary)] px-5 text-sm font-semibold text-white shadow-[var(--ukip-glow-violet)] transition hover:bg-[var(--ukip-primary-strong)] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {loading ? "Ingresando..." : `Entrar a ${branding.platform_name || "UKIP"}`}
+                {loading ? t("auth.login.loading") : t("auth.login.submit", { platform: platformName })}
               </button>
             </form>
 
             <p className="mt-8 text-center text-xs text-slate-400 dark:text-[var(--ukip-muted)]">
-              © 2026 {branding.platform_name || "UKIP"}. {branding.footer_text || "Research Intelligence Platform"}.
+              © 2026 {platformName}. {footerText}.
             </p>
           </div>
         </div>
@@ -227,15 +267,15 @@ function LoginPageContent() {
           <div className="relative flex h-full min-h-[560px] flex-col">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/60">UKIP Narrative</p>
-                <p className="mt-1 text-sm font-semibold text-white/80">Research intelligence by stakeholder</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/60">{t("auth.login.narrative_label")}</p>
+                <p className="mt-1 text-sm font-semibold text-white/80">{t("auth.login.narrative_subtitle")}</p>
               </div>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setActiveSlide((current) => (current - 1 + stakeholderSlides.length) % stakeholderSlides.length)}
                   className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white transition hover:bg-white/20"
-                  aria-label="Slide anterior"
+                  aria-label={t("auth.login.previous_slide")}
                 >
                   ←
                 </button>
@@ -243,7 +283,7 @@ function LoginPageContent() {
                   type="button"
                   onClick={() => setActiveSlide((current) => (current + 1) % stakeholderSlides.length)}
                   className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white transition hover:bg-white/20"
-                  aria-label="Slide siguiente"
+                  aria-label={t("auth.login.next_slide")}
                 >
                   →
                 </button>
@@ -304,7 +344,7 @@ function LoginPageContent() {
                   type="button"
                   onClick={() => setActiveSlide(index)}
                   className={`h-2 rounded-full transition-all ${activeSlide === index ? "w-8 bg-white" : "w-2 bg-white/40 hover:bg-white/70"}`}
-                  aria-label={`Ir al slide ${index + 1}`}
+                  aria-label={t("auth.login.go_to_slide", { number: index + 1 })}
                 />
               ))}
             </div>

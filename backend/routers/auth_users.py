@@ -18,6 +18,7 @@ from backend import models, schemas
 from backend.auth import authenticate_user, create_access_token, create_refresh_token, get_current_user, require_role, SECRET_KEY, ALGORITHM
 from jose import jwt, JWTError
 from backend.database import get_db
+from backend.routers.platform_auth_settings import get_or_create_auth_settings, sso_provider_configured
 from backend.routers.limiter import limiter
 
 router = APIRouter(tags=["auth"])
@@ -97,8 +98,13 @@ oauth.register(
 )
 
 @router.get("/sso/login", tags=["sso"])
-async def sso_login(request: Request):
+async def sso_login(request: Request, db: Session = Depends(get_db)):
     """Initiates the OAuth2 / OIDC login flow."""
+    settings = get_or_create_auth_settings(db)
+    if not settings.sso_enabled:
+        raise HTTPException(status_code=404, detail="SSO is disabled")
+    if not sso_provider_configured():
+        raise HTTPException(status_code=503, detail="SSO provider is not configured")
     redirect_uri = str(request.url_for('sso_callback'))
     return await oauth.sso.authorize_redirect(request, redirect_uri)
 
@@ -121,9 +127,24 @@ async def sso_callback(request: Request, db: Session = Depends(get_db)):
     if not email:
         raise HTTPException(status_code=400, detail="SSO provider did not return an email address")
 
+    settings = get_or_create_auth_settings(db)
+    if not settings.sso_enabled:
+        raise HTTPException(status_code=404, detail="SSO is disabled")
+
+    allowed_domains = [
+        domain.strip().lower().lstrip("@")
+        for domain in (settings.sso_allowed_domains or "").split(",")
+        if domain.strip()
+    ]
+    email_domain = email.rsplit("@", 1)[-1].lower() if "@" in email else ""
+    if allowed_domains and email_domain not in allowed_domains:
+        raise HTTPException(status_code=403, detail="Email domain is not allowed for SSO")
+
     # Find or create user
     user = db.query(models.User).filter(models.User.email == email).first()
     if not user:
+        if not settings.sso_auto_provision:
+            raise HTTPException(status_code=403, detail="SSO user auto-provisioning is disabled")
         # Auto-provision a viewer account
         import uuid
         from backend.auth import hash_password
@@ -133,7 +154,7 @@ async def sso_callback(request: Request, db: Session = Depends(get_db)):
             username=email.split("@")[0] + "_" + str(uuid.uuid4())[:6],
             email=email,
             password_hash=hash_password(dummy_pass),
-            role="viewer",
+            role=settings.sso_default_role or "viewer",
             display_name=user_info.get("name"),
             avatar_url=user_info.get("picture"),
             is_active=True

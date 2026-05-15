@@ -65,6 +65,7 @@ from backend.routers import (
     transformations,
     webhooks,
     onboarding,
+    platform_auth_settings,
     widgets,
     workspace_reset,
     workflows,
@@ -324,6 +325,7 @@ app.add_middleware(RequestLoggingMiddleware)
 # ── Register routers ──────────────────────────────────────────────────────────
 
 app.include_router(auth_users.router)
+app.include_router(platform_auth_settings.router)
 app.include_router(ingest.router)
 app.include_router(domains.router)
 app.include_router(analytics.router)

@@ -535,6 +535,36 @@ class BrandingSettingsUpdate(BaseModel):
     footer_text:   Optional[str] = Field(None, max_length=200)
 
 
+# ── Platform Authentication Settings ─────────────────────────────────────────
+
+class PlatformAuthSettingsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    sso_enabled: bool
+    sso_login_button_visible: bool
+    sso_provider_label: str
+    sso_auto_provision: bool
+    sso_default_role: str
+    sso_allowed_domains: str
+    sso_provider_configured: bool = False
+
+
+class PublicSsoSettingsResponse(BaseModel):
+    sso_enabled: bool
+    sso_login_button_visible: bool
+    sso_provider_label: str
+    sso_provider_configured: bool
+
+
+class PlatformAuthSettingsUpdate(BaseModel):
+    sso_enabled: Optional[bool] = None
+    sso_login_button_visible: Optional[bool] = None
+    sso_provider_label: Optional[str] = Field(None, min_length=1, max_length=80)
+    sso_auto_provision: Optional[bool] = None
+    sso_default_role: Optional[str] = Field(None, pattern=r"^(viewer|editor|admin)$")
+    sso_allowed_domains: Optional[str] = Field(None, max_length=500)
+
+
 # ── Phase 10 Sprint 45: Knowledge Gap Detector ───────────────────────────────
 
 class GapItemResponse(BaseModel):

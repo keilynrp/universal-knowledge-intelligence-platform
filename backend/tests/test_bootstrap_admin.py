@@ -108,3 +108,38 @@ def test_bootstrap_refreshes_password_for_existing_super_admin(db_session, monke
     user = db_session.query(models.User).filter(models.User.username == "superadmin").first()
     assert user is not None
     assert verify_password("fresh-secret123", user.password_hash) is True
+
+
+@pytest.mark.usefixtures("db_session")
+def test_bootstrap_preserves_existing_avatar(db_session, monkeypatch):
+    existing_super_admin = (
+        db_session.query(models.User)
+        .filter(models.User.role == "super_admin")
+        .all()
+    )
+    for user in existing_super_admin:
+        db_session.delete(user)
+    db_session.commit()
+
+    avatar_url = "data:image/jpeg;base64,avatar-payload"
+    db_session.add(models.User(
+        username="superadmin",
+        password_hash="stale-hash",
+        role="super_admin",
+        is_active=True,
+        avatar_url=avatar_url,
+        display_name="Existing Admin",
+    ))
+    db_session.commit()
+
+    monkeypatch.setenv("ADMIN_USERNAME", "superadmin")
+    monkeypatch.setenv("ADMIN_PASSWORD", "fresh-secret123")
+    monkeypatch.setenv("ADMIN_PASSWORD_HASH", "$$2b$$12$$ignoredWhenPlainPasswordExists")
+
+    ensure_bootstrap_super_admin(db_session)
+
+    user = db_session.query(models.User).filter(models.User.username == "superadmin").first()
+    assert user is not None
+    assert user.avatar_url == avatar_url
+    assert user.display_name == "Existing Admin"
+    assert verify_password("fresh-secret123", user.password_hash) is True

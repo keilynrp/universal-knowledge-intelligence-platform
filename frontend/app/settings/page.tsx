@@ -9,13 +9,14 @@ import PreferencesTab from "./PreferencesTab";
 import BrandingTab from "./BrandingTab";
 import AccountTab from "./AccountTab";
 import NotificationsTab from "./NotificationsTab";
+import AuthSettingsTab from "./AuthSettingsTab";
 import UsersTab from "./UsersTab";
 import WebhooksTab from "./WebhooksTab";
 import WorkspaceResetTab from "./WorkspaceResetTab";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-type Tab = "preferences" | "account" | "users" | "webhooks" | "notifications" | "branding" | "workspace_reset";
+type Tab = "preferences" | "account" | "users" | "auth" | "webhooks" | "notifications" | "branding" | "workspace_reset";
 
 
 // ── Main Page ────────────────────────────────────────────────────────────────
@@ -34,6 +35,7 @@ export default function SettingsPage() {
         { id: "preferences", label: t("settings.tab.preferences") },
         { id: "account", label: t("settings.tab.account") },
         ...(isSuperAdmin ? [{ id: "users", label: t("settings.tab.users") }] : []),
+        ...(isAdmin ? [{ id: "auth", label: t("settings.tab.auth") }] : []),
         ...(isAdmin ? [{ id: "webhooks", label: t("settings.tab.webhooks") }] : []),
         ...(isAdmin ? [{ id: "notifications", label: t("settings.tab.notifications") }] : []),
         ...(isAdmin ? [{ id: "branding", label: t("settings.tab.branding") }] : []),
@@ -67,6 +69,7 @@ export default function SettingsPage() {
             )}
             {tab === "account"        && <AccountTab user={user} updateAvatarUrl={updateAvatarUrl} toast={toast} />}
             {tab === "users"          && isSuperAdmin && <UsersTab currentUserId={user?.id ?? 0} toast={toast} />}
+            {tab === "auth"           && isAdmin && <AuthSettingsTab toast={toast} />}
             {tab === "webhooks"       && isAdmin && <WebhooksTab toast={toast} />}
             {tab === "notifications"  && isAdmin && <NotificationsTab toast={toast} />}
             {tab === "branding"       && isAdmin && <BrandingTab toast={toast} />}

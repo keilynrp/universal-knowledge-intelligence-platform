@@ -404,6 +404,20 @@ class BrandingSettings(Base):
     footer_text   = Column(String, default="Universal Knowledge Intelligence Platform")
 
 
+# ── Platform Authentication Settings (singleton, id=1) ──────────────────────
+
+class PlatformAuthSettings(Base):
+    __tablename__ = "platform_auth_settings"
+
+    id                       = Column(Integer, primary_key=True, default=1)
+    sso_enabled              = Column(Boolean, default=False)
+    sso_login_button_visible = Column(Boolean, default=False)
+    sso_provider_label       = Column(String, default="SSO")
+    sso_auto_provision       = Column(Boolean, default=True)
+    sso_default_role         = Column(String, default="viewer")
+    sso_allowed_domains      = Column(Text, default="")  # comma-separated email domains
+
+
 # ── Phase 10 Sprint 46: Artifact Templates ────────────────────────────────────
 
 class ArtifactTemplate(Base):
