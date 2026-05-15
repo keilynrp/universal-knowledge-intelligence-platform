@@ -17,7 +17,9 @@ from backend.auth import (
     create_access_token,
     SECRET_KEY,
     ALGORITHM,
+    verify_password,
 )
+from backend import models
 
 
 
@@ -98,3 +100,80 @@ def test_login_wrong_username(client):
 def test_login_missing_fields(client):
     response = client.post("/auth/token", data={})
     assert response.status_code == 422  # Unprocessable entity
+
+
+def test_password_reset_request_reports_unavailable_without_smtp(client):
+    response = client.post("/auth/password-reset/request", json={"email": "testadmin@example.com"})
+
+    assert response.status_code == 200
+    assert response.json()["sent"] is False
+    assert response.json()["reason"] == "smtp_not_configured"
+
+
+def test_password_reset_request_creates_token_and_sends_email(client, db_session, monkeypatch):
+    user = (
+        db_session.query(models.User)
+        .filter(models.User.username == os.environ["ADMIN_USERNAME"])
+        .first()
+    )
+    user.email = "TestAdmin@Example.com"
+    db_session.merge(models.NotificationSettings(
+        id=1,
+        enabled=True,
+        smtp_host="smtp.example.com",
+        smtp_port=587,
+        smtp_user="mailer@example.com",
+        smtp_password="secret",
+        from_email="noreply@example.com",
+    ))
+    db_session.commit()
+    sent = {}
+
+    def fake_send(settings, to_address, subject, body):
+        sent["to"] = to_address
+        sent["subject"] = subject
+        sent["body"] = body
+        return True
+
+    monkeypatch.setattr("backend.routers.auth_users.send_plain_email", fake_send)
+
+    response = client.post("/auth/password-reset/request", json={"email": "testadmin@example.com"})
+
+    assert response.status_code == 200
+    assert response.json()["sent"] is True
+    assert sent["to"] == "testadmin@example.com"
+    assert "/login?reset_token=" in sent["body"]
+    assert db_session.query(models.PasswordResetToken).filter_by(user_id=user.id).count() == 1
+
+
+def test_password_reset_confirm_updates_password(client, db_session):
+    user = (
+        db_session.query(models.User)
+        .filter(models.User.username == os.environ["ADMIN_USERNAME"])
+        .first()
+    )
+    raw_token = "reset-token-for-test-12345678901234567890"
+    from backend.routers.auth_users import _password_reset_token_hash
+    from datetime import datetime, timedelta, timezone
+
+    db_session.add(models.PasswordResetToken(
+        user_id=user.id,
+        token_hash=_password_reset_token_hash(raw_token),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+    ))
+    db_session.commit()
+
+    response = client.post(
+        "/auth/password-reset/confirm",
+        json={"token": raw_token, "new_password": "newpassword123"},
+    )
+
+    assert response.status_code == 200
+    db_session.refresh(user)
+    assert verify_password("newpassword123", user.password_hash) is True
+    used_token = (
+        db_session.query(models.PasswordResetToken)
+        .filter_by(token_hash=_password_reset_token_hash(raw_token))
+        .first()
+    )
+    assert used_token.used_at is not None

@@ -4,22 +4,27 @@ Authentication and user management endpoints.
   GET/POST/GET{id}/PUT/DELETE /users
   GET/POST /users/me  /users/me/password
 """
+from datetime import datetime, timedelta, timezone
+import hashlib
+import secrets
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from starlette.responses import RedirectResponse
 from authlib.integrations.starlette_client import OAuth
 import os
 
 from backend import models, schemas
-from backend.auth import authenticate_user, create_access_token, create_refresh_token, get_current_user, require_role, SECRET_KEY, ALGORITHM
+from backend.auth import authenticate_user, create_access_token, create_refresh_token, get_current_user, require_role, SECRET_KEY, ALGORITHM, hash_password
 from jose import jwt, JWTError
 from backend.database import get_db
 from backend.routers.platform_auth_settings import get_or_create_auth_settings, sso_provider_configured
 from backend.routers.limiter import limiter
+from backend.notifications.email_sender import send_plain_email
 
 router = APIRouter(tags=["auth"])
 
@@ -53,6 +58,31 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str = Field(..., description="The valid refresh JWT token")
 
 
+class PasswordResetRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(..., min_length=32, max_length=256)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
+def _password_reset_token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _reset_link(request: Request, token: str) -> str:
+    frontend_url = os.environ.get("FRONTEND_URL", "").rstrip("/")
+    if not frontend_url:
+        forwarded_host = request.headers.get("x-forwarded-host")
+        forwarded_proto = request.headers.get("x-forwarded-proto", "https")
+        if forwarded_host:
+            frontend_url = f"{forwarded_proto}://{forwarded_host}"
+        else:
+            frontend_url = str(request.base_url).rstrip("/")
+    return f"{frontend_url}/login?reset_token={token}"
+
+
 @router.post("/auth/refresh", tags=["auth"])
 @limiter.limit("20/minute")
 def refresh_token(request: Request, payload: RefreshTokenRequest, db: Session = Depends(get_db)):
@@ -84,6 +114,92 @@ def refresh_token(request: Request, payload: RefreshTokenRequest, db: Session = 
     new_refresh = create_refresh_token(subject=user.username, role=user.role)
 
     return {"access_token": new_access, "refresh_token": new_refresh, "token_type": "bearer"}
+
+
+@router.post("/auth/password-reset/request", tags=["auth"])
+@limiter.limit("10/hour")
+def request_password_reset(
+    request: Request,
+    payload: PasswordResetRequest,
+    db: Session = Depends(get_db),
+):
+    """Request a password reset email if SMTP and the account are available."""
+    neutral_response = {
+        "sent": True,
+        "detail": "If the account exists and email delivery is configured, a reset link will be sent.",
+    }
+    email = payload.email.strip().lower()
+    smtp_settings = db.get(models.NotificationSettings, 1)
+    if not smtp_settings or not smtp_settings.enabled or not smtp_settings.smtp_host:
+        return {**neutral_response, "sent": False, "reason": "smtp_not_configured"}
+
+    user = (
+        db.query(models.User)
+        .filter(func.lower(models.User.email) == email, models.User.is_active == True)
+        .first()
+    )
+    if not user:
+        return neutral_response
+
+    raw_token = secrets.token_urlsafe(48)
+    token = models.PasswordResetToken(
+        user_id=user.id,
+        token_hash=_password_reset_token_hash(raw_token),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+    )
+    db.add(token)
+    db.commit()
+
+    platform_name = os.environ.get("PLATFORM_NAME", "UKIP")
+    link = _reset_link(request, raw_token)
+    sent = send_plain_email(
+        smtp_settings,
+        email,
+        subject=f"{platform_name}: recupera tu contraseña",
+        body=(
+            "Recibimos una solicitud para recuperar tu contraseña.\n\n"
+            f"Usa este enlace para crear una nueva contraseña:\n{link}\n\n"
+            "Este enlace vence en 30 minutos. Si no solicitaste este cambio, puedes ignorar este correo."
+        ),
+    )
+    if not sent:
+        return {**neutral_response, "sent": False, "reason": "email_not_sent"}
+    return neutral_response
+
+
+@router.post("/auth/password-reset/confirm", tags=["auth"])
+@limiter.limit("20/hour")
+def confirm_password_reset(
+    request: Request,
+    payload: PasswordResetConfirm,
+    db: Session = Depends(get_db),
+):
+    """Consume a valid password reset token and update the user's password."""
+    token_hash = _password_reset_token_hash(payload.token)
+    reset_token = (
+        db.query(models.PasswordResetToken)
+        .filter(models.PasswordResetToken.token_hash == token_hash)
+        .first()
+    )
+    now = datetime.now(timezone.utc)
+    if not reset_token or reset_token.used_at is not None:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+    expires_at = reset_token.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < now:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    user = db.get(models.User, reset_token.user_id)
+    if not user or not user.is_active:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    user.password_hash = hash_password(payload.new_password)
+    user.failed_attempts = 0
+    user.locked_until = None
+    reset_token.used_at = now
+    db.commit()
+    return {"reset": True}
 
 
 # ── SSO Integration (Sprint 65) ───────────────────────────────────────────────

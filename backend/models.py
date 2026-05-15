@@ -218,6 +218,17 @@ class User(Base):
     org_id          = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
 
 
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    token_hash = Column(String(64), unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    used_at    = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 # ── Authority Resolution Layer ──────────────────────────────────────────────
 
 class AuthorityRecord(Base):

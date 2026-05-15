@@ -23,8 +23,12 @@ function LoginPageContent() {
   const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetMode, setResetMode] = useState<"login" | "request" | "confirm">("login");
   const [showPassword, setShowPassword] = useState(false);
   const [activeSlide, setActiveSlide] = useState(0);
   const [ssoSettings, setSsoSettings] = useState<PublicSsoSettings | null>(null);
@@ -83,6 +87,9 @@ function LoginPageContent() {
       // Wait a moment for context to catch up or just reload
       window.location.href = "/";
     }
+    if (searchParams.get("reset_token")) {
+      setResetMode("confirm");
+    }
   }, [searchParams]);
 
   // Already authenticated → go straight to dashboard
@@ -124,6 +131,57 @@ function LoginPageContent() {
       router.push("/");
     } catch {
       setError(t("auth.login.error"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordResetRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch(`${API_BASE}/auth/password-reset/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: resetEmail }),
+      });
+      if (!response.ok) throw new Error("reset request failed");
+      const data = await response.json();
+      if (data.sent === false && data.reason === "smtp_not_configured") {
+        setError(t("auth.login.reset_smtp_unavailable"));
+        return;
+      }
+      setNotice(t("auth.login.reset_request_sent"));
+    } catch {
+      setError(t("auth.login.reset_request_error"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordResetConfirm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch(`${API_BASE}/auth/password-reset/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: searchParams.get("reset_token") ?? "",
+          new_password: newPassword,
+        }),
+      });
+      if (!response.ok) throw new Error("reset confirm failed");
+      setNotice(t("auth.login.reset_complete"));
+      setNewPassword("");
+      setResetMode("login");
+      router.replace("/login");
+    } catch {
+      setError(t("auth.login.reset_confirm_error"));
     } finally {
       setLoading(false);
     }
@@ -173,6 +231,87 @@ function LoginPageContent() {
               </>
             )}
 
+            {resetMode === "request" && (
+              <form onSubmit={handlePasswordResetRequest} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-[0.12em] text-slate-700 dark:text-[var(--ukip-text)]">
+                    {t("auth.login.reset_email")}
+                  </label>
+                  <input
+                    type="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    required
+                    autoComplete="email"
+                    placeholder={t("settings.account.email_placeholder")}
+                    className="ukip-focus mt-2 h-12 w-full rounded-full border border-slate-200 bg-slate-50 px-5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-violet-300 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)] dark:focus:bg-white/10"
+                  />
+                </div>
+                {error && (
+                  <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200">
+                    {error}
+                  </p>
+                )}
+                {notice && (
+                  <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
+                    {notice}
+                  </p>
+                )}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="ukip-focus h-12 w-full rounded-full border border-transparent bg-[var(--ukip-primary)] px-5 text-sm font-semibold text-white shadow-[var(--ukip-glow-violet)] transition hover:bg-[var(--ukip-primary-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loading ? t("auth.login.reset_sending") : t("auth.login.reset_send_link")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setResetMode("login"); setError(""); setNotice(""); }}
+                  className="w-full text-center text-xs font-semibold text-violet-600 dark:text-violet-300"
+                >
+                  {t("auth.login.back_to_login")}
+                </button>
+              </form>
+            )}
+
+            {resetMode === "confirm" && (
+              <form onSubmit={handlePasswordResetConfirm} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-[0.12em] text-slate-700 dark:text-[var(--ukip-text)]">
+                    {t("auth.login.new_password")}
+                  </label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                    placeholder={t("auth.login.new_password_placeholder")}
+                    className="ukip-focus mt-2 h-12 w-full rounded-full border border-slate-200 bg-slate-50 px-5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-violet-300 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)] dark:focus:bg-white/10"
+                  />
+                </div>
+                {error && (
+                  <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200">
+                    {error}
+                  </p>
+                )}
+                {notice && (
+                  <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
+                    {notice}
+                  </p>
+                )}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="ukip-focus h-12 w-full rounded-full border border-transparent bg-[var(--ukip-primary)] px-5 text-sm font-semibold text-white shadow-[var(--ukip-glow-violet)] transition hover:bg-[var(--ukip-primary-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loading ? t("settings.account.saving") : t("auth.login.reset_password")}
+                </button>
+              </form>
+            )}
+
+            {resetMode === "login" && (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-[0.12em] text-slate-700 dark:text-[var(--ukip-text)]">
@@ -233,7 +372,13 @@ function LoginPageContent() {
                   <input type="checkbox" defaultChecked className="h-4 w-4 rounded border-violet-300 accent-violet-600" />
                   {t("auth.login.remember_me")}
                 </label>
-                <span className="font-semibold text-violet-600 dark:text-violet-300">{t("auth.login.forgot_password")}</span>
+                <button
+                  type="button"
+                  onClick={() => { setResetMode("request"); setError(""); setNotice(""); setResetEmail(username); }}
+                  className="font-semibold text-violet-600 dark:text-violet-300"
+                >
+                  {t("auth.login.forgot_password")}
+                </button>
               </div>
 
               {error && (
@@ -250,6 +395,7 @@ function LoginPageContent() {
                 {loading ? t("auth.login.loading") : t("auth.login.submit", { platform: platformName })}
               </button>
             </form>
+            )}
 
             <p className="mt-8 text-center text-xs text-slate-400 dark:text-[var(--ukip-muted)]">
               © 2026 {platformName}. {footerText}.

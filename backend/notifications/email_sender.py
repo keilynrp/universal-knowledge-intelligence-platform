@@ -31,9 +31,19 @@ def send_notification(settings, subject: str, body: str) -> bool:
     Send a plain-text email via TLS SMTP.
     Returns True on success, False on any error (never raises).
     """
+    if not settings.recipient_email:
+        return False
+    return send_plain_email(settings, settings.recipient_email, subject, body)
+
+
+def send_plain_email(settings, to_address: str, subject: str, body: str) -> bool:
+    """
+    Send a plain-text email via TLS SMTP to a specific recipient.
+    Returns True on success, False on any error (never raises).
+    """
     if not settings.enabled:
         return False
-    if not settings.recipient_email or not settings.smtp_host:
+    if not to_address or not settings.smtp_host:
         return False
 
     try:
@@ -48,11 +58,11 @@ def send_notification(settings, subject: str, body: str) -> bool:
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
             msg["From"] = settings.from_email or settings.smtp_user
-            msg["To"] = settings.recipient_email
+            msg["To"] = to_address
             msg.attach(MIMEText(body, "plain"))
             smtp.sendmail(
                 msg["From"],
-                settings.recipient_email,
+                to_address,
                 msg.as_string(),
             )
         logger.info("Email notification sent: %s", subject)
