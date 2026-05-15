@@ -23,7 +23,7 @@ interface DashboardStats {
   total_entities: number;
   unique_secondary_labels: number;
   unique_entity_types: number;
-  domain_distribution?: { domain: string | null; count: number }[];
+  domain_distribution?: { domain?: string | null; name?: string | null; count: number }[];
 }
 
 interface DemoStatus {
@@ -356,7 +356,7 @@ export default function Home() {
   const topDomains = activeDomains.slice(0, 6);
   const maxDomainCount = topDomains[0]?.count ?? 1;
   const domainCoverage = topDomains.map((domain) => ({
-    label: domain.domain ?? t("page.home.domain_unknown"),
+    label: domain.domain ?? domain.name ?? t("page.home.domain_unknown"),
     percent: clampPercent((domain.count / maxDomainCount) * 100),
   }));
   const ingestionScore = hasEntities ? 100 : 0;
@@ -499,9 +499,9 @@ export default function Home() {
                 const active = stats.domain_distribution!.filter((d) => d.count > 0).sort((a, b) => b.count - a.count);
                 const max = active[0]?.count ?? 1;
                 return active.map((d) => (
-                  <div key={d.domain ?? "unknown"} className="flex items-center gap-3">
+                  <div key={d.domain ?? d.name ?? "unknown"} className="flex items-center gap-3">
                     <span className="w-28 shrink-0 truncate text-sm font-medium text-slate-700 dark:text-[var(--ukip-muted)]">
-                      {d.domain ?? tr("page.home.domain_unknown", "Sin dominio")}
+                      {d.domain ?? d.name ?? tr("page.home.domain_unknown", "Sin dominio")}
                     </span>
                     <div className="flex-1 h-2 rounded-full bg-slate-100 dark:bg-white/10">
                       <div className="h-2 rounded-full bg-violet-500 transition-all" style={{ width: `${Math.round((d.count / max) * 100)}%` }} />

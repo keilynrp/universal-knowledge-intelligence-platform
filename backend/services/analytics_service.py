@@ -511,6 +511,6 @@ class AnalyticsService:
             },
             "top_secondary_labels": [{"name": b[0], "count": b[1]} for b in top_secondary_labels],
             "type_distribution": [{"name": t[0], "count": t[1]} for t in type_distribution],
-            "domain_distribution": [{"name": d[0], "count": d[1]} for d in domain_distribution],
+            "domain_distribution": [{"domain": d[0], "name": d[0], "count": d[1]} for d in domain_distribution],
             "quality": {"average": avg_quality, "distribution": quality_dist},
         }

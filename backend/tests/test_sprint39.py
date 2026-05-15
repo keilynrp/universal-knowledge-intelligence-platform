@@ -89,6 +89,23 @@ def test_dashboard_kpis_match_entity_count(client, auth_headers, db_session):
     assert data["kpis"]["total_entities"] >= actual - 2  # allow minor StaticPool drift
 
 
+def test_stats_domain_distribution_uses_domain_key(client, auth_headers, db_session):
+    db_session.add(models.RawEntity(
+        primary_label="Science entity",
+        domain="science",
+        enrichment_status="completed",
+    ))
+    db_session.commit()
+
+    response = client.get("/stats", headers=auth_headers)
+
+    assert response.status_code == 200
+    domains = response.json()["domain_distribution"]
+    science = next((item for item in domains if item.get("domain") == "science"), None)
+    assert science is not None
+    assert science["count"] >= 1
+
+
 def test_dashboard_empty_domain_returns_zeros(client, auth_headers):
     """With no entities, KPIs are zero and lists are empty — no server error."""
     response = client.get("/dashboard/summary?domain_id=empty_test_domain", headers=auth_headers)
