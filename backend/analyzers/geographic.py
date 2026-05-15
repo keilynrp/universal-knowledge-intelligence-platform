@@ -171,12 +171,16 @@ def geographic_analysis(
 
     rows = _load_entities_with_affiliations(domain_id, org_id=org_id)
     if not rows:
-        return {
+        result: dict[str, Any] = {
             "domain_id": domain_id,
             "coverage": 0.0,
             "total_entities": 0,
             "countries": [],
         }
+        if include_collaboration:
+            result["collaboration_rate"] = 0.0
+            result["top_country_pairs"] = []
+        return result
 
     total_entities = len(rows)
     country_stats: dict[str, dict[str, int]] = defaultdict(lambda: {
