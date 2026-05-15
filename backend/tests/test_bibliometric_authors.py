@@ -1,7 +1,6 @@
 """Tests for Author Productivity & H-index (task 2.4)."""
 import json
 import pytest
-from backend.tests.conftest import TestingSessionLocal
 from backend import models
 from backend.analyzers.author_metrics import compute_h_index
 

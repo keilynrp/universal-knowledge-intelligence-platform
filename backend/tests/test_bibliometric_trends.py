@@ -1,13 +1,13 @@
 """Tests for Trend Topics analyzer (task 1.4)."""
 import json
 import pytest
-from backend.tests.conftest import TestingSessionLocal
 from backend import models
+from backend.database import SessionLocal
 
 
 def _seed_entities_with_years(concepts_by_year: dict[int, list[str]], domain: str = "default"):
     """Seed entities with concepts and year in attributes_json using a fresh session."""
-    db = TestingSessionLocal()
+    db = SessionLocal()
     try:
         for year, concepts_list in concepts_by_year.items():
             for concepts in concepts_list:

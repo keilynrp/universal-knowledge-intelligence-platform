@@ -1,8 +1,8 @@
 """Tests for Geographic / Country analysis (task 4.6)."""
 import json
 import pytest
-from backend.tests.conftest import TestingSessionLocal
 from backend import models
+from backend.database import SessionLocal
 from backend.analyzers.geographic import extract_country, geographic_analysis
 
 
@@ -42,8 +42,8 @@ class TestCountryExtraction:
 
 
 def _seed_entities_with_affiliations(entities_data: list[dict], domain: str = "default"):
-    """Seed entities using a fresh session from TestingSessionLocal."""
-    db = TestingSessionLocal()
+    """Seed entities using a fresh session."""
+    db = SessionLocal()
     try:
         for data in entities_data:
             attrs = {"affiliation": data.get("affiliation", "")}

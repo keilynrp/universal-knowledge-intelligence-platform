@@ -1,41 +1,52 @@
 """
 Shared pytest fixtures for UKIP backend tests.
-Uses an isolated in-memory SQLite database so tests never touch sql_app.db.
+Supports both SQLite (local dev) and PostgreSQL (CI / production parity).
 """
 import os
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-# ── Use a clean in-memory DB for every test session ────────────────────────
-# StaticPool ensures all sessions/connections share the SAME in-memory database.
-TEST_DATABASE_URL = "sqlite:///:memory:"
-
-# Patch the database URL before importing app modules.
-# ADMIN_PASSWORD is the plain-text password used to bootstrap the super_admin
-# on first startup. ADMIN_USERNAME identifies the account.
+# ── Determine test DB mode ──────────────────────────────────────────────────
+# CI sets UKIP_DB_MODE=postgres + DATABASE_URL=postgresql://...
+# Local dev defaults to SQLite in-memory.
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-not-for-production")
 os.environ.setdefault("ADMIN_USERNAME", "testadmin")
 os.environ.setdefault("ADMIN_PASSWORD", "testpassword")
 os.environ.setdefault("ENCRYPTION_KEY", "vRHc0zVcTXbRfUBZEsKNal2lMCfINwDh90EXE8vu2Ew=")
-os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
 os.environ.setdefault("UKIP_DB_MODE", "sqlite")
 os.environ.setdefault("UKIP_SKIP_STARTUP_SIDE_EFFECTS", "1")
 os.environ.setdefault("SENTRY_ENABLED", "0")
 
+_DB_MODE = os.environ.get("UKIP_DB_MODE", "sqlite").lower()
+_IS_POSTGRES = _DB_MODE == "postgres"
 
-from sqlalchemy import text  # noqa: E402
+if _IS_POSTGRES:
+    _TEST_DB_URL = os.environ.get(
+        "DATABASE_URL",
+        "postgresql+psycopg2://ukip_test:ukip_test_pw@localhost:5432/ukip_test",
+    )
+    os.environ["DATABASE_URL"] = _TEST_DB_URL
+else:
+    _TEST_DB_URL = "sqlite:///:memory:"
+    os.environ.setdefault("DATABASE_URL", _TEST_DB_URL)
+
+
 from backend import models, database  # noqa: E402 — env vars must be set first
 from backend.main import app  # noqa: E402
 
-# Override the database engine with the in-memory one
-test_engine = create_engine(
-    TEST_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
+# ── Create the test engine ──────────────────────────────────────────────────
+if _IS_POSTGRES:
+    test_engine = create_engine(_TEST_DB_URL, pool_pre_ping=True)
+else:
+    test_engine = create_engine(
+        _TEST_DB_URL,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 
@@ -47,21 +58,49 @@ def override_get_db():
         db.close()
 
 
-# Create tables in the in-memory DB
+# ── Create tables ───────────────────────────────────────────────────────────
+if _IS_POSTGRES:
+    # Drop all existing tables and recreate for a clean slate each test run.
+    models.Base.metadata.drop_all(bind=test_engine)
+
 models.Base.metadata.create_all(bind=test_engine)
 
-# FTS5 virtual table (not in ORM metadata — must be created manually)
+# search_index: FTS5 on SQLite, regular table with GIN on PostgreSQL
 with test_engine.connect() as _fts_conn:
-    _fts_conn.execute(text("""
-        CREATE VIRTUAL TABLE IF NOT EXISTS search_index
-        USING fts5(
-            doc_type,
-            doc_id   UNINDEXED,
-            title,
-            body,
-            href     UNINDEXED
-        )
-    """))
+    if _IS_POSTGRES:
+        _fts_conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS search_index (
+                doc_type TEXT,
+                doc_id   INTEGER,
+                title    TEXT,
+                body     TEXT,
+                href     TEXT
+            )
+        """))
+        _fts_conn.execute(text("""
+            DO $$ BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_indexes
+                    WHERE tablename = 'search_index'
+                      AND indexname = 'ix_search_index_vector'
+                ) THEN
+                    CREATE INDEX ix_search_index_vector
+                    ON search_index
+                    USING GIN (to_tsvector('english', coalesce(title,'') || ' ' || coalesce(body,'')));
+                END IF;
+            END $$
+        """))
+    else:
+        _fts_conn.execute(text("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS search_index
+            USING fts5(
+                doc_type,
+                doc_id   UNINDEXED,
+                title,
+                body,
+                href     UNINDEXED
+            )
+        """))
     _fts_conn.commit()
 
 # Override dependency — imported from database to match auth.py's import
@@ -90,8 +129,7 @@ _geographic_module.engine = test_engine
 _topic_modeling_module.engine = test_engine
 _olap_module.engine = test_engine
 
-# Seed the super_admin in the in-memory test DB so the login fixture works.
-# Startup side effects are disabled in tests, so seeding must happen explicitly.
+# Seed the super_admin in the test DB so the login fixture works.
 from backend.auth import hash_password as _hash_pw  # noqa: E402
 
 
@@ -135,7 +173,7 @@ _ensure_test_admin()
 
 @pytest.fixture(scope="session")
 def client():
-    """FastAPI test client with in-memory DB."""
+    """FastAPI test client with test DB."""
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c
 
@@ -246,10 +284,28 @@ _TABLES_TO_CLEAN = [
 
 
 def _reset_test_state(db):
-    for table in _TABLES_TO_CLEAN:
-        db.execute(text(f"DELETE FROM {table}"))
-    db.execute(text("UPDATE users SET org_id = NULL"))
-    db.commit()
+    if _IS_POSTGRES:
+        # PostgreSQL: use savepoints so a missing table doesn't abort the tx
+        for table in _TABLES_TO_CLEAN:
+            try:
+                nested = db.begin_nested()
+                db.execute(text(f"DELETE FROM {table}"))
+                nested.commit()
+            except Exception:
+                pass  # savepoint auto-rolled-back
+        try:
+            nested = db.begin_nested()
+            db.execute(text("UPDATE users SET org_id = NULL"))
+            nested.commit()
+        except Exception:
+            pass
+        db.commit()
+    else:
+        # SQLite: all tables exist (StaticPool in-memory), no need for savepoints
+        for table in _TABLES_TO_CLEAN:
+            db.execute(text(f"DELETE FROM {table}"))
+        db.execute(text("UPDATE users SET org_id = NULL"))
+        db.commit()
 
 
 @pytest.fixture(autouse=True)

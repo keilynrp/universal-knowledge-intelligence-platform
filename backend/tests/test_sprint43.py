@@ -107,6 +107,13 @@ def test_get_settings_recreates_missing_table(client, auth_headers, db_session):
     assert resp.status_code == 200
     assert resp.json()["smtp_port"] == 587
 
+    # Ensure the table exists for subsequent tests — the endpoint recreates it
+    # via _get_or_create_settings, but do an explicit check as a safety net.
+    from backend import models
+    models.NotificationSettings.__table__.create(
+        bind=db_session.get_bind(), checkfirst=True,
+    )
+
 
 # ── Viewer cannot access settings ────────────────────────────────────────────
 

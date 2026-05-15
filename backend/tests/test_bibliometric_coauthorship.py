@@ -1,7 +1,7 @@
 """Tests for Co-authorship Network analyzer (task 3.5)."""
 import pytest
-from backend.tests.conftest import TestingSessionLocal
 from backend import models
+from backend.database import SessionLocal
 from backend.analyzers.coauthorship import (
     compute_degree_centrality,
     detect_communities,
@@ -13,7 +13,7 @@ from backend.analyzers.coauthorship import (
 
 def _seed_coauthor_edges(edges: list[tuple[str, str, float]], domain: str = "default"):
     """Seed CO_AUTHOR edges directly into entity_relationships."""
-    db = TestingSessionLocal()
+    db = SessionLocal()
     try:
         # Need at least one entity for the join
         entity = models.RawEntity(
@@ -144,7 +144,7 @@ class TestCoauthorshipNetwork:
 
     def test_empty_network(self):
         # Use unique domain that has an entity but no CO_AUTHOR edges
-        db = TestingSessionLocal()
+        db = SessionLocal()
         try:
             db.add(models.RawEntity(
                 primary_label="Solo Paper",

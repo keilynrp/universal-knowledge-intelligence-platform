@@ -10,6 +10,21 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ukip_test
+          POSTGRES_PASSWORD: ukip_test_pw
+          POSTGRES_DB: ukip_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ukip_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
     strategy:
       fail-fast: false
       matrix:
@@ -31,12 +46,14 @@ jobs:
       - name: Run tests with coverage
         env:
           ADMIN_USERNAME: testadmin
-          ADMIN_PASSWORD: testpassword123
+          ADMIN_PASSWORD: testpassword
           JWT_SECRET_KEY: test-jwt-secret-key-for-ci-only-not-production
-          # Valid Fernet key (32 random bytes, base64) — CI only, never used in prod
           ENCRYPTION_KEY: "vRHc0zVcTXbRfUBZEsKNal2lMCfINwDh90EXE8vu2Ew="
-          DATABASE_URL: sqlite:///./test_ci.db
+          DATABASE_URL: "postgresql+psycopg2://ukip_test:ukip_test_pw@localhost:5432/ukip_test"
+          UKIP_DB_MODE: postgres
           ALLOWED_ORIGINS: "http://localhost:3004"
+          UKIP_SKIP_STARTUP_SIDE_EFFECTS: "1"
+          SENTRY_ENABLED: "0"
         run: |
           pip install pytest-cov -c requirements.lock
           pytest backend/tests/ \
