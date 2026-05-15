@@ -63,8 +63,8 @@ WIDGET_CATALOGUE = [
     },
     {
         "type":        "concept_cloud",
-        "label":       "Concept Cloud",
-        "description": "Most common enrichment concepts as a word cloud",
+        "label":       "Coocurrencia temática",
+        "description": "Mapa de áreas con pares de keywords depurados por similitud léxica",
         "default_cols": 6,
         "icon":        "sparkles",
     },

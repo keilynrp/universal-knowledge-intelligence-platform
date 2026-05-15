@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -179,6 +180,84 @@ function SourceBadge({ source }: { source: string | null }) {
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>
       {source}
     </span>
+  );
+}
+
+type NarrativeIconName = "eye" | "target" | "shield" | "spark" | "route" | "check" | "alert";
+
+function NarrativeIcon({ name, tone = "violet" }: { name: NarrativeIconName; tone?: "violet" | "emerald" | "amber" | "cyan" }) {
+  const toneClass = {
+    violet: "bg-violet-500/10 text-violet-600 dark:text-violet-300",
+    emerald: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
+    amber: "bg-amber-500/10 text-amber-600 dark:text-amber-300",
+    cyan: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-300",
+  }[tone];
+  const paths: Record<NarrativeIconName, ReactNode> = {
+    eye: (
+      <>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </>
+    ),
+    target: (
+      <>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M12 21a9 9 0 100-18 9 9 0 000 18z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M12 17a5 5 0 100-10 5 5 0 000 10zM12 13a1 1 0 100-2 1 1 0 000 2z" />
+      </>
+    ),
+    shield: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M12 3.75l7.25 2.6v5.4c0 4.35-2.93 8.22-7.25 9.5-4.32-1.28-7.25-5.15-7.25-9.5v-5.4L12 3.75zM9.25 12.1l1.85 1.85 3.95-4.15" />
+    ),
+    spark: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M12 3l1.35 5.15L18.5 9.5l-5.15 1.35L12 16l-1.35-5.15L5.5 9.5l5.15-1.35L12 3zM18.5 14.5l.7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3zM5.5 14.5l.55 1.95L8 17l-1.95.55L5.5 19.5l-.55-1.95L3 17l1.95-.55L5.5 14.5z" />
+    ),
+    route: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M6.5 7.5a2.75 2.75 0 100-5.5 2.75 2.75 0 000 5.5zM17.5 22a2.75 2.75 0 100-5.5 2.75 2.75 0 000 5.5zM6.5 7.5v2.25A3.25 3.25 0 009.75 13h4.5a3.25 3.25 0 013.25 3.25v.25" />
+    ),
+    check: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M20 6.75L9.5 17.25 4 11.75" />
+    ),
+    alert: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M12 8v4m0 4h.01M10.45 3.85L2.7 17.25A2 2 0 004.43 20.25h15.14a2 2 0 001.73-3L13.55 3.85a1.8 1.8 0 00-3.1 0z" />
+    ),
+  };
+
+  return (
+    <span className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${toneClass}`}>
+      <svg className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        {paths[name]}
+      </svg>
+    </span>
+  );
+}
+
+function StoryMetricCard({
+  icon,
+  label,
+  value,
+  description,
+  tone = "violet",
+  footer,
+}: {
+  icon: NarrativeIconName;
+  label: string;
+  value: ReactNode;
+  description: string;
+  tone?: "violet" | "emerald" | "amber" | "cyan";
+  footer?: ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-panel)] p-4 shadow-[var(--ukip-shadow-soft)]">
+      <div className="flex items-start gap-3">
+        <NarrativeIcon name={icon} tone={tone} />
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--ukip-muted)]">{label}</p>
+          <p className="mt-2 text-3xl font-black leading-none text-[var(--ukip-text-strong)]">{value}</p>
+          <p className="mt-2 text-xs text-[var(--ukip-muted)]">{description}</p>
+          {footer ? <div className="mt-3">{footer}</div> : null}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -448,6 +527,25 @@ export default function ExecutiveDashboardPage() {
       : data?.institutional_benchmark.status === "gap"
         ? "text-amber-300 bg-amber-500/10 border-amber-400/20"
         : "text-violet-300 bg-violet-500/10 border-violet-400/20";
+  const executiveStoryStatus = data ? translateBenchmarkStatus(data.institutional_benchmark.status) : "";
+  const executiveStoryAction = decisionHighlights[0] ?? null;
+  const executiveStoryLine = data
+    ? data.institutional_benchmark.status === "ready"
+      ? tr("page.exec_dashboard.story_ready", "El portafolio ya sostiene una narrativa ejecutiva clara; la oportunidad ahora es convertirla en recomendación accionable.")
+      : data.institutional_benchmark.status === "gap"
+        ? tr("page.exec_dashboard.story_gap", "La lectura ejecutiva muestra una brecha concreta: elevar calidad y cobertura antes de presentar conclusiones finales.")
+        : tr("page.exec_dashboard.story_watch", "El portafolio tiene señales útiles, pero necesita una capa más de validación para convertir análisis en decisión.")
+    : "";
+  const storySparklineData = data?.entities_by_year?.length
+    ? data.entities_by_year.slice(-10)
+    : [
+        { year: 1, count: 3 },
+        { year: 2, count: 6 },
+        { year: 3, count: 5 },
+        { year: 4, count: 11 },
+        { year: 5, count: 9 },
+        { year: 6, count: 14 },
+      ];
 
   return (
     <div className="flex flex-col gap-6 pb-10">
@@ -515,68 +613,124 @@ export default function ExecutiveDashboardPage() {
       {error && <ErrorBanner message={error} onRetry={fetchDashboard} variant="card" />}
 
       {data && (
-        <div className="ukip-gradient-panel p-5">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-stretch xl:justify-between">
-            <div className="min-w-0 xl:max-w-sm">
-              <p className="ukip-kicker">{tr("page.exec_dashboard.signal_summary", "Executive signal")}</p>
-              <h2 className="mt-2 text-2xl font-semibold text-[var(--ukip-text-strong)]">
-                {translateBenchmarkStatus(data.institutional_benchmark.status)}
+        <div className="rounded-[var(--ukip-radius-2xl)] border border-violet-200/70 bg-[var(--ukip-panel)] p-5 shadow-[var(--ukip-shadow-panel)] dark:border-violet-500/20">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div>
+              <p className="ukip-kicker">{tr("page.exec_dashboard.executive_signal", "Señal ejecutiva")}</p>
+              <h2 className="mt-1 text-xl font-black text-[var(--ukip-text-strong)]">
+                {tr("page.exec_dashboard.story_title", "La historia del portafolio en una lectura")}
               </h2>
-              <p className="mt-2 text-sm text-[var(--ukip-muted)]">
-                {importedFlag
-                  ? t("page.exec_dashboard.imported_into_domain", {
-                      summary: importedRows
-                        ? `${Number(importedRows).toLocaleString()} ${tr("page.import.entities_imported", "entities imported")}`
-                        : tr("page.exec_dashboard.latest_import", "Your latest import"),
-                      domain: importedDomain ?? activeDomainId,
-                    })
-                  : tr("page.exec_dashboard.current_workspace", "Current active workspace")}
-              </p>
             </div>
+            <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] ${readinessStatusTone}`}>
+              {executiveStoryStatus}
+            </span>
+          </div>
 
-            <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ukip-muted)]">
-                  {tr("page.exec_dashboard.benchmark_score", "Benchmark Score")}
-                </p>
-                <p className="mt-2 text-3xl font-bold text-[var(--ukip-text-strong)]">
-                  {Math.round(data.institutional_benchmark.readiness_pct)}%
-                </p>
-                <span className={`mt-3 inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${readinessStatusTone}`}>
-                  {translateBenchmarkStatus(data.institutional_benchmark.status)}
+          <div className="grid gap-4 xl:grid-cols-[1.1fr_1fr_1fr_1fr_1fr]">
+            <div className="relative overflow-hidden rounded-2xl border border-violet-200/70 bg-gradient-to-br from-violet-50 via-white to-cyan-50 p-4 dark:border-violet-500/20 dark:from-violet-500/10 dark:via-[var(--ukip-panel)] dark:to-cyan-500/10">
+              <div className="flex items-start justify-between gap-3">
+                <NarrativeIcon name="eye" />
+                <span className="rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-violet-700 shadow-sm dark:bg-white/10 dark:text-violet-200">
+                  {tr("page.exec_dashboard.observation_badge", "Observación")}
                 </span>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ukip-muted)]">
-                  {tr("page.exec_dashboard.kpi.enrichment_coverage", "Enrichment Coverage")}
-                </p>
-                <p className="mt-2 text-3xl font-bold text-[var(--ukip-text-strong)]">{data.kpis.enrichment_pct}%</p>
-                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-700/70">
+              <h3 className="mt-4 text-lg font-black text-[var(--ukip-text-strong)]">
+                {tr("page.exec_dashboard.observation_title", "Panorama actual")}
+              </h3>
+              <p className="mt-2 text-xs leading-5 text-[var(--ukip-muted)]">
+                {executiveStoryLine}
+              </p>
+              <div className="mt-4 h-16">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={storySparklineData} margin={{ top: 6, right: 0, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="storySparkline" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.34} />
+                        <stop offset="95%" stopColor="#7c3aed" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="count" stroke="#7c3aed" strokeWidth={2} fill="url(#storySparkline)" dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <StoryMetricCard
+              icon="target"
+              label={tr("page.exec_dashboard.benchmark_score", "Puntaje de referencia")}
+              value={`${Math.round(data.institutional_benchmark.readiness_pct)}%`}
+              description={tr("page.exec_dashboard.benchmark_percentile", "Percentil global")}
+              footer={
+                <span className="rounded-full bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold text-cyan-700 dark:text-cyan-300">
+                  {data.institutional_benchmark.passed_rules}/{data.institutional_benchmark.total_rules} {tr("page.exec_dashboard.rules_met_short", "reglas")}
+                </span>
+              }
+              tone="violet"
+            />
+            <StoryMetricCard
+              icon="route"
+              label={tr("page.exec_dashboard.kpi.enrichment_coverage", "Cobertura de enriquecimiento")}
+              value={`${data.kpis.enrichment_pct}%`}
+              description={tr("page.exec_dashboard.enriched_entities", "Entidades enriquecidas")}
+              footer={
+                <div className="h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
                   <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400" style={{ width: `${data.kpis.enrichment_pct}%` }} />
                 </div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ukip-muted)]">
-                  {tr("page.exec_dashboard.kpi.avg_quality", "Avg Quality")}
-                </p>
-                <p className="mt-2 text-3xl font-bold text-[var(--ukip-text-strong)]">{qualityPct != null ? `${qualityPct}%` : "—"}</p>
-                <p className="mt-3 text-xs text-[var(--ukip-muted)]">
-                  {tr("page.exec_dashboard.records_scored", "records scored")}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ukip-muted)]">
-                  {tr("page.exec_dashboard.benchmark_leading_gap", "Main current constraint")}
-                </p>
-                <p className="mt-2 text-sm font-semibold text-[var(--ukip-text-strong)]">
-                  {leadingGap ? translateRuleLabel(leadingGap.id, leadingGap.label) : tr("page.exec_dashboard.no_active_gap", "No active gap")}
-                </p>
-                <Link href={nextPilotStep.href} className="mt-4 inline-flex rounded-lg bg-violet-500 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-400">
-                  {nextPilotStep.cta}
-                </Link>
+              }
+              tone="emerald"
+            />
+            <StoryMetricCard
+              icon="shield"
+              label={tr("page.exec_dashboard.kpi.avg_quality", "Calidad promedio")}
+              value={qualityPct != null ? `${qualityPct}%` : "—"}
+              description={tr("page.exec_dashboard.content_quality", "Calidad del contenido")}
+              footer={
+                <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                  {tr("page.exec_dashboard.records_scored", "registros evaluados")}
+                </span>
+              }
+              tone={qualityPct != null && qualityPct >= 70 ? "emerald" : "amber"}
+            />
+            <div className="rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-panel)] p-4 shadow-[var(--ukip-shadow-soft)]">
+              <div className="flex items-start gap-3">
+                <NarrativeIcon name={leadingGap ? "alert" : "check"} tone={leadingGap ? "amber" : "emerald"} />
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--ukip-muted)]">
+                    {tr("page.exec_dashboard.benchmark_leading_gap", "Principal restricción actual")}
+                  </p>
+                  <p className="mt-2 text-sm font-black leading-5 text-[var(--ukip-text-strong)]">
+                    {leadingGap ? translateRuleLabel(leadingGap.id, leadingGap.label) : tr("page.exec_dashboard.no_active_gap", "Sin restricción activa")}
+                  </p>
+                  <p className="mt-2 text-xs text-[var(--ukip-muted)]">
+                    {leadingGap ? translateBenchmarkEvidence(data.institutional_benchmark.profile_id, leadingGap) : tr("page.exec_dashboard.story_clear_path", "La evidencia permite avanzar hacia recomendación ejecutiva.")}
+                  </p>
+                  <Link href={nextPilotStep.href} className="mt-4 inline-flex rounded-xl bg-violet-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-violet-500">
+                    {nextPilotStep.cta}
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
+
+          {executiveStoryAction && (
+            <div className="mt-4 rounded-2xl border border-violet-200/70 bg-violet-50/70 p-4 dark:border-violet-500/20 dark:bg-violet-500/10">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-start gap-3">
+                  <NarrativeIcon name="spark" tone="violet" />
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-700 dark:text-violet-300">
+                      {tr("page.exec_dashboard.elevator_pitch", "Elevator pitch analítico")}
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-[var(--ukip-text-strong)]">{executiveStoryAction.title}</p>
+                    <p className="mt-1 text-xs text-[var(--ukip-muted)]">{executiveStoryAction.evidence}</p>
+                  </div>
+                </div>
+                <Link href={briefBuilderHref} className="inline-flex shrink-0 rounded-xl border border-violet-200 bg-white px-4 py-2 text-xs font-bold text-violet-700 shadow-sm transition hover:bg-violet-50 dark:border-violet-500/20 dark:bg-white/10 dark:text-violet-200 dark:hover:bg-white/15">
+                  {tr("page.exec_dashboard.view_story_recommendations", "Ver recomendaciones estratégicas")}
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

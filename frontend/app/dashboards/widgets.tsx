@@ -9,7 +9,7 @@ import { apiFetch } from "@/lib/api";
 import { formatDateTime } from "../lib/dateFormat";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell,
+  PieChart, Pie, Cell, Treemap,
 } from "recharts";
 
 export interface WidgetConfig {
@@ -200,42 +200,121 @@ export function TopBrandsWidget({ config }: { config: WidgetConfig }) {
   );
 }
 
-// ── Concept Cloud ─────────────────────────────────────────────────────────────
+// ── Semantic Co-occurrence Map ────────────────────────────────────────────────
+
+interface CooccurrencePair {
+  concept_a: string;
+  concept_b: string;
+  count: number;
+  pmi: number;
+  semantic_score?: number;
+}
+
+interface CooccurrenceTile extends Record<string, unknown> {
+  name: string;
+  value: number;
+  count: number;
+  pmi: number;
+  semanticScore: number;
+}
+
+function CooccurrenceTileContent(props: Record<string, unknown>) {
+  const x = Number(props.x ?? 0);
+  const y = Number(props.y ?? 0);
+  const width = Number(props.width ?? 0);
+  const height = Number(props.height ?? 0);
+  const name = String(props.name ?? "");
+  const pmi = Number(props.pmi ?? 0);
+  const count = Number(props.count ?? 0);
+  const intensity = Math.max(0.18, Math.min(0.92, 0.22 + Math.max(pmi, 0) / 6));
+  const fill = `rgba(124, 58, 237, ${intensity})`;
+  const canShowText = width > 92 && height > 42;
+
+  return (
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={Math.max(width - 3, 0)}
+        height={Math.max(height - 3, 0)}
+        rx={7}
+        ry={7}
+        fill={fill}
+        stroke="rgba(255,255,255,0.78)"
+        strokeWidth={1}
+      />
+      {canShowText && (
+        <>
+          <text x={x + 8} y={y + 16} fill="#fff" fontSize={10} fontWeight={700}>
+            {name.length > 30 ? `${name.slice(0, 27)}...` : name}
+          </text>
+          <text x={x + 8} y={y + 32} fill="rgba(255,255,255,0.82)" fontSize={9}>
+            {count}x · PMI {pmi.toFixed(2)}
+          </text>
+        </>
+      )}
+    </g>
+  );
+}
 
 export function ConceptCloudWidget({ config }: { config: WidgetConfig }) {
-  const [concepts, setConcepts] = useState<{ concept: string; count: number }[]>([]);
+  const [pairs, setPairs] = useState<CooccurrencePair[]>([]);
+  const [normalizedCount, setNormalizedCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const domain = resolveWidgetDomain(config.config);
 
   useEffect(() => {
-    apiFetch(`/analyzers/topics/${domain}?limit=20`)
+    apiFetch(`/analyzers/cooccurrence/${domain}?top_n=18&normalize_similar=true&min_similarity=0.88`)
       .then((r) => r.json())
-      .then((d) => setConcepts(Array.isArray(d) ? d : d.topics ?? []))
-      .catch(() => setConcepts([]))
+      .then((d) => {
+        setPairs(Array.isArray(d) ? [] : d.pairs ?? []);
+        setNormalizedCount(Array.isArray(d) ? 0 : d.normalization?.merged_terms?.length ?? 0);
+      })
+      .catch(() => {
+        setPairs([]);
+        setNormalizedCount(0);
+      })
       .finally(() => setLoading(false));
   }, [domain]);
 
-  if (loading) return <WidgetShell title={config.title || "Concept Cloud"} loading>{null}</WidgetShell>;
+  if (loading) return <WidgetShell title={config.title || "Coocurrencia temática"} loading>{null}</WidgetShell>;
 
-  const max = Math.max(...concepts.map((c) => c.count), 1);
+  const tiles: CooccurrenceTile[] = pairs.map((pair) => ({
+    name: `${pair.concept_a} + ${pair.concept_b}`,
+    value: Math.max(pair.count, 1),
+    count: pair.count,
+    pmi: pair.pmi,
+    semanticScore: pair.semantic_score ?? pair.count * Math.max(pair.pmi, 0),
+  }));
 
   return (
-    <WidgetShell title={config.title || "Concept Cloud"}>
-      <div className="flex flex-wrap gap-1.5 overflow-auto h-full items-start content-start">
-        {concepts.map((c) => {
-          const ratio = c.count / max;
-          const size = ratio > 0.7 ? "text-sm font-bold" : ratio > 0.4 ? "text-xs font-semibold" : "text-[10px]";
-          return (
-            <span
-              key={c.concept}
-              className={`rounded-full px-2 py-0.5 ${size} bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300`}
+    <WidgetShell title={config.title || "Coocurrencia temática"}>
+      <div className="flex h-full flex-col gap-2">
+        <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400">
+          <span>{pairs.length} pares depurados</span>
+          <span>Jaro-Winkler · Levenshtein{normalizedCount ? ` · ${normalizedCount} merges` : ""}</span>
+        </div>
+        {tiles.length === 0 ? (
+          <p className="flex h-full items-center justify-center text-xs text-gray-400">
+            No hay coocurrencias suficientes. Enriquece entidades con al menos 2 keywords.
+          </p>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <Treemap
+              data={tiles}
+              dataKey="value"
+              aspectRatio={4 / 3}
+              stroke="#fff"
+              content={<CooccurrenceTileContent />}
             >
-              {c.concept}
-            </span>
-          );
-        })}
-        {concepts.length === 0 && (
-          <p className="text-xs text-gray-400">No concepts yet. Enrich entities to populate.</p>
+              <Tooltip
+                formatter={(value, name, item) => {
+                  const payload = item.payload as CooccurrenceTile;
+                  return [`${value} coocurrencias · PMI ${payload.pmi.toFixed(2)}`, payload.name];
+                }}
+              />
+            </Treemap>
+          </ResponsiveContainer>
         )}
       </div>
     </WidgetShell>

@@ -11,6 +11,7 @@ import logging
 import math
 import re
 from collections import Counter, defaultdict
+from difflib import SequenceMatcher
 from itertools import combinations
 from typing import Any
 
@@ -23,9 +24,16 @@ from backend.tenant_access import add_org_sql_filter
 
 logger = logging.getLogger(__name__)
 
+try:
+    import Levenshtein as _levenshtein
+except Exception:  # pragma: no cover - optional acceleration library
+    _levenshtein = None
+
 # Concepts stored as "A, B, C" — split on ", " then strip each
 _SEPARATORS_RE = re.compile(r"[;,|]")
 _YEAR_RE = re.compile(r"\b(19\d{2}|20\d{2})\b")
+_TRAILING_NOISE_RE = re.compile(r"\s*\([^)]*\)\s*$")
+_TOKEN_NOISE_RE = re.compile(r"[^a-z0-9\s-]+")
 
 
 def _validate_domain(domain_id: str, org_id: int | None = None) -> None:
@@ -51,6 +59,85 @@ def _parse_concepts(raw: str | None) -> list[str]:
     if not raw:
         return []
     return [c.strip() for c in _SEPARATORS_RE.split(raw) if c.strip()]
+
+
+def _concept_key(concept: str) -> str:
+    """Return a comparison key for fuzzy concept deduplication."""
+    cleaned = _TRAILING_NOISE_RE.sub("", concept).casefold()
+    cleaned = _TOKEN_NOISE_RE.sub(" ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+
+def _jaro_winkler_similarity(a: str, b: str) -> float:
+    if _levenshtein is not None and hasattr(_levenshtein, "jaro_winkler"):
+        return float(_levenshtein.jaro_winkler(a, b))
+    return SequenceMatcher(None, a, b).ratio()
+
+
+def _levenshtein_similarity(a: str, b: str) -> float:
+    if not a and not b:
+        return 1.0
+    max_len = max(len(a), len(b), 1)
+    if _levenshtein is not None and hasattr(_levenshtein, "distance"):
+        distance = int(_levenshtein.distance(a, b))
+    else:
+        distance = int(round((1.0 - SequenceMatcher(None, a, b).ratio()) * max_len))
+    return max(0.0, 1.0 - distance / max_len)
+
+
+def _concept_similarity(a: str, b: str) -> float:
+    """Blend Jaro-Winkler and Levenshtein signals for conservative merges."""
+    key_a = _concept_key(a)
+    key_b = _concept_key(b)
+    if not key_a or not key_b:
+        return 0.0
+    if key_a == key_b:
+        return 1.0
+    jaro = _jaro_winkler_similarity(key_a, key_b)
+    levenshtein = _levenshtein_similarity(key_a, key_b)
+    return round((jaro * 0.65) + (levenshtein * 0.35), 4)
+
+
+def _canonicalize_similar_concepts(
+    concepts: list[str],
+    canonical_counts: Counter,
+    min_similarity: float,
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """
+    Merge near-duplicate concepts before pair counting.
+
+    This keeps the most frequent existing label as canonical and only merges
+    high-confidence lexical variants, so broad semantic neighbors remain separate.
+    """
+    canonicalized: list[str] = []
+    merges: list[dict[str, Any]] = []
+    canonicals = [concept for concept, _ in canonical_counts.most_common()]
+
+    for concept in concepts:
+        best: str | None = None
+        best_score = 0.0
+        for candidate in canonicals:
+            score = _concept_similarity(concept, candidate)
+            if score > best_score:
+                best = candidate
+                best_score = score
+        if best is not None and best_score >= min_similarity:
+            canonical = best
+            if _concept_key(concept) != _concept_key(canonical):
+                merges.append({
+                    "from": concept,
+                    "to": canonical,
+                    "score": round(best_score, 3),
+                    "algorithm": "jaro_winkler+levenshtein",
+                })
+        else:
+            canonical = concept
+            canonicals.append(canonical)
+        canonical_counts[canonical] += 1
+        canonicalized.append(canonical)
+
+    return canonicalized, merges
 
 
 def _parse_concepts_from_value(value: Any) -> list[str]:
@@ -273,7 +360,14 @@ class TopicAnalyzer:
 
     # ── Co-occurrence ────────────────────────────────────────────────────────
 
-    def cooccurrence(self, domain_id: str, top_n: int = 20, org_id: int | None = None) -> dict[str, Any]:
+    def cooccurrence(
+        self,
+        domain_id: str,
+        top_n: int = 20,
+        org_id: int | None = None,
+        normalize_similar: bool = False,
+        min_similarity: float = 0.88,
+    ) -> dict[str, Any]:
         """
         Return concept pairs that most frequently co-occur in the same entity.
 
@@ -281,7 +375,8 @@ class TopicAnalyzer:
             {
               "domain_id": str,
               "total_enriched": int,
-              "pairs": [{"concept_a": str, "concept_b": str, "count": int, "pmi": float}, ...]
+              "pairs": [{"concept_a": str, "concept_b": str, "count": int, "pmi": float}, ...],
+              "normalization": {"enabled": bool, "merged_terms": [...]}
             }
         """
         _validate_domain(domain_id, org_id=org_id)
@@ -290,12 +385,21 @@ class TopicAnalyzer:
 
         pair_counter: Counter = Counter()
         concept_counter: Counter = Counter()
+        canonical_counts: Counter = Counter()
+        merged_terms: list[dict[str, Any]] = []
 
         for row in df.itertuples(index=False):
             concepts = _parse_record_concepts(
                 getattr(row, "enrichment_concepts", None),
                 getattr(row, "attributes_json", None),
             )
+            if normalize_similar:
+                concepts, merges = _canonicalize_similar_concepts(
+                    concepts,
+                    canonical_counts,
+                    max(0.0, min(min_similarity, 1.0)),
+                )
+                merged_terms.extend(merges)
             concept_counter.update(concepts)
             # Each pair counted once per entity (sorted to canonicalize)
             for a, b in combinations(sorted(set(concepts)), 2):
@@ -320,16 +424,36 @@ class TopicAnalyzer:
                 "concept_b": b,
                 "count": co_count,
                 "pmi": pmi,
+                "semantic_score": round(co_count * max(pmi, 0.0), 3),
             })
 
         # Sort by raw count for UI (most frequent pairs first), cap at top_n
-        pairs.sort(key=lambda x: x["count"], reverse=True)
+        pairs.sort(key=lambda x: (x["count"], x.get("semantic_score", 0.0)), reverse=True)
         pairs = pairs[:top_n]
+        unique_merges = []
+        seen_merges: set[tuple[str, str]] = set()
+        for merge in merged_terms:
+            key = (str(merge["from"]).casefold(), str(merge["to"]).casefold())
+            if key in seen_merges:
+                continue
+            seen_merges.add(key)
+            unique_merges.append(merge)
 
         return {
             "domain_id": domain_id,
             "total_enriched": total_enriched,
             "pairs": pairs,
+            "normalization": {
+                "enabled": normalize_similar,
+                "algorithms": ["jaro_winkler", "levenshtein"],
+                "min_similarity": round(max(0.0, min(min_similarity, 1.0)), 3),
+                "merged_terms": unique_merges[:25],
+                "latent_semantic_indexing": {
+                    "enabled": False,
+                    "status": "planned",
+                    "reason": "Dashboard summary uses lexical normalization plus co-occurrence PMI; full LSI/LSA can be added as a separate vector-space pass.",
+                },
+            },
         }
 
     # ── Topic clusters ───────────────────────────────────────────────────────

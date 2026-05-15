@@ -140,6 +140,35 @@ class TestAnalyzerCooccurrence:
             for i in range(len(pairs) - 1):
                 assert pairs[i]["count"] >= pairs[i + 1]["count"]
 
+    def test_normalized_cooccurrence_merges_similar_keywords(self, client, auth_headers, db_session):
+        db_session.add(models.RawEntity(
+            primary_label="Entity A",
+            validation_status="active",
+            enrichment_concepts="Machine Learning, Neural Network",
+            enrichment_status="completed",
+        ))
+        db_session.add(models.RawEntity(
+            primary_label="Entity B",
+            validation_status="active",
+            enrichment_concepts="machine-learning, Deep Learning",
+            enrichment_status="completed",
+        ))
+        db_session.commit()
+
+        resp = client.get(
+            "/analyzers/cooccurrence/default?top_n=5&normalize_similar=true",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["normalization"]["enabled"] is True
+        assert "jaro_winkler" in data["normalization"]["algorithms"]
+        assert "levenshtein" in data["normalization"]["algorithms"]
+        assert any(
+            merge["from"] == "machine-learning" and merge["to"] == "Machine Learning"
+            for merge in data["normalization"]["merged_terms"]
+        )
+
 
 # ── GET /analyzers/clusters/{domain_id} ──────────────────────────────────────
 

@@ -215,24 +215,33 @@ async def analyzer_cooccurrence(
     request: Request,
     domain_id: str,
     top_n: int = Query(default=20, ge=1, le=100),
+    normalize_similar: bool = Query(default=False),
+    min_similarity: float = Query(default=0.88, ge=0.0, le=1.0),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
     """Concept co-occurrence pairs with PMI score."""
     _validate_domain_id(domain_id)
     org_id = resolve_request_org_id(db, current_user)
-    _key = f"cooccurrence_{domain_id}_{scope_tag(org_id)}_{top_n}"
+    _key = f"cooccurrence_{domain_id}_{scope_tag(org_id)}_{top_n}_{normalize_similar}_{min_similarity}"
     cached = _analytics_cache.get(_key)
     if cached is not None:
         return cached
-    engine_result = await try_engine_analytics(
-        _get_engine_client(request), domain_id, "cooccurrence", top_n, org_id
-    )
-    if engine_result is not None:
-        _analytics_cache.set(_key, engine_result)
-        return engine_result
+    if not normalize_similar:
+        engine_result = await try_engine_analytics(
+            _get_engine_client(request), domain_id, "cooccurrence", top_n, org_id
+        )
+        if engine_result is not None:
+            _analytics_cache.set(_key, engine_result)
+            return engine_result
     try:
-        result = _topic_analyzer.cooccurrence(domain_id, top_n=top_n, org_id=org_id)
+        result = _topic_analyzer.cooccurrence(
+            domain_id,
+            top_n=top_n,
+            org_id=org_id,
+            normalize_similar=normalize_similar,
+            min_similarity=min_similarity,
+        )
         _analytics_cache.set(_key, result)
         return result
     except ValueError as e:
