@@ -1,6 +1,7 @@
 use dashmap::DashMap;
 use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::db::job_store;
 
@@ -26,8 +27,10 @@ pub struct JobState {
 
 pub struct JobManager {
     jobs: DashMap<String, JobState>,
+    #[allow(dead_code)]
     max_concurrent: usize,
     pool: Option<sqlx::PgPool>,
+    semaphore: Arc<Semaphore>,
 }
 
 impl JobManager {
@@ -36,6 +39,7 @@ impl JobManager {
             jobs: DashMap::new(),
             max_concurrent,
             pool: None,
+            semaphore: Arc::new(Semaphore::new(max_concurrent)),
         }
     }
 
@@ -45,6 +49,7 @@ impl JobManager {
             jobs: DashMap::new(),
             max_concurrent,
             pool: Some(pool),
+            semaphore: Arc::new(Semaphore::new(max_concurrent)),
         }
     }
 
@@ -163,7 +168,14 @@ impl JobManager {
     }
 
     pub fn can_accept(&self) -> bool {
-        self.active_count() < self.max_concurrent
+        self.semaphore.available_permits() > 0
+    }
+
+    /// Atomically acquire a concurrency permit. Returns `None` if at capacity.
+    /// The caller must hold the permit until the job completes.
+    #[must_use = "dropping the permit immediately releases the concurrency slot"]
+    pub fn try_acquire(&self) -> Option<OwnedSemaphorePermit> {
+        Arc::clone(&self.semaphore).try_acquire_owned().ok()
     }
 
     pub async fn fail_all_active(&self, error: &str) {
@@ -283,8 +295,10 @@ mod tests {
     #[tokio::test]
     async fn test_max_concurrent_exceeded() {
         let mgr = JobManager::new(1);
-        mgr.create("j1", "test").await;
-        mgr.set_running("j1").await;
+        // Acquire the single permit
+        let _permit = mgr.try_acquire().expect("should get first permit");
+        // Second acquire should fail — at capacity
+        assert!(mgr.try_acquire().is_none());
         assert!(!mgr.can_accept());
     }
 

@@ -20,6 +20,34 @@ use self::topics::{parse_concepts, top_topics};
 
 const VALID_MODES: &[&str] = &["topics", "cooccurrence", "clusters", "correlation"];
 
+/// Whitelist of raw_entities columns allowed in correlation field_filter queries.
+/// Any user-supplied column name not in this list is rejected before SQL construction.
+const ALLOWED_COLUMNS: &[&str] = &[
+    "primary_label",
+    "secondary_label",
+    "entity_type",
+    "entity_name",
+    "brand_capitalized",
+    "enrichment_concepts",
+    "enrichment_source",
+    "enrichment_status",
+    "enrichment_doi",
+    "enrichment_citation_count",
+    "domain",
+    "validation_status",
+    "sku",
+    "gtin",
+    "barcode",
+    "title",
+    "doi",
+    "nct_id",
+    "source",
+    "branches",
+    "creation_date",
+    "normalized_json",
+    "status",
+];
+
 pub struct AnalyticsPipeline;
 
 #[async_trait::async_trait]
@@ -132,7 +160,12 @@ impl Pipeline for AnalyticsPipeline {
                     })
                     .collect();
             }
-            _ => unreachable!("validated above"),
+            other => {
+                return Err(PipelineError::Validation(format!(
+                    "unknown analytics mode: {}",
+                    other
+                )))
+            }
         }
 
         ctx.progress
@@ -194,6 +227,15 @@ async fn load_field_data(
             "enrichment_status", "validation_status",
         ]
     } else {
+        // Validate all user-supplied field names against the whitelist
+        for f in field_filters {
+            if !ALLOWED_COLUMNS.contains(&f.as_str()) {
+                return Err(PipelineError::Validation(format!(
+                    "unknown column '{}' in field_filters; allowed: {:?}",
+                    f, ALLOWED_COLUMNS
+                )));
+            }
+        }
         field_filters.iter().map(|s| s.as_str()).collect()
     };
 
@@ -204,14 +246,14 @@ async fn load_field_data(
             continue;
         }
 
-        let safe_field = field.replace(|c: char| !c.is_alphanumeric() && c != '_', "");
-        if safe_field.is_empty() || safe_field != *field {
-            continue; // skip if the field name was sanitized (unsafe chars)
+        // Double-check against whitelist (covers both default and user-supplied paths)
+        if !ALLOWED_COLUMNS.contains(field) {
+            continue;
         }
 
         let query = format!(
             "SELECT \"{}\" FROM raw_entities WHERE domain = $1 AND \"{}\" IS NOT NULL",
-            safe_field, safe_field
+            field, field
         );
 
         let rows: Vec<(String,)> = sqlx::query_as(&query)
@@ -227,4 +269,50 @@ async fn load_field_data(
     }
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_allowed_columns_whitelist_rejects_unknown() {
+        assert!(ALLOWED_COLUMNS.contains(&"brand_capitalized"));
+        assert!(ALLOWED_COLUMNS.contains(&"domain"));
+        assert!(!ALLOWED_COLUMNS.contains(&"'; DROP TABLE raw_entities; --"));
+        assert!(!ALLOWED_COLUMNS.contains(&"nonexistent_column"));
+    }
+
+    #[test]
+    fn test_default_candidate_fields_are_allowed() {
+        let defaults = ["brand_capitalized", "enrichment_source", "domain",
+                        "enrichment_status", "validation_status"];
+        for field in &defaults {
+            assert!(
+                ALLOWED_COLUMNS.contains(field),
+                "default field '{}' not in ALLOWED_COLUMNS",
+                field
+            );
+        }
+    }
+
+    #[test]
+    fn test_analytics_validate_rejects_invalid_mode() {
+        let pipeline = AnalyticsPipeline;
+        let input = PipelineInput {
+            job_id: "t".to_string(),
+            import_batch_id: 0,
+            org_id: None,
+            domain: "t".to_string(),
+            publications: vec![],
+            options: HashMap::new(),
+            payload: Some(ComputePayload::Analytics(crate::proto::AnalyticsRequest {
+                domain_id: "test".to_string(),
+                mode: "sql_injection".to_string(),
+                limit: 10,
+                field_filters: vec!["'; DROP TABLE--".to_string()],
+            })),
+        };
+        assert!(pipeline.validate(&input).is_err());
+    }
 }

@@ -102,6 +102,12 @@ impl Pipeline for ConnectorPipeline {
                 if req.queries.is_empty() {
                     return Err(ValidationError::EmptyInput);
                 }
+                if req.queries.len() > 200 {
+                    return Err(ValidationError::InvalidField(format!(
+                        "too many queries: {} (max 200)",
+                        req.queries.len()
+                    )));
+                }
                 Ok(())
             }
             _ => Err(ValidationError::EmptyInput),
@@ -236,6 +242,29 @@ mod tests {
             })),
         };
         assert!(pipeline.validate(&input).is_err());
+    }
+
+    #[test]
+    fn test_connector_validate_too_many_queries() {
+        let pipeline = ConnectorPipeline::new().unwrap();
+        let queries: Vec<String> = (0..201).map(|i| format!("query_{}", i)).collect();
+        let input = PipelineInput {
+            job_id: "t".to_string(),
+            import_batch_id: 0,
+            org_id: None,
+            domain: "t".to_string(),
+            publications: vec![],
+            options: HashMap::new(),
+            payload: Some(ComputePayload::Connector(crate::proto::ConnectorRequest {
+                source: "openalex".to_string(),
+                query_type: "doi".to_string(),
+                queries,
+                limit: 10,
+                filters: HashMap::new(),
+            })),
+        };
+        let err = pipeline.validate(&input).unwrap_err();
+        assert!(format!("{}", err).contains("too many queries"));
     }
 
     #[test]

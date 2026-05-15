@@ -25,12 +25,18 @@ pub struct CorrelationEntry {
 /// Compute Cramér's V between two categorical arrays.
 ///
 /// Returns a value in [0, 1]; 0 = no association, 1 = perfect.
-pub fn cramers_v(x: &[String], y: &[String]) -> f64 {
-    assert_eq!(x.len(), y.len(), "arrays must have equal length");
+pub fn cramers_v(x: &[String], y: &[String]) -> Result<f64, String> {
+    if x.len() != y.len() {
+        return Err(format!(
+            "arrays must have equal length: x={}, y={}",
+            x.len(),
+            y.len()
+        ));
+    }
 
     let n = x.len();
     if n == 0 {
-        return 0.0;
+        return Ok(0.0);
     }
 
     // Build category indices
@@ -48,7 +54,7 @@ pub fn cramers_v(x: &[String], y: &[String]) -> f64 {
     let c = y_cats.len();
 
     if r <= 1 || c <= 1 {
-        return 0.0;
+        return Ok(0.0);
     }
 
     // Build contingency table
@@ -82,11 +88,11 @@ pub fn cramers_v(x: &[String], y: &[String]) -> f64 {
 
     let k = r.min(c);
     if k <= 1 || n <= 1 {
-        return 0.0;
+        return Ok(0.0);
     }
 
     let v = (chi2 / (n_f * (k as f64 - 1.0))).sqrt();
-    (v.min(1.0) * 10000.0).round() / 10000.0
+    Ok((v.min(1.0) * 10000.0).round() / 10000.0)
 }
 
 /// Classify correlation strength.
@@ -144,7 +150,10 @@ pub fn top_correlations(
                 continue;
             }
 
-            let v = cramers_v(x, y);
+            let v = match cramers_v(x, y) {
+                Ok(v) => v,
+                Err(_) => continue, // skip mismatched-length pairs
+            };
             if v < 0.05 {
                 continue;
             }
@@ -172,7 +181,7 @@ mod tests {
         // Perfect 1:1 mapping
         let x = vec!["A".to_string(), "A".to_string(), "B".to_string(), "B".to_string(), "C".to_string()];
         let y = vec!["X".to_string(), "X".to_string(), "Y".to_string(), "Y".to_string(), "Z".to_string()];
-        let v = cramers_v(&x, &y);
+        let v = cramers_v(&x, &y).unwrap();
         assert!(v > 0.9, "expected near 1.0, got {}", v);
     }
 
@@ -181,13 +190,13 @@ mod tests {
         // Uniformly distributed — near zero
         let x: Vec<String> = (0..100).map(|i| if i % 2 == 0 { "A".to_string() } else { "B".to_string() }).collect();
         let y: Vec<String> = (0..100).map(|i| if i % 3 == 0 { "X".to_string() } else if i % 3 == 1 { "Y".to_string() } else { "Z".to_string() }).collect();
-        let v = cramers_v(&x, &y);
+        let v = cramers_v(&x, &y).unwrap();
         assert!(v < 0.3, "expected low V, got {}", v);
     }
 
     #[test]
     fn test_cramers_v_empty() {
-        let v = cramers_v(&[], &[]);
+        let v = cramers_v(&[], &[]).unwrap();
         assert!((v - 0.0).abs() < 0.001);
     }
 
@@ -196,8 +205,17 @@ mod tests {
         let x = vec!["A".to_string(); 10];
         let y = vec!["X".to_string(), "Y".to_string(), "X".to_string(), "Y".to_string(), "X".to_string(),
                      "Y".to_string(), "X".to_string(), "Y".to_string(), "X".to_string(), "Y".to_string()];
-        let v = cramers_v(&x, &y);
+        let v = cramers_v(&x, &y).unwrap();
         assert!((v - 0.0).abs() < 0.001, "single x category → V=0, got {}", v);
+    }
+
+    #[test]
+    fn test_cramers_v_mismatched_lengths() {
+        let x = vec!["A".to_string(), "B".to_string()];
+        let y = vec!["X".to_string()];
+        let result = cramers_v(&x, &y);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("equal length"));
     }
 
     #[test]

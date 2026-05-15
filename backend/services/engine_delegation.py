@@ -8,6 +8,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 ENGINE_DELEGATION_THRESHOLD = int(os.environ.get("ENGINE_DELEGATION_THRESHOLD", "100"))
+MAX_DELEGATION_VALUES = 50_000
 
 
 def _get_engine_client(request) -> Any | None:
@@ -107,6 +108,12 @@ async def try_engine_disambiguation(
     """
     if client is None:
         return None
+    if len(values) > MAX_DELEGATION_VALUES:
+        logger.warning(
+            "Disambiguation values truncated from %d to %d",
+            len(values), MAX_DELEGATION_VALUES,
+        )
+        values = values[:MAX_DELEGATION_VALUES]
     try:
         resp = await client.process_disambiguation(
             field_name=field_name,
@@ -146,6 +153,12 @@ async def try_engine_normalization(
     """
     if client is None:
         return None
+    if len(values) > MAX_DELEGATION_VALUES:
+        logger.warning(
+            "Normalization values truncated from %d to %d",
+            len(values), MAX_DELEGATION_VALUES,
+        )
+        values = values[:MAX_DELEGATION_VALUES]
     try:
         resp = await client.process_normalization(
             values=values,

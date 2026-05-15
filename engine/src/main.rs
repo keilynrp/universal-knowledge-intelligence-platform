@@ -88,6 +88,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!(%addr, "starting ukip-engine");
 
     let auth_token = config.auth_token.clone();
+    if auth_token.is_none() {
+        tracing::warn!("ENGINE_AUTH_TOKEN is not set — gRPC endpoints are unauthenticated");
+    }
     let shutdown_timeout = std::time::Duration::from_secs(config.shutdown_timeout_secs);
     let svc =
         ukip_engine::server::EngineService::new(router, job_manager.clone(), pool.clone(), config);
@@ -106,7 +109,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
     tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.ok();
+        let ctrl_c = tokio::signal::ctrl_c();
+
+        #[cfg(unix)]
+        {
+            let mut sigterm =
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                    .expect("failed to register SIGTERM handler");
+            tokio::select! {
+                _ = ctrl_c => {},
+                _ = sigterm.recv() => {},
+            }
+        }
+
+        #[cfg(not(unix))]
+        {
+            ctrl_c.await.ok();
+        }
+
         tracing::info!("received shutdown signal");
         let _ = shutdown_tx.send(());
     });

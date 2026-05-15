@@ -70,20 +70,14 @@ pub async fn update_status(
     status: &str,
     progress: f32,
 ) -> Result<(), sqlx::Error> {
-    let started_at_expr = if status == "running" {
-        "COALESCE(started_at, NOW())"
+    let query = if status == "running" {
+        "UPDATE engine_jobs SET status = $2, progress = $3, started_at = COALESCE(started_at, NOW()) WHERE job_id = $1"
     } else {
-        "started_at"
+        "UPDATE engine_jobs SET status = $2, progress = $3 WHERE job_id = $1"
     };
-
-    let sql = format!(
-        "UPDATE engine_jobs SET status = $2, progress = $3, started_at = {}
-         WHERE job_id = $1",
-        started_at_expr
-    );
     tokio::time::timeout(
         QUERY_TIMEOUT,
-        sqlx::query(&sql)
+        sqlx::query(query)
             .bind(job_id)
             .bind(status)
             .bind(progress)

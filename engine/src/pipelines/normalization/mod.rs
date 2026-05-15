@@ -30,6 +30,12 @@ impl Pipeline for NormalizationPipeline {
                 if req.values.is_empty() {
                     return Err(ValidationError::EmptyInput);
                 }
+                if req.values.len() > 50_000 {
+                    return Err(ValidationError::InvalidField(format!(
+                        "too many values: {} (max 50,000)",
+                        req.values.len()
+                    )));
+                }
                 if !VALID_MODES.contains(&req.mode.as_str()) {
                     return Err(ValidationError::InvalidField(format!(
                         "invalid mode '{}', expected one of: {:?}",
@@ -40,6 +46,12 @@ impl Pipeline for NormalizationPipeline {
                     return Err(ValidationError::InvalidField(
                         "rules mode requires at least one rule".to_string(),
                     ));
+                }
+                if req.mode == "rules" && req.rules.len() > 1_000 {
+                    return Err(ValidationError::InvalidField(format!(
+                        "too many rules: {} (max 1,000)",
+                        req.rules.len()
+                    )));
                 }
                 Ok(())
             }
@@ -104,7 +116,12 @@ impl Pipeline for NormalizationPipeline {
                     .map(|v| apply_rules(v, &compiled))
                     .collect();
             }
-            _ => unreachable!("validated above"),
+            other => {
+                return Err(PipelineError::Validation(format!(
+                    "unknown normalization mode: {}",
+                    other
+                )))
+            }
         }
 
         ctx.progress
@@ -250,6 +267,29 @@ mod tests {
             )),
         };
         assert!(pipeline.validate(&input_no_rules).is_err());
+    }
+
+    #[test]
+    fn test_normalization_validate_too_many_values() {
+        let pipeline = NormalizationPipeline;
+        let values: Vec<String> = (0..50_001).map(|i| format!("val_{}", i)).collect();
+        let input = PipelineInput {
+            job_id: "t".to_string(),
+            import_batch_id: 0,
+            org_id: None,
+            domain: "t".to_string(),
+            publications: vec![],
+            options: HashMap::new(),
+            payload: Some(ComputePayload::Normalization(
+                crate::proto::NormalizationRequest {
+                    values,
+                    mode: "unicode".to_string(),
+                    rules: vec![],
+                },
+            )),
+        };
+        let err = pipeline.validate(&input).unwrap_err();
+        assert!(format!("{}", err).contains("too many values"));
     }
 
     #[test]

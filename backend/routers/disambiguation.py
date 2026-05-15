@@ -13,7 +13,7 @@ import re
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field as PydanticField
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
@@ -89,9 +89,8 @@ async def disambiguate_field(
 
 
 class AIResolveRequest(BaseModel):
-    field_name: str
+    field_name: str = PydanticField(..., min_length=1, max_length=200)
     variations: List[str]
-    api_key: Optional[str] = None
 
 
 @router.post("/disambiguate/ai-resolve")
@@ -109,7 +108,6 @@ def ai_resolve_variations(
         resolution = resolve_canonical_name(
             field_name=payload.field_name,
             variations=payload.variations,
-            api_key=payload.api_key,
         )
         return resolution
     except Exception:

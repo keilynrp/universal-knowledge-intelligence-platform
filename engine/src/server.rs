@@ -187,9 +187,11 @@ impl Engine for EngineService {
         &self,
         request: Request<ProcessRequest>,
     ) -> Result<Response<JobAccepted>, Status> {
-        if !self.job_manager.can_accept() {
-            return Err(Status::resource_exhausted("max concurrent jobs reached"));
-        }
+        // Atomically acquire a concurrency permit (no TOCTOU race)
+        let permit = self
+            .job_manager
+            .try_acquire()
+            .ok_or_else(|| Status::resource_exhausted("max concurrent jobs reached"))?;
 
         let req = request.into_inner();
         let pipeline_name = req.pipeline.clone();
@@ -215,7 +217,7 @@ impl Engine for EngineService {
         let tracker = Arc::new(ProgressTracker::new(job_id.clone()));
         self.job_manager.store_tracker(&job_id, tracker.clone());
 
-        // Spawn async task
+        // Spawn async task — permit is moved in and dropped when the job completes
         let job_manager = self.job_manager.clone();
         let pool = self.pool.clone();
         let config = (*self.config).clone();
@@ -233,6 +235,7 @@ impl Engine for EngineService {
                 Ok(output) => job_manager.set_completed(&jid, output).await,
                 Err(e) => job_manager.set_failed(&jid, e.to_string()).await,
             }
+            drop(permit); // explicitly release concurrency slot
         });
 
         Ok(Response::new(JobAccepted {

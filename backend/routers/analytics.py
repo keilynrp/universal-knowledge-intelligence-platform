@@ -55,6 +55,13 @@ _topic_analyzer = TopicAnalyzer()
 _correlation_analyzer = CorrelationAnalyzer()
 _trend_analyzer = TrendAnalyzer()
 
+_DOMAIN_RE = re.compile(r"^[a-z][a-z0-9_\-]{0,63}$")
+
+
+def _validate_domain_id(domain_id: str) -> None:
+    if not _DOMAIN_RE.match(domain_id):
+        raise HTTPException(status_code=422, detail=f"Invalid domain_id '{domain_id}': must match [a-z][a-z0-9_-]{{0,63}}")
+
 # ── In-memory TTL analytics cache (Sprint 83) ─────────────────────────────────
 
 class _SimpleCache:
@@ -179,6 +186,7 @@ async def analyzer_topics(
     current_user: models.User = Depends(get_current_user),
 ):
     """Top concepts by frequency across enriched entities in a domain."""
+    _validate_domain_id(domain_id)
     org_id = resolve_request_org_id(db, current_user)
     _key = f"topics_{domain_id}_{scope_tag(org_id)}_{top_n}"
     cached = _analytics_cache.get(_key)
@@ -211,6 +219,7 @@ async def analyzer_cooccurrence(
     current_user: models.User = Depends(get_current_user),
 ):
     """Concept co-occurrence pairs with PMI score."""
+    _validate_domain_id(domain_id)
     org_id = resolve_request_org_id(db, current_user)
     _key = f"cooccurrence_{domain_id}_{scope_tag(org_id)}_{top_n}"
     cached = _analytics_cache.get(_key)
@@ -242,6 +251,7 @@ async def analyzer_clusters(
     current_user: models.User = Depends(get_current_user),
 ):
     """Greedy concept clusters seeded by top concepts."""
+    _validate_domain_id(domain_id)
     org_id = resolve_request_org_id(db, current_user)
     _key = f"clusters_{domain_id}_{scope_tag(org_id)}_{n_clusters}"
     cached = _analytics_cache.get(_key)
@@ -273,6 +283,7 @@ async def analyzer_correlation(
     current_user: models.User = Depends(get_current_user),
 ):
     """Cramér's V pairwise field correlations for categorical columns in a domain."""
+    _validate_domain_id(domain_id)
     org_id = resolve_request_org_id(db, current_user)
     _key = f"correlation_{domain_id}_{scope_tag(org_id)}_{top_n}"
     cached = _analytics_cache.get(_key)
@@ -308,6 +319,7 @@ def analyzer_trends(
     current_user: models.User = Depends(get_current_user),
 ):
     """Concept frequency trends with slope-based classification (emerging/declining/stable)."""
+    _validate_domain_id(domain_id)
     org_id = resolve_request_org_id(db, current_user)
     _key = f"trends_{domain_id}_{scope_tag(org_id)}_{limit}_{min_year}_{max_year}_{min_years}"
     cached = _analytics_cache.get(_key)
@@ -337,6 +349,7 @@ def analyzer_author_detail(
     current_user: models.User = Depends(get_current_user),
 ):
     """Full productivity detail for a single author by authority record ID."""
+    _validate_domain_id(domain_id)
     org_id = resolve_request_org_id(db, current_user)
     try:
         result = author_detail(domain_id, record_id, org_id=org_id)
@@ -356,6 +369,7 @@ def analyzer_authors(
     current_user: models.User = Depends(get_current_user),
 ):
     """Ranked list of authors with h-index and productivity metrics."""
+    _validate_domain_id(domain_id)
     org_id = resolve_request_org_id(db, current_user)
     _key = f"authors_{domain_id}_{scope_tag(org_id)}_{sort_by}_{limit}"
     cached = _analytics_cache.get(_key)
@@ -384,6 +398,7 @@ def analyzer_geographic(
     current_user: models.User = Depends(get_current_user),
 ):
     """Per-country aggregation with optional international collaboration analysis."""
+    _validate_domain_id(domain_id)
     org_id = resolve_request_org_id(db, current_user)
     _key = f"geo_{domain_id}_{scope_tag(org_id)}_{sort_by}_{limit}_{include_collaboration}"
     cached = _analytics_cache.get(_key)
@@ -414,6 +429,7 @@ def analyzer_coauthorship(
     current_user: models.User = Depends(get_current_user),
 ):
     """Co-authorship network with degree centrality and community detection."""
+    _validate_domain_id(domain_id)
     org_id = resolve_request_org_id(db, current_user)
     _key = f"coauth_{domain_id}_{scope_tag(org_id)}_{min_weight}_{limit}"
     cached = _analytics_cache.get(_key)
@@ -508,8 +524,9 @@ def dashboard_compare(
     Returns a list of domain snapshots in the same order as requested.
     """
     domain_ids = [d.strip() for d in domains.split(",") if d.strip()]
+    for did in domain_ids:
+        _validate_domain_id(did)
     if len(domain_ids) < 2:
-        from fastapi import HTTPException
         raise HTTPException(status_code=422, detail="Provide at least 2 domain IDs")
     if len(domain_ids) > 4:
         domain_ids = domain_ids[:4]

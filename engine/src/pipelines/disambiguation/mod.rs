@@ -26,7 +26,18 @@ impl Pipeline for DisambiguationPipeline {
 
     fn validate(&self, input: &PipelineInput) -> Result<(), ValidationError> {
         match &input.payload {
-            Some(ComputePayload::Disambiguation(req)) if !req.values.is_empty() => Ok(()),
+            Some(ComputePayload::Disambiguation(req)) => {
+                if req.values.is_empty() {
+                    return Err(ValidationError::EmptyInput);
+                }
+                if req.values.len() > 50_000 {
+                    return Err(ValidationError::InvalidField(format!(
+                        "too many values: {} (max 50,000)",
+                        req.values.len()
+                    )));
+                }
+                Ok(())
+            }
             _ => Err(ValidationError::EmptyInput),
         }
     }
@@ -249,6 +260,29 @@ mod tests {
         let elapsed = start.elapsed();
         assert!(!clusters.is_empty());
         assert!(elapsed.as_secs() < 30, "should complete in < 30s, took {:?}", elapsed);
+    }
+
+    #[test]
+    fn test_disambiguation_validate_too_many_values() {
+        let pipeline = DisambiguationPipeline;
+        let values: Vec<String> = (0..50_001).map(|i| format!("val_{}", i)).collect();
+        let input = PipelineInput {
+            job_id: "test".to_string(),
+            import_batch_id: 0,
+            org_id: None,
+            domain: "test".to_string(),
+            publications: vec![],
+            options: HashMap::new(),
+            payload: Some(ComputePayload::Disambiguation(
+                crate::proto::DisambiguationRequest {
+                    field_name: "brand".to_string(),
+                    values,
+                    similarity_threshold: 0.85,
+                },
+            )),
+        };
+        let err = pipeline.validate(&input).unwrap_err();
+        assert!(format!("{}", err).contains("too many values"));
     }
 
     #[test]

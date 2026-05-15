@@ -27,18 +27,27 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/scientific", tags=["scientific-import"])
 
 
+_VALID_SOURCES = {s["id"] for s in list_sources()}
+
+
+class AdapterConfig(BaseModel):
+    """Typed config for scientific adapters — only known keys allowed."""
+    email: Optional[str] = None
+    api_key_name: Optional[str] = None
+
+
 class SearchRequest(BaseModel):
     source: str
     query: str = Field(min_length=1, max_length=500)
     max_results: int = Field(default=20, ge=1, le=100)
-    config: dict = Field(default_factory=dict)
+    config: AdapterConfig = Field(default_factory=AdapterConfig)
     use_engine: bool = Field(default=False, description="Opt-in to Rust engine delegation")
 
 
 class DoiBatchRequest(BaseModel):
     dois: list[str] = Field(min_length=1, max_length=200)
     source: str = Field(default="crossref")
-    config: dict = Field(default_factory=dict)
+    config: AdapterConfig = Field(default_factory=AdapterConfig)
 
 
 def _record_to_dict(r: ScientificRecord) -> dict:
@@ -99,7 +108,7 @@ def _save_records(records: list, db: Session, org_id: Optional[int]) -> dict:
 
 def _fetch_doi_records(body: DoiBatchRequest) -> list[ScientificRecord]:
     try:
-        adapter = get_scientific_adapter(body.source, body.config)
+        adapter = get_scientific_adapter(body.source, body.config.model_dump(exclude_none=True))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     try:
@@ -153,6 +162,8 @@ def get_sources(_=Depends(get_current_user)):
 
 @router.post("/search")
 async def search_scientific(request: Request, body: SearchRequest, _=Depends(get_current_user)):
+    if body.source not in _VALID_SOURCES:
+        raise HTTPException(status_code=400, detail=f"Invalid source '{body.source}'. Available: {sorted(_VALID_SOURCES)}")
     # Try engine delegation if opted-in
     if body.use_engine:
         engine_client = _get_engine_client(request)
@@ -162,7 +173,7 @@ async def search_scientific(request: Request, body: SearchRequest, _=Depends(get
         if engine_pubs is not None:
             return engine_pubs
     try:
-        adapter = get_scientific_adapter(body.source, body.config)
+        adapter = get_scientific_adapter(body.source, body.config.model_dump(exclude_none=True))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     try:
@@ -185,6 +196,8 @@ async def import_scientific(
     db: Session = Depends(get_db),
     current_user=Depends(require_role("super_admin", "admin", "editor")),
 ):
+    if body.source not in _VALID_SOURCES:
+        raise HTTPException(status_code=400, detail=f"Invalid source '{body.source}'. Available: {sorted(_VALID_SOURCES)}")
     org_id = resolve_request_org_id(db, current_user)
     # Try engine delegation if opted-in (bypasses Python rate limiter)
     if body.use_engine:
@@ -195,7 +208,7 @@ async def import_scientific(
         if engine_pubs is not None:
             return _save_engine_publications(engine_pubs, db, org_id)
     try:
-        adapter = get_scientific_adapter(body.source, body.config)
+        adapter = get_scientific_adapter(body.source, body.config.model_dump(exclude_none=True))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     try:

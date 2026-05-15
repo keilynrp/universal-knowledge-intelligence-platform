@@ -3,14 +3,14 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from backend.auth import get_current_user
+from backend.auth import require_role
 from backend.services.engine_delegation import ENGINE_DELEGATION_THRESHOLD
 
 router = APIRouter(prefix="/engine", tags=["engine"])
 
 
 @router.get("/health")
-async def engine_health(request: Request, _=Depends(get_current_user)):
+async def engine_health(request: Request, _=Depends(require_role("super_admin", "admin"))):
     """Return engine availability and registered pipeline info."""
     engine = getattr(request.app.state, "engine_client", None)
     if not engine:
@@ -47,7 +47,7 @@ async def engine_health(request: Request, _=Depends(get_current_user)):
 async def engine_job_status(
     job_id: str,
     request: Request,
-    _=Depends(get_current_user),
+    _=Depends(require_role("super_admin", "admin")),
 ):
     """Return the status of an async engine job."""
     engine = getattr(request.app.state, "engine_client", None)

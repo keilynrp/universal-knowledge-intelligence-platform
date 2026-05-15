@@ -2,9 +2,18 @@
 from __future__ import annotations
 
 import logging
+import os
+import re
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+_JOB_ID_RE = re.compile(r"[^a-zA-Z0-9_\-]")
+
+
+def _sanitize_job_id(raw: str) -> str:
+    """Strip non-alphanumeric/dash/underscore chars and truncate to 128 chars."""
+    return _JOB_ID_RE.sub("", raw)[:128]
 
 
 class EngineClient:
@@ -15,14 +24,29 @@ class EngineClient:
         self.auth_token = auth_token
         self._channel = None
         self._stub = None
+        self._use_tls = os.environ.get("ENGINE_GRPC_TLS", "") == "1"
 
     async def _ensure_channel(self) -> bool:
         if not self.grpc_url:
             return False
         if self._channel is None:
             try:
+                import grpc
                 import grpc.aio
-                self._channel = grpc.aio.insecure_channel(self.grpc_url)
+                if self._use_tls:
+                    self._channel = grpc.aio.secure_channel(
+                        self.grpc_url, grpc.ssl_channel_credentials()
+                    )
+                else:
+                    # Warn if insecure channel to non-localhost
+                    host = self.grpc_url.split(":")[0] if ":" in self.grpc_url else self.grpc_url
+                    if host not in ("localhost", "127.0.0.1", "::1"):
+                        logger.warning(
+                            "ENGINE_GRPC_TLS is not enabled but connecting to non-localhost "
+                            "host '%s' — credentials will be sent in plaintext",
+                            host,
+                        )
+                    self._channel = grpc.aio.insecure_channel(self.grpc_url)
                 from backend.proto.ukip.engine.v1 import engine_pb2_grpc
                 self._stub = engine_pb2_grpc.EngineStub(self._channel)
             except Exception as exc:
@@ -72,7 +96,7 @@ class EngineClient:
             from backend.proto.ukip.engine.v1 import engine_pb2
             req = engine_pb2.ProcessRequest(
                 pipeline=pipeline,
-                job_id=job_id,
+                job_id=_sanitize_job_id(job_id),
                 import_batch_id=import_batch_id,
                 domain=domain,
                 publications=publications,
@@ -112,7 +136,7 @@ class EngineClient:
             from backend.proto.ukip.engine.v1 import engine_pb2
             req = engine_pb2.ProcessRequest(
                 pipeline=pipeline,
-                job_id=job_id,
+                job_id=_sanitize_job_id(job_id),
                 import_batch_id=import_batch_id,
                 domain=domain,
                 publications=publications,
@@ -181,7 +205,7 @@ class EngineClient:
 
             req = engine_pb2.ProcessRequest(
                 pipeline="compute_authority",
-                job_id=f"authority-{field_name}",
+                job_id=_sanitize_job_id(f"authority-{field_name}"),
                 import_batch_id=0,
                 domain=domain,
                 authority_request=authority_req,
@@ -216,7 +240,7 @@ class EngineClient:
             )
             req = engine_pb2.ProcessRequest(
                 pipeline="compute_analytics",
-                job_id=f"analytics-{mode}-{domain_id}",
+                job_id=_sanitize_job_id(f"analytics-{mode}-{domain_id}"),
                 import_batch_id=0,
                 domain=domain_id,
                 analytics_request=analytics_req,
@@ -250,7 +274,7 @@ class EngineClient:
             )
             req = engine_pb2.ProcessRequest(
                 pipeline="compute_disambiguation",
-                job_id=f"disambiguate-{field_name}",
+                job_id=_sanitize_job_id(f"disambiguate-{field_name}"),
                 import_batch_id=0,
                 domain=domain,
                 disambiguation_request=disambiguation_req,
@@ -292,7 +316,7 @@ class EngineClient:
             )
             req = engine_pb2.ProcessRequest(
                 pipeline="compute_normalization",
-                job_id=f"normalize-{mode}",
+                job_id=_sanitize_job_id(f"normalize-{mode}"),
                 import_batch_id=0,
                 domain=domain,
                 normalization_request=normalization_req,
@@ -330,7 +354,7 @@ class EngineClient:
             )
             req = engine_pb2.ProcessRequest(
                 pipeline="compute_connectors",
-                job_id=f"connector-{source}",
+                job_id=_sanitize_job_id(f"connector-{source}"),
                 import_batch_id=0,
                 domain=domain,
                 connector_request=connector_req,
