@@ -173,17 +173,32 @@ function parseJsonObject(raw: string | null): Record<string, unknown> {
     }
 }
 
+function stripInlineHtml(value: string): string {
+    return value
+        .replace(/<\s*br\s*\/?\s*>/gi, " ")
+        .replace(/<\s*\/?\s*(sup|sub|i|em|b|strong|span)\b[^>]*>/gi, "")
+        .replace(/<[^>]+>/g, "")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
 function formatValue(value: unknown): React.ReactNode {
     if (value === null || value === undefined || value === "") {
         return <span className="italic text-gray-300 dark:text-gray-600">—</span>;
     }
     if (Array.isArray(value)) {
-        return value.length > 0 ? value.map((item) => String(item)).join(", ") : <span className="italic text-gray-300 dark:text-gray-600">—</span>;
+        return value.length > 0 ? value.map((item) => stripInlineHtml(String(item))).join(", ") : <span className="italic text-gray-300 dark:text-gray-600">—</span>;
     }
     if (typeof value === "object") {
         return JSON.stringify(value);
     }
-    return String(value);
+    return stripInlineHtml(String(value));
 }
 
 const Spinner = () => (

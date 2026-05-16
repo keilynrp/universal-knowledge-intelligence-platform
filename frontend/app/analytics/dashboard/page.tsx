@@ -147,6 +147,21 @@ interface BenchmarkGap {
   evidence: string;
 }
 
+function stripInlineHtml(value: string): string {
+  return value
+    .replace(/<\s*br\s*\/?\s*>/gi, " ")
+    .replace(/<\s*\/?\s*(sup|sub|i|em|b|strong|span)\b[^>]*>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 // ── Heatmap cell with violet color scale ─────────────────────────────────────
 
 function HeatCell({ value, max }: { value: number; max: number }) {
@@ -1304,11 +1319,11 @@ export default function ExecutiveDashboardPage() {
                         href={`/entities/${e.id}`}
                         className="text-sm font-medium text-gray-900 hover:text-violet-600 dark:text-white dark:hover:text-violet-400"
                       >
-                        {e.entity_name || e.primary_label || `Entity #${e.id}`}
+                        {stripInlineHtml(e.entity_name || e.primary_label || `Entity #${e.id}`)}
                       </Link>
                     </td>
                     <td className="py-3 pr-4 text-sm text-gray-500 dark:text-gray-400">
-                      {e.brand || e.primary_label || "—"}
+                      {stripInlineHtml(e.brand || e.primary_label || "-")}
                     </td>
                     <td className="py-3 pr-4 text-right">
                       <span className="text-sm font-bold text-violet-600 dark:text-violet-400">
