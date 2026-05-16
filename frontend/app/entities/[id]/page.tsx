@@ -481,18 +481,51 @@ function IconGlyph({ name, className = "h-5 w-5" }: { name: string; className?: 
     );
 }
 
-function QualityRing({ percent }: { percent: number }) {
+function qualityHealth(percent: number) {
     const safePercent = Math.round(Math.max(0, Math.min(100, percent)));
+    if (safePercent <= 20) {
+        return {
+            key: "critical" as const,
+            ring: "#ef4444",
+            track: "#fee2e2",
+            textClass: "text-red-600 dark:text-red-300",
+            shadow: "shadow-[inset_0_0_0_1px_rgba(239,68,68,0.22)]",
+            barClass: "bg-red-500",
+        };
+    }
+    if (safePercent < 80) {
+        return {
+            key: "warning" as const,
+            ring: "#f59e0b",
+            track: "#fef3c7",
+            textClass: "text-amber-600 dark:text-amber-300",
+            shadow: "shadow-[inset_0_0_0_1px_rgba(245,158,11,0.24)]",
+            barClass: "bg-amber-500",
+        };
+    }
+    return {
+        key: "healthy" as const,
+        ring: "#10b981",
+        track: "#d1fae5",
+        textClass: "text-emerald-600 dark:text-emerald-300",
+        shadow: "shadow-[inset_0_0_0_1px_rgba(16,185,129,0.22)]",
+        barClass: "bg-emerald-500",
+    };
+}
+
+function QualityRing({ percent, label }: { percent: number; label: string }) {
+    const safePercent = Math.round(Math.max(0, Math.min(100, percent)));
+    const health = qualityHealth(safePercent);
     return (
         <div
-            className="relative flex h-36 w-36 shrink-0 items-center justify-center rounded-full shadow-[inset_0_0_0_1px_rgba(124,58,237,0.12)]"
+            className={`relative flex h-36 w-36 shrink-0 items-center justify-center rounded-full ${health.shadow}`}
             style={{
-                background: `conic-gradient(#7c3aed ${safePercent * 3.6}deg, #e8e4ff ${safePercent * 3.6}deg)`,
+                background: `conic-gradient(${health.ring} ${safePercent * 3.6}deg, ${health.track} ${safePercent * 3.6}deg)`,
             }}
-            aria-label={`Quality score ${safePercent}%`}
+            aria-label={`${label} ${safePercent}%`}
         >
             <div className="absolute inset-4 rounded-full bg-white dark:bg-slate-950" />
-            <span className="relative text-4xl font-black tracking-tight text-violet-600 dark:text-violet-300">
+            <span className={`relative text-4xl font-black tracking-tight ${health.textClass}`}>
                 {safePercent}%
             </span>
         </div>
@@ -717,6 +750,7 @@ export default function EntityDetailPage() {
         return value === key ? fallback : value;
     };
     const qualityPercent = normalizePercent(qualityData?.score ?? entity.quality_score);
+    const qualityHealthState = qualityHealth(qualityPercent);
     const qualityRows = qualityData
         ? Object.entries(qualityData.breakdown).map(([key, dim]) => ({
             key,
@@ -922,7 +956,10 @@ export default function EntityDetailPage() {
                                     </h2>
                                 </div>
                                 <div className="flex flex-col gap-8 sm:flex-row sm:items-center">
-                                    <QualityRing percent={qualityPercent} />
+                                    <QualityRing
+                                        percent={qualityPercent}
+                                        label={tr("entities.detail.quality.ring_aria", "Índice de calidad global")}
+                                    />
                                     <div className="min-w-0 flex-1 space-y-3">
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
@@ -936,7 +973,7 @@ export default function EntityDetailPage() {
                                         </div>
                                         <div className="h-3 max-w-xs rounded-full bg-slate-100 dark:bg-white/10">
                                             <div
-                                                className="h-3 rounded-full bg-emerald-500"
+                                                className={`h-3 rounded-full ${qualityHealthState.barClass}`}
                                                 style={{ width: `${qualityPercent}%` }}
                                             />
                                         </div>
