@@ -144,19 +144,27 @@ export default function TopicsPage() {
       if (tabKey === "topics") {
         const r = await apiFetch(`/analyzers/topics/${domainId}?top_n=30`);
         if (!r.ok) throw new Error(`Server responded with ${r.status}`);
-        setTopicsData(await r.json());
+        const data = await r.json();
+        if (!data.topics) data.topics = [];
+        setTopicsData(data);
       } else if (tabKey === "cooccurrence") {
         const r = await apiFetch(`/analyzers/cooccurrence/${domainId}?top_n=20`);
         if (!r.ok) throw new Error(`Server responded with ${r.status}`);
-        setCooccData(await r.json());
+        const data = await r.json();
+        if (!data.pairs) data.pairs = [];
+        setCooccData(data);
       } else if (tabKey === "clusters") {
         const r = await apiFetch(`/analyzers/clusters/${domainId}?n_clusters=6`);
         if (!r.ok) throw new Error(`Server responded with ${r.status}`);
-        setClustersData(await r.json());
+        const data = await r.json();
+        if (!data.clusters) data.clusters = [];
+        setClustersData(data);
       } else if (tabKey === "correlation") {
         const r = await apiFetch(`/analyzers/correlation/${domainId}?top_n=20`);
         if (!r.ok) throw new Error(`Server responded with ${r.status}`);
-        setCorrelationData(await r.json());
+        const data = await r.json();
+        if (!data.correlations) data.correlations = [];
+        setCorrelationData(data);
       }
     } catch (err) {
       setTabError(err instanceof Error ? err.message : t("page.topics.analysis_failed"));
@@ -225,7 +233,7 @@ export default function TopicsPage() {
       )}
 
       {/* ── Tab: Top Concepts ────────────────────────────────────────────────── */}
-      {!loading && !tabError && tab === "topics" && topicsData && (
+      {!loading && !tabError && tab === "topics" && topicsData && topicsData.topics && (
         <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
           <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
             <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -266,7 +274,7 @@ export default function TopicsPage() {
       )}
 
       {/* ── Tab: Co-occurrence ───────────────────────────────────────────────── */}
-      {!loading && !tabError && tab === "cooccurrence" && cooccData && (
+      {!loading && !tabError && tab === "cooccurrence" && cooccData && cooccData.pairs && (
         <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
           <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
             <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -310,7 +318,7 @@ export default function TopicsPage() {
       )}
 
       {/* ── Tab: Topic Clusters ──────────────────────────────────────────────── */}
-      {!loading && !tabError && tab === "clusters" && clustersData && (
+      {!loading && !tabError && tab === "clusters" && clustersData && clustersData.clusters && (
         <div>
           {clustersData.clusters.length === 0 ? (
             <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
@@ -360,7 +368,7 @@ export default function TopicsPage() {
       )}
 
       {/* ── Tab: Field Correlation ───────────────────────────────────────────── */}
-      {!loading && !tabError && tab === "correlation" && correlationData && (
+      {!loading && !tabError && tab === "correlation" && correlationData && correlationData.correlations && (
         <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
           <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
             <span className="text-sm font-medium text-gray-700 dark:text-gray-300">

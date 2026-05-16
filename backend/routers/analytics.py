@@ -268,7 +268,8 @@ async def analyzer_topics(
     engine_result = await try_engine_analytics(
         _get_engine_client(request), domain_id, "topics", top_n, org_id
     )
-    if engine_result is not None:
+    if engine_result is not None and isinstance(engine_result, dict) and "topics" in engine_result:
+        engine_result.setdefault("domain_id", domain_id)
         _analytics_cache.set(_key, engine_result)
         return engine_result
     try:
@@ -303,7 +304,8 @@ async def analyzer_cooccurrence(
         engine_result = await try_engine_analytics(
             _get_engine_client(request), domain_id, "cooccurrence", top_n, org_id
         )
-        if engine_result is not None:
+        if engine_result is not None and isinstance(engine_result, dict) and "pairs" in engine_result:
+            engine_result.setdefault("domain_id", domain_id)
             _analytics_cache.set(_key, engine_result)
             return engine_result
     try:
@@ -341,7 +343,8 @@ async def analyzer_clusters(
     engine_result = await try_engine_analytics(
         _get_engine_client(request), domain_id, "clusters", n_clusters, org_id
     )
-    if engine_result is not None:
+    if engine_result is not None and isinstance(engine_result, dict) and "clusters" in engine_result:
+        engine_result.setdefault("domain_id", domain_id)
         _analytics_cache.set(_key, engine_result)
         return engine_result
     try:
@@ -373,7 +376,8 @@ async def analyzer_correlation(
     engine_result = await try_engine_analytics(
         _get_engine_client(request), domain_id, "correlation", top_n, org_id
     )
-    if engine_result is not None:
+    if engine_result is not None and isinstance(engine_result, dict) and "correlations" in engine_result:
+        engine_result.setdefault("domain_id", domain_id)
         _analytics_cache.set(_key, engine_result)
         return engine_result
     try:

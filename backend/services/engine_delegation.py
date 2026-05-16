@@ -59,38 +59,62 @@ def _convert_analytics(resp, mode: str) -> dict | None:
     return None
 
 
-def _convert_topics(ar) -> list[dict]:
-    return [{"concept": t.concept, "count": t.count} for t in ar.topics]
+def _convert_topics(ar) -> dict:
+    total_enriched = getattr(ar, "total_enriched", 0)
+    topics = [{"concept": t.concept, "count": t.count, "pct": 0.0} for t in ar.topics]
+    if total_enriched > 0:
+        for t in topics:
+            t["pct"] = round(t["count"] / total_enriched * 100, 2)
+    return {
+        "domain_id": getattr(ar, "domain_id", ""),
+        "total_enriched": total_enriched,
+        "topics": topics,
+    }
 
 
-def _convert_cooccurrence(ar) -> list[dict]:
-    return [
-        {"concept_a": p.concept_a, "concept_b": p.concept_b, "pmi": round(p.pmi, 4)}
-        for p in ar.cooccurrences
-    ]
+def _convert_cooccurrence(ar) -> dict:
+    return {
+        "domain_id": getattr(ar, "domain_id", ""),
+        "total_enriched": getattr(ar, "total_enriched", 0),
+        "pairs": [
+            {"concept_a": p.concept_a, "concept_b": p.concept_b, "count": getattr(p, "count", 0), "pmi": round(p.pmi, 4)}
+            for p in ar.cooccurrences
+        ],
+    }
 
 
-def _convert_clusters(ar) -> list[dict]:
-    return [
+def _convert_clusters(ar) -> dict:
+    clusters = [
         {
-            "cluster_id": i,
+            "id": i,
             "seed": c.seed_concept,
-            "members": list(c.members),
+            "size": len(c.members),
+            "members": [{"concept": m, "count": 0} for m in c.members],
         }
         for i, c in enumerate(ar.clusters)
     ]
+    return {
+        "domain_id": getattr(ar, "domain_id", ""),
+        "n_clusters": len(clusters),
+        "clusters": clusters,
+    }
 
 
-def _convert_correlation(ar) -> list[dict]:
-    return [
-        {
-            "field_a": c.field_a,
-            "field_b": c.field_b,
-            "cramers_v": round(c.cramers_v, 4),
-            "strength": c.strength,
-        }
-        for c in ar.correlations
-    ]
+def _convert_correlation(ar) -> dict:
+    return {
+        "domain_id": getattr(ar, "domain_id", ""),
+        "n_entities": getattr(ar, "n_entities", 0),
+        "fields_analyzed": getattr(ar, "fields_analyzed", 0),
+        "correlations": [
+            {
+                "field_a": c.field_a,
+                "field_b": c.field_b,
+                "cramers_v": round(c.cramers_v, 4),
+                "strength": c.strength,
+            }
+            for c in ar.correlations
+        ],
+    }
 
 
 # ── Disambiguation ───────────────────────────────────────────────────────────
