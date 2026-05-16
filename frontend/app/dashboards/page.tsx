@@ -1,574 +1,494 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { apiFetch } from "@/lib/api";
-import { WIDGET_REGISTRY, type WidgetConfig } from "./widgets";
-import PresenceAvatars from "../components/PresenceAvatars";
-import { useWebSocket } from "@/lib/useWebSocket";
-import { formatDate } from "../lib/dateFormat";
+import type { ReactNode } from "react";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+const smallTrend = [
+  { x: 0, y: 22 },
+  { x: 1, y: 18 },
+  { x: 2, y: 24 },
+  { x: 3, y: 23 },
+  { x: 4, y: 34 },
+  { x: 5, y: 38 },
+  { x: 6, y: 24 },
+  { x: 7, y: 22 },
+  { x: 8, y: 31 },
+  { x: 9, y: 34 },
+  { x: 10, y: 29 },
+  { x: 11, y: 25 },
+  { x: 12, y: 26 },
+];
 
-interface Dashboard {
-  id: number;
-  name: string;
-  layout: WidgetConfig[];
-  is_default: boolean;
-  updated_at: string | null;
+const monteCarlo = [
+  { x: "65", y: 14 },
+  { x: "", y: 20 },
+  { x: "", y: 31 },
+  { x: "", y: 20 },
+  { x: "", y: 25 },
+  { x: "", y: 39 },
+  { x: "", y: 51 },
+  { x: "", y: 39 },
+  { x: "", y: 62 },
+  { x: "", y: 50 },
+  { x: "", y: 47 },
+  { x: "", y: 49 },
+  { x: "", y: 68 },
+  { x: "", y: 82 },
+  { x: "", y: 73 },
+  { x: "95", y: 49 },
+];
+
+const timeSeries = [
+  1, 1, 2, 2, 3, 4, 3, 6, 8, 5, 8, 4, 5, 13, 9, 16, 11, 16, 17, 27, 23, 34,
+  32, 48, 66, 75, 100, 72, 86, 103, 106, 103, 68, 52, 42, 24, 4,
+].map((value, index) => ({ year: 2010 + index * 0.44, value }));
+
+const topicSignals = ["Open Education & E-Learning", "Programming language", "Population"];
+
+const heatRows = [
+  ["Open Science", "-", "-", "-", "-", "1"],
+  ["UNESCO Recommendation...", "-", "2", "-", "-", "-"],
+  ["Eating Into Open Science...", "1", "1", "-", "-", "-"],
+  ["Open Science in Archaeology", "-", "-", "-", "-", "-"],
+  ["Towards wide-scale adoption...", "1", "1", "-", "-", "-"],
+];
+
+const conceptTags = [
+  ["Computer science", 319, "blue"],
+  ["Political science", 197, "violet"],
+  ["Engineering", 130, "green"],
+  ["Psychology", 110, "green"],
+  ["Data science", 97, "amber"],
+  ["Biology", 97, "cyan"],
+  ["Education", 77, "pink"],
+  ["Scientific Computing", 60, "violet"],
+  ["Database", 77, "blue"],
+  ["Evolution", 66, "rose"],
+  ["Artificial Intelligence", 50, "blue"],
+  ["Ecology", 55, "slate"],
+  ["Knowledge management", 45, "amber"],
+  ["Physics", 35, "blue"],
+  ["Social psychology", 37, "violet"],
+  ["Transparency", 37, "cyan"],
+  ["Genetics", 35, "green"],
+] as const;
+
+const impactRows = [
+  ["1", "Open Science: the Very Idea", "Open Science: the Very Idea", "74,359", "OpenAlex"],
+  ["2", "The Open Knowledge Foundation: Open Data Means Better Science", "The Open Knowledge Foundation: Open Data Means Better Science", "74,305", "OpenAlex"],
+  ["3", "Open Science in Software Engineering", "Open Science in Software Engineering", "69,813", "OpenAlex"],
+  ["4", "Open Science Collaboration", "Open Science Collaboration", "69,813", "OpenAlex"],
+  ["5", "Open Science and Open Innovation: Sourcing Knowledge from Universities", "Open Science and Open Innovation: Sourcing Knowledge from Universities", "42,410", "OpenAlex"],
+];
+
+function pointsFromData(data: { y?: number; value?: number }[], width = 280, height = 88) {
+  const values = data.map((item) => item.y ?? item.value ?? 0);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(max - min, 1);
+  return values
+    .map((value, index) => {
+      const x = (index / Math.max(values.length - 1, 1)) * width;
+      const y = height - ((value - min) / range) * (height - 8) - 4;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
 }
 
-interface WidgetType {
-  type: string;
-  label: string;
-  description: string;
-  default_cols: number;
-  icon: string;
-}
-
-// ── Icon helper ───────────────────────────────────────────────────────────────
-
-function WidgetIcon({ icon }: { icon: string }) {
-  const paths: Record<string, string> = {
-    "chart-bar":         "M3 3v18h18M7 16l4-4 4 4 5-5",
-    "beaker":            "M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.3 24.3 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15M14.25 3.104c.251.023.501.05.75.082M19.8 15a2.25 2.25 0 010 3.182M19.8 15l-2.8-2.8M5 14.5a2.25 2.25 0 000 3.182M5 14.5l2.8-2.8m0 0L12 7.5m-4.2 4.2L12 7.5m5 4.2L12 7.5",
-    "table-cells":       "M3 3h18v18H3V3zm6 0v18M15 3v18M3 9h18M3 15h18",
-    "tag":               "M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z",
-    "sparkles":          "M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z",
-    "clock":             "M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z",
-    "chart-bar-square":  "M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z",
-    "cube":              "M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9",
-  };
+function SparkLine({ data, className = "h-12" }: { data: { y: number }[]; className?: string }) {
   return (
-    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={paths[icon] ?? paths["chart-bar"]} />
+    <svg className={`w-full ${className}`} viewBox="0 0 280 88" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points={pointsFromData(data)} fill="none" stroke="#7c3aed" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
-// ── Unique ID generator ───────────────────────────────────────────────────────
-
-let _seq = 0;
-function uid() { return `w_${Date.now()}_${++_seq}`; }
-
-// ── Widget Picker Modal ───────────────────────────────────────────────────────
-
-function WidgetPicker({
-  catalogue,
-  onAdd,
-  onClose,
-}: {
-  catalogue: WidgetType[];
-  onAdd: (wt: WidgetType) => void;
-  onClose: () => void;
-}) {
+function ImpactLine() {
+  const points = pointsFromData(monteCarlo, 320, 112);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-900">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white">Add Widget</h3>
-          <button onClick={onClose} className="rounded p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          {catalogue.map((wt) => (
-            <button
-              key={wt.type}
-              onClick={() => { onAdd(wt); onClose(); }}
-              className="flex items-start gap-3 rounded-xl border border-gray-200 p-3 text-left hover:border-blue-400 hover:bg-blue-50 dark:border-gray-700 dark:hover:border-blue-600 dark:hover:bg-blue-900/20"
-            >
-              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                <WidgetIcon icon={wt.icon} />
-              </span>
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">{wt.label}</p>
-                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{wt.description}</p>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Dashboard Grid ────────────────────────────────────────────────────────────
-
-const COL_CLASS: Record<number, string> = {
-  4:  "col-span-4",
-  6:  "col-span-6",
-  8:  "col-span-8",
-  12: "col-span-12",
-};
-
-function DashboardGrid({
-  widgets,
-  editing,
-  onReorder,
-  onRemove,
-}: {
-  widgets: WidgetConfig[];
-  editing: boolean;
-  onReorder: (from: number, to: number) => void;
-  onRemove: (id: string) => void;
-}) {
-  const dragIdx = useRef<number | null>(null);
-
-  function handleDragStart(e: React.DragEvent, idx: number) {
-    dragIdx.current = idx;
-    e.dataTransfer.effectAllowed = "move";
-  }
-
-  function handleDrop(e: React.DragEvent, toIdx: number) {
-    e.preventDefault();
-    if (dragIdx.current !== null && dragIdx.current !== toIdx) {
-      onReorder(dragIdx.current, toIdx);
-    }
-    dragIdx.current = null;
-  }
-
-  function handleDragOver(e: React.DragEvent) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-  }
-
-  if (widgets.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 py-24 dark:border-gray-700">
-        <svg className="mb-3 h-10 w-10 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-        </svg>
-        <p className="text-sm text-gray-400 dark:text-gray-500">
-          {editing ? "Click \"+ Add Widget\" to build your dashboard" : "This dashboard is empty."}
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid grid-cols-12 gap-4">
-      {widgets.map((w, idx) => {
-        const Renderer = WIDGET_REGISTRY[w.type];
-        const spanClass = COL_CLASS[w.cols] ?? "col-span-6";
-        return (
-          <div
-            key={w.id}
-            className={`${spanClass} relative rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900 ${editing ? "cursor-grab active:cursor-grabbing" : ""}`}
-            style={{ minHeight: 200 }}
-            draggable={editing}
-            onDragStart={(e) => editing && handleDragStart(e, idx)}
-            onDragOver={handleDragOver}
-            onDrop={(e) => editing && handleDrop(e, idx)}
-          >
-            {editing && (
-              <div className="absolute right-2 top-2 flex items-center gap-1">
-                {/* Drag handle hint */}
-                <span className="cursor-grab text-gray-300 dark:text-gray-600" title="Drag to reorder">
-                  <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                    <circle cx="9" cy="6"  r="1.5" /><circle cx="15" cy="6"  r="1.5" />
-                    <circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
-                    <circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
-                  </svg>
-                </span>
-                <button
-                  onClick={() => onRemove(w.id)}
-                  title="Remove widget"
-                  className="rounded p-0.5 text-gray-300 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400"
-                >
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            )}
-            {Renderer ? (
-              <Renderer config={w} />
-            ) : (
-              <p className="text-xs text-red-400">Unknown widget type: {w.type}</p>
-            )}
-          </div>
-        );
+    <svg className="h-28 w-full" viewBox="0 0 320 112" preserveAspectRatio="none" aria-hidden="true">
+      <path d={`M0 112 L${points.replaceAll(" ", " L")} L320 112 Z`} fill="rgba(139,92,246,0.08)" />
+      <polyline points={points} fill="none" stroke="#8b5cf6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      {points.split(" ").map((point, index) => {
+        if (![1, 5, 8, 13, 14].includes(index)) return null;
+        const [cx, cy] = point.split(",");
+        return <circle key={point} cx={cx} cy={cy} r="3.5" fill="#8b5cf6" stroke="white" strokeWidth="2" />;
       })}
+    </svg>
+  );
+}
+
+function ReferenceRing({ value }: { value: number }) {
+  const radius = 42;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - value / 100);
+  return (
+    <div className="relative mt-3 h-48 w-48">
+      <svg className="h-full w-full -rotate-90" viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r={radius} fill="none" stroke="#eadcff" strokeWidth="8" />
+        <circle
+          cx="50"
+          cy="50"
+          r={radius}
+          fill="none"
+          stroke="#7c3aed"
+          strokeLinecap="round"
+          strokeWidth="8"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <p className="text-5xl font-semibold text-violet-600">{value}%</p>
+        <p className="mt-1 text-xs font-medium text-slate-600">Percentil</p>
+      </div>
     </div>
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
-
-export default function DashboardsPage() {
-  const [dashboards, setDashboards] = useState<Dashboard[]>([]);
-  const [catalogue, setCatalogue]   = useState<WidgetType[]>([]);
-  const [activeDash, setActiveDash] = useState<Dashboard | null>(null);
-
-  // Real-time presence (Sprint 91)
-  const { presence, isConnected } = useWebSocket(
-    activeDash ? `dashboard-${activeDash.id}` : null
-  );
-  const [editLayout, setEditLayout] = useState<WidgetConfig[]>([]);
-  const [editing, setEditing]       = useState(false);
-  const [loading, setLoading]       = useState(true);
-  const [saving, setSaving]         = useState(false);
-  const [showPicker, setShowPicker] = useState(false);
-  const [showNewForm, setShowNewForm] = useState(false);
-  const [newName, setNewName]       = useState("");
-  const [creatingNew, setCreatingNew] = useState(false);
-
-  // ── Load ──────────────────────────────────────────────────────────────────
-
-  const applyDashboardData = useCallback((dashes: Dashboard[], cat: WidgetType[]) => {
-    setCatalogue(cat);
-    setDashboards(dashes);
-    const def = dashes.find((d) => d.is_default) ?? dashes[0] ?? null;
-    if (def) {
-      setActiveDash(def);
-      setEditLayout(def.layout);
-    } else {
-      setActiveDash(null);
-      setEditLayout([]);
-    }
-  }, []);
-
-  const fetchDashboardData = useCallback(async () => {
-    const [dRes, cRes] = await Promise.all([
-      apiFetch("/dashboards"),
-      apiFetch("/dashboards/widget-types"),
-    ]);
-    const dashes: Dashboard[] = dRes.ok ? await dRes.json() : [];
-    const cat: WidgetType[]   = cRes.ok ? await cRes.json() : [];
-    return { dashes, cat };
-  }, []);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const { dashes, cat } = await fetchDashboardData();
-    applyDashboardData(dashes, cat);
-    setLoading(false);
-  }, [applyDashboardData, fetchDashboardData]);
-
-  useEffect(() => {
-    let active = true;
-    void fetchDashboardData().then(({ dashes, cat }) => {
-      if (!active) {
-        return;
-      }
-      applyDashboardData(dashes, cat);
-      setLoading(false);
-    });
-    return () => {
-      active = false;
-    };
-  }, [applyDashboardData, fetchDashboardData]);
-
-  // ── Dashboard selection ───────────────────────────────────────────────────
-
-  function selectDash(d: Dashboard) {
-    if (editing) {
-      if (!confirm("Discard unsaved changes?")) return;
-      setEditing(false);
-    }
-    setActiveDash(d);
-    setEditLayout(d.layout);
-  }
-
-  // ── Editing ───────────────────────────────────────────────────────────────
-
-  function startEdit() {
-    setEditLayout(activeDash?.layout ?? []);
-    setEditing(true);
-  }
-
-  function cancelEdit() {
-    setEditLayout(activeDash?.layout ?? []);
-    setEditing(false);
-  }
-
-  async function saveEdit() {
-    if (!activeDash) return;
-    setSaving(true);
-    const res = await apiFetch(`/dashboards/${activeDash.id}`, {
-      method: "PUT",
-      body: JSON.stringify({ layout: editLayout }),
-    });
-    if (res.ok) {
-      const updated: Dashboard = await res.json();
-      setActiveDash(updated);
-      setDashboards((prev) => prev.map((d) => d.id === updated.id ? updated : d));
-      setEditing(false);
-    }
-    setSaving(false);
-  }
-
-  // ── Widget CRUD ───────────────────────────────────────────────────────────
-
-  function addWidget(wt: WidgetType) {
-    const w: WidgetConfig = {
-      id:    uid(),
-      type:  wt.type,
-      title: wt.label,
-      cols:  wt.default_cols,
-      config: {},
-    };
-    setEditLayout((prev) => [...prev, w]);
-  }
-
-  function removeWidget(id: string) {
-    setEditLayout((prev) => prev.filter((w) => w.id !== id));
-  }
-
-  function reorderWidgets(from: number, to: number) {
-    setEditLayout((prev) => {
-      const next = [...prev];
-      const [item] = next.splice(from, 1);
-      next.splice(to, 0, item);
-      return next;
-    });
-  }
-
-  // ── New dashboard ─────────────────────────────────────────────────────────
-
-  async function createDashboard() {
-    if (!newName.trim()) return;
-    setCreatingNew(true);
-    const res = await apiFetch("/dashboards", {
-      method: "POST",
-      body: JSON.stringify({ name: newName.trim(), layout: [] }),
-    });
-    if (res.ok) {
-      const created: Dashboard = await res.json();
-      setDashboards((prev) => [created, ...prev]);
-      setActiveDash(created);
-      setEditLayout([]);
-      setShowNewForm(false);
-      setNewName("");
-      setEditing(true);
-    }
-    setCreatingNew(false);
-  }
-
-  // ── Set default ───────────────────────────────────────────────────────────
-
-  async function setDefault(d: Dashboard) {
-    const res = await apiFetch(`/dashboards/${d.id}/default`, { method: "POST" });
-    if (res.ok) {
-      const updated: Dashboard = await res.json();
-      setDashboards((prev) =>
-        prev.map((x) => ({ ...x, is_default: x.id === updated.id }))
-      );
-      setActiveDash(updated);
-    }
-  }
-
-  // ── Delete dashboard ──────────────────────────────────────────────────────
-
-  async function deleteDash(d: Dashboard) {
-    if (!confirm(`Delete dashboard "${d.name}"?`)) return;
-    await apiFetch(`/dashboards/${d.id}`, { method: "DELETE" });
-    await load();
-  }
-
-  // ── Render ────────────────────────────────────────────────────────────────
-
-  const displayWidgets = editing ? editLayout : (activeDash?.layout ?? []);
-
+function TemporalArea() {
+  const width = 900;
+  const height = 280;
+  const points = pointsFromData(timeSeries, width, height - 28);
+  const area = `M0 ${height - 20} L${points.replaceAll(" ", " L")} L${width} ${height - 20} Z`;
   return (
-    <div className="flex h-full min-h-screen">
-      {/* Sidebar — dashboard list */}
-      <aside className="w-64 shrink-0 border-r border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/60 flex flex-col">
-        <div className="flex items-center justify-between px-4 py-4 border-b border-gray-200 dark:border-gray-700">
-          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">My Dashboards</span>
-          <button
-            onClick={() => setShowNewForm(true)}
-            title="New dashboard"
-            className="rounded-lg p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
-        </div>
+    <svg className="h-72 w-full" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-label="Serie temporal de entidades">
+      <defs>
+        <linearGradient id="temporalNativeFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.34" />
+          <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {[40, 90, 140, 190, 240].map((y) => (
+        <line key={y} x1="0" x2={width} y1={y} y2={y} stroke="#edf0f7" strokeWidth="1" />
+      ))}
+      <path d={area} fill="url(#temporalNativeFill)" />
+      <polyline points={points} fill="none" stroke="#7c3aed" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      {["2010", "2012", "2014", "2016", "2018", "2020", "2022", "2024", "2026"].map((year, index) => (
+        <text key={year} x={index * 112 + 4} y={height - 2} fill="#64748b" fontSize="11">
+          {year}
+        </text>
+      ))}
+    </svg>
+  );
+}
 
-        {loading ? (
-          <div className="p-4 space-y-2">
-            {[1, 2, 3].map((i) => <div key={i} className="h-10 animate-pulse rounded-lg bg-gray-200 dark:bg-gray-700" />)}
-          </div>
-        ) : (
-          <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
-            {dashboards.length === 0 && (
-              <p className="px-3 py-6 text-center text-xs text-gray-400">No dashboards yet.</p>
-            )}
-            {dashboards.map((d) => (
-              <button
-                key={d.id}
-                onClick={() => selectDash(d)}
-                className={`group w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                  activeDash?.id === d.id
-                    ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-                    : "text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-                }`}
-              >
-                <span className="flex-1 truncate">{d.name}</span>
-                {d.is_default && (
-                  <span className="rounded px-1 text-[9px] font-bold uppercase bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                    default
-                  </span>
-                )}
-                {/* Actions visible on hover */}
-                <span className="hidden group-hover:flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                  {!d.is_default && (
-                    <span
-                      onClick={() => setDefault(d)}
-                      title="Set as default"
-                      className="cursor-pointer text-gray-400 hover:text-amber-500"
-                    >
-                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                      </svg>
-                    </span>
-                  )}
-                  <span
-                    onClick={() => deleteDash(d)}
-                    title="Delete"
-                    className="cursor-pointer text-gray-400 hover:text-red-500"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </span>
-                </span>
-              </button>
-            ))}
-          </nav>
-        )}
+function Icon({ path, className = "h-4 w-4" }: { path: string; className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d={path} />
+    </svg>
+  );
+}
 
-        {/* New dashboard form */}
-        {showNewForm && (
-          <div className="border-t border-gray-200 p-3 dark:border-gray-700">
-            <input
-              autoFocus
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") createDashboard(); if (e.key === "Escape") setShowNewForm(false); }}
-              placeholder="Dashboard name…"
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-800 outline-none focus:border-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
-            />
-            <div className="mt-2 flex gap-2">
-              <button
-                onClick={createDashboard}
-                disabled={creatingNew || !newName.trim()}
-                className="flex-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                {creatingNew ? "Creating…" : "Create"}
-              </button>
-              <button
-                onClick={() => { setShowNewForm(false); setNewName(""); }}
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </aside>
+function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <section className={`rounded-2xl border border-[var(--ukip-border)] bg-white shadow-[0_16px_50px_rgb(91_72_163/0.05)] ${className}`}>
+      {children}
+    </section>
+  );
+}
 
-      {/* Main canvas */}
-      <main className="flex-1 overflow-y-auto p-6 space-y-5">
-        {activeDash ? (
-          <>
-            {/* Toolbar */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">{activeDash.name}</h2>
-                <p className="text-xs text-gray-400">
-                  {displayWidgets.length} widget{displayWidgets.length !== 1 ? "s" : ""}
-                  {activeDash.updated_at && ` · saved ${formatDate(activeDash.updated_at)}`}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <PresenceAvatars presence={presence} isConnected={isConnected} />
-                {editing ? (
-                  <>
-                    <button
-                      onClick={() => setShowPicker(true)}
-                      className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-                    >
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      Add Widget
-                    </button>
-                    <button
-                      onClick={cancelEdit}
-                      className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={saveEdit}
-                      disabled={saving}
-                      className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      {saving ? "Saving…" : "Save"}
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={startEdit}
-                    className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                    Edit Dashboard
-                  </button>
-                )}
-              </div>
-            </div>
+function Label({ children, tone = "violet" }: { children: ReactNode; tone?: "violet" | "blue" }) {
+  return (
+    <p className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${tone === "blue" ? "text-blue-600" : "text-violet-600"}`}>
+      {children}
+    </p>
+  );
+}
 
-            {editing && (
-              <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-4 py-2.5 text-sm text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
-                <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Edit mode — drag widgets to reorder, click × to remove. Click Save when done.
-              </div>
-            )}
+function ActionButton({ children, primary = false, icon }: { children: ReactNode; primary?: boolean; icon: string }) {
+  return (
+    <button
+      className={`inline-flex h-11 items-center gap-2 rounded-lg border px-5 text-sm font-medium transition ${
+        primary
+          ? "border-violet-600 bg-violet-600 text-white shadow-[0_12px_26px_rgb(124_58_237/0.22)] hover:bg-violet-700"
+          : "border-[var(--ukip-border)] bg-white text-[var(--ukip-text)] hover:bg-violet-50"
+      }`}
+    >
+      <Icon path={icon} />
+      {children}
+    </button>
+  );
+}
 
-            <DashboardGrid
-              widgets={displayWidgets}
-              editing={editing}
-              onReorder={reorderWidgets}
-              onRemove={removeWidget}
-            />
-          </>
-        ) : (
-          !loading && (
-            <div className="flex flex-col items-center justify-center py-32">
-              <svg className="mb-4 h-14 w-14 text-gray-200 dark:text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-              </svg>
-              <p className="mb-2 text-lg font-semibold text-gray-400 dark:text-gray-500">No dashboards yet</p>
-              <p className="mb-6 text-sm text-gray-400">Create your first personalised dashboard to get started.</p>
-              <button
-                onClick={() => setShowNewForm(true)}
-                className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
-              >
-                Create Dashboard
-              </button>
-            </div>
-          )
-        )}
-      </main>
-
-      {/* Widget picker modal */}
-      {showPicker && (
-        <WidgetPicker
-          catalogue={catalogue}
-          onAdd={addWidget}
-          onClose={() => setShowPicker(false)}
-        />
+function StatCard({ label, value, helper, badge }: { label: string; value: string; helper: string; badge?: string }) {
+  return (
+    <div className="rounded-xl border border-[var(--ukip-border)] bg-white p-5">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
+      <p className="mt-4 text-4xl font-semibold tracking-normal text-slate-950">{value}</p>
+      <p className="mt-2 text-sm text-slate-500">{helper}</p>
+      {badge && (
+        <span className="mt-4 inline-flex rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-600">
+          {badge}
+        </span>
       )}
     </div>
+  );
+}
+
+function MiniMetric({ icon, value, label, helper, tone }: { icon: string; value: string; label: string; helper: string; tone: string }) {
+  return (
+    <Card className="p-5">
+      <div className={`mb-5 flex h-10 w-10 items-center justify-center rounded-lg ${tone}`}>
+        <Icon path={icon} />
+      </div>
+      <p className="text-3xl font-semibold tracking-normal text-slate-950">{value}</p>
+      <p className="mt-1 text-sm font-medium text-slate-700">{label}</p>
+      <p className="mt-2 text-xs text-slate-500">{helper}</p>
+    </Card>
+  );
+}
+
+function Recommendation({ title, body, tone }: { title: string; body: string; tone: string }) {
+  return (
+    <div className={`rounded-xl border p-5 ${tone}`}>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-500">Acción sugerida</p>
+      <p className="mt-2 text-sm font-semibold text-slate-950">{title}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-600">{body}</p>
+      <p className="mt-3 text-xs font-semibold text-slate-800">Impacto esperado: +6-12pp</p>
+    </div>
+  );
+}
+
+function TopicCard({ title }: { title: string }) {
+  return (
+    <div className="rounded-xl border border-orange-200 bg-orange-50/25 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-slate-950">{title}</h3>
+        <div className="flex gap-1">
+          <span className="rounded bg-orange-100 px-2 py-1 text-[10px] font-semibold uppercase text-orange-500">Experimental</span>
+          <span className="rounded bg-red-50 px-2 py-1 text-[10px] font-semibold uppercase text-red-500">Alza</span>
+        </div>
+      </div>
+      <div className="mt-5 grid grid-cols-3 gap-2">
+        {["Aceleración", "Participación reciente", "Participación base"].map((label, index) => (
+          <div key={label} className="rounded-lg border border-orange-100 bg-white p-3 text-center">
+            <p className="text-[10px] text-slate-500">{label}</p>
+            <p className="mt-2 text-lg font-semibold text-slate-950">{index === 2 ? "0.8%" : "14.3%"}</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 text-xs text-slate-500">Aparece 2 veces en 2024-2025 vs 1 en 2021-2023.</p>
+    </div>
+  );
+}
+
+export default function DashboardsPage() {
+  return (
+    <main className="min-h-screen bg-[radial-gradient(circle_at_22%_0%,rgba(124,58,237,0.08),transparent_28%),linear-gradient(180deg,#fbfbff_0%,#ffffff_52%,#fbfbff_100%)] px-5 py-7 text-[var(--ukip-text)] sm:px-8 lg:px-10">
+      <div className="mx-auto max-w-[1380px] space-y-6">
+        <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-semibold tracking-normal text-slate-950">Panel Ejecutivo</h1>
+              <button className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--ukip-border)] bg-white text-violet-500">
+                <Icon path="M11.48 3.499a.6.6 0 011.04 0l2.125 3.78 4.252.85a.6.6 0 01.321 1.008l-2.946 3.18.5 4.31a.6.6 0 01-.841.619L12 15.42l-3.93 1.826a.6.6 0 01-.842-.619l.5-4.31-2.946-3.18a.6.6 0 01.321-1.008l4.252-.85 2.125-3.78z" />
+              </button>
+            </div>
+            <p className="mt-3 text-sm text-slate-500">Indicadores clave, tendencias temporales y panorama conceptual para tomadores de decisiones.</p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <ActionButton icon="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">Actualizar</ActionButton>
+            <ActionButton icon="M7.5 7.5h-.75A2.25 2.25 0 004.5 9.75v8.25a2.25 2.25 0 002.25 2.25h8.25a2.25 2.25 0 002.25-2.25v-.75M15 3.75h5.25M20.25 3.75V9M20.25 3.75L9.75 14.25">Compartir</ActionButton>
+            <ActionButton primary icon="M12 3v12m0 0l4-4m-4 4l-4-4M4.5 19.5h15">Exportar PDF</ActionButton>
+          </div>
+        </header>
+
+        <Card className="p-5">
+          <Label>Executive Signal</Label>
+          <div className="mt-5 grid gap-4 lg:grid-cols-[1.15fr_repeat(4,1fr)]">
+            <div className="relative overflow-hidden rounded-xl border border-violet-200 bg-violet-50 p-5">
+              <div className="absolute right-4 top-4 h-24 w-24 rounded-full bg-violet-200/70 blur-xl" />
+              <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white text-violet-600">
+                <Icon path="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12zM15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </div>
+              <p className="relative mt-5 text-xl font-semibold text-slate-950">Observación</p>
+              <p className="relative mt-1 text-xs text-slate-600">Panorama actual del portafolio</p>
+              <div className="relative mt-5 h-12">
+                <SparkLine data={smallTrend} />
+              </div>
+            </div>
+            <StatCard label="Puntaje de referencia" value="67%" helper="Percentil global" badge="8pp vs periodo anterior" />
+            <StatCard label="Cobertura de enriquecimiento" value="86.7%" helper="Entidades enriquecidas" badge="12pp" />
+            <StatCard label="Calidad promedio" value="51%" helper="Calidad del contenido" />
+            <div className="rounded-xl border border-[var(--ukip-border)] bg-white p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Principal restricción actual</p>
+              <p className="mt-4 text-base font-semibold text-slate-950">Calidad promedio</p>
+              <p className="mt-1 text-sm text-slate-500">Afecta consistencia del informe</p>
+              <button className="mt-5 rounded-lg bg-violet-600 px-4 py-3 text-xs font-semibold text-white">Ver constructores del informe</button>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <Label>Línea Base de Referencia Institucional</Label>
+          <div className="mt-5 grid gap-8 xl:grid-cols-[1.45fr_0.85fr_1fr]">
+            <div>
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className="text-xl font-semibold text-slate-950">Línea Base de Portafolio de Investigación</h2>
+                <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold uppercase text-violet-600">Observación</span>
+              </div>
+              <label className="mt-5 block text-xs font-semibold text-slate-700">Perfil de referencia</label>
+              <select className="mt-2 h-11 w-full rounded-lg border border-[var(--ukip-border)] bg-white px-3 text-sm text-slate-700">
+                <option>Línea Base de Portafolio de Investigación</option>
+              </select>
+              <p className="mt-4 text-sm text-violet-700">Preparación del 66.7% con 2 de 3 reglas actualmente satisfechas.</p>
+              <div className="mt-5 rounded-xl border border-[var(--ukip-border)] p-5">
+                <div className="flex items-center gap-3">
+                  <p className="text-base font-semibold text-slate-950">Calidad promedio</p>
+                  <span className="rounded-md bg-orange-100 px-2 py-1 text-xs font-semibold uppercase text-orange-500">Alta</span>
+                </div>
+                <p className="mt-3 text-sm text-slate-500">Calidad promedio observado 51%, esperado al menos 63%.</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-center border-y border-[var(--ukip-border)] py-6 xl:border-x xl:border-y-0">
+              <div className="text-center">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-600">Puntaje de referencia</p>
+                <ReferenceRing value={67} />
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-violet-600">Reglas actualmente satisfechas</p>
+              {["Cobertura mínima alcanzada (86.7%)", "Calidad mínima del contenido (51%)", "Consistencia de metadatos (pendiente)"].map((rule, index) => (
+                <div key={rule} className="mt-5 flex items-center gap-3 text-sm text-slate-700">
+                  <span className={`flex h-7 w-7 items-center justify-center rounded-full border ${index < 2 ? "border-emerald-400 text-emerald-500" : "border-slate-300 text-slate-400"}`}>
+                    <Icon path="M4.5 12.75l6 6 9-13.5" className="h-3.5 w-3.5" />
+                  </span>
+                  {rule}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="mt-8 grid gap-5 lg:grid-cols-3">
+            <Recommendation title="Mejorar calidad del contenido" body="Priorizar entidades y fuentes con bajo impacto." tone="border-violet-200 bg-violet-50/60" />
+            <Recommendation title="Enriquecer metadatos clave" body="Aumenta la encontrabilidad y consistencia." tone="border-emerald-200 bg-emerald-50/60" />
+            <Recommendation title="Explorar clústeres conceptuales" body="Descubrir temas emergentes y relaciones." tone="border-violet-200 bg-violet-50/60" />
+          </div>
+        </Card>
+
+        <div className="grid gap-4 lg:grid-cols-4">
+          <MiniMetric icon="M9 12h6m-6 4h6M8 4h8a2 2 0 012 2v12a2 2 0 01-2 2H8a2 2 0 01-2-2V6a2 2 0 012-2z" value="497" label="Entidades" helper="Total identificadas" tone="bg-blue-50 text-blue-600" />
+          <MiniMetric icon="M4 19V9m5 10V5m5 14v-7m5 7V8" value="2303.4" label="Citas promedio" helper="Impacto promedio" tone="bg-violet-50 text-violet-600" />
+          <MiniMetric icon="M12 21s-7.5-4.35-7.5-10.5A4.5 4.5 0 0112 7.1a4.5 4.5 0 017.5 3.4C19.5 16.65 12 21 12 21z" value="1923" label="Conceptos distintos" helper="Diversidad conceptual" tone="bg-orange-50 text-orange-500" />
+          <Card className="p-5">
+            <p className="text-sm font-semibold text-slate-500">Calidad promedio</p>
+            <p className="mt-1 text-3xl font-semibold text-slate-950">51%</p>
+            <p className="text-sm text-slate-500">Percentil</p>
+            <div className="mt-5 h-3 rounded-full bg-gradient-to-r from-amber-400 via-orange-400 to-rose-500">
+              <div className="ml-[51%] h-3 w-1 rounded-full bg-orange-600" />
+            </div>
+            <p className="mt-4 text-xs text-slate-500">Confianza media</p>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-3">
+          <Card className="p-5">
+            <Label>Proyección Monte Carlo</Label>
+            <div className="mt-2 flex items-start justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-slate-950">Proyección de impacto</h2>
+                <p className="mt-3 max-w-xs text-xs leading-5 text-slate-500">Simulación del impacto potencial al mejorar la cobertura y conectividad de entidades.</p>
+              </div>
+              <div className="rounded-xl border border-[var(--ukip-border)] p-5 text-center">
+                <p className="text-[10px] font-semibold uppercase text-slate-500">Esperado</p>
+                <p className="mt-3 text-3xl font-semibold text-slate-950">82</p>
+                <p className="text-xs text-slate-500">/100</p>
+              </div>
+            </div>
+            <div className="mt-3 h-28">
+              <ImpactLine />
+            </div>
+            <div className="flex justify-between text-xs text-slate-500"><span>Conservador 65</span><span>Rango probable 66-95</span><span>Optimista 95</span></div>
+          </Card>
+          <Card className="p-5">
+            <div className="flex items-start justify-between"><Label tone="blue">Conexión con el informe</Label><span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-600">JDF 74,100</span></div>
+            <h2 className="mt-2 text-base font-semibold text-slate-950">Ángulo narrativo</h2>
+            <p className="mt-5 text-sm leading-6 text-slate-600">El portafolio ya sostiene una narrativa de impacto defensible ante stakeholders.</p>
+            <p className="mt-5 text-sm leading-6 text-slate-600">Enfócate en reforzar los impactos de mayor relevancia y oportunidades de posicionamiento.</p>
+            <button className="mt-8 rounded-lg bg-violet-600 px-5 py-3 text-sm font-semibold text-white">Abrir informe con proyección</button>
+          </Card>
+          <Card className="p-5">
+            <div className="flex items-start justify-between"><Label tone="blue">Distribución de impacto</Label><span className="rounded-lg border px-3 py-1 text-xs font-semibold text-slate-700">5 señales</span></div>
+            <h2 className="mt-2 text-base font-semibold text-slate-950">Patrones ocultos</h2>
+            <p className="mt-3 text-sm text-slate-500">Clústeres, valores atípicos, brechas y señales de grano no evidentes.</p>
+            {["Political science", "Open science", "Computer science"].map((item, index) => (
+              <div key={item} className="mt-4 flex items-center justify-between rounded-lg bg-slate-50 p-3 text-sm">
+                <span className="font-medium text-slate-700">Concentración temática: {item}</span>
+                <span className="text-slate-500">{index === 2 ? "Medio impacto" : "Alto impacto"}</span>
+              </div>
+            ))}
+            <button className="mt-5 w-full text-right text-sm font-semibold text-violet-600">Ver todas las señales</button>
+          </Card>
+        </div>
+
+        <Card className="p-5">
+          <h2 className="text-lg font-semibold text-slate-950">Entidades en el Tiempo</h2>
+          <Label tone="blue">Temporal Signal</Label>
+          <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_240px]">
+            <div className="h-72">
+              <TemporalArea />
+            </div>
+            <div>
+              <div className="rounded-xl border border-[var(--ukip-border)] bg-slate-50 p-5">
+                <p className="text-sm font-semibold text-violet-600">Insight</p>
+                <p className="mt-4 text-sm leading-6 text-slate-600">Crecimiento sostenido desde 2017 con pico en 2034. Requiere consolidación en 2035.</p>
+              </div>
+              <div className="mt-5 grid grid-cols-2 rounded-lg bg-slate-100 p-1 text-center text-xs font-semibold">
+                <span className="rounded-md bg-violet-100 py-2 text-violet-600">Modo serie</span>
+                <span className="py-2 text-slate-500">Modo acumulado</span>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-5">
+          <div className="flex items-center justify-between">
+            <div><h2 className="text-lg font-semibold text-slate-950">Señales Emergentes de Tópicos</h2><Label tone="blue">Aceleración</Label></div>
+            <button className="rounded-lg border border-[var(--ukip-border)] px-4 py-2 text-sm font-semibold text-violet-600">Ver todas las señales</button>
+          </div>
+          <div className="mt-5 grid gap-4 lg:grid-cols-3">{topicSignals.map((topic) => <TopicCard key={topic} title={topic} />)}</div>
+        </Card>
+
+        <div className="grid gap-4 xl:grid-cols-[0.95fr_1.35fr]">
+          <Card className="p-5">
+            <h2 className="text-lg font-semibold text-slate-950">Principales Etiquetas Primarias por Año</h2>
+            <Label tone="blue">Density Map</Label>
+            <div className="mt-5 overflow-hidden rounded-xl border border-[var(--ukip-border)]">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-500">
+                  <tr><th className="p-3 font-medium">Etiqueta</th>{["2020", "2021", "2022", "2024", "2025"].map((y) => <th key={y} className="p-3 font-medium">{y}</th>)}</tr>
+                </thead>
+                <tbody>{heatRows.map((row) => <tr key={row[0]} className="border-t border-[var(--ukip-border)]"><td className="p-3 font-medium text-slate-700">{row[0]}</td>{row.slice(1).map((cell, index) => <td key={index} className={`p-3 text-center ${cell !== "-" ? "bg-violet-200 text-violet-800" : "bg-violet-50 text-slate-400"}`}>{cell}</td>)}</tr>)}</tbody>
+              </table>
+            </div>
+          </Card>
+          <Card className="p-5">
+            <div className="flex justify-between"><div><h2 className="text-lg font-semibold text-slate-950">Mapa de Conceptos de Conocimiento</h2><Label tone="blue">Semantic Signal</Label></div><button className="text-sm font-semibold text-violet-600">Análisis completo →</button></div>
+            <div className="mt-5 flex flex-wrap gap-2">
+              {conceptTags.map(([name, count, tone]) => (
+                <span key={name} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                  tone === "blue" ? "bg-blue-100 text-blue-600" : tone === "green" ? "bg-emerald-100 text-emerald-600" : tone === "amber" ? "bg-orange-100 text-orange-600" : tone === "cyan" ? "bg-cyan-100 text-cyan-600" : tone === "rose" ? "bg-rose-100 text-rose-600" : tone === "pink" ? "bg-pink-100 text-pink-600" : tone === "slate" ? "bg-slate-100 text-slate-600" : "bg-violet-100 text-violet-600"
+                }`}>{name} {count}</span>
+              ))}
+            </div>
+          </Card>
+        </div>
+
+        <Card className="p-5">
+          <div className="flex items-center justify-between"><div><h2 className="text-lg font-semibold text-slate-950">Entidades principales por impacto</h2><Label tone="blue">Impact Rank</Label></div><button className="text-sm font-semibold text-violet-600">Ver todo el ranking →</button></div>
+          <div className="mt-5 overflow-hidden rounded-xl border border-[var(--ukip-border)]">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-white text-xs text-slate-500"><tr>{["#", "Entidad", "Etiqueta principal", "Citas", "Fuente"].map((h) => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}</tr></thead>
+              <tbody>{impactRows.map((row) => <tr key={row[0]} className="border-t border-[var(--ukip-border)]">{row.map((cell, index) => <td key={index} className={`px-4 py-4 ${index === 1 ? "font-semibold text-slate-800" : index === 3 ? "font-semibold text-violet-600" : "text-slate-600"}`}>{index === 4 ? <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-600">{cell}</span> : cell}</td>)}</tr>)}</tbody>
+            </table>
+          </div>
+        </Card>
+
+        <div className="flex flex-col gap-4 rounded-xl border border-violet-200 bg-violet-50 px-6 py-5 text-sm font-medium text-violet-700 sm:flex-row sm:items-center sm:justify-between">
+          <span>Este dashboard cuenta una historia: cobertura sólida, calidad en mejora y oportunidades claras para aumentar el impacto.</span>
+          <button className="rounded-lg bg-white px-5 py-3 font-semibold text-violet-600 shadow-sm">Ver recomendaciones estratégicas</button>
+        </div>
+      </div>
+    </main>
   );
 }

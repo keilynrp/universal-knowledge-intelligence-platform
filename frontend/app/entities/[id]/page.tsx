@@ -38,6 +38,39 @@ interface EntityQualityData {
     breakdown: Record<string, QualityBreakdownDimension>;
 }
 
+interface EntityAttentionData {
+    summary: {
+        attention_score: number;
+        category: "none" | "low" | "moderate" | "high" | "very_high";
+        total_mentions: number;
+        active_sources: number;
+        last_seen_at: string | null;
+    };
+    source_counts: Record<string, number>;
+    source_breakdown: Array<{
+        source_type: string;
+        mentions: number;
+        weighted_contribution: number;
+        share: number;
+        weight: number;
+    }>;
+    timeline: Array<{
+        period: string;
+        mentions: number;
+        score_delta: number;
+        weighted_score: number;
+        top_source_type: string | null;
+        spike: boolean;
+        spike_reason: string | null;
+    }>;
+    explanations: Array<{
+        type: string;
+        label: string;
+        evidence: string;
+        priority: number;
+    }>;
+}
+
 interface Entity {
     id: number;
     import_batch_id: number | null;
@@ -101,6 +134,31 @@ function enrichmentVariant(status: string | null) {
     return status === "completed" ? "success" as const :
            status === "pending" ? "warning" as const :
            status === "failed" ? "error" as const : "default" as const;
+}
+
+function attentionLabel(category: EntityAttentionData["summary"]["category"]) {
+    return category === "very_high" ? "Muy alta" :
+           category === "high" ? "Alta" :
+           category === "moderate" ? "Media" :
+           category === "low" ? "Baja" : "Sin senal";
+}
+
+function attentionClass(category: EntityAttentionData["summary"]["category"]) {
+    return category === "very_high" ? "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700 dark:border-fuchsia-400/20 dark:bg-fuchsia-400/10 dark:text-fuchsia-200" :
+           category === "high" ? "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-400/20 dark:bg-violet-400/10 dark:text-violet-200" :
+           category === "moderate" ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-200" :
+           category === "low" ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200" :
+           "border-slate-200 bg-slate-50 text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-300";
+}
+
+function attentionSourceLabel(sourceType: string) {
+    return sourceType === "policy" ? "Policy" :
+           sourceType === "news" ? "Noticias" :
+           sourceType === "wikipedia" ? "Wikipedia" :
+           sourceType === "repository" ? "Repositorios" :
+           sourceType === "blog" ? "Blogs" :
+           sourceType === "scholarly_web" ? "Web academica" :
+           sourceType === "social_web" ? "Social/web" : "Otras";
 }
 
 function parseJsonObject(raw: string | null): Record<string, unknown> {
@@ -414,6 +472,7 @@ export default function EntityDetailPage() {
 
     // Quality score
     const [qualityData, setQualityData] = useState<EntityQualityData | null>(null);
+    const [attentionData, setAttentionData] = useState<EntityAttentionData | null>(null);
 
     const fetchEntity = useCallback(async () => {
         setLoading(true);
@@ -472,7 +531,13 @@ export default function EntityDetailPage() {
                 .then((data: EntityQualityData | null) => { if (data) setQualityData(data); })
                 .catch(() => {});
         }
-    }, [tab, entity, qualityData]);
+        if (tab === "overview" && entity && !attentionData) {
+            apiFetch(`/entities/${entity.id}/attention`)
+                .then((r) => r.ok ? r.json() : null)
+                .then((data: EntityAttentionData | null) => { if (data) setAttentionData(data); })
+                .catch(() => {});
+        }
+    }, [tab, entity, qualityData, attentionData]);
 
     function startEdit() {
         if (!entity) return;
@@ -626,6 +691,15 @@ export default function EntityDetailPage() {
         { key: "source", label: "Fuente", value: entity.source, icon: "user" },
         { key: "import_batch_id", label: "Import batch id", value: entity.import_batch_id, icon: "database" },
         { key: "quality_score", label: "Puntuacion de calidad", value: qualityPercent > 0 ? `${Math.round(qualityPercent)}%` : null, icon: "star" },
+        {
+            key: "attention_score",
+            label: "Atencion externa",
+            value: attentionData
+                ? `${attentionData.summary.attention_score}/100 · ${attentionData.summary.total_mentions} menciones · ${attentionData.summary.active_sources} fuentes`
+                : null,
+            badge: "attention",
+            icon: "spark",
+        },
         { key: "enrichment_citation_count", label: "Citas", value: entity.enrichment_citation_count ?? 0, icon: "quote" },
         { key: "enrichment_source", label: "Fuente de enrichment", value: entity.enrichment_source, icon: "cube" },
         { key: "enrichment_doi", label: "DOI", value: entity.enrichment_doi, icon: "link", copyable: true },
@@ -639,6 +713,9 @@ export default function EntityDetailPage() {
         ? entity.enrichment_concepts.split(",").map((concept) => concept.trim()).filter(Boolean)
         : [];
     const shortSource = entity.enrichment_source || entity.source || String(mergedAttributes.source_name || mergedAttributes.source || "");
+    const attentionTimelineMax = attentionData?.timeline.length
+        ? Math.max(...attentionData.timeline.map((item) => item.weighted_score), 1)
+        : 1;
     const enrichmentSignals = [
         { label: "Estado", value: entity.enrichment_status, badge: "enrichment", icon: "shield" },
         { label: "Citas detectadas", value: entity.enrichment_citation_count ?? 0, icon: "quote" },
@@ -673,10 +750,20 @@ export default function EntityDetailPage() {
 
                     <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0 space-y-2">
-                            <div className="flex items-center gap-3">
+                            <div className="flex flex-wrap items-center gap-3">
                                 <h1 className="text-3xl font-black tracking-tight text-slate-950 dark:text-white md:text-4xl">
                                     {displayTitle}
                                 </h1>
+                                {attentionData ? (
+                                    <span
+                                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${attentionClass(attentionData.summary.category)}`}
+                                        title="Senal contextual: mide atencion externa, no calidad academica."
+                                    >
+                                        <IconGlyph name="spark" className="h-3.5 w-3.5" />
+                                        Atencion externa: {attentionLabel(attentionData.summary.category)}
+                                        <span className="font-black">{attentionData.summary.attention_score}</span>
+                                    </span>
+                                ) : null}
                                 <button
                                     type="button"
                                     className="rounded-xl p-2 text-slate-400 transition-colors hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-white/10 dark:hover:text-violet-200"
@@ -911,6 +998,11 @@ export default function EntityDetailPage() {
                                             <Badge variant={enrichmentVariant(entity.enrichment_status)}>
                                                 {entity.enrichment_status}
                                             </Badge>
+                                        ) : field.badge === "attention" && attentionData ? (
+                                            <span className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${attentionClass(attentionData.summary.category)}`}>
+                                                {attentionLabel(attentionData.summary.category)}
+                                                <span className="font-black">{attentionData.summary.attention_score}</span>
+                                            </span>
                                         ) : (
                                             <div className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200">
                                                 <span className="break-words">{formatValue(field.value)}</span>
@@ -928,6 +1020,110 @@ export default function EntityDetailPage() {
                                     </div>
                                 ))}
                             </div>
+                            {attentionData && attentionData.source_breakdown.length > 0 ? (
+                                <div className="mt-7 rounded-2xl border border-slate-100 bg-slate-50/70 p-4 dark:border-white/10 dark:bg-white/5">
+                                    <div className="mb-4 flex items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400">
+                                                Composicion de atencion
+                                            </p>
+                                            <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                                                Contribucion por fuente; no representa calidad academica.
+                                            </p>
+                                        </div>
+                                        <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-violet-600 shadow-sm dark:bg-white/10 dark:text-violet-200">
+                                            {attentionData.summary.active_sources} fuentes
+                                        </span>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {attentionData.source_breakdown.slice(0, 4).map((source) => (
+                                            <div key={source.source_type} className="grid gap-2">
+                                                <div className="flex items-center justify-between gap-3 text-xs font-bold">
+                                                    <span className="text-slate-600 dark:text-slate-300">
+                                                        {attentionSourceLabel(source.source_type)}
+                                                    </span>
+                                                    <span className="text-slate-400">
+                                                        {source.mentions} menciones · {Math.round(source.share * 100)}%
+                                                    </span>
+                                                </div>
+                                                <div className="h-2 rounded-full bg-white dark:bg-white/10">
+                                                    <div
+                                                        className="h-2 rounded-full bg-violet-500"
+                                                        style={{ width: `${Math.max(3, Math.round(source.share * 100))}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : null}
+                            {attentionData && attentionData.timeline.length > 0 ? (
+                                <div className="mt-4 rounded-2xl border border-slate-100 bg-white/70 p-4 dark:border-white/10 dark:bg-white/5">
+                                    <div className="mb-4 flex items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400">
+                                                Timeline de atencion
+                                            </p>
+                                            <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                                                Evolucion mensual desde observaciones externas.
+                                            </p>
+                                        </div>
+                                        {attentionData.timeline.some((bucket) => bucket.spike) ? (
+                                            <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700 ring-1 ring-amber-200 dark:bg-amber-400/10 dark:text-amber-200 dark:ring-amber-400/20">
+                                                Spike
+                                            </span>
+                                        ) : null}
+                                    </div>
+                                    <div className="flex items-end gap-2 overflow-x-auto pb-1">
+                                        {attentionData.timeline.slice(-8).map((bucket) => {
+                                            const height = Math.max(12, Math.round((bucket.weighted_score / attentionTimelineMax) * 64));
+                                            return (
+                                                <div key={bucket.period} className="flex min-w-12 flex-col items-center gap-2">
+                                                    <div
+                                                        className={`w-8 rounded-t-xl ${bucket.spike ? "bg-amber-400" : "bg-violet-500"}`}
+                                                        style={{ height }}
+                                                        title={`${bucket.period}: ${bucket.mentions} menciones`}
+                                                    />
+                                                    <span className="text-[10px] font-bold text-slate-400">
+                                                        {bucket.period.slice(5)}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ) : null}
+                            {attentionData && attentionData.explanations.length > 0 ? (
+                                <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4 dark:border-white/10 dark:bg-white/5">
+                                    <div className="mb-4">
+                                        <p className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400">
+                                            Explicaciones
+                                        </p>
+                                        <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                                            Evidencia compacta que explica por que cambia la atencion.
+                                        </p>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {attentionData.explanations.slice(0, 3).map((explanation) => (
+                                            <div key={`${explanation.type}-${explanation.label}`} className="rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 dark:bg-white/5 dark:ring-white/10">
+                                                <div className="flex items-start gap-3">
+                                                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-50 text-violet-600 dark:bg-violet-400/10 dark:text-violet-200">
+                                                        <IconGlyph name={explanation.type === "attention_spike" ? "chart" : "spark"} className="h-4 w-4" />
+                                                    </span>
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                                                            {explanation.label}
+                                                        </p>
+                                                        <p className="mt-1 text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">
+                                                            {explanation.evidence}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : null}
                         </section>
                     </div>
 

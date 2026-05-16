@@ -4,11 +4,20 @@ from __future__ import annotations
 import logging
 import os
 import re
+import sys
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 _JOB_ID_RE = re.compile(r"[^a-zA-Z0-9_\-]")
+
+
+def _ensure_proto_import_path() -> None:
+    proto_path = Path(__file__).resolve().parents[1] / "proto"
+    proto_path_str = str(proto_path)
+    if proto_path_str not in sys.path:
+        sys.path.insert(0, proto_path_str)
 
 
 def _sanitize_job_id(raw: str) -> str:
@@ -31,6 +40,7 @@ class EngineClient:
             return False
         if self._channel is None:
             try:
+                _ensure_proto_import_path()
                 import grpc
                 import grpc.aio
                 if self._use_tls:

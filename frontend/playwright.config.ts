@@ -9,7 +9,16 @@ export default defineConfig({
   reporter: "html",
   use: {
     baseURL: "http://localhost:3004",
+    channel: "chrome",
     trace: "on-first-retry",
+    launchOptions: {
+      args: [
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+        "--no-first-run",
+        "--no-default-browser-check",
+      ],
+    },
   },
   projects: [
     {
@@ -18,7 +27,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev",
+    command: "node node_modules/next/dist/bin/next dev -p 3004 --webpack",
     url: "http://localhost:3004",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

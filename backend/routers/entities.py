@@ -25,6 +25,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from backend import database, models, schemas
+from backend.analyzers.external_attention import compute_attention_summary
 from backend.analytics.montecarlo import simulate_citation_impact
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
@@ -259,6 +260,27 @@ def get_entity(
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
     return entity
+
+
+@router.get("/entities/{entity_id}/attention", tags=["entities"])
+def get_entity_attention(
+    entity_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    org_id = resolve_request_org_id(db, current_user)
+    entity = get_scoped_record(db, models.RawEntity, entity_id, org_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    payload = compute_attention_summary(entity.attributes_json)
+    return {
+        "scope": {
+            "entity_id": entity.id,
+            "domain_id": entity.domain,
+        },
+        **payload,
+    }
 
 
 @router.put("/entities/{entity_id}", response_model=schemas.Entity)
