@@ -75,7 +75,7 @@ def compute_attention_summary(attributes_json: str | None) -> dict[str, Any]:
     last_seen_at = max(last_seen_values).isoformat() if last_seen_values else None
     source_breakdown = _build_source_breakdown(source_counts, source_weighted)
     timeline = _build_timeline(timeline_buckets)
-    explanations = _build_explanations(source_breakdown, timeline)
+    explanations = _build_explanations(source_breakdown, timeline, observations)
     alerts = _build_alerts(source_breakdown, timeline, total_mentions)
 
     return {
@@ -201,6 +201,7 @@ def _top_source_type(sources: dict[str, int]) -> str | None:
 def _build_explanations(
     source_breakdown: list[dict[str, Any]],
     timeline: list[dict[str, Any]],
+    observations: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     explanations: list[dict[str, Any]] = []
 
@@ -209,26 +210,40 @@ def _build_explanations(
         source_type = str(top_source["source_type"])
         share = round(float(top_source["share"]) * 100)
         mentions = int(top_source["mentions"])
-        explanations.append({
+
+        # Try to find a representative snippet for the top source
+        top_source_snippet = _find_best_snippet(observations, source_type) if observations else None
+
+        explanation_entry: dict[str, Any] = {
             "type": "top_source",
             "label": f"{_source_display_name(source_type)} drives the attention score",
             "evidence": f"{_source_display_name(source_type)} contributes {share}% of weighted attention from {mentions} mentions.",
             "priority": 80,
-        })
+        }
+        if top_source_snippet:
+            explanation_entry["snippet"] = top_source_snippet
+        explanations.append(explanation_entry)
 
         policy = next((row for row in source_breakdown if row["source_type"] == "policy"), None)
         if policy is not None:
             policy_share = round(float(policy["share"]) * 100)
-            explanations.append({
+            policy_snippet = _find_best_snippet(observations, "policy") if observations else None
+            policy_entry: dict[str, Any] = {
                 "type": "policy_mention",
                 "label": "Policy attention detected",
                 "evidence": f"Policy mentions contribute {policy_share}% of weighted attention.",
                 "priority": 95,
-            })
+            }
+            if policy_snippet:
+                policy_entry["snippet"] = policy_snippet
+            explanations.append(policy_entry)
 
     spike_bucket = next((bucket for bucket in reversed(timeline) if bucket.get("spike")), None)
     if spike_bucket is not None:
-        explanations.append({
+        spike_snippet = _find_best_snippet_for_period(
+            observations, spike_bucket["period"]
+        ) if observations else None
+        spike_entry: dict[str, Any] = {
             "type": "attention_spike",
             "label": f"Attention spiked in {spike_bucket['period']}",
             "evidence": (
@@ -236,7 +251,10 @@ def _build_explanations(
                 f"led by {_source_display_name(spike_bucket.get('top_source_type'))}."
             ),
             "priority": 90,
-        })
+        }
+        if spike_snippet:
+            spike_entry["snippet"] = spike_snippet
+        explanations.append(spike_entry)
 
     if len(source_breakdown) >= 3:
         explanations.append({
@@ -247,6 +265,61 @@ def _build_explanations(
         })
 
     return sorted(explanations, key=lambda item: -int(item["priority"]))[:5]
+
+
+def _find_best_snippet(
+    observations: list[dict[str, Any]] | None,
+    source_type: str,
+) -> dict[str, str] | None:
+    """Find the best snippet (title + url + snippet text) for a given source type."""
+    if not observations:
+        return None
+    for obs in observations:
+        if _normalize_source_type(obs.get("source_type")) != source_type:
+            continue
+        title = obs.get("title")
+        url = obs.get("url")
+        snippet_text = obs.get("snippet")
+        if title or url or snippet_text:
+            result: dict[str, str] = {}
+            if title:
+                result["title"] = str(title)[:500]
+            if url:
+                result["url"] = str(url)[:2000]
+            if snippet_text:
+                result["text"] = str(snippet_text)[:1000]
+            return result
+    return None
+
+
+def _find_best_snippet_for_period(
+    observations: list[dict[str, Any]] | None,
+    period: str,
+) -> dict[str, str] | None:
+    """Find a snippet from an observation whose last_seen_at falls in the given YYYY-MM period."""
+    if not observations:
+        return None
+    for obs in observations:
+        last_seen = _parse_datetime(
+            obs.get("last_seen_at") or obs.get("seen_at") or obs.get("date")
+        )
+        if last_seen is None:
+            continue
+        if last_seen.strftime("%Y-%m") != period:
+            continue
+        title = obs.get("title")
+        url = obs.get("url")
+        snippet_text = obs.get("snippet")
+        if title or url or snippet_text:
+            result: dict[str, str] = {}
+            if title:
+                result["title"] = str(title)[:500]
+            if url:
+                result["url"] = str(url)[:2000]
+            if snippet_text:
+                result["text"] = str(snippet_text)[:1000]
+            return result
+    return None
 
 
 def _source_display_name(source_type: Any) -> str:

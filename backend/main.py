@@ -46,6 +46,7 @@ from backend.routers import (
     domains,
     entities,
     entity_linker,
+    external_attention,
     graph_export,
     harmonization,
     ingest,
@@ -349,6 +350,7 @@ app.include_router(context.router)
 app.include_router(audit_log.router)
 app.include_router(search.router)
 app.include_router(entity_linker.router)
+app.include_router(external_attention.router)
 app.include_router(scheduled_imports.router)
 app.include_router(relationships.router)
 app.include_router(graph_export.router)

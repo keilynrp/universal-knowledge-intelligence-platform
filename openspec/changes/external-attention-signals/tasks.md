@@ -26,7 +26,7 @@
 ## 4. Priority 4 - Spike Explanations
 
 - [x] 4.1 Generate deterministic explanations from top source contribution and period deltas.
-- [ ] 4.2 Include evidence snippets only when source title/url/snippet is available.
+- [x] 4.2 Include evidence snippets only when source title/url/snippet is available.
 - [x] 4.3 Add explanation cards to entity detail.
 - [x] 4.4 Add tests for explanation priority and sparse evidence fallback.
 
@@ -42,5 +42,5 @@
 - [ ] 6.1 Document that attention is not quality or citation impact.
 - [ ] 6.2 Add tenant scoping and domain filters to all endpoints.
 - [ ] 6.3 Add feature flag for external attention signals.
-- [ ] 6.4 Add import path for customer-provided external attention observations.
+- [x] 6.4 Add import path for customer-provided external attention observations.
 - [ ] 6.5 Revisit Rust engine delegation only after Python scoring is validated.

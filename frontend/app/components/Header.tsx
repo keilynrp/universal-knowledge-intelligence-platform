@@ -40,6 +40,7 @@ const pageTitles: Record<string, { titleKey: string; subtitleKey: string; titleF
   "/settings/users": { titleKey: "header.page.settings_users.title", subtitleKey: "header.page.settings_users.subtitle", titleFallback: "User Management", subtitleFallback: "Manage user accounts, roles, and platform access" },
   "/profile": { titleKey: "header.page.profile.title", subtitleKey: "header.page.profile.subtitle", titleFallback: "My Profile", subtitleFallback: "Manage your personal information, avatar, and password" },
   "/demo/sales": { titleKey: "header.page.demo_sales.title", subtitleKey: "header.page.demo_sales.subtitle", titleFallback: "Sales Deck", subtitleFallback: "Executive narrative — printable to PDF for prospects and stakeholders" },
+  "/external-attention": { titleKey: "header.page.external_attention.title", subtitleKey: "header.page.external_attention.subtitle", titleFallback: "External Attention", subtitleFallback: "Import and track real-world mentions that drive entity attention scores" },
 };
 
 // ── Search result type ─────────────────────────────────────────────────────────
