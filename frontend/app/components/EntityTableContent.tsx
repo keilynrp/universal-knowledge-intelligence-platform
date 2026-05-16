@@ -96,6 +96,18 @@ function renderLocalizedValue(
     return renderDisplayValue(attributeName, value, emptyLabel);
 }
 
+function EntityTitleLink({ entityId, title }: { entityId: number; title: string }) {
+    return (
+        <Link
+            href={`/entities/${entityId}`}
+            onClick={(event) => event.stopPropagation()}
+            className="rounded-md px-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-950 [@media(hover:hover)_and_(pointer:fine)]:hover:bg-violet-50 [@media(hover:hover)_and_(pointer:fine)]:hover:text-violet-700 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:bg-violet-500/10 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:text-violet-300"
+        >
+            {title}
+        </Link>
+    );
+}
+
 const CORE_ATTRIBUTE_LABEL_KEYS: Record<string, string> = {
     primary_label: "entities.primary_label",
     secondary_label: "page.import.field.secondary_label",
@@ -338,7 +350,7 @@ export default function EntityTableContent({
                                             tone={statusTone}
                                             onSelect={() => onToggleSelect(entity.id)}
                                             onClick={() => onSelectEntity(entity)}
-                                            title={titleValue}
+                                            title={<EntityTitleLink entityId={entity.id} title={titleValue} />}
                                             metaLine={
                                                 <>
                                                     {identifierValue ? String(identifierValue) : `#${entity.id}`}
@@ -369,7 +381,7 @@ export default function EntityTableContent({
                                                 </div>
                                             }
                                             statusTone={statusTone}
-                                            title={titleValue}
+                                            title={<EntityTitleLink entityId={entity.id} title={titleValue} />}
                                             secondaryLine={
                                                 <>
                                                     {secondaryValue ? <span>{String(secondaryValue)}</span> : null}
