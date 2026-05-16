@@ -23,6 +23,7 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.analyzers.external_attention import compute_attention_summary
 from backend.analyzers.author_metrics import author_detail, author_rankings
 from backend.analyzers.coauthorship import coauthorship_network
 from backend.analyzers.correlation import CorrelationAnalyzer
@@ -61,6 +62,77 @@ _DOMAIN_RE = re.compile(r"^[a-z][a-z0-9_\-]{0,63}$")
 def _validate_domain_id(domain_id: str) -> None:
     if not _DOMAIN_RE.match(domain_id):
         raise HTTPException(status_code=422, detail=f"Invalid domain_id '{domain_id}': must match [a-z][a-z0-9_-]{{0,63}}")
+
+
+def _dashboard_external_attention(
+    db: Session,
+    domain_id: str,
+    org_id: int | None,
+    *,
+    limit: int = 5,
+) -> dict:
+    query = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
+    if domain_id not in ("all", "default"):
+        query = query.filter(models.RawEntity.domain == domain_id)
+    elif domain_id == "default":
+        query = query.filter((models.RawEntity.domain == domain_id) | (models.RawEntity.domain.is_(None)))
+
+    candidates = (
+        query.filter(
+            models.RawEntity.attributes_json.isnot(None),
+            models.RawEntity.attributes_json.like("%external_attention%"),
+        )
+        .limit(500)
+        .all()
+    )
+
+    entities: list[dict] = []
+    alerts: list[dict] = []
+    total_mentions = 0
+    active_entities = 0
+    score_sum = 0
+
+    for entity in candidates:
+        attention = compute_attention_summary(entity.attributes_json)
+        summary = attention["summary"]
+        score = int(summary["attention_score"])
+        mentions = int(summary["total_mentions"])
+        if score <= 0 and mentions <= 0:
+            continue
+
+        active_entities += 1
+        score_sum += score
+        total_mentions += mentions
+        label = entity.primary_label or entity.secondary_label or f"Entity #{entity.id}"
+        entities.append({
+            "id": entity.id,
+            "label": label,
+            "attention_score": score,
+            "category": summary["category"],
+            "total_mentions": mentions,
+            "active_sources": summary["active_sources"],
+            "last_seen_at": summary["last_seen_at"],
+        })
+        for alert in attention.get("alerts", []):
+            alerts.append({
+                **alert,
+                "entity_id": entity.id,
+                "entity_label": label,
+            })
+
+    entities.sort(key=lambda item: (-item["attention_score"], -item["total_mentions"], item["label"]))
+    alerts.sort(key=lambda item: (-int(item.get("priority") or 0), item.get("entity_label") or ""))
+
+    return {
+        "summary": {
+            "active_entities": active_entities,
+            "avg_attention_score": round(score_sum / active_entities, 1) if active_entities else 0,
+            "total_mentions": total_mentions,
+            "top_score": entities[0]["attention_score"] if entities else 0,
+        },
+        "top_entities": entities[:limit],
+        "alerts": alerts[:3],
+    }
 
 # ── In-memory TTL analytics cache (Sprint 83) ─────────────────────────────────
 
@@ -491,6 +563,21 @@ def dashboard_summary(
         result["geographic_heatmap"] = geographic_heatmap(domain_id, org_id=org_id)
     except Exception:
         result["geographic_heatmap"] = []
+
+    try:
+        result["external_attention"] = _dashboard_external_attention(db, domain_id, org_id)
+    except Exception:
+        logger.exception("Failed to build external attention dashboard summary")
+        result["external_attention"] = {
+            "summary": {
+                "active_entities": 0,
+                "avg_attention_score": 0,
+                "total_mentions": 0,
+                "top_score": 0,
+            },
+            "top_entities": [],
+            "alerts": [],
+        }
 
     _dashboard_cache.set(_key, result)
     return result

@@ -6,7 +6,7 @@
 - [x] 1.4 Add endpoint for entity-level attention summary.
 - [x] 1.5 Add tests for empty data, single-source data, multi-source weighting, recency decay, and score cap.
 - [x] 1.6 Add an attention badge to entity detail.
-- [ ] 1.7 Add a compact attention card to executive dashboard summary.
+- [x] 1.7 Add a compact attention card to executive dashboard summary.
 
 ## 2. Priority 2 - Source Breakdown
 
@@ -32,10 +32,10 @@
 
 ## 5. Priority 5 - Emerging Attention Alerts
 
-- [ ] 5.1 Implement `new_attention`, `attention_spike`, `policy_mention`, and `cross_source_momentum` alert rules.
-- [ ] 5.2 Add alert severity and confidence fields.
-- [ ] 5.3 Add top 3 attention alerts to executive dashboard.
-- [ ] 5.4 Add tests for baseline thresholds, false-positive guards, and alert ordering.
+- [x] 5.1 Implement `new_attention`, `attention_spike`, `policy_mention`, and `cross_source_momentum` alert rules.
+- [x] 5.2 Add alert severity and confidence fields.
+- [x] 5.3 Add top 3 attention alerts to executive dashboard.
+- [x] 5.4 Add tests for baseline thresholds, false-positive guards, and alert ordering.
 
 ## 6. Integration and Governance
 

@@ -76,6 +76,7 @@ def compute_attention_summary(attributes_json: str | None) -> dict[str, Any]:
     source_breakdown = _build_source_breakdown(source_counts, source_weighted)
     timeline = _build_timeline(timeline_buckets)
     explanations = _build_explanations(source_breakdown, timeline)
+    alerts = _build_alerts(source_breakdown, timeline, total_mentions)
 
     return {
         "summary": {
@@ -89,6 +90,7 @@ def compute_attention_summary(attributes_json: str | None) -> dict[str, Any]:
         "source_breakdown": source_breakdown,
         "timeline": timeline,
         "explanations": explanations,
+        "alerts": alerts,
     }
 
 
@@ -105,6 +107,7 @@ def _empty_summary() -> dict[str, Any]:
         "source_breakdown": [],
         "timeline": [],
         "explanations": [],
+        "alerts": [],
     }
 
 
@@ -258,6 +261,70 @@ def _source_display_name(source_type: Any) -> str:
         "other": "Other sources",
     }
     return labels.get(str(source_type), "External attention")
+
+
+def _build_alerts(
+    source_breakdown: list[dict[str, Any]],
+    timeline: list[dict[str, Any]],
+    total_mentions: int,
+) -> list[dict[str, Any]]:
+    alerts: list[dict[str, Any]] = []
+    latest_period = timeline[-1]["period"] if timeline else None
+
+    if total_mentions > 0 and len(timeline) == 1:
+        alerts.append({
+            "type": "new_attention",
+            "severity": "low",
+            "confidence": "medium",
+            "label": "New external attention detected",
+            "evidence": f"{total_mentions} external mentions are available for this entity.",
+            "period": latest_period,
+            "priority": 40,
+        })
+
+    spike_bucket = next((bucket for bucket in reversed(timeline) if bucket.get("spike")), None)
+    if spike_bucket is not None:
+        alerts.append({
+            "type": "attention_spike",
+            "severity": "medium",
+            "confidence": "high" if int(spike_bucket["mentions"]) >= 5 else "medium",
+            "label": f"Attention spike in {spike_bucket['period']}",
+            "evidence": f"{spike_bucket['mentions']} mentions exceeded the rolling baseline.",
+            "period": spike_bucket["period"],
+            "priority": 80,
+        })
+
+    policy = next((row for row in source_breakdown if row["source_type"] == "policy"), None)
+    if policy is not None:
+        share = float(policy["share"])
+        alerts.append({
+            "type": "policy_mention",
+            "severity": "high" if share >= 0.25 else "medium",
+            "confidence": "high",
+            "label": "Policy attention detected",
+            "evidence": f"Policy sources account for {round(share * 100)}% of weighted attention.",
+            "period": latest_period,
+            "priority": 90,
+        })
+
+    if len(source_breakdown) >= 3:
+        alerts.append({
+            "type": "cross_source_momentum",
+            "severity": "medium",
+            "confidence": "medium",
+            "label": "Cross-source momentum detected",
+            "evidence": f"{len(source_breakdown)} source types are contributing to this attention signal.",
+            "period": latest_period,
+            "priority": 70,
+        })
+
+    return sorted(
+        alerts,
+        key=lambda item: (
+            -int(item["priority"]),
+            str(item.get("type")),
+        ),
+    )[:5]
 
 
 def _extract_observations(attributes_json: str | None) -> list[dict[str, Any]]:

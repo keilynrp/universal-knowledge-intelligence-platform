@@ -147,3 +147,33 @@ def test_compute_attention_summary_explains_policy_and_spike():
     assert "attention_spike" in explanation_types
     assert "cross_source_momentum" in explanation_types
     assert len(payload["explanations"]) <= 5
+
+
+def test_compute_attention_summary_returns_alerts_by_priority():
+    attrs = {
+        "external_attention_observations": [
+            {"source_type": "social_web", "mention_count": 1, "last_seen_at": "2026-01-10T00:00:00Z"},
+            {"source_type": "blog", "mention_count": 1, "last_seen_at": "2026-02-10T00:00:00Z"},
+            {"source_type": "policy", "mention_count": 8, "last_seen_at": "2026-03-10T00:00:00Z"},
+        ]
+    }
+
+    payload = compute_attention_summary(json.dumps(attrs))
+    alert_types = [item["type"] for item in payload["alerts"]]
+
+    assert alert_types[:3] == ["policy_mention", "attention_spike", "cross_source_momentum"]
+    assert payload["alerts"][0]["severity"] == "high"
+    assert payload["alerts"][0]["confidence"] == "high"
+
+
+def test_compute_attention_summary_returns_new_attention_alert():
+    attrs = {
+        "external_attention_observations": [
+            {"source_type": "news", "mention_count": 2, "last_seen_at": "2026-05-10T00:00:00Z"},
+        ]
+    }
+
+    payload = compute_attention_summary(json.dumps(attrs))
+
+    assert payload["alerts"][0]["type"] == "new_attention"
+    assert payload["alerts"][0]["period"] == "2026-05"

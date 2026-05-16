@@ -125,6 +125,34 @@ interface DashboardData {
       entities: { id: number; label: string; entity_type?: string | null }[];
     }[];
   };
+  external_attention?: {
+    summary: {
+      active_entities: number;
+      avg_attention_score: number;
+      total_mentions: number;
+      top_score: number;
+    };
+    top_entities: {
+      id: number;
+      label: string;
+      attention_score: number;
+      category: string;
+      total_mentions: number;
+      active_sources: number;
+      last_seen_at: string | null;
+    }[];
+    alerts: {
+      type: string;
+      severity: "low" | "medium" | "high";
+      confidence: "low" | "medium" | "high";
+      label: string;
+      evidence: string;
+      period: string | null;
+      priority: number;
+      entity_id: number;
+      entity_label: string;
+    }[];
+  };
 }
 
 interface BenchmarkProfile {
@@ -160,6 +188,14 @@ function stripInlineHtml(value: string): string {
     .replace(/&#39;/g, "'")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function attentionSeverityClass(severity: "low" | "medium" | "high") {
+  return severity === "high"
+    ? "border-red-200 bg-red-50 text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200"
+    : severity === "medium"
+      ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200"
+      : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-200";
 }
 
 // ── Heatmap cell with violet color scale ─────────────────────────────────────
@@ -962,6 +998,83 @@ export default function ExecutiveDashboardPage() {
           </>
         ) : null}
       </div>
+
+      {data?.external_attention && data.external_attention.summary.active_entities > 0 && (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+          <div className="ukip-panel-soft p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="ukip-kicker">{tr("page.exec_dashboard.external_attention_eyebrow", "External attention")}</p>
+                <h3 className="mt-1 text-lg font-bold text-[var(--ukip-text-strong)]">
+                  {tr("page.exec_dashboard.external_attention_title", "Attention Signals")}
+                </h3>
+                <p className="mt-2 text-sm text-[var(--ukip-muted)]">
+                  {tr("page.exec_dashboard.external_attention_body", "Contextual attention from external observations. This is not a quality score.")}
+                </p>
+              </div>
+              <div className="rounded-3xl border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-6 py-4 text-center shadow-sm">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--ukip-muted)]">
+                  {tr("page.exec_dashboard.external_attention_avg", "Average")}
+                </p>
+                <p className="mt-1 text-3xl font-black text-[var(--ukip-text-strong)]">
+                  {data.external_attention.summary.avg_attention_score}
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 grid grid-cols-3 gap-3">
+              <div className="rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-panel)] p-3">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--ukip-muted)]">{tr("page.exec_dashboard.external_attention_entities", "Entities")}</p>
+                <p className="mt-1 text-xl font-black text-[var(--ukip-text-strong)]">{data.external_attention.summary.active_entities}</p>
+              </div>
+              <div className="rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-panel)] p-3">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--ukip-muted)]">{tr("page.exec_dashboard.external_attention_mentions", "Mentions")}</p>
+                <p className="mt-1 text-xl font-black text-[var(--ukip-text-strong)]">{data.external_attention.summary.total_mentions}</p>
+              </div>
+              <div className="rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-panel)] p-3">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--ukip-muted)]">{tr("page.exec_dashboard.external_attention_top", "Top")}</p>
+                <p className="mt-1 text-xl font-black text-[var(--ukip-text-strong)]">{data.external_attention.summary.top_score}</p>
+              </div>
+            </div>
+          </div>
+          <div className="ukip-panel-soft p-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="ukip-kicker">{tr("page.exec_dashboard.external_attention_alerts", "Top alerts")}</p>
+                <h3 className="mt-1 text-base font-bold text-[var(--ukip-text-strong)]">
+                  {tr("page.exec_dashboard.external_attention_alert_title", "Signals needing review")}
+                </h3>
+              </div>
+              <Link href="/analytics/dashboard" className="text-xs font-bold text-violet-600 dark:text-violet-300">
+                {tr("page.exec_dashboard.external_attention_view_all", "Dashboard")}
+              </Link>
+            </div>
+            <div className="mt-4 space-y-3">
+              {data.external_attention.alerts.length > 0 ? data.external_attention.alerts.map((alert) => (
+                <Link
+                  key={`${alert.entity_id}-${alert.type}-${alert.period ?? "current"}`}
+                  href={`/entities/${alert.entity_id}`}
+                  className={`block rounded-2xl border p-3 transition hover:shadow-sm ${attentionSeverityClass(alert.severity)}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold">{alert.label}</p>
+                      <p className="mt-1 text-xs font-semibold opacity-85">{stripInlineHtml(alert.entity_label)}</p>
+                      <p className="mt-1 text-xs leading-5 opacity-75">{alert.evidence}</p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide dark:bg-white/10">
+                      {alert.confidence}
+                    </span>
+                  </div>
+                </Link>
+              )) : (
+                <p className="rounded-2xl border border-dashed border-[var(--ukip-border)] p-4 text-sm text-[var(--ukip-muted)]">
+                  {tr("page.exec_dashboard.external_attention_no_alerts", "No attention alerts yet.")}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {data?.impact_projection && (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">

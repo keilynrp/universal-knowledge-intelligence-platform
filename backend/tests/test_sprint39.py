@@ -55,6 +55,7 @@ def test_dashboard_summary_returns_shape(client, auth_headers, db_session):
     assert "institutional_benchmark" in data
     assert "impact_projection" in data
     assert "hidden_patterns" in data
+    assert "external_attention" in data
 
     # KPI shape
     kpis = data["kpis"]
@@ -74,6 +75,29 @@ def test_dashboard_summary_returns_shape(client, auth_headers, db_session):
     assert "brands" in matrix
     assert "years" in matrix
     assert "matrix" in matrix
+
+
+def test_dashboard_includes_external_attention_summary(client, auth_headers, db_session):
+    db_session.add(models.RawEntity(
+        primary_label="Policy Attention Entity",
+        domain="attention_dashboard_test",
+        attributes_json=json.dumps({
+            "external_attention_observations": [
+                {"source_type": "news", "mention_count": 2, "last_seen_at": "2026-01-10T00:00:00Z"},
+                {"source_type": "policy", "mention_count": 4, "last_seen_at": "2026-02-10T00:00:00Z"},
+            ]
+        }),
+    ))
+    db_session.commit()
+
+    response = client.get("/dashboard/summary?domain_id=attention_dashboard_test", headers=auth_headers)
+
+    assert response.status_code == 200
+    external_attention = response.json()["external_attention"]
+    assert external_attention["summary"]["active_entities"] == 1
+    assert external_attention["summary"]["total_mentions"] == 6
+    assert external_attention["top_entities"][0]["label"] == "Policy Attention Entity"
+    assert external_attention["alerts"][0]["type"] == "policy_mention"
 
 
 def test_dashboard_kpis_match_entity_count(client, auth_headers, db_session):

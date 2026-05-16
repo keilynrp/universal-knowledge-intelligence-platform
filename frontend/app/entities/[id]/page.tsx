@@ -69,6 +69,15 @@ interface EntityAttentionData {
         evidence: string;
         priority: number;
     }>;
+    alerts: Array<{
+        type: string;
+        severity: "low" | "medium" | "high";
+        confidence: "low" | "medium" | "high";
+        label: string;
+        evidence: string;
+        period: string | null;
+        priority: number;
+    }>;
 }
 
 interface Entity {
@@ -159,6 +168,45 @@ function attentionSourceLabel(sourceType: string) {
            sourceType === "blog" ? "Blogs" :
            sourceType === "scholarly_web" ? "Web academica" :
            sourceType === "social_web" ? "Social/web" : "Otras";
+}
+
+function QualityIndexTooltip({
+    ariaLabel,
+    title,
+    body,
+}: {
+    ariaLabel: string;
+    title: string;
+    body: string;
+}) {
+    return (
+        <span className="group relative inline-flex">
+            <button
+                type="button"
+                className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-900 bg-slate-950 text-xs font-black text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 dark:border-white dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200 dark:focus:ring-offset-slate-950"
+                aria-label={ariaLabel}
+            >
+                i
+            </button>
+            <span
+                role="tooltip"
+                className="pointer-events-none absolute left-1/2 top-8 z-30 w-80 -translate-x-1/2 rounded-2xl border border-slate-200 bg-slate-950 p-4 text-left text-xs font-medium leading-5 text-white opacity-0 shadow-2xl transition group-hover:opacity-100 group-focus-within:opacity-100 dark:border-white/10 dark:bg-white dark:text-slate-900"
+            >
+                <span className="block text-[11px] font-black uppercase tracking-[0.14em] text-violet-300 dark:text-violet-600">
+                    {title}
+                </span>
+                <span className="mt-2 block">
+                    {body}
+                </span>
+            </span>
+        </span>
+    );
+}
+
+function alertClass(severity: "low" | "medium" | "high") {
+    return severity === "high" ? "border-red-200 bg-red-50 text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200" :
+           severity === "medium" ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200" :
+           "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-200";
 }
 
 function parseJsonObject(raw: string | null): Record<string, unknown> {
@@ -696,19 +744,19 @@ export default function EntityDetailPage() {
     const primaryFields = [
         { key: "primary_label", label: "Etiqueta principal", value: entity.primary_label, icon: "type" },
         { key: "secondary_label", label: "Etiqueta secundaria (marca / autor)", value: entity.secondary_label, icon: "tag" },
-        { key: "canonical_id", label: "ID canonico (SKU / DOI / codigo)", value: entity.canonical_id, icon: "link", copyable: true },
+        { key: "canonical_id", label: tr("entities.detail.fields.canonical_id", "ID canónico (SKU / DOI / código)"), value: entity.canonical_id, icon: "link", copyable: true },
         { key: "entity_type", label: "Tipo de entidad", value: entity.entity_type, icon: "cube" },
         { key: "domain", label: "Dominio", value: entity.domain, icon: "globe" },
     ];
     const systemFields = [
-        { key: "validation_status", label: "Validacion", value: entity.validation_status, badge: "validation", icon: "quality" },
+        { key: "validation_status", label: tr("entities.detail.fields.validation_status", "Validación"), value: entity.validation_status, badge: "validation", icon: "quality" },
         { key: "enrichment_status", label: "Estado de enriquecimiento", value: entity.enrichment_status, badge: "enrichment", icon: "shield" },
         { key: "source", label: "Fuente", value: entity.source, icon: "user" },
         { key: "import_batch_id", label: "Import batch id", value: entity.import_batch_id, icon: "database" },
-        { key: "quality_score", label: "Puntuacion de calidad", value: qualityPercent > 0 ? `${Math.round(qualityPercent)}%` : null, icon: "star" },
+        { key: "quality_score", label: tr("entities.detail.fields.quality_score", "Puntuación de calidad"), value: qualityPercent > 0 ? `${Math.round(qualityPercent)}%` : null, icon: "star" },
         {
             key: "attention_score",
-            label: "Atencion externa",
+            label: tr("entities.detail.attention.badge_label", "Atención externa"),
             value: attentionData
                 ? `${attentionData.summary.attention_score}/100 · ${attentionData.summary.total_mentions} menciones · ${attentionData.summary.active_sources} fuentes`
                 : null,
@@ -772,10 +820,10 @@ export default function EntityDetailPage() {
                                 {attentionData ? (
                                     <span
                                         className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${attentionClass(attentionData.summary.category)}`}
-                                        title="Senal contextual: mide atencion externa, no calidad academica."
+                                        title={tr("entities.detail.attention.badge_tooltip", "Señal contextual: mide atención externa, no calidad académica.")}
                                     >
                                         <IconGlyph name="spark" className="h-3.5 w-3.5" />
-                                        Atencion externa: {attentionLabel(attentionData.summary.category)}
+                                        {tr("entities.detail.attention.badge_label", "Atención externa")}: {attentionLabel(attentionData.summary.category)}
                                         <span className="font-black">{attentionData.summary.attention_score}</span>
                                     </span>
                                 ) : null}
@@ -870,7 +918,7 @@ export default function EntityDetailPage() {
                                         <IconGlyph name="quality" className="h-6 w-6" />
                                     </div>
                                     <h2 className="text-sm font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
-                                        Puntuacion de calidad
+                                        {tr("entities.detail.section.quality", "Puntuación de calidad")}
                                     </h2>
                                 </div>
                                 <div className="flex flex-col gap-8 sm:flex-row sm:items-center">
@@ -878,11 +926,13 @@ export default function EntityDetailPage() {
                                     <div className="min-w-0 flex-1 space-y-3">
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                                                Indice de Calidad Global
+                                                {tr("entities.detail.quality.overall", "Índice de Calidad Global")}
                                             </span>
-                                            <span className="flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-xs text-slate-400 dark:border-white/10">
-                                                i
-                                            </span>
+                                            <QualityIndexTooltip
+                                                ariaLabel={tr("entities.detail.quality.tooltip_aria", "Qué significa el Índice de Calidad Global")}
+                                                title={tr("entities.detail.quality.tooltip_title", "Índice de Calidad Global")}
+                                                body={tr("entities.detail.quality.tooltip_body", "Mide qué tan listo está este registro para el análisis ejecutivo dentro de UKIP. Combina completitud de metadatos, identificadores, enriquecimiento, validación, relaciones y señales de autoridad. No es una métrica de impacto académico ni de atención externa.")}
+                                            />
                                         </div>
                                         <div className="h-3 max-w-xs rounded-full bg-slate-100 dark:bg-white/10">
                                             <div
@@ -1040,10 +1090,10 @@ export default function EntityDetailPage() {
                                     <div className="mb-4 flex items-center justify-between gap-3">
                                         <div>
                                             <p className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400">
-                                                Composicion de atencion
+                                                {tr("entities.detail.attention.composition_title", "Composición de atención")}
                                             </p>
                                             <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                                                Contribucion por fuente; no representa calidad academica.
+                                                {tr("entities.detail.attention.composition_help", "Contribución por fuente; no representa calidad académica.")}
                                             </p>
                                         </div>
                                         <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-violet-600 shadow-sm dark:bg-white/10 dark:text-violet-200">
@@ -1133,6 +1183,38 @@ export default function EntityDetailPage() {
                                                             {explanation.evidence}
                                                         </p>
                                                     </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : null}
+                            {attentionData && attentionData.alerts.length > 0 ? (
+                                <div className="mt-4 rounded-2xl border border-slate-100 bg-white/70 p-4 dark:border-white/10 dark:bg-white/5">
+                                    <div className="mb-4 flex items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400">
+                                                Alertas de atencion
+                                            </p>
+                                            <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                                                Reglas accionables sobre cambios y fuentes externas.
+                                            </p>
+                                        </div>
+                                        <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-black text-slate-500 ring-1 ring-slate-200 dark:bg-white/10 dark:text-slate-300 dark:ring-white/10">
+                                            {attentionData.alerts.length}
+                                        </span>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {attentionData.alerts.slice(0, 3).map((alert) => (
+                                            <div key={`${alert.type}-${alert.period ?? "current"}`} className={`rounded-xl border p-3 ${alertClass(alert.severity)}`}>
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-bold">{alert.label}</p>
+                                                        <p className="mt-1 text-xs font-medium leading-5 opacity-80">{alert.evidence}</p>
+                                                    </div>
+                                                    <span className="shrink-0 rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide dark:bg-white/10">
+                                                        {alert.confidence}
+                                                    </span>
                                                 </div>
                                             </div>
                                         ))}
@@ -1229,12 +1311,12 @@ export default function EntityDetailPage() {
                                     </div>
                                     <p className="mt-4 text-sm font-medium leading-6 text-white/82">
                                         {entity.enrichment_status === "completed"
-                                            ? "El registro ya tiene senales enriquecidas listas para analisis, impacto y brief."
+                                            ? tr("entities.detail.enrichment.summary_completed", "El registro ya tiene señales enriquecidas listas para análisis, impacto y brief.")
                                             : entity.enrichment_status === "pending"
-                                            ? "El enriquecimiento esta en proceso. La lectura ejecutiva debe esperar a que termine la normalizacion."
+                                            ? tr("entities.detail.enrichment.summary_pending", "El enriquecimiento está en proceso. La lectura ejecutiva debe esperar a que termine la normalización.")
                                             : entity.enrichment_status === "failed"
-                                            ? "El intento de enrichment fallo. Conviene reintentar o revisar DOI, fuente y metadatos base."
-                                            : "Ejecuta enrichment para conectar el registro con citas, DOI, conceptos y fuentes academicas."}
+                                            ? tr("entities.detail.enrichment.summary_failed", "El intento de enriquecimiento falló. Conviene reintentar o revisar DOI, fuente y metadatos base.")
+                                            : tr("entities.detail.enrichment.summary_idle", "Ejecuta el enriquecimiento para conectar el registro con citas, DOI, conceptos y fuentes académicas.")}
                                     </p>
                                 </div>
                             </div>
@@ -1328,10 +1410,10 @@ export default function EntityDetailPage() {
                                     <IconGlyph name="spark" className="mb-4 h-10 w-10 text-violet-500 dark:text-violet-300" />
                                     <p className="max-w-md text-sm font-bold leading-6 text-slate-500 dark:text-slate-400">
                                         {entity.enrichment_status === "failed"
-                                            ? "No se pudo completar el enrichment. Reintenta para recalcular conceptos, DOI, citas y proyeccion."
+                                            ? tr("entities.detail.projection.empty_failed", "No se pudo completar el enriquecimiento. Reintenta para recalcular conceptos, DOI, citas y proyección.")
                                             : entity.enrichment_status === "pending"
-                                            ? "El enrichment sigue en proceso. La proyeccion aparecera cuando el estado cambie a completed."
-                                            : "La proyeccion se activa cuando el registro queda enriquecido con senales academicas confiables."}
+                                            ? tr("entities.detail.projection.empty_pending", "El enriquecimiento sigue en proceso. La proyección aparecerá cuando el estado cambie a completado.")
+                                            : tr("entities.detail.projection.empty_idle", "La proyección se activa cuando el registro queda enriquecido con señales académicas confiables.")}
                                     </p>
                                 </div>
                             )}
