@@ -80,6 +80,15 @@ interface EntityAttentionData {
     }>;
 }
 
+interface EnrichmentFailureDetails {
+    code?: string;
+    evidence?: string;
+    recommendations?: string[];
+    provider_attempts?: string[];
+    exception_type?: string | null;
+    failed_at?: string;
+}
+
 interface Entity {
     id: number;
     import_batch_id: number | null;
@@ -145,11 +154,46 @@ function enrichmentVariant(status: string | null) {
            status === "failed" ? "error" as const : "default" as const;
 }
 
+function enrichmentHealth(percent: number) {
+    const safePercent = Math.round(Math.max(0, Math.min(100, percent)));
+    if (safePercent <= 20) {
+        return {
+            panelClass: "bg-gradient-to-br from-red-600 to-rose-600 shadow-[0_18px_50px_rgba(239,68,68,0.24)]",
+            barClass: "bg-white",
+        };
+    }
+    if (safePercent < 80) {
+        return {
+            panelClass: "bg-gradient-to-br from-amber-500 to-orange-500 shadow-[0_18px_50px_rgba(245,158,11,0.22)]",
+            barClass: "bg-white",
+        };
+    }
+    return {
+        panelClass: "bg-gradient-to-br from-emerald-600 to-teal-600 shadow-[0_18px_50px_rgba(16,185,129,0.22)]",
+        barClass: "bg-white",
+    };
+}
+
+function enrichmentStatusLabel(
+    status: string | null,
+    tr: (key: string, fallback: string) => string,
+) {
+    const normalized = status || "none";
+    const labels: Record<string, string> = {
+        completed: tr("entities.detail.enrichment.status_completed", "Enriquecido"),
+        pending: tr("entities.detail.enrichment.status_pending", "Pendiente"),
+        processing: tr("entities.detail.enrichment.status_processing", "Procesando"),
+        failed: tr("entities.detail.enrichment.status_failed", "Fallido"),
+        none: tr("entities.detail.enrichment.status_none", "Sin iniciar"),
+    };
+    return labels[normalized] || normalized;
+}
+
 function attentionLabel(category: EntityAttentionData["summary"]["category"]) {
     return category === "very_high" ? "Muy alta" :
            category === "high" ? "Alta" :
            category === "moderate" ? "Media" :
-           category === "low" ? "Baja" : "Sin senal";
+           category === "low" ? "Baja" : "Sin señal";
 }
 
 function attentionClass(category: EntityAttentionData["summary"]["category"]) {
@@ -166,7 +210,7 @@ function attentionSourceLabel(sourceType: string) {
            sourceType === "wikipedia" ? "Wikipedia" :
            sourceType === "repository" ? "Repositorios" :
            sourceType === "blog" ? "Blogs" :
-           sourceType === "scholarly_web" ? "Web academica" :
+           sourceType === "scholarly_web" ? "Web académica" :
            sourceType === "social_web" ? "Social/web" : "Otras";
 }
 
@@ -219,6 +263,54 @@ function parseJsonObject(raw: string | null): Record<string, unknown> {
     } catch {
         return {};
     }
+}
+
+function parseEnrichmentFailure(value: unknown): EnrichmentFailureDetails | null {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const payload = value as Record<string, unknown>;
+    return {
+        code: typeof payload.code === "string" ? payload.code : undefined,
+        evidence: typeof payload.evidence === "string" ? payload.evidence : undefined,
+        recommendations: Array.isArray(payload.recommendations)
+            ? payload.recommendations.filter((item): item is string => typeof item === "string")
+            : [],
+        provider_attempts: Array.isArray(payload.provider_attempts)
+            ? payload.provider_attempts.filter((item): item is string => typeof item === "string")
+            : [],
+        exception_type: typeof payload.exception_type === "string" ? payload.exception_type : null,
+        failed_at: typeof payload.failed_at === "string" ? payload.failed_at : undefined,
+    };
+}
+
+function fallbackEnrichmentFailure(
+    entity: Entity,
+    tr: (key: string, fallback: string) => string,
+): EnrichmentFailureDetails {
+    if (!entity.primary_label) {
+        return {
+            code: "missing_title",
+            evidence: tr("entities.detail.enrichment.failure_missing_title_evidence", "El registro está en estado fallido y no tiene una etiqueta principal suficiente para buscar coincidencias externas."),
+            recommendations: [
+                tr("entities.detail.enrichment.failure_missing_title_rec_title", "Complete el título o etiqueta principal antes de reintentar."),
+                tr("entities.detail.enrichment.failure_missing_title_rec_identifier", "Agregue un DOI o identificador estable si está disponible."),
+            ],
+            provider_attempts: entity.enrichment_source && entity.enrichment_source !== "None"
+                ? [entity.enrichment_source]
+                : [],
+        };
+    }
+    return {
+        code: "legacy_failed",
+        evidence: tr("entities.detail.enrichment.failure_legacy_evidence", "El registro ya estaba marcado como fallido, pero no conserva una evidencia técnica detallada del intento anterior."),
+        recommendations: [
+            tr("entities.detail.enrichment.failure_legacy_rec_title", "Revise que el título no tenga abreviaturas, HTML residual o errores tipográficos."),
+            tr("entities.detail.enrichment.failure_legacy_rec_doi", "Agregue o corrija el DOI para aumentar la probabilidad de coincidencia."),
+            tr("entities.detail.enrichment.failure_legacy_rec_retry", "Reintente el enriquecimiento para generar una nueva evidencia diagnóstica."),
+        ],
+        provider_attempts: entity.enrichment_source && entity.enrichment_source !== "None"
+            ? [entity.enrichment_source]
+            : [],
+    };
 }
 
 function stripInlineHtml(value: string): string {
@@ -784,7 +876,7 @@ export default function EntityDetailPage() {
     ];
     const systemFields = [
         { key: "validation_status", label: tr("entities.detail.fields.validation_status", "Validación"), value: entity.validation_status, badge: "validation", icon: "quality" },
-        { key: "enrichment_status", label: "Estado de enriquecimiento", value: entity.enrichment_status, badge: "enrichment", icon: "shield" },
+        { key: "enrichment_status", label: tr("entities.enrichment_status", "Estado de enriquecimiento"), value: entity.enrichment_status, badge: "enrichment", icon: "shield" },
         { key: "source", label: "Fuente", value: entity.source, icon: "user" },
         { key: "import_batch_id", label: "Import batch id", value: entity.import_batch_id, icon: "database" },
         { key: "quality_score", label: tr("entities.detail.fields.quality_score", "Puntuación de calidad"), value: qualityPercent > 0 ? `${Math.round(qualityPercent)}%` : null, icon: "star" },
@@ -798,26 +890,33 @@ export default function EntityDetailPage() {
             icon: "spark",
         },
         { key: "enrichment_citation_count", label: "Citas", value: entity.enrichment_citation_count ?? 0, icon: "quote" },
-        { key: "enrichment_source", label: "Fuente de enrichment", value: entity.enrichment_source, icon: "cube" },
+        { key: "enrichment_source", label: tr("entities.detail.enrichment.source", "Fuente"), value: entity.enrichment_source === "None" ? tr("common.none", "Ninguno") : entity.enrichment_source, icon: "cube" },
         { key: "enrichment_doi", label: "DOI", value: entity.enrichment_doi, icon: "link", copyable: true },
     ];
     const enrichmentPercent =
         entity.enrichment_status === "completed" ? 100 :
+        entity.enrichment_status === "processing" ? 65 :
         entity.enrichment_status === "pending" ? 45 :
         entity.enrichment_status === "failed" ? 12 :
         0;
+    const enrichmentHealthState = enrichmentHealth(enrichmentPercent);
+    const enrichmentLabel = enrichmentStatusLabel(entity.enrichment_status, tr);
+    const enrichmentFailure: EnrichmentFailureDetails | null = entity.enrichment_status === "failed"
+        ? parseEnrichmentFailure(sourceAttributes.enrichment_failure) || fallbackEnrichmentFailure(entity, tr)
+        : null;
     const enrichmentConcepts = entity.enrichment_concepts
         ? entity.enrichment_concepts.split(",").map((concept) => concept.trim()).filter(Boolean)
         : [];
-    const shortSource = entity.enrichment_source || entity.source || String(mergedAttributes.source_name || mergedAttributes.source || "");
+    const sanitizedEnrichmentSource = entity.enrichment_source && entity.enrichment_source !== "None" ? entity.enrichment_source : "";
+    const shortSource = sanitizedEnrichmentSource || entity.source || String(mergedAttributes.source_name || mergedAttributes.source || "");
     const attentionTimelineMax = attentionData?.timeline.length
         ? Math.max(...attentionData.timeline.map((item) => item.weighted_score), 1)
         : 1;
     const enrichmentSignals = [
-        { label: "Estado", value: entity.enrichment_status, badge: "enrichment", icon: "shield" },
-        { label: "Citas detectadas", value: entity.enrichment_citation_count ?? 0, icon: "quote" },
-        { label: "Fuente academica", value: entity.enrichment_source || shortSource || "—", icon: "database" },
-        { label: "DOI normalizado", value: entity.enrichment_doi || entity.canonical_id, icon: "link", href: entity.enrichment_doi ? `https://doi.org/${entity.enrichment_doi}` : undefined },
+        { label: tr("entities.detail.enrichment.status", "Estado"), value: enrichmentLabel, badge: "enrichment", icon: "shield" },
+        { label: tr("entities.detail.enrichment.citations_detected", "Citas detectadas"), value: entity.enrichment_citation_count ?? 0, icon: "quote" },
+        { label: tr("entities.detail.enrichment.academic_source", "Fuente académica"), value: entity.enrichment_source || shortSource || "—", icon: "database" },
+        { label: tr("entities.detail.enrichment.normalized_doi", "DOI normalizado"), value: entity.enrichment_doi || entity.canonical_id, icon: "link", href: entity.enrichment_doi ? `https://doi.org/${entity.enrichment_doi}` : undefined },
     ];
     const extendedEntries = Object.entries(mergedAttributes).filter(
         ([key]) => !["primary_label", "secondary_label", "canonical_id", "entity_type", "domain"].includes(key)
@@ -1098,7 +1197,7 @@ export default function EntityDetailPage() {
                                             </Badge>
                                         ) : field.badge === "enrichment" && entity.enrichment_status ? (
                                             <Badge variant={enrichmentVariant(entity.enrichment_status)}>
-                                                {entity.enrichment_status}
+                                                {enrichmentLabel}
                                             </Badge>
                                         ) : field.badge === "attention" && attentionData ? (
                                             <span className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${attentionClass(attentionData.summary.category)}`}>
@@ -1326,29 +1425,33 @@ export default function EntityDetailPage() {
                                     </div>
                                     <div>
                                         <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
-                                            Enrichment
+                                            {tr("entities.detail.tab.enrichment", "Enriquecimiento")}
                                         </p>
                                         <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950 dark:text-white">
-                                            Cobertura academica del registro
+                                            {tr("entities.detail.enrichment.coverage_title", "Cobertura académica del registro")}
                                         </h2>
                                     </div>
                                 </div>
-                                <div className="rounded-[1.25rem] bg-gradient-to-br from-violet-600 to-blue-600 p-5 text-white shadow-[0_18px_50px_rgba(99,102,241,0.28)]">
+                                <div className={`rounded-[1.25rem] p-5 text-white ${enrichmentHealthState.panelClass}`}>
                                     <div className="flex items-end justify-between gap-4">
                                         <div>
-                                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/70">Progreso</p>
+                                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/70">
+                                                {tr("entities.detail.quality.progress", "Progreso")}
+                                            </p>
                                             <p className="mt-2 text-5xl font-black tracking-tight">{enrichmentPercent}%</p>
                                         </div>
                                         <Badge variant={enrichmentVariant(entity.enrichment_status)}>
-                                            {entity.enrichment_status || "sin iniciar"}
+                                            {enrichmentLabel}
                                         </Badge>
                                     </div>
                                     <div className="mt-5 h-3 rounded-full bg-white/20">
-                                        <div className="h-3 rounded-full bg-white" style={{ width: `${enrichmentPercent}%` }} />
+                                        <div className={`h-3 rounded-full ${enrichmentHealthState.barClass}`} style={{ width: `${enrichmentPercent}%` }} />
                                     </div>
                                     <p className="mt-4 text-sm font-medium leading-6 text-white/82">
                                         {entity.enrichment_status === "completed"
                                             ? tr("entities.detail.enrichment.summary_completed", "El registro ya tiene señales enriquecidas listas para análisis, impacto y brief.")
+                                            : entity.enrichment_status === "processing"
+                                            ? tr("entities.detail.enrichment.summary_processing", "El enriquecimiento está procesando el registro. Espera a que termine antes de reintentar.")
                                             : entity.enrichment_status === "pending"
                                             ? tr("entities.detail.enrichment.summary_pending", "El enriquecimiento está en proceso. La lectura ejecutiva debe esperar a que termine la normalización.")
                                             : entity.enrichment_status === "failed"
@@ -1356,6 +1459,36 @@ export default function EntityDetailPage() {
                                             : tr("entities.detail.enrichment.summary_idle", "Ejecuta el enriquecimiento para conectar el registro con citas, DOI, conceptos y fuentes académicas.")}
                                     </p>
                                 </div>
+                                {enrichmentFailure ? (
+                                    <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-4 text-rose-950 dark:border-rose-400/20 dark:bg-rose-400/10 dark:text-rose-100">
+                                        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-rose-600 dark:text-rose-200">
+                                            {tr("entities.detail.enrichment.failure_title", "Evidencia del fallo")}
+                                        </p>
+                                        <p className="mt-2 text-sm font-semibold leading-6">
+                                            {enrichmentFailure.evidence || tr("entities.detail.enrichment.failure_generic", "No se obtuvo una coincidencia confiable con las fuentes de enriquecimiento disponibles.")}
+                                        </p>
+                                        {enrichmentFailure.provider_attempts && enrichmentFailure.provider_attempts.length > 0 ? (
+                                            <p className="mt-3 text-xs font-bold text-rose-700 dark:text-rose-200">
+                                                {tr("entities.detail.enrichment.failure_sources", "Fuentes consultadas")}: {enrichmentFailure.provider_attempts.join(", ")}
+                                            </p>
+                                        ) : null}
+                                        {enrichmentFailure.recommendations && enrichmentFailure.recommendations.length > 0 ? (
+                                            <div className="mt-4">
+                                                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-rose-600 dark:text-rose-200">
+                                                    {tr("entities.detail.enrichment.failure_recommendations", "Recomendaciones")}
+                                                </p>
+                                                <ul className="mt-2 space-y-2 text-sm font-medium leading-5">
+                                                    {enrichmentFailure.recommendations.map((recommendation) => (
+                                                        <li key={recommendation} className="flex gap-2">
+                                                            <span aria-hidden="true">-</span>
+                                                            <span>{recommendation}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                ) : null}
                             </div>
 
                             <div className="grid gap-5 sm:grid-cols-2 lg:pl-8">
@@ -1368,7 +1501,7 @@ export default function EntityDetailPage() {
                                             <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">{signal.label}</p>
                                             {signal.badge === "enrichment" && entity.enrichment_status ? (
                                                 <Badge variant={enrichmentVariant(entity.enrichment_status)}>
-                                                    {entity.enrichment_status}
+                                                    {enrichmentLabel}
                                                 </Badge>
                                             ) : signal.href ? (
                                                 <a href={signal.href} target="_blank" rel="noopener noreferrer" className="block truncate text-sm font-black text-violet-600 hover:underline dark:text-violet-300">
@@ -1394,10 +1527,10 @@ export default function EntityDetailPage() {
                                 </div>
                                 <div>
                                     <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
-                                        Conceptos detectados
+                                        {tr("entities.detail.enrichment.concepts_detected", "Conceptos detectados")}
                                     </p>
                                     <p className="mt-1 text-sm font-semibold text-slate-400">
-                                        {enrichmentConcepts.length} conceptos semanticos
+                                        {tr("entities.detail.enrichment.concepts_count", "{count} conceptos semánticos").replace("{count}", String(enrichmentConcepts.length))}
                                     </p>
                                 </div>
                             </div>
@@ -1409,7 +1542,7 @@ export default function EntityDetailPage() {
                                 </div>
                             ) : (
                                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-6 text-sm font-semibold text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
-                                    Aun no hay conceptos enriquecidos. Ejecuta enrichment para activar esta capa semantica.
+                                    {tr("entities.detail.enrichment.concepts_empty", "Aún no hay conceptos enriquecidos. Ejecuta el enriquecimiento para activar esta capa semántica.")}
                                 </div>
                             )}
                         </section>
@@ -1422,14 +1555,14 @@ export default function EntityDetailPage() {
                                     </div>
                                     <div>
                                         <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
-                                            Proyeccion de impacto
+                                            {tr("entities.detail.enrichment.projection_title", "Proyección de impacto")}
                                         </p>
                                         <p className="mt-1 text-sm font-semibold text-slate-400">
-                                            Simulacion conectada al registro enriquecido
+                                            {tr("entities.detail.enrichment.projection_subtitle", "Simulación conectada al registro enriquecido")}
                                         </p>
                                     </div>
                                 </div>
-                                {entity.enrichment_status !== "pending" && entity.enrichment_status !== "completed" ? (
+                                {entity.enrichment_status !== "pending" && entity.enrichment_status !== "processing" && entity.enrichment_status !== "completed" ? (
                                     <button
                                         onClick={handleEnrich}
                                         disabled={enriching}
@@ -1448,7 +1581,7 @@ export default function EntityDetailPage() {
                                     <p className="max-w-md text-sm font-bold leading-6 text-slate-500 dark:text-slate-400">
                                         {entity.enrichment_status === "failed"
                                             ? tr("entities.detail.projection.empty_failed", "No se pudo completar el enriquecimiento. Reintenta para recalcular conceptos, DOI, citas y proyección.")
-                                            : entity.enrichment_status === "pending"
+                                            : entity.enrichment_status === "pending" || entity.enrichment_status === "processing"
                                             ? tr("entities.detail.projection.empty_pending", "El enriquecimiento sigue en proceso. La proyección aparecerá cuando el estado cambie a completado.")
                                             : tr("entities.detail.projection.empty_idle", "La proyección se activa cuando el registro queda enriquecido con señales académicas confiables.")}
                                     </p>
@@ -1493,10 +1626,10 @@ export default function EntityDetailPage() {
                             </div>
                             <div>
                                 <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
-                                    Gestion de relaciones
+                                    {tr("entities.detail.relationships.title", "Gestión de relaciones")}
                                 </p>
                                 <p className="mt-1 text-sm font-semibold text-slate-400">
-                                    Crea, edita o refresca conexiones semanticas para este registro.
+                                    {tr("entities.detail.relationships.subtitle", "Crea, edita o refresca conexiones semánticas para este registro.")}
                                 </p>
                             </div>
                         </div>

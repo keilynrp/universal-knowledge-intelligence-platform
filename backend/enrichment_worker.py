@@ -1,6 +1,8 @@
 import asyncio
+import json
 import logging
 import os
+from datetime import datetime, timezone
 
 from sqlalchemy import update
 from sqlalchemy.orm import Session
@@ -43,6 +45,73 @@ _cb_scholar = CircuitBreaker(name="scholar", failure_threshold=5, recovery_timeo
 # Any record stuck in "processing" for longer than this after a server
 # crash will be reclaimed on the next startup.
 VALID_STATUSES = {"none", "pending", "processing", "completed", "failed"}
+
+_FAILURE_RECOMMENDATIONS = {
+    "missing_title": [
+        "Complete el título o etiqueta principal antes de reintentar.",
+        "Incluya un identificador estable como DOI si está disponible.",
+    ],
+    "no_provider_match": [
+        "Revise que el título no tenga abreviaturas, HTML residual o errores tipográficos.",
+        "Agregue o corrija el DOI para aumentar la probabilidad de coincidencia.",
+        "Active una fuente adicional de enriquecimiento si el registro no está cubierto por OpenAlex.",
+    ],
+    "data_error": [
+        "Revise DOI, título, autores y metadatos base del registro.",
+        "Reintente el enriquecimiento después de corregir los campos incompletos o inconsistentes.",
+    ],
+    "unexpected_error": [
+        "Reintente el enriquecimiento; si se repite, revise los logs del backend.",
+        "Verifique conectividad y configuración de las fuentes externas activas.",
+    ],
+}
+
+
+def _attrs(entity: models.RawEntity) -> dict:
+    try:
+        parsed = json.loads(entity.attributes_json or "{}")
+        return parsed if isinstance(parsed, dict) else {}
+    except (TypeError, ValueError):
+        return {}
+
+
+def _clear_enrichment_failure(entity: models.RawEntity) -> None:
+    attrs = _attrs(entity)
+    if attrs.pop("enrichment_failure", None) is not None:
+        entity.attributes_json = json.dumps(attrs, ensure_ascii=False)
+
+
+def clear_enrichment_failure(entity: models.RawEntity) -> None:
+    """Public wrapper used by routers when re-queueing explicit records."""
+
+    _clear_enrichment_failure(entity)
+
+
+def _set_enrichment_failed(
+    entity: models.RawEntity,
+    *,
+    code: str,
+    evidence: str,
+    provider_attempts: list[str] | None = None,
+    exception_type: str | None = None,
+) -> None:
+    attrs = _attrs(entity)
+    attrs["enrichment_failure"] = {
+        "code": code,
+        "evidence": evidence,
+        "recommendations": _FAILURE_RECOMMENDATIONS.get(code, _FAILURE_RECOMMENDATIONS["unexpected_error"]),
+        "provider_attempts": provider_attempts or [],
+        "exception_type": exception_type,
+        "record_snapshot": {
+            "primary_label": entity.primary_label,
+            "canonical_id": entity.canonical_id,
+            "enrichment_doi": entity.enrichment_doi,
+            "domain": entity.domain,
+        },
+        "failed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    entity.attributes_json = json.dumps(attrs, ensure_ascii=False)
+    entity.enrichment_status = "failed"
 
 
 def reset_stale_processing_records(db: Session) -> int:
@@ -135,18 +204,24 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
     Web of Science (BYOK) -> OpenAlex (Free API) -> Google Scholar (Scraping).
     """
     if not entity.primary_label:
-        entity.enrichment_status = "failed"
+        _set_enrichment_failed(
+            entity,
+            code="missing_title",
+            evidence="El registro no tiene título o etiqueta principal para buscar en fuentes externas.",
+        )
         db.commit()
         return entity
 
     query = entity.primary_label
     enriched_data = None
     source = "Unknown"
+    provider_attempts: list[str] = []
 
     try:
         # Phase 3: Premium BYOK Priority
         # Phase 3: Premium BYOK Priority (Scopus -> WoS)
         if adapter_scopus.is_active:
+            provider_attempts.append("Elsevier Scopus")
             try:
                 results_scopus = _cb_scopus.call(adapter_scopus.search_by_title, query, limit=1)
                 if results_scopus:
@@ -156,6 +231,7 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
                 logger.warning(str(e))
 
         if not enriched_data and adapter_wos.is_active:
+            provider_attempts.append("Web of Science")
             try:
                 results_wos = _cb_wos.call(adapter_wos.search_by_title, query, limit=1)
                 if results_wos:
@@ -166,6 +242,7 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
 
         # Phase 1: Free Open API
         if not enriched_data:
+            provider_attempts.append("OpenAlex")
             try:
                 results = _cb_openalex.call(adapter_openalex.search_by_title, query, limit=1)
                 if results:
@@ -174,6 +251,7 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
                 else:
                     # Phase 2: Scraping Fallback
                     if adapter_scholar is not None:
+                        provider_attempts.append("Google Scholar")
                         logger.info(f"OpenAlex found nothing for '{query}'. Falling back to Google Scholar.")
                         try:
                             results_scholar = _cb_scholar.call(adapter_scholar.search_by_title, query, limit=1)
@@ -198,6 +276,7 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
             )
             entity.enrichment_source = source
             entity.enrichment_status = "completed"
+            _clear_enrichment_failure(entity)
 
             # Extract and cache country from affiliation data
             _extract_and_cache_country(entity)
@@ -205,17 +284,34 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
             # Fallback: try active web scraper configs
             scraped = enrich_with_web_scrapers(db, entity)
             if not scraped:
-                entity.enrichment_status = "failed"
                 entity.enrichment_source = "None"
+                _set_enrichment_failed(
+                    entity,
+                    code="no_provider_match",
+                    evidence=f"No se encontraron coincidencias para '{query}' en las fuentes de enriquecimiento disponibles.",
+                    provider_attempts=provider_attempts,
+                )
 
     except (ValueError, KeyError, AttributeError) as e:
         # Domain / data errors — mark failed, log details
         logger.error(f"Data error enriching record ID {entity.id}: {e}")
-        entity.enrichment_status = "failed"
+        _set_enrichment_failed(
+            entity,
+            code="data_error",
+            evidence=f"Error de datos durante el enriquecimiento: {e}",
+            provider_attempts=provider_attempts,
+            exception_type=type(e).__name__,
+        )
     except Exception as e:
         # Unexpected errors — mark failed but log at WARNING so they're visible
         logger.warning(f"Unexpected error enriching record ID {entity.id}: {type(e).__name__}: {e}")
-        entity.enrichment_status = "failed"
+        _set_enrichment_failed(
+            entity,
+            code="unexpected_error",
+            evidence=f"Error inesperado durante el enriquecimiento: {type(e).__name__}: {e}",
+            provider_attempts=provider_attempts,
+            exception_type=type(e).__name__,
+        )
 
     db.commit()
     return entity
@@ -325,5 +421,6 @@ def trigger_enrichment_bulk(
     entities = entities.offset(skip).limit(limit).all()
     for entity in entities:
         entity.enrichment_status = "pending"
+        _clear_enrichment_failure(entity)
     db.commit()
     return len(entities)

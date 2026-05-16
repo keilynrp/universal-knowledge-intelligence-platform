@@ -12,6 +12,8 @@ attributes_json = all remaining science-specific fields
 import json
 from typing import Any
 
+from backend.services.text_normalization import normalize_import_value
+
 
 def _clean_doi(doi: str | None) -> str | None:
     """Normalize DOI — strip URL prefix if present."""
@@ -38,6 +40,7 @@ def science_record_to_entity(record: dict[str, Any]) -> dict[str, Any]:
     Convert a parsed BibTeX/RIS record dict to a RawEntity kwargs dict.
     Always sets domain='science'.
     """
+    record = normalize_import_value(record)
     title   = record.get("title") or ""
     doi     = _clean_doi(record.get("doi"))
     authors = record.get("authors")

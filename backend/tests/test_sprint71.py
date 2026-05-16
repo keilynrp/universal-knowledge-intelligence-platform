@@ -278,6 +278,24 @@ class TestUploadWithDomain:
         assert resp.status_code == 201
         assert resp.json()["domain"] == "default"
 
+    def test_upload_normalizes_imported_html_before_persisting(self, client, editor_headers, db_session):
+        from backend import models
+
+        buf = _csv_file([{
+            "primary_label": "The Astropy Project<sup>*</sup>",
+            "Notes": "<p>Open &amp; reusable</p>",
+        }])
+        resp = client.post(
+            "/upload",
+            files={"file": ("html.csv", buf, "text/csv")},
+            headers=editor_headers,
+        )
+        assert resp.status_code == 201, resp.text
+
+        entity = db_session.query(models.RawEntity).filter_by(primary_label="The Astropy Project").one()
+        normalized = json.loads(entity.normalized_json)
+        assert normalized["Notes"] == "Open & reusable"
+
     def test_bibtex_upload_with_domain(self, client, editor_headers):
         resp = client.post(
             "/upload",

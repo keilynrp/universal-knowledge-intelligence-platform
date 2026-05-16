@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from backend.parsers.science_mapper import science_record_to_entity
+from backend.services.text_normalization import normalize_import_value
 
 
 @dataclass(slots=True)
@@ -64,7 +65,8 @@ class CanonicalPublication:
             "citation_count": self.citation_count,
             "reference_count": self.reference_count,
         }
-        entity = science_record_to_entity({**self.raw_record, **{k: v for k, v in record.items() if v is not None}})
+        normalized_raw_record = normalize_import_value(self.raw_record)
+        entity = science_record_to_entity({**normalized_raw_record, **{k: v for k, v in record.items() if v is not None}})
         entity["domain"] = domain
         entity["enrichment_source"] = self.provider
         if self.doi:
@@ -79,7 +81,7 @@ class CanonicalPublication:
                 "canonical_authors": [asdict(author) for author in self.authors],
                 "canonical_affiliations": [asdict(affiliation) for affiliation in self.affiliations],
                 "canonical_identifiers": [asdict(identifier) for identifier in self.identifiers],
-                "raw_record": self.raw_record,
+                "raw_record": normalized_raw_record,
             }
         )
         entity["attributes_json"] = json.dumps(attrs, ensure_ascii=False)

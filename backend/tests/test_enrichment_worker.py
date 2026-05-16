@@ -2,6 +2,8 @@
 Tests for backend/enrichment_worker.py — atomic claim logic,
 stale record reset, and error handling.
 """
+import json
+
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -89,6 +91,9 @@ def test_enrich_marks_failed_on_empty_name(db_session):
 
     result = enrich_single_record(db_session, entity)
     assert result.enrichment_status == "failed"
+    failure = json.loads(result.attributes_json)["enrichment_failure"]
+    assert failure["code"] == "missing_title"
+    assert failure["recommendations"]
 
 
 def test_enrich_marks_failed_when_all_adapters_return_nothing(db_session):
@@ -106,6 +111,10 @@ def test_enrich_marks_failed_when_all_adapters_return_nothing(db_session):
         result = enrich_single_record(db_session, entity)
 
     assert result.enrichment_status == "failed"
+    failure = json.loads(result.attributes_json)["enrichment_failure"]
+    assert failure["code"] == "no_provider_match"
+    assert "OpenAlex" in failure["provider_attempts"]
+    assert "Some Unknown Entity" in failure["evidence"]
 
 
 def test_enrich_skips_scholar_when_disabled(db_session):
@@ -145,6 +154,7 @@ def test_enrich_marks_completed_on_openalex_success(db_session):
     assert result.enrichment_doi == "10.1234/test"
     assert result.enrichment_citation_count == 42
     assert "Biology" in result.enrichment_concepts
+    assert "enrichment_failure" not in json.loads(result.attributes_json or "{}")
 
 
 def test_enrich_marks_failed_on_unexpected_exception(db_session):
@@ -157,6 +167,9 @@ def test_enrich_marks_failed_on_unexpected_exception(db_session):
             result = enrich_single_record(db_session, entity)
 
     assert result.enrichment_status == "failed"
+    failure = json.loads(result.attributes_json)["enrichment_failure"]
+    assert failure["code"] == "unexpected_error"
+    assert failure["exception_type"] == "RuntimeError"
 
 
 # ── trigger_enrichment_bulk ──────────────────────────────────────────────────
@@ -164,8 +177,10 @@ def test_enrich_marks_failed_on_unexpected_exception(db_session):
 def test_trigger_bulk_marks_none_and_failed_as_pending(db_session):
     e_none = make_entity(db_session, "E1", status="none")
     e_fail = make_entity(db_session, "E2", status="failed")
+    e_fail.attributes_json = json.dumps({"enrichment_failure": {"code": "no_provider_match"}})
     e_done = make_entity(db_session, "E3", status="completed")
     e_proc = make_entity(db_session, "E4", status="processing")
+    db_session.commit()
 
     count = trigger_enrichment_bulk(db_session)
 
@@ -176,6 +191,7 @@ def test_trigger_bulk_marks_none_and_failed_as_pending(db_session):
     db_session.refresh(e_proc)
     assert e_none.enrichment_status == "pending"
     assert e_fail.enrichment_status == "pending"
+    assert "enrichment_failure" not in json.loads(e_fail.attributes_json or "{}")
     assert e_done.enrichment_status == "completed"  # untouched
     assert e_proc.enrichment_status == "processing"  # untouched
 

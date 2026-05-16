@@ -35,6 +35,7 @@ from backend.routers.column_maps import COLUMN_MAPPING, EXPORT_COLUMN_MAPPING
 from backend.routers.deps import _audit, _dispatch_webhook, _get_active_integration
 from backend.services.graph_materializer import materialize_scientific_import_graph
 from backend.services import engine_bridge
+from backend.services.text_normalization import normalize_import_value
 from backend.tenant_access import persisted_org_id, resolve_request_org_id, scope_query_to_org
 
 logger = logging.getLogger(__name__)
@@ -743,6 +744,7 @@ async def upload_file(
         virtual_field_data: dict = {}
 
         for k, val in row.items():
+            val = normalize_import_value(val)
             is_nan = False
             if type(val) is float and math.isnan(val):
                 is_nan = True
@@ -769,11 +771,11 @@ async def upload_file(
             elif mapped_field in _VIRTUAL_MODEL_FIELDS:
                 _record_virtual_field(virtual_field_data, mapped_field, val)
             elif mapped_field:
-                row_data[mapped_field] = str(val) if val is not None else None
+                row_data[mapped_field] = str(normalize_import_value(val)) if val is not None else None
             elif sk in _VIRTUAL_MODEL_FIELDS:
                 _record_virtual_field(virtual_field_data, sk, val)
             elif sk in valid_model_keys:
-                row_data[sk] = str(val) if val is not None else None
+                row_data[sk] = str(normalize_import_value(val)) if val is not None else None
             else:
                 unmatched_data[sk] = val
 

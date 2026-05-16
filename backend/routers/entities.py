@@ -494,13 +494,16 @@ def enrich_bulk_by_ids(
 ):
     """Queue a specific list of entities for background enrichment."""
     org_id = resolve_request_org_id(db, current_user)
-    updated = (
+    entities = (
         scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
         .filter(models.RawEntity.id.in_(payload.ids))
-        .update({"enrichment_status": "pending"}, synchronize_session=False)
+        .all()
     )
+    for entity in entities:
+        entity.enrichment_status = "pending"
+        enrichment_worker.clear_enrichment_failure(entity)
     db.commit()
-    return {"queued": updated}
+    return {"queued": len(entities)}
 
 
 @router.get("/enrich/stats")
