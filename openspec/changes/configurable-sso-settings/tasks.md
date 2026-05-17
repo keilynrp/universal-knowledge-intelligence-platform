@@ -18,6 +18,6 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Run backend tests for SSO settings.
+- [x] 4.1 Run backend tests for SSO settings.
 - [x] 4.2 Run frontend build.
 - [x] 4.3 Rebuild/restart frontend/backend containers.

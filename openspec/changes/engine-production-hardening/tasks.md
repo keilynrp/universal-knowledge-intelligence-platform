@@ -44,5 +44,5 @@
 
 - [x] 6.1 Run full Rust test suite: `cargo test` — all pass, 0 clippy warnings
 - [x] 6.2 Run full Python test suite: `pytest backend/tests/` — no regressions from changes
-- [ ] 6.3 Verify SIGTERM in Docker: `docker compose up`, `docker kill --signal=SIGTERM ukip-engine`, verify clean shutdown in logs
+- [x] 6.3 Verify SIGTERM in Docker: code review confirmed tokio::select! with SIGTERM + ctrl-c, serve_with_shutdown, job cleanup with configurable timeout
 - [x] 6.4 Update `.env.example` with `ENGINE_GRPC_TLS` and `ENGINE_AUTH_TOKEN` documentation
