@@ -625,3 +625,17 @@ def get_montecarlo_prediction(
         num_simulations=5000,
     )
     return predictions
+
+
+# ── Maintenance ───────────────────────────────────────────────────────────────
+
+
+@router.post("/entities/maintenance/normalize-text", tags=["admin"])
+def maintenance_normalize_text(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("super_admin", "admin")),
+):
+    """Run text normalization backfill (fixes mojibake + HTML artifacts). Admin only."""
+    from backend.scripts.normalize_imported_text import run as run_backfill
+    result = run_backfill(limit=None)
+    return result
