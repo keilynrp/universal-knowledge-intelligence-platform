@@ -170,19 +170,6 @@ async def lifespan(app: FastAPI):
             db.commit()
             logger.info("Bootstrap: %d built-in artifact templates seeded", len(_BUILTIN_TEMPLATES))
 
-    # ── One-time text normalization backfill (ftfy mojibake repair) ───────────
-    from backend.scripts.normalize_imported_text import run as _run_text_backfill
-    try:
-        probe = _run_text_backfill(limit=50, dry_run=True)
-        if probe["updated"] > 0:
-            result = _run_text_backfill(limit=None)
-            logger.info(
-                "Text normalization backfill: %d/%d entities repaired",
-                result["updated"], result["scanned"],
-            )
-    except Exception as exc:
-        logger.warning("Text normalization backfill skipped: %s", exc)
-
     def get_db_gen():
         while True:
             db = database.SessionLocal()
