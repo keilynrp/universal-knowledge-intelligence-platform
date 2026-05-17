@@ -39,7 +39,7 @@
 
 ## 6. Integration and Governance
 
-- [ ] 6.1 Document that attention is not quality or citation impact.
+- [x] 6.1 Document that attention is not quality or citation impact.
 - [x] 6.2 Add tenant scoping and domain filters to all endpoints.
 - [x] 6.3 Add feature flag for external attention signals.
 - [x] 6.4 Add import path for customer-provided external attention observations.

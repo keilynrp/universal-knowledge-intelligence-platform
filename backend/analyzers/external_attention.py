@@ -1,3 +1,14 @@
+"""
+External Attention Score Analyzer.
+
+IMPORTANT: The attention score measures *visibility* across non-academic sources
+(news, policy documents, Wikipedia, blogs, repositories, social media). It is
+NOT a quality indicator and NOT a citation-impact metric. A high attention score
+means the entity is being discussed externally — it does not imply the underlying
+research is good, bad, impactful, or validated.
+
+Use this signal alongside quality and enrichment scores, never as a replacement.
+"""
 from __future__ import annotations
 
 import json
