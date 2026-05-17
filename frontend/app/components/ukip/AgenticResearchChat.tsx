@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { useLanguage } from "../../contexts/LanguageContext";
 
 type ChatMode = "auto" | "rag" | "nlq" | "hybrid";
 
@@ -44,9 +45,10 @@ export default function AgenticResearchChat({
   provider,
   portalSlug,
   entityId,
-  title = "Analista conversacional UKIP",
+  title,
   compact = false,
 }: AgenticResearchChatProps) {
+  const { t } = useLanguage();
   const [question, setQuestion] = useState(starterPrompts[0]);
   const [mode, setMode] = useState<ChatMode>("auto");
   const [useTools, setUseTools] = useState(true);
@@ -56,13 +58,13 @@ export default function AgenticResearchChat({
   const [response, setResponse] = useState<ChatResponse | null>(null);
 
   const scopeLabel = useMemo(() => {
-    const parts = [`Dominio ${domainId}`];
-    if (importBatchId) parts.push(`Ingesta #${importBatchId}`);
-    if (provider) parts.push(`Proveedor ${provider}`);
-    if (portalSlug) parts.push(`Portal ${portalSlug}`);
-    if (entityId) parts.push(`Registro #${entityId}`);
+    const parts = [`${t('agentic_chat.scope_domain')} ${domainId}`];
+    if (importBatchId) parts.push(`${t('agentic_chat.scope_ingest')} #${importBatchId}`);
+    if (provider) parts.push(`${t('agentic_chat.scope_provider')} ${provider}`);
+    if (portalSlug) parts.push(`${t('agentic_chat.scope_portal')} ${portalSlug}`);
+    if (entityId) parts.push(`${t('agentic_chat.scope_record')} #${entityId}`);
     return parts.join(" · ");
-  }, [domainId, entityId, importBatchId, portalSlug, provider]);
+  }, [domainId, entityId, importBatchId, portalSlug, provider, t]);
 
   async function submit(event?: FormEvent) {
     event?.preventDefault();
@@ -105,7 +107,7 @@ export default function AgenticResearchChat({
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <p className="ukip-kicker">NLQ + RAG + tools</p>
-              <h3 className="mt-1 text-lg font-bold text-[var(--ukip-text-strong)]">{title}</h3>
+              <h3 className="mt-1 text-lg font-bold text-[var(--ukip-text-strong)]">{title || t('agentic_chat.title')}</h3>
               <p className="mt-2 text-sm text-[var(--ukip-muted)]">{scopeLabel}</p>
             </div>
             <span className="w-fit rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-200">
@@ -127,18 +129,18 @@ export default function AgenticResearchChat({
                   onChange={(event) => setMode(event.target.value as ChatMode)}
                   className="rounded-full border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-3 py-2 font-semibold text-[var(--ukip-text)] outline-none"
                 >
-                  <option value="auto">Auto</option>
-                  <option value="hybrid">Hybrid</option>
+                  <option value="auto">{t('agentic_chat.mode_auto')}</option>
+                  <option value="hybrid">{t('agentic_chat.mode_hybrid')}</option>
                   <option value="rag">RAG</option>
                   <option value="nlq">NLQ</option>
                 </select>
                 <label className="inline-flex items-center gap-2 rounded-full border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-3 py-2 font-semibold text-[var(--ukip-text)]">
                   <input type="checkbox" checked={useTools} onChange={(event) => setUseTools(event.target.checked)} />
-                  Tools
+                  {t('agentic_chat.tools')}
                 </label>
                 <label className="inline-flex items-center gap-2 rounded-full border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-3 py-2 font-semibold text-[var(--ukip-text)]">
                   <input type="checkbox" checked={persistTrace} onChange={(event) => setPersistTrace(event.target.checked)} />
-                  Guardar traza
+                  {t('agentic_chat.persist_trace')}
                 </label>
               </div>
               <button
@@ -146,7 +148,7 @@ export default function AgenticResearchChat({
                 disabled={loading}
                 className="inline-flex items-center justify-center rounded-2xl bg-violet-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {loading ? "Analizando..." : "Preguntar al portafolio"}
+                {loading ? t('agentic_chat.analyzing') : t('agentic_chat.ask_portfolio')}
               </button>
             </div>
           </form>
@@ -168,7 +170,7 @@ export default function AgenticResearchChat({
         </div>
 
         <div className="border-t border-[var(--ukip-border)] bg-[var(--ukip-surface)] p-5 md:p-6 lg:border-l lg:border-t-0">
-          <p className="ukip-kicker">Respuesta trazable</p>
+          <p className="ukip-kicker">{t('agentic_chat.traceable_response')}</p>
           {error && (
             <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200">
               {error}
@@ -176,7 +178,7 @@ export default function AgenticResearchChat({
           )}
           {!response && !error && (
             <div className="mt-4 rounded-2xl border border-dashed border-[var(--ukip-border)] p-5 text-sm text-[var(--ukip-muted)]">
-              Haz una pregunta para generar una lectura conectada al catalogo, NLQ, RAG y herramientas del sistema.
+              {t('agentic_chat.empty_state')}
             </div>
           )}
           {response && (
@@ -188,12 +190,12 @@ export default function AgenticResearchChat({
               </div>
               {response.trace_id && (
                 <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
-                  Traza guardada #{response.trace_id}. Puede reutilizarse en brief/reportes.
+                  {t('agentic_chat.trace_saved')} #{response.trace_id}
                 </p>
               )}
               {(response.trace?.tools_used?.length ?? 0) > 0 && (
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--ukip-muted)]">Herramientas</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--ukip-muted)]">{t('agentic_chat.tools')}</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {response.trace?.tools_used?.map((tool) => (
                       <span key={tool} className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-bold text-violet-700 dark:bg-violet-500/15 dark:text-violet-200">
@@ -205,11 +207,11 @@ export default function AgenticResearchChat({
               )}
               {(response.sources?.length ?? 0) > 0 && (
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--ukip-muted)]">Fuentes</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--ukip-muted)]">{t('rag.sources')}</p>
                   <ul className="mt-2 space-y-2">
                     {response.sources?.slice(0, 4).map((source, index) => (
                       <li key={`${source.entity_id ?? index}-${source.label}`} className="rounded-xl border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-3 py-2 text-xs text-[var(--ukip-muted)]">
-                        <span className="font-bold text-[var(--ukip-text-strong)]">{source.label || `Fuente ${index + 1}`}</span>
+                        <span className="font-bold text-[var(--ukip-text-strong)]">{source.label || `${t('agentic_chat.source')} ${index + 1}`}</span>
                         {source.entity_id ? ` · #${source.entity_id}` : ""}
                       </li>
                     ))}

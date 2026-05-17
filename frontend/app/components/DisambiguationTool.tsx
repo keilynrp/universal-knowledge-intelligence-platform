@@ -35,36 +35,8 @@ interface AuthorityRecord {
     status: string;
 }
 
-const ALGORITHMS = [
-    {
-        value: "token_sort",
-        label: "Token Sort",
-        tip: "Agrupa variantes por orden de palabras: 'Smith John' ≈ 'John Smith'. Ideal para nombres de personas y marcas.",
-    },
-    {
-        value: "fingerprint",
-        label: "Fingerprint",
-        tip: "Normaliza puntuación y mayúsculas antes de comparar: 'Apple, Inc.' ≈ 'inc apple'. Ideal para datos inconsistentes.",
-    },
-    {
-        value: "ngram",
-        label: "N-gram",
-        tip: "Similitud por bigramas de caracteres (Jaccard). Robusto ante errores tipográficos y OCR: 'colour' ≈ 'color'.",
-    },
-    {
-        value: "phonetic",
-        label: "Fonético",
-        tip: "Agrupa por sonido (Cologne + Metaphone): 'Müller' ≈ 'Mueller'. Ideal para nombres europeos con grafías distintas.",
-    },
-];
-
-const ENTITY_TYPES = [
-    { value: "general",     label: "General" },
-    { value: "organization", label: "Organization / Brand" },
-    { value: "person",      label: "Person / Author" },
-    { value: "institution", label: "Institution" },
-    { value: "concept",     label: "Concept / Category" },
-];
+const ALGORITHM_KEYS = ["token_sort", "fingerprint", "ngram", "phonetic"] as const;
+const ENTITY_TYPE_KEYS = ["general", "organization", "person", "institution", "concept"] as const;
 
 export default function DisambiguationTool() {
     const { t } = useLanguage();
@@ -143,7 +115,7 @@ export default function DisambiguationTool() {
             setSearchedField(fieldLabel);
             setHasSearched(true);
         } catch {
-            toast("Error analyzing data", "error");
+            toast(t('disambiguation.error_analyzing'), "error");
         } finally {
             setLoading(false);
         }
@@ -151,7 +123,7 @@ export default function DisambiguationTool() {
 
     async function resolveWithAI(idx: number, variations: string[]) {
         if (!canManageAuthority) {
-            toast("Esta accion requiere permisos de editor o superiores", "warning");
+            toast(t('disambiguation.editor_required'), "warning");
             return;
         }
         setResolvingIdx(idx);
@@ -173,7 +145,7 @@ export default function DisambiguationTool() {
 
     async function acceptResolution(idx: number, canonical_value: string, variations: string[]) {
         if (!canManageAuthority) {
-            toast("Esta accion requiere permisos de editor o superiores", "warning");
+            toast(t('disambiguation.editor_required'), "warning");
             return;
         }
         setProcessingRule(idx);
@@ -196,7 +168,7 @@ export default function DisambiguationTool() {
 
     async function resolveWithAuthority(idx: number, mainValue: string) {
         if (!canManageAuthority) {
-            toast("Resolve with authority requiere permisos de editor o superiores", "warning");
+            toast(t('disambiguation.editor_required'), "warning");
             return;
         }
         setAuthorityLoading(prev => ({ ...prev, [idx]: true }));
@@ -222,7 +194,7 @@ export default function DisambiguationTool() {
 
     async function confirmCandidate(groupIdx: number, recordId: number) {
         if (!canManageAuthority) {
-            toast("Esta accion requiere permisos de editor o superiores", "warning");
+            toast(t('disambiguation.editor_required'), "warning");
             return;
         }
         setAuthorityAction(prev => ({ ...prev, [groupIdx]: recordId }));
@@ -238,7 +210,7 @@ export default function DisambiguationTool() {
                 ...prev,
                 [groupIdx]: (prev[groupIdx] || []).map(r => r.id === recordId ? { ...r, status: updated.status } : r),
             }));
-            toast("Candidate confirmed", "success");
+            toast(t('disambiguation.candidate_confirmed'), "success");
         } catch (error) {
             toast(error instanceof Error ? error.message : "Error confirming candidate", "error");
         } finally {
@@ -248,7 +220,7 @@ export default function DisambiguationTool() {
 
     async function rejectCandidate(groupIdx: number, recordId: number) {
         if (!canManageAuthority) {
-            toast("Esta accion requiere permisos de editor o superiores", "warning");
+            toast(t('disambiguation.editor_required'), "warning");
             return;
         }
         setAuthorityAction(prev => ({ ...prev, [groupIdx]: recordId }));
@@ -261,7 +233,7 @@ export default function DisambiguationTool() {
                 ...prev,
                 [groupIdx]: (prev[groupIdx] || []).map(r => r.id === recordId ? { ...r, status: "rejected" } : r),
             }));
-            toast("Candidate rejected", "warning");
+            toast(t('disambiguation.candidate_rejected'), "warning");
         } catch (error) {
             toast(error instanceof Error ? error.message : "Error rejecting candidate", "error");
         } finally {
@@ -278,7 +250,7 @@ export default function DisambiguationTool() {
                 <div className="flex flex-wrap items-end gap-4">
                     <div className="flex-1 min-w-[200px]">
                         <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Knowledge Attribute to Analyze
+                            {t('disambiguation.attribute_label')}
                         </label>
                         <select
                             value={field}
@@ -292,27 +264,27 @@ export default function DisambiguationTool() {
                                         <option key={attr.name} value={attr.name}>{attr.label}</option>
                                     ))
                             ) : (
-                                <option value="">Loading attributes...</option>
+                                <option value="">{t('disambiguation.loading_attributes')}</option>
                             )}
                         </select>
                     </div>
                     <div className="min-w-[180px]">
                         <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Entity Type (for Authority)
+                            {t('disambiguation.entity_type_label')}
                         </label>
                         <select
                             value={entityType}
                             onChange={(e) => setEntityType(e.target.value)}
                             className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
                         >
-                            {ENTITY_TYPES.map(et => (
-                                <option key={et.value} value={et.value}>{et.label}</option>
+                            {ENTITY_TYPE_KEYS.map(key => (
+                                <option key={key} value={key}>{t(`disambiguation.entity_type.${key}`)}</option>
                             ))}
                         </select>
                     </div>
                     <div className="min-w-[180px]">
                         <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Threshold: {threshold}%
+                            {t('disambiguation.threshold_label')}: {threshold}%
                         </label>
                         <input
                             type="range"
@@ -334,38 +306,38 @@ export default function DisambiguationTool() {
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                                 </svg>
-                                Parsing context...
+                                {t('disambiguation.parsing')}
                             </>
                         ) : (
                             <>
                                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                                 </svg>
-                                Find Inconsistencies
+                                {t('disambiguation.find_inconsistencies')}
                             </>
                         )}
                     </button>
                 </div>
                 {/* Algorithm selector */}
                 <div className="mt-4 flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Algoritmo</label>
+                    <label className="text-xs font-medium text-gray-700 dark:text-gray-300">{t('disambiguation.algorithm_label')}</label>
                     <div className="flex flex-wrap gap-2">
-                        {ALGORITHMS.map((alg) => (
-                            <div key={alg.value} className="relative group">
+                        {ALGORITHM_KEYS.map((key) => (
+                            <div key={key} className="relative group">
                                 <button
                                     type="button"
-                                    onClick={() => setAlgorithm(alg.value)}
+                                    onClick={() => setAlgorithm(key)}
                                     className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                                        algorithm === alg.value
+                                        algorithm === key
                                             ? "bg-indigo-600 text-white border-indigo-600"
                                             : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-indigo-400"
                                     }`}
                                 >
-                                    {alg.label}
+                                    {t(`disambiguation.algo.${key}`)}
                                 </button>
                                 {/* Tooltip */}
                                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 rounded-lg bg-gray-900 dark:bg-gray-700 px-3 py-2 text-[11px] text-white shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-                                    {alg.tip}
+                                    {t(`disambiguation.algo.${key}_tip`)}
                                     <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700" />
                                 </div>
                             </div>
@@ -373,12 +345,12 @@ export default function DisambiguationTool() {
                     </div>
                     {algorithm === "fingerprint" && (
                         <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">
-                            Fingerprint usa coincidencia exacta — el slider de threshold no aplica.
+                            {t('disambiguation.fingerprint_note')}
                         </p>
                     )}
                     {algorithm === "phonetic" && (
                         <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">
-                            Fonético usa código fonético exacto — el slider de threshold no aplica.
+                            {t('disambiguation.phonetic_note')}
                         </p>
                     )}
                 </div>
@@ -388,11 +360,11 @@ export default function DisambiguationTool() {
             {groups.length > 0 && (
                 <div className="flex gap-4">
                     <div className="flex-1 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Resolved Groups</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('disambiguation.resolved_groups')}</p>
                         <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">{totalGroups}</p>
                     </div>
                     <div className="flex-1 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Attribute</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('disambiguation.attribute')}</p>
                         <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">{fieldLabel}</p>
                     </div>
                     <div className="flex-1 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
@@ -445,8 +417,8 @@ export default function DisambiguationTool() {
                                 <svg className="mb-3 h-12 w-12 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                                 </svg>
-                                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Ready for Ontological Analysis</p>
-                                <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Pick an entity attribute to find naming inconsistencies in the repository</p>
+                                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('disambiguation.ready_title')}</p>
+                                <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{t('disambiguation.ready_hint')}</p>
                             </>
                         )}
                     </div>

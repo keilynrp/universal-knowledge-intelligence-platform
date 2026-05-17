@@ -80,6 +80,8 @@ interface UserFormProps {
 }
 
 function UserFormSlider({ initial, onClose, onSaved, toast }: UserFormProps) {
+  const { t } = useLanguage();
+  const tr = (key: string, fallback: string) => { const v = t(key); return v === key ? fallback : v; };
   const isEdit = !!initial?.id;
   const [form, setForm] = useState({
     username: initial?.username ?? "",
@@ -173,7 +175,7 @@ function UserFormSlider({ initial, onClose, onSaved, toast }: UserFormProps) {
             )}
 
             <div>
-              <label htmlFor="user-email" className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
+              <label htmlFor="user-email" className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{tr("page.settings_users.email", "Email")}</label>
               <input
                 id="user-email"
                 type="email"
@@ -187,8 +189,8 @@ function UserFormSlider({ initial, onClose, onSaved, toast }: UserFormProps) {
 
             <div>
               <label htmlFor="user-password" className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                {isEdit ? "New password" : "Password"}{" "}
-                <span className="font-normal text-gray-400">{isEdit ? "(leave blank to keep)" : "*"}</span>
+                {isEdit ? tr("page.settings_users.new_password", "New password") : tr("page.settings_users.password", "Password")}{" "}
+                <span className="font-normal text-gray-400">{isEdit ? tr("page.settings_users.password_keep_hint", "(leave blank to keep)") : "*"}</span>
               </label>
               <input
                 id="user-password"
@@ -205,7 +207,7 @@ function UserFormSlider({ initial, onClose, onSaved, toast }: UserFormProps) {
 
             <div>
               <label htmlFor="user-role" className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Role <span className="text-red-500" aria-label="required">*</span>
+                {tr("page.settings_users.role_label", "Role")} <span className="text-red-500" aria-label="required">*</span>
               </label>
               <select
                 id="user-role"
@@ -213,10 +215,10 @@ function UserFormSlider({ initial, onClose, onSaved, toast }: UserFormProps) {
                 value={form.role}
                 onChange={e => setForm(f => ({ ...f, role: e.target.value as UserRole }))}
               >
-                <option value="viewer">Viewer — read-only access</option>
-                <option value="editor">Editor — can create and edit data</option>
-                <option value="admin">Admin — full data + config access</option>
-                <option value="super_admin">Super Admin — full platform access</option>
+                <option value="viewer">{tr("page.settings_users.role.viewer_desc", "Viewer — read-only access")}</option>
+                <option value="editor">{tr("page.settings_users.role.editor_desc", "Editor — can create and edit data")}</option>
+                <option value="admin">{tr("page.settings_users.role.admin_desc", "Admin — full data + config access")}</option>
+                <option value="super_admin">{tr("page.settings_users.role.super_admin_desc", "Super Admin — full platform access")}</option>
               </select>
             </div>
 
@@ -440,10 +442,10 @@ export default function UsersManagementPage() {
           onChange={e => setRoleFilter(e.target.value as UserRole | "")}
         >
           <option value="">{tr("page.settings_users.all_roles", "All roles")}</option>
-          <option value="super_admin">Super Admin</option>
-          <option value="admin">Admin</option>
-          <option value="editor">Editor</option>
-          <option value="viewer">Viewer</option>
+          <option value="super_admin">{tr("page.settings_users.role.super_admin", "Super Admin")}</option>
+          <option value="admin">{tr("page.settings_users.role.admin", "Admin")}</option>
+          <option value="editor">{tr("page.settings_users.role.editor", "Editor")}</option>
+          <option value="viewer">{tr("page.settings_users.role.viewer", "Viewer")}</option>
         </select>
 
         {/* Status filter */}
@@ -539,10 +541,10 @@ export default function UsersManagementPage() {
                           aria-label={`Change role for ${u.username}`}
                           className="h-7 rounded-lg border border-gray-200 bg-white px-2 text-xs font-medium text-gray-700 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
                         >
-                          <option value="viewer">Viewer</option>
-                          <option value="editor">Editor</option>
-                          <option value="admin">Admin</option>
-                          <option value="super_admin">Super Admin</option>
+                          <option value="viewer">{tr("page.settings_users.role.viewer", "Viewer")}</option>
+                          <option value="editor">{tr("page.settings_users.role.editor", "Editor")}</option>
+                          <option value="admin">{tr("page.settings_users.role.admin", "Admin")}</option>
+                          <option value="super_admin">{tr("page.settings_users.role.super_admin", "Super Admin")}</option>
                         </select>
                       )}
                     </td>

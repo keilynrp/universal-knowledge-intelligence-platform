@@ -163,14 +163,14 @@ export default function RAGChatInterface() {
                 <div className="flex items-center gap-2.5">
                     <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 text-lg dark:bg-indigo-500/20">🌌</span>
                     <div>
-                        <p className="text-sm font-bold text-gray-900 dark:text-white">Semantic AI Assistant</p>
-                        <p className="text-xs text-gray-500">UKIP Semantic RAG — Grounded by repository</p>
+                        <p className="text-sm font-bold text-gray-900 dark:text-white">{t('rag.assistant_title')}</p>
+                        <p className="text-xs text-gray-500">{t('rag.assistant_subtitle')}</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
                     {indexStats !== null && (
                         <Badge variant={indexStats.total_indexed > 0 ? "success" : "warning"} dot>
-                            {indexStats.total_indexed > 0 ? `${indexStats.total_indexed} entities indexed` : "Not indexed yet"}
+                            {indexStats.total_indexed > 0 ? `${indexStats.total_indexed} ${t('rag.entities_indexed')}` : t('rag.not_indexed')}
                         </Badge>
                     )}
                     <button
@@ -212,7 +212,7 @@ export default function RAGChatInterface() {
                                             <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-indigo-400 [animation-delay:150ms]" />
                                             <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-indigo-400 [animation-delay:300ms]" />
                                         </div>
-                                        <span className="text-xs text-gray-500">Analyzing knowledge & generating response...</span>
+                                        <span className="text-xs text-gray-500">{t('rag.generating')}</span>
                                     </div>
                                 ) : (
                                     <p className="whitespace-pre-wrap">{msg.content}</p>
@@ -222,7 +222,7 @@ export default function RAGChatInterface() {
                             {/* Source pills */}
                             {msg.sources && msg.sources.length > 0 && (
                                 <div className="flex flex-wrap gap-1.5">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Sources:</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{t('rag.sources')}:</span>
                                     {msg.sources.map((src, j) => (
                                         <span key={j} className="rounded-full border border-indigo-100 bg-white px-2 py-0.5 text-[10px] font-medium text-indigo-600 dark:border-indigo-500/20 dark:bg-gray-800 dark:text-indigo-400">
                                             {formatSourceLabel(src)}
@@ -313,7 +313,7 @@ export default function RAGChatInterface() {
                     )}
                 </div>
                 <form onSubmit={handleSend} className="flex gap-2">
-                    <label htmlFor="rag-input" className="sr-only">Ask a question about your knowledge hub</label>
+                    <label htmlFor="rag-input" className="sr-only">{t('rag.input_label')}</label>
                     <input
                         id="rag-input"
                         type="text"
