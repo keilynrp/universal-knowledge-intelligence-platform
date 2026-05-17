@@ -18,7 +18,7 @@
 ## 3. Priority 3 - Attention Timeline
 
 - [x] 3.1 Aggregate observations by month by default.
-- [ ] 3.2 Support optional day granularity for short windows.
+- [x] 3.2 Support optional day granularity for short windows.
 - [x] 3.3 Add spike metadata to timeline buckets.
 - [x] 3.4 Render a compact timeline in entity detail.
 - [x] 3.5 Add tests for empty ranges and period aggregation.
@@ -40,7 +40,7 @@
 ## 6. Integration and Governance
 
 - [ ] 6.1 Document that attention is not quality or citation impact.
-- [ ] 6.2 Add tenant scoping and domain filters to all endpoints.
-- [ ] 6.3 Add feature flag for external attention signals.
+- [x] 6.2 Add tenant scoping and domain filters to all endpoints.
+- [x] 6.3 Add feature flag for external attention signals.
 - [x] 6.4 Add import path for customer-provided external attention observations.
 - [ ] 6.5 Revisit Rust engine delegation only after Python scoring is validated.

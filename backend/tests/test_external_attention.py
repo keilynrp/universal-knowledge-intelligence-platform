@@ -177,3 +177,58 @@ def test_compute_attention_summary_returns_new_attention_alert():
 
     assert payload["alerts"][0]["type"] == "new_attention"
     assert payload["alerts"][0]["period"] == "2026-05"
+
+
+def test_compute_attention_summary_day_granularity():
+    attrs = {
+        "external_attention_observations": [
+            {"source_type": "news", "mention_count": 1, "last_seen_at": "2026-03-10T00:00:00Z"},
+            {"source_type": "news", "mention_count": 2, "last_seen_at": "2026-03-18T00:00:00Z"},
+            {"source_type": "policy", "mention_count": 3, "last_seen_at": "2026-03-18T12:00:00Z"},
+        ]
+    }
+
+    payload = compute_attention_summary(json.dumps(attrs), granularity="day")
+
+    periods = [bucket["period"] for bucket in payload["timeline"]]
+    assert "2026-03-10" in periods
+    assert "2026-03-18" in periods
+    assert len(periods) == 2  # two distinct days
+
+
+def test_entity_attention_endpoint_day_granularity(client, session_factory, auth_headers):
+    attrs = {
+        "external_attention_observations": [
+            {"source_type": "news", "mention_count": 1, "last_seen_at": "2026-05-01T00:00:00Z"},
+            {"source_type": "news", "mention_count": 2, "last_seen_at": "2026-05-03T00:00:00Z"},
+        ]
+    }
+    with session_factory() as db:
+        entity = models.RawEntity(
+            domain="science",
+            primary_label="Day Granularity Test",
+            attributes_json=json.dumps(attrs),
+        )
+        db.add(entity)
+        db.commit()
+        entity_id = entity.id
+
+    response = client.get(f"/entities/{entity_id}/attention?granularity=day", headers=auth_headers)
+
+    assert response.status_code == 200
+    periods = [b["period"] for b in response.json()["timeline"]]
+    assert "2026-05-01" in periods
+    assert "2026-05-03" in periods
+
+
+def test_entity_attention_endpoint_feature_flag_disabled(client, session_factory, auth_headers, monkeypatch):
+    monkeypatch.setenv("UKIP_ENABLE_EXTERNAL_ATTENTION", "0")
+    with session_factory() as db:
+        entity = models.RawEntity(domain="science", primary_label="Flag Test")
+        db.add(entity)
+        db.commit()
+        entity_id = entity.id
+
+    response = client.get(f"/entities/{entity_id}/attention", headers=auth_headers)
+    assert response.status_code == 404
+    assert "disabled" in response.json()["detail"]

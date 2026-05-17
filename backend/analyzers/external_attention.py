@@ -33,7 +33,7 @@ def attention_category(score: int) -> str:
     return "very_high"
 
 
-def compute_attention_summary(attributes_json: str | None) -> dict[str, Any]:
+def compute_attention_summary(attributes_json: str | None, granularity: str = "month") -> dict[str, Any]:
     observations = _extract_observations(attributes_json)
     if not observations:
         return _empty_summary()
@@ -66,7 +66,7 @@ def compute_attention_summary(attributes_json: str | None) -> dict[str, Any]:
         total_mentions += mention_count
         source_counts[source_type] = source_counts.get(source_type, 0) + mention_count
         source_weighted[source_type] = source_weighted.get(source_type, 0.0) + weighted_contribution
-        _add_timeline_observation(timeline_buckets, source_type, mention_count, weighted_contribution, last_seen)
+        _add_timeline_observation(timeline_buckets, source_type, mention_count, weighted_contribution, last_seen, granularity)
 
     if total_mentions <= 0:
         return _empty_summary()
@@ -141,10 +141,11 @@ def _add_timeline_observation(
     mentions: int,
     weighted_contribution: float,
     seen_at: datetime | None,
+    granularity: str = "month",
 ) -> None:
     if seen_at is None:
         return
-    period = seen_at.strftime("%Y-%m")
+    period = seen_at.strftime("%Y-%m-%d") if granularity == "day" else seen_at.strftime("%Y-%m")
     bucket = buckets.setdefault(period, {
         "period": period,
         "mentions": 0,

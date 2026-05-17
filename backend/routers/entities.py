@@ -24,6 +24,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+import os
+
 from backend import database, models, schemas
 from backend.analyzers.external_attention import compute_attention_summary
 from backend.analytics.montecarlo import simulate_citation_impact
@@ -262,18 +264,25 @@ def get_entity(
     return entity
 
 
+def _external_attention_enabled() -> bool:
+    return os.environ.get("UKIP_ENABLE_EXTERNAL_ATTENTION", "1").strip().lower() in {"1", "true", "yes", "on"}
+
+
 @router.get("/entities/{entity_id}/attention", tags=["entities"])
 def get_entity_attention(
     entity_id: int = Path(..., ge=1),
+    granularity: str = Query("month", pattern=r"^(month|day)$"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    if not _external_attention_enabled():
+        raise HTTPException(status_code=404, detail="External attention feature is disabled")
     org_id = resolve_request_org_id(db, current_user)
     entity = get_scoped_record(db, models.RawEntity, entity_id, org_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
 
-    payload = compute_attention_summary(entity.attributes_json)
+    payload = compute_attention_summary(entity.attributes_json, granularity=granularity)
     return {
         "scope": {
             "entity_id": entity.id,

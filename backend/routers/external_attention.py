@@ -7,6 +7,7 @@ import csv
 import io
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 
@@ -24,6 +25,11 @@ from backend.tenant_access import resolve_request_org_id, scope_query_to_org
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["external-attention"])
+
+
+def _external_attention_enabled() -> bool:
+    return os.environ.get("UKIP_ENABLE_EXTERNAL_ATTENTION", "1").strip().lower() in {"1", "true", "yes", "on"}
+
 
 _MAX_OBSERVATIONS_PER_REQUEST = 5_000
 _MAX_SNIPPET_LENGTH = 1_000
@@ -86,6 +92,8 @@ def bulk_import_observations_json(
     current_user: models.User = Depends(get_current_user),
 ):
     """Import external attention observations for multiple entities (JSON body)."""
+    if not _external_attention_enabled():
+        raise HTTPException(status_code=404, detail="External attention feature is disabled")
     if len(observations) > _MAX_OBSERVATIONS_PER_REQUEST:
         raise HTTPException(
             status_code=422,
@@ -122,6 +130,8 @@ async def bulk_import_observations_csv(
     Expected columns: entity_id, source_type, mention_count, last_seen_at, title, url, snippet
     Only entity_id and source_type are required.
     """
+    if not _external_attention_enabled():
+        raise HTTPException(status_code=404, detail="External attention feature is disabled")
     if file.content_type and file.content_type not in (
         "text/csv",
         "application/csv",
@@ -206,6 +216,8 @@ def single_entity_import(
     current_user: models.User = Depends(get_current_user),
 ):
     """Import external attention observations for a single entity."""
+    if not _external_attention_enabled():
+        raise HTTPException(status_code=404, detail="External attention feature is disabled")
     if len(observations) > 500:
         raise HTTPException(status_code=422, detail="Maximum 500 observations per entity per request.")
 
