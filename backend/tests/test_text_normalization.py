@@ -88,3 +88,16 @@ def test_backfill_normalizes_existing_entity_payloads():
     assert entity.secondary_label == "Ada & Grace"
     assert json.loads(entity.attributes_json)["journal"] == "Open & Tests"
     assert json.loads(entity.normalized_json)["note"] == "Imported"
+
+
+def test_normalize_import_text_fixes_mojibake():
+    """UTF-8 decoded as CP1252/Latin-1 should be repaired by ftfy."""
+    assert normalize_import_text("G\u00c3\u00bcnther") == "Günther"
+    assert normalize_import_text("Rub\u00c3\u00a9n") == "Rubén"
+    assert normalize_import_text("P\u00c3\u00a9rez") == "Pérez"
+
+
+def test_normalize_import_text_combined_mojibake_and_html():
+    """Mojibake + HTML artifacts fixed in one pass."""
+    raw = "G\u00c3\u00bcnther<sup>1</sup> &amp; M\u00c3\u00bcller"
+    assert normalize_import_text(raw) == "Günther & Müller"

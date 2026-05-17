@@ -42,6 +42,9 @@ itsdangerous
 # ── Prioridad 3: Telemetry & Monitoring
 sentry-sdk[fastapi]
 
+# ── Text normalization
+ftfy>=6.1
+
 # ── Engine (Rust gRPC) integration
 grpcio>=1.62.0
 grpcio-tools>=1.62.0

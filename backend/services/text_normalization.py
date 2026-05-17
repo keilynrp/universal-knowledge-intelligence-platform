@@ -7,6 +7,8 @@ import re
 import unicodedata
 from typing import Any
 
+import ftfy
+
 
 _BLOCK_TAG_RE = re.compile(r"<\s*(script|style)\b[^>]*>.*?<\s*/\s*\1\s*>", re.IGNORECASE | re.DOTALL)
 _BREAK_TAG_RE = re.compile(r"<\s*(br|/p|/div|/li)\b[^>]*>", re.IGNORECASE)
@@ -21,12 +23,16 @@ _WHITESPACE_RE = re.compile(r"\s+")
 def normalize_import_text(value: str) -> str:
     """Normalize text imported from provider HTML before storing it.
 
-    The goal is intentionally narrow: make imported labels readable in UKIP by
-    decoding HTML entities, removing inline markup, and dropping common footnote
-    markers such as ``<sup>*</sup>`` without changing the natural wording.
+    Pipeline:
+    1. Fix mojibake / encoding errors (ftfy)
+    2. Unicode NFC normalization
+    3. Decode HTML entities
+    4. Strip inline HTML and footnote markers
+    5. Collapse whitespace
     """
 
-    text = unicodedata.normalize("NFC", str(value))
+    text = ftfy.fix_text(str(value))
+    text = unicodedata.normalize("NFC", text)
     for _ in range(2):
         unescaped = html.unescape(text)
         if unescaped == text:
