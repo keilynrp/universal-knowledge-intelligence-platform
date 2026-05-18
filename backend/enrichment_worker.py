@@ -278,10 +278,12 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
             entity.enrichment_status = "completed"
             _clear_enrichment_failure(entity)
 
-            # Persist author ORCIDs when available
-            if enriched_data.author_orcids and any(enriched_data.author_orcids):
+            # Persist author names and ORCIDs from enrichment source
+            if enriched_data.authors:
                 attrs = json.loads(entity.attributes_json) if entity.attributes_json else {}
-                attrs["enrichment_author_orcids"] = enriched_data.author_orcids
+                attrs["enrichment_authors"] = enriched_data.authors
+                if enriched_data.author_orcids and any(enriched_data.author_orcids):
+                    attrs["enrichment_author_orcids"] = enriched_data.author_orcids
                 entity.attributes_json = json.dumps(attrs, ensure_ascii=False)
 
             # Extract and cache country from affiliation data

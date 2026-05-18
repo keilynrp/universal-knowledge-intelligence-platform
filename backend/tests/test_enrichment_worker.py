@@ -140,6 +140,8 @@ def test_enrich_marks_completed_on_openalex_success(db_session):
     mock_result.doi = "10.1234/test"
     mock_result.citation_count = 42
     mock_result.concepts = ["Biology", "Genetics"]
+    mock_result.authors = ["Alice Smith", "Bob Jones"]
+    mock_result.author_orcids = ["0000-0001-2345-6789", None]
 
     with (
         patch("backend.enrichment_worker.adapter_wos") as mock_wos,
@@ -154,7 +156,10 @@ def test_enrich_marks_completed_on_openalex_success(db_session):
     assert result.enrichment_doi == "10.1234/test"
     assert result.enrichment_citation_count == 42
     assert "Biology" in result.enrichment_concepts
-    assert "enrichment_failure" not in json.loads(result.attributes_json or "{}")
+    attrs = json.loads(result.attributes_json or "{}")
+    assert "enrichment_failure" not in attrs
+    assert attrs["enrichment_authors"] == ["Alice Smith", "Bob Jones"]
+    assert attrs["enrichment_author_orcids"] == ["0000-0001-2345-6789", None]
 
 
 def test_enrich_marks_failed_on_unexpected_exception(db_session):

@@ -116,11 +116,12 @@ function AuthorsWithOrcids({ authors, orcids }: { authors: string[]; orcids: (st
     );
 }
 
-function _resolveAuthorsList(attrs: Record<string, unknown>, entity: Entity): string[] {
-    const raw = attrs.authors ?? attrs.full_authors ?? entity.secondary_label;
-    if (!raw) return [];
-    if (Array.isArray(raw)) return raw.map(String);
-    if (typeof raw === "string") return raw.split(/;\s*|,\s*/).filter(Boolean);
+function _resolveAuthorsList(attrs: Record<string, unknown>): string[] {
+    // Prefer enrichment_authors (individual names from enrichment source, aligned with ORCIDs)
+    const enrichmentAuthors = attrs.enrichment_authors;
+    if (Array.isArray(enrichmentAuthors) && enrichmentAuthors.length > 0) {
+        return enrichmentAuthors.map(String);
+    }
     return [];
 }
 
@@ -273,12 +274,12 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
 
     // Pair authors with ORCIDs for rich rendering
     const enrichmentOrcids = (sourceAttributes.enrichment_author_orcids ?? []) as (string | null)[];
-    const authorsList = _resolveAuthorsList(mergedExtendedAttributes, entity);
+    const authorsList = _resolveAuthorsList(sourceAttributes);
 
     const extendedFields = sortExtendedFields(
         activeDomain?.id,
         Object.entries(mergedExtendedAttributes)
-        .filter(([key, value]) => value !== null && value !== undefined && value !== "" && key !== "enrichment_author_orcids")
+        .filter(([key, value]) => value !== null && value !== undefined && value !== "" && key !== "enrichment_author_orcids" && key !== "enrichment_authors")
         .map(([key, value]) => ({
             key,
             label: activeDomain?.attributes.find((attribute) => attribute.name === key)?.label ?? titleCaseKey(key),
