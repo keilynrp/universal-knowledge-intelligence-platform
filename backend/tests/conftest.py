@@ -285,6 +285,11 @@ _TABLES_TO_CLEAN = [
 
 def _reset_test_state(db):
     if _IS_POSTGRES:
+        # Ensure we start with a clean transaction (prior test may have left it aborted)
+        try:
+            db.rollback()
+        except Exception:
+            pass
         # PostgreSQL: use savepoints so a missing table doesn't abort the tx
         for table in _TABLES_TO_CLEAN:
             try:
@@ -292,13 +297,13 @@ def _reset_test_state(db):
                 db.execute(text(f"DELETE FROM {table}"))
                 nested.commit()
             except Exception:
-                pass  # savepoint auto-rolled-back
+                nested.rollback()
         try:
             nested = db.begin_nested()
             db.execute(text("UPDATE users SET org_id = NULL"))
             nested.commit()
         except Exception:
-            pass
+            nested.rollback()
         db.commit()
     else:
         # SQLite: all tables exist (StaticPool in-memory), no need for savepoints

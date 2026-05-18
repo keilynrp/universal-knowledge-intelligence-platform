@@ -67,7 +67,7 @@ describe("DisambiguationTool Component", () => {
 
   it("presents available clustering algorithms", async () => {
     renderTool();
-    expect(await screen.findByText(/Algoritmo/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Algorithm/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Token Sort/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Fingerprint/i })).toBeInTheDocument();
   });
