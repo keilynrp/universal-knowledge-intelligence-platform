@@ -43,4 +43,4 @@
 - [x] 6.2 Add tenant scoping and domain filters to all endpoints.
 - [x] 6.3 Add feature flag for external attention signals.
 - [x] 6.4 Add import path for customer-provided external attention observations.
-- [ ] 6.5 Revisit Rust engine delegation only after Python scoring is validated.
+- [x] 6.5 Revisit Rust engine delegation only after Python scoring is validated.
