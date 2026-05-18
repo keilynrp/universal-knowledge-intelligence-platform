@@ -83,6 +83,47 @@ function formatValue(value: unknown, emptyLabel: string): string {
     return String(value);
 }
 
+/**
+ * Renders a list of authors paired with their ORCIDs (when available).
+ * Each ORCID links to the official orcid.org profile.
+ */
+function AuthorsWithOrcids({ authors, orcids }: { authors: string[]; orcids: (string | null)[] }) {
+    return (
+        <ul className="space-y-1">
+            {authors.map((name, i) => {
+                const orcid = orcids[i] ?? null;
+                return (
+                    <li key={`${name}-${i}`} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <span className="font-medium">{name}</span>
+                        {orcid && (
+                            <a
+                                href={`https://orcid.org/${orcid}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 rounded bg-green-50 px-1.5 py-0.5 text-[11px] font-semibold text-green-700 transition hover:bg-green-100 dark:bg-green-500/10 dark:text-green-400 dark:hover:bg-green-500/20"
+                                title={`ORCID: ${orcid}`}
+                            >
+                                <svg className="h-3 w-3" viewBox="0 0 256 256" fill="currentColor">
+                                    <path d="M128 0C57.3 0 0 57.3 0 128s57.3 128 128 128 128-57.3 128-128S198.7 0 128 0zM86.3 186.2H70.9V79.1h15.4v107.1zM78.6 66.4c-5.7 0-10.3-4.6-10.3-10.3 0-5.7 4.6-10.3 10.3-10.3 5.7 0 10.3 4.6 10.3 10.3C88.9 61.8 84.3 66.4 78.6 66.4zM196.5 186.2h-15.4v-64.2c0-17.2-6.5-25.9-19.4-25.9-14.8 0-22.2 10-22.2 29.5v60.6h-15.4V79.1h15.4v14.4c0 0 0 0 0 0 6.6-11.2 17.5-17.2 31.2-17.2 22.7 0 25.8 18.5 25.8 37.7V186.2z" />
+                                </svg>
+                                {orcid}
+                            </a>
+                        )}
+                    </li>
+                );
+            })}
+        </ul>
+    );
+}
+
+function _resolveAuthorsList(attrs: Record<string, unknown>, entity: Entity): string[] {
+    const raw = attrs.authors ?? attrs.full_authors ?? entity.secondary_label;
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw.map(String);
+    if (typeof raw === "string") return raw.split(/;\s*|,\s*/).filter(Boolean);
+    return [];
+}
+
 function resolveDomainAttributeValue(
     entity: Entity,
     mergedAttributes: Record<string, unknown>,
@@ -230,10 +271,14 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
         value: entity[field.key],
     }));
 
+    // Pair authors with ORCIDs for rich rendering
+    const enrichmentOrcids = (sourceAttributes.enrichment_author_orcids ?? []) as (string | null)[];
+    const authorsList = _resolveAuthorsList(mergedExtendedAttributes, entity);
+
     const extendedFields = sortExtendedFields(
         activeDomain?.id,
         Object.entries(mergedExtendedAttributes)
-        .filter(([, value]) => value !== null && value !== undefined && value !== "")
+        .filter(([key, value]) => value !== null && value !== undefined && value !== "" && key !== "enrichment_author_orcids")
         .map(([key, value]) => ({
             key,
             label: activeDomain?.attributes.find((attribute) => attribute.name === key)?.label ?? titleCaseKey(key),
@@ -292,14 +337,22 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
                             <section>
                                 <h3 className="mb-4 text-sm font-semibold text-gray-900 dark:text-white">{t("page.entity_table.section_extended")}</h3>
                                 <div className="grid grid-cols-1 gap-x-8 gap-y-4 md:grid-cols-2">
-                                    {extendedFields.map((field) => (
-                                        <div key={field.label} className="flex flex-col gap-1 border-b border-gray-50 pb-2 dark:border-gray-800/50">
-                                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{field.label}</span>
-                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                {formatValue(field.value, t("common.no_data"))}
-                                            </span>
-                                        </div>
-                                    ))}
+                                    {extendedFields.map((field) => {
+                                        const isAuthorsField = field.key === "authors" || field.key === "full_authors";
+                                        const hasOrcids = isAuthorsField && enrichmentOrcids.length > 0 && authorsList.length > 0;
+                                        return (
+                                            <div key={field.label} className={`flex flex-col gap-1 border-b border-gray-50 pb-2 dark:border-gray-800/50${hasOrcids ? " md:col-span-2" : ""}`}>
+                                                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{field.label}</span>
+                                                {hasOrcids ? (
+                                                    <AuthorsWithOrcids authors={authorsList} orcids={enrichmentOrcids} />
+                                                ) : (
+                                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                        {formatValue(field.value, t("common.no_data"))}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </section>
                         )}
