@@ -47,11 +47,16 @@ class OpenAlexAdapter(BaseScientometricAdapter):
 
         # 3. Dig into authors list dynamically
         author_list = []
+        orcid_list = []
         for authorship in raw_openalex.get("authorships", []):
             author_data = authorship.get("author", {})
             name = author_data.get("display_name")
             if name:
                 author_list.append(name)
+                raw_orcid = author_data.get("orcid")
+                # Strip URL prefix if present (e.g. "https://orcid.org/0000-...")
+                orcid = raw_orcid.replace("https://orcid.org/", "") if raw_orcid else None
+                orcid_list.append(orcid)
         
         # 4. Extract concepts from concepts, topics, and keywords fields
         concept_list = []
@@ -91,6 +96,7 @@ class OpenAlexAdapter(BaseScientometricAdapter):
             doi=clean_doi,
             title=title,
             authors=author_list,
+            author_orcids=orcid_list,
             citation_count=cited_count,
             publication_year=pub_year,
             publisher=publisher,
