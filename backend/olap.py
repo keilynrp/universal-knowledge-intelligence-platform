@@ -45,6 +45,14 @@ class DuckDBOLAPEngine:
             for attr in domain.attributes:
                 if not attr.is_core:
                     df[attr.name] = json_df.apply(lambda x, n=attr.name: x.get(n))
+
+        # Extract epistemic paradigm dimension from attributes_json
+        if domain.epistemology and "attributes_json" in df.columns:
+            attrs_parsed = df["attributes_json"].apply(_safe_parse)
+            df["paradigm"] = attrs_parsed.apply(
+                lambda a: (a.get("epistemic_profile") or {}).get("dominant", None)
+            )
+
         return df
 
     @staticmethod
@@ -139,6 +147,17 @@ class DuckDBOLAPEngine:
                 "type": attr.type,
                 "distinct_count": distinct,
             })
+
+        # Add epistemic paradigm as a virtual dimension
+        if domain.epistemology and "paradigm" in df.columns:
+            distinct = int(df["paradigm"].dropna().nunique()) if len(df) > 0 else 0
+            result.append({
+                "name": "paradigm",
+                "label": "Epistemic Paradigm",
+                "type": "string",
+                "distinct_count": distinct,
+            })
+
         return result
 
     def query_cube(
@@ -159,6 +178,9 @@ class DuckDBOLAPEngine:
             raise ValueError(f"Domain '{domain_id}' not found")
 
         attr_names = {a.name for a in domain.attributes}
+        # Include virtual dimensions (e.g., paradigm from epistemic classification)
+        if domain.epistemology:
+            attr_names.add("paradigm")
         valid_columns_schema = set()
         for dim in group_by:
             if not _is_safe_identifier(dim):

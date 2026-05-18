@@ -15,6 +15,32 @@ class AttributeSchema(BaseModel):
     required: bool = False
     is_core: bool = False # whether it matches standard RawEntity columns or goes into normalized_json
 
+
+# ── Epistemology configuration models ─────────────────────────────────────────
+
+class ParadigmIndicators(BaseModel):
+    terms: List[str] = []
+    document_types: List[str] = []
+    journals_affinity: List[str] = []
+
+class Paradigm(BaseModel):
+    id: str
+    label: str
+    description: str = ""
+    indicators: ParadigmIndicators = ParadigmIndicators()
+
+class EvidenceLevel(BaseModel):
+    level: int
+    label: str
+    weight: float = 1.0
+
+class EpistemologyConfig(BaseModel):
+    paradigms: List[Paradigm] = []
+    evidence_hierarchy: List[EvidenceLevel] = []
+
+
+# ── Domain schema ─────────────────────────────────────────────────────────────
+
 class DomainSchema(BaseModel):
     id: str
     name: str
@@ -22,6 +48,7 @@ class DomainSchema(BaseModel):
     primary_entity: str
     icon: Optional[str] = "Database"
     attributes: List[AttributeSchema]
+    epistemology: Optional[EpistemologyConfig] = None
 
 class SchemaRegistry:
     def __init__(self):

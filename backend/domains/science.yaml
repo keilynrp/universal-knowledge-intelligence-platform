@@ -69,3 +69,142 @@ attributes:
     type: string
     label: "Institution / School"
     is_core: false
+
+epistemology:
+  paradigms:
+    - id: empiricist
+      label: "Empiricist / Positivist"
+      description: "Privileges experimental evidence, replicability, statistical significance"
+      indicators:
+        terms:
+          - "randomized"
+          - "controlled trial"
+          - "p-value"
+          - "statistical significance"
+          - "hypothesis testing"
+          - "sample size"
+          - "effect size"
+          - "double-blind"
+          - "placebo"
+          - "experimental design"
+          - "regression analysis"
+          - "confidence interval"
+          - "longitudinal study"
+          - "cohort study"
+          - "cross-sectional"
+          - "meta-analysis"
+          - "systematic review"
+          - "replicability"
+          - "quantitative"
+          - "empirical evidence"
+        document_types:
+          - "randomized controlled trial"
+          - "meta-analysis"
+          - "systematic review"
+          - "clinical trial"
+          - "cohort study"
+          - "experimental study"
+        journals_affinity:
+          - "The Lancet"
+          - "NEJM"
+          - "Nature"
+          - "Science"
+          - "PLOS ONE"
+          - "BMJ"
+          - "JAMA"
+
+    - id: constructivist
+      label: "Social Constructivist"
+      description: "Privileges social context, narrative, reflexivity of the researcher"
+      indicators:
+        terms:
+          - "discourse analysis"
+          - "situated knowledge"
+          - "reflexivity"
+          - "qualitative"
+          - "ethnography"
+          - "hermeneutics"
+          - "phenomenology"
+          - "grounded theory"
+          - "interpretive"
+          - "social construction"
+          - "narrative analysis"
+          - "participant observation"
+          - "thick description"
+          - "case study"
+          - "lived experience"
+          - "meaning-making"
+          - "subjectivity"
+          - "contextual"
+          - "intersubjective"
+          - "constructionism"
+        document_types:
+          - "case study"
+          - "ethnographic study"
+          - "narrative review"
+          - "qualitative study"
+          - "interview study"
+        journals_affinity:
+          - "Social Studies of Science"
+          - "Science as Culture"
+          - "Qualitative Research"
+          - "Qualitative Inquiry"
+          - "Human Studies"
+
+    - id: critical
+      label: "Critical Theory"
+      description: "Examines power relations, inequity, structural biases"
+      indicators:
+        terms:
+          - "power relations"
+          - "hegemony"
+          - "decolonial"
+          - "feminist epistemology"
+          - "bias"
+          - "equity"
+          - "justice"
+          - "marginalized"
+          - "intersectionality"
+          - "postcolonial"
+          - "critical race"
+          - "structural inequality"
+          - "oppression"
+          - "emancipatory"
+          - "participatory action"
+          - "social justice"
+          - "praxis"
+          - "neo-liberal"
+          - "subaltern"
+          - "counter-narrative"
+        document_types:
+          - "critical review"
+          - "commentary"
+          - "position paper"
+          - "editorial"
+          - "policy brief"
+        journals_affinity:
+          - "Critical Inquiry"
+          - "Social Text"
+          - "Feminist Studies"
+          - "Race Ethnicity and Education"
+          - "Journal of Critical Realism"
+
+  evidence_hierarchy:
+    - level: 1
+      label: "Systematic Review / Meta-analysis"
+      weight: 1.0
+    - level: 2
+      label: "Randomized Controlled Trial"
+      weight: 0.85
+    - level: 3
+      label: "Cohort / Longitudinal Study"
+      weight: 0.70
+    - level: 4
+      label: "Case-Control Study"
+      weight: 0.55
+    - level: 5
+      label: "Case Report / Series"
+      weight: 0.40
+    - level: 6
+      label: "Expert Opinion / Editorial"
+      weight: 0.25

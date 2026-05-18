@@ -197,6 +197,19 @@ def _extract_and_cache_country(entity: models.RawEntity) -> None:
         entity.attributes_json = json.dumps(attrs)
 
 
+def _try_epistemic_classify(db: Session, entity: models.RawEntity) -> None:
+    """Auto-classify entity if its domain has epistemology configuration."""
+    try:
+        from backend.schema_registry import registry
+        from backend.analyzers.epistemic_classifier import classify_entity
+
+        domain = registry.get_domain(entity.domain or "default")
+        if domain and domain.epistemology and domain.epistemology.paradigms:
+            classify_entity(db, entity, domain.epistemology.paradigms, commit=False)
+    except Exception as e:
+        logger.debug("Epistemic classification skipped for entity %s: %s", entity.id, e)
+
+
 def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEntity:
     """
     Synchronously enriches a single record by title or DOI.
@@ -290,6 +303,9 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
 
             # Extract and cache country from affiliation data
             _extract_and_cache_country(entity)
+
+            # Epistemic classification (if domain has epistemology config)
+            _try_epistemic_classify(db, entity)
         else:
             # Fallback: try active web scraper configs
             scraped = enrich_with_web_scrapers(db, entity)

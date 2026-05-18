@@ -48,6 +48,7 @@ from backend.analyzers.concept_hierarchy import (
     build_concept_tree,
     materialize_domain_concepts,
 )
+from backend.analyzers.epistemic_classifier import classify_batch
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
 from threading import Lock
@@ -929,4 +930,114 @@ def concept_detail(
         "page": page,
         "per_page": per_page,
         "total": total,
+    }
+
+
+# ── Epistemic classification endpoints ───────────────────────────────────────
+
+
+def _require_epistemology(domain_id: str):
+    """Validate domain exists and has epistemology config. Raises 400 if not."""
+    from backend.schema_registry import registry as _reg
+
+    domain = _reg.get_domain(domain_id)
+    if not domain:
+        raise HTTPException(status_code=404, detail=f"Domain '{domain_id}' not found")
+    if not domain.epistemology or not domain.epistemology.paradigms:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Domain '{domain_id}' has no epistemology configuration",
+        )
+    return domain
+
+
+@router.post(
+    "/analytics/epistemic/{domain_id}/classify",
+    dependencies=[Depends(require_role("super_admin", "admin"))],
+)
+def epistemic_classify_batch(
+    domain_id: str,
+    db: Session = Depends(get_db),
+):
+    _validate_domain_id(domain_id)
+    _require_epistemology(domain_id)
+    result = classify_batch(db, domain_id)
+    return result
+
+
+@router.get(
+    "/analytics/epistemic/{domain_id}/distribution",
+    dependencies=[Depends(get_current_user)],
+)
+def epistemic_distribution(
+    domain_id: str,
+    db: Session = Depends(get_db),
+):
+    _validate_domain_id(domain_id)
+    domain = _require_epistemology(domain_id)
+
+    import json as _json
+
+    entities = (
+        db.query(models.RawEntity.attributes_json, models.RawEntity.normalized_json)
+        .filter(
+            models.RawEntity.domain == domain_id,
+            models.RawEntity.enrichment_status == "completed",
+        )
+        .all()
+    )
+
+    paradigm_counts: dict[str, int] = {}
+    by_year: dict[int, dict[str, int]] = {}
+    total_classified = 0
+    total_unclassified = 0
+
+    for attrs_json, norm_json in entities:
+        try:
+            attrs = _json.loads(attrs_json or "{}") or {}
+        except (TypeError, ValueError):
+            attrs = {}
+
+        profile = attrs.get("epistemic_profile")
+        if not profile or not profile.get("dominant"):
+            total_unclassified += 1
+            continue
+
+        total_classified += 1
+        dominant = profile["dominant"]
+        paradigm_counts[dominant] = paradigm_counts.get(dominant, 0) + 1
+
+        # Extract year for temporal breakdown
+        year = attrs.get("year")
+        if not year:
+            try:
+                norm = _json.loads(norm_json or "{}") or {}
+                year = norm.get("year")
+            except (TypeError, ValueError):
+                pass
+        if year:
+            try:
+                year = int(year)
+                if year not in by_year:
+                    by_year[year] = {}
+                by_year[year][dominant] = by_year[year].get(dominant, 0) + 1
+            except (TypeError, ValueError):
+                pass
+
+    # Build temporal series sorted by year
+    temporal = [
+        {"year": y, "paradigm_counts": counts}
+        for y, counts in sorted(by_year.items())
+    ]
+
+    return {
+        "domain_id": domain_id,
+        "total_classified": total_classified,
+        "total_unclassified": total_unclassified,
+        "paradigm_counts": paradigm_counts,
+        "paradigms": [
+            {"id": p.id, "label": p.label}
+            for p in domain.epistemology.paradigms
+        ],
+        "by_year": temporal,
     }
