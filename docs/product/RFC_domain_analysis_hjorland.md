@@ -8,6 +8,67 @@
 | Autor | Equipo UKIP |
 | Fecha | 2026-05-18 |
 | Relacionado | `docs/ontological_spectrum_spec.md`, `docs/SCIENTOMETRICS.md` |
+| Dependencia | Ontological Spectrum Spec (Capas I y III son precondición parcial) |
+
+---
+
+## 0. Relación con el Espectro Ontológico
+
+> Este RFC **no reemplaza** el [Ontological Spectrum Spec](../ontological_spectrum_spec.md).
+> Lo complementa como capa de interpretación cualitativa sobre la infraestructura formal que el Spectrum establece.
+
+### Mapa de dependencia entre ambas propuestas
+
+```
+ONTOLOGICAL SPECTRUM (infraestructura)        RFC DOMAIN ANALYSIS (interpretación)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━        ━���━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Capa I:  Identidad biunívoca               ──► Capa 3: Comunidad discursiva
+         (ORCID, VIAF, LCNAF)              │         (authority_sources, Gini, colaboración)
+         "¿Quién es este autor?"           │         "¿Cómo se estructura esta comunidad?"
+                                           │
+         PRECONDICIÓN: sin identidad       │         Sin identidad resuelta no hay
+         resuelta no hay red confiable.    │         red de co-autoría confiable.
+                                           │
+Capa II: Modelado bibliográfico            ─┐  Capa 1: Estructura epistémica
+         (BIBFRAME, LRM, WEMI)             ├─        (paradigmas, jerarquía de evidencia)
+         "¿Qué forma tiene esta obra?"     │         "¿Desde qué tradición se produjo?"
+                                           │
+         ORTOGONAL-COMPLEMENTARIA:         │         Un paper es simultáneamente
+         tipifica forma editorial.          │         bf:Work Y empiricist-0.8.
+         Habilita benchmarking formal.     │         Habilita inteligencia cualitativa.
+                                           │
+Capa III: Topología semántica              ══► Capa 2: Estructura semántica de conceptos
+          (LCSH)                                       (OpenAlex ontology + LCSH)
+          "¿Sobre qué campo trata?"                   "¿Cómo se relacionan los conceptos?"
+
+          DIRECTAMENTE PROPORCIONAL:                  Mismo problema: jerarquía y
+          LCSH normaliza top-down.                    normalización de conceptos.
+          OpenAlex emerge bottom-up.                  Se combinan para cobertura total.
+```
+
+### Principio de diseño: Capas fundacionales → Capas interpretativas
+
+| Orden | Qué se construye | Por qué primero |
+|-------|------------------|-----------------|
+| 1 | Spectrum Capa I (Identidad) | Sin ORCID/VIAF resueltos, las métricas de comunidad son ruido |
+| 2 | Spectrum Capa III (LCSH) + RFC Capa 2 (OpenAlex) | La jerarquía de conceptos es input para clasificación epistémica |
+| 3 | RFC Capa 1 (Paradigmas) | Requiere conceptos organizados y abstracts enriquecidos |
+| 4 | Spectrum Capa II (BIBFRAME/WEMI) + RFC Capa 1 (Evidence hierarchy) | La tipificación formal y epistémica se complementan para benchmarking completo |
+| 5 | RFC Capa 3 (Comunidad discursiva) | Síntesis final: requiere identidad + conceptos + paradigmas |
+
+### Qué resuelve cada propuesta (audiencias distintas)
+
+| | Ontological Spectrum | RFC Domain Analysis |
+|-|---------------------|---------------------|
+| **Output** | "Dr. X cumple SNI-2: SI" (expediente verificable) | "Este corpus tiene diversidad epistémica baja y Gini 0.73" |
+| **Audiencia** | Comités de evaluación, auditorías institucionales | Directivos estratégicos, gestores de investigación |
+| **Naturaleza** | Prescriptiva (compliance) | Descriptiva-analítica (inteligencia) |
+| **Dato base** | Metadatos formales (DOI, ISSN, tipología WEMI) | Contenido semántico (abstracts, conceptos, redes) |
+
+### Regla de coherencia
+
+> Toda implementación de este RFC que requiera datos de identidad (ORCID, VIAF) o tipología formal (WEMI) debe consumirlos desde las estructuras definidas en el Ontological Spectrum — nunca duplicar ni re-implementar la resolución de autoridades o el modelado bibliográfico.
 
 ---
 
@@ -328,41 +389,77 @@ Las tres capas son **opcionales** (`Optional`). Un dominio sin ellas sigue funci
 
 ## 5. Plan de Implementación Incremental
 
-### Fase A — Capa 1: Estructura epistémica (MVP)
+> **Nota de dependencia:** Las fases se ordenan respetando las precondiciones del Ontological Spectrum.
+> Donde una capacidad del Spectrum ya existe (e.g., Authority Resolution — Sprint 15-16), se consume directamente.
+> Donde aún no existe (e.g., BIBFRAME/WEMI), esta RFC no la implementa — se marca como dependencia futura.
 
-**Alcance:** Clasificación de paradigmas por text matching en abstracts/conceptos.
+### Fase A — Capa 2: Jerarquía de conceptos (Foundation)
 
-1. Extender `DomainSchema` con `epistemology` opcional
-2. Configurar paradigmas en `science.yaml`
-3. Implementar `epistemic_classifier.py` (term frequency sobre indicators)
-4. Hook post-enrichment que clasifica y persiste `epistemic_profile`
-5. Endpoint `GET /analyzers/epistemic-distribution/{domain_id}`
-6. Widget de distribución de paradigmas en frontend
+**Justificación:** Se implementa primero porque (a) no tiene dependencias bloqueantes del Spectrum, (b) OpenAlex ya proporciona niveles jerárquicos en cada enrichment, y (c) la jerarquía de conceptos es input para la clasificación epistémica de la Fase B.
 
-**Entregable:** Gráfico de barras/donut mostrando distribución de paradigmas en el corpus, con drill-down temporal.
-
-### Fase B — Capa 2: Jerarquía de conceptos
+**Dependencia Spectrum:** Capa III (LCSH) — si disponible, se usa como capa de normalización canónica sobre OpenAlex. Si no, OpenAlex opera standalone.
 
 **Alcance:** Navegación jerárquica de conceptos con datos de OpenAlex.
 
 1. Extender `DomainSchema` con `concept_relations` opcional
-2. Implementar `concept_hierarchy.py` (fetch + cache de ancestros desde OpenAlex)
-3. Materializar subgrafo local de conceptos del corpus
+2. Implementar `concept_hierarchy.py` (fetch + cache de ancestros desde OpenAlex Concepts API)
+3. Materializar subgrafo local de conceptos del corpus (solo conceptos que aparecen en entidades del tenant)
 4. Endpoint `GET /analyzers/concept-tree/{domain_id}`
 5. Tree view / sunburst de conceptos en frontend
 
 **Entregable:** Árbol de conceptos navegable con conteos de entidades por nodo.
 
-### Fase C — Capa 3: Métricas de comunidad
+### Fase B — Capa 1: Estructura epistémica (Core)
+
+**Justificación:** Requiere abstracts enriquecidos y conceptos organizados (Fase A). Produce la clasificación paradigmática que alimenta las métricas de salud (Fase C).
+
+**Dependencia Spectrum:** Ninguna bloqueante. La Capa II (BIBFRAME/WEMI) enriquecería la `evidence_hierarchy` con tipificación formal, pero el clasificador funciona sin ella usando `document_type` + text matching en abstracts.
+
+**Alcance:** Clasificación de paradigmas por text matching en abstracts/conceptos.
+
+1. Extender `DomainSchema` con `epistemology` opcional
+2. Configurar paradigmas en `science.yaml` (al menos 3: empiricist, constructivist, critical)
+3. Implementar `epistemic_classifier.py` (term frequency + concept overlap sobre indicators)
+4. Hook post-enrichment que clasifica y persiste `attributes_json.epistemic_profile`
+5. Endpoint `GET /analyzers/epistemic-distribution/{domain_id}`
+6. Widget de distribución de paradigmas en frontend
+7. Nueva dimensión `paradigm` en OLAP cube
+
+**Entregable:** Gráfico de barras/donut mostrando distribución de paradigmas en el corpus, con drill-down temporal y correlación con métricas cuantitativas.
+
+### Fase C — Capa 3: Métricas de comunidad (Synthesis)
+
+**Justificación:** Capa de síntesis que consume identidad resuelta (Spectrum Capa I), paradigmas clasificados (Fase B), y estructura de conceptos (Fase A) para producir indicadores holísticos.
+
+**Dependencia Spectrum:** Capa I (Authority Resolution) — **ya implementada** (Sprint 15-16: ORCID, VIAF, OpenAlex, Wikidata, DBpedia). Se consume directamente desde `authority_records` y `enrichment_author_orcids`.
 
 **Alcance:** Dashboard de salud del dominio.
 
 1. Extender `DomainSchema` con `discourse_community` opcional
-2. Implementar `domain_health.py` (Gini, tasas de colaboración, diversidad)
+2. Implementar `domain_health.py`:
+   - Gini de autoría (distribución de producción) — usa datos de co-autoría existentes
+   - Tasa de colaboración internacional — usa country extraction existente
+   - Tasa de Open Access — usa `is_open_access` del enrichment
+   - Diversidad epistémica (Shannon entropy) — usa `epistemic_profile` de Fase B
+   - Tasa de newcomers — usa timeline de primera aparición por autor
 3. Endpoint `GET /analyzers/domain-health/{domain_id}`
-4. Dashboard de salud con indicadores y tendencias temporales
+4. Dashboard de salud con indicadores, tendencias temporales, y comparación entre dominios
 
 **Entregable:** Panel de indicadores de concentración, diversidad epistémica, apertura.
+
+### Fase D (futura) — Convergencia con Benchmarking Engine
+
+**Dependencia:** Ontological Spectrum Capa II (BIBFRAME/WEMI) implementada + este RFC completo (Fases A-C).
+
+**Alcance:** Cuando WEMI esté implementado, la `evidence_hierarchy` de este RFC se combina con la tipificación formal del Spectrum para producir un puntaje de peso compuesto:
+
+```
+peso_total = peso_WEMI(forma_editorial) * peso_epistémico(nivel_evidencia)
+```
+
+Esto permitiría al Benchmarking Engine distinguir no solo "obra original vs. traducción" (Spectrum) sino también "meta-análisis original vs. case report original" (RFC), produciendo evaluaciones de cumplimiento SNI/REF/ANECA más granulares.
+
+> Esta fase NO se implementa en este RFC. Se documenta como horizonte de convergencia entre ambas propuestas.
 
 ---
 
@@ -374,27 +471,37 @@ Las tres capas son **opcionales** (`Optional`). Un dominio sin ellas sigue funci
 | Overhead de API al obtener jerarquía de conceptos | Media | Bajo | Cache agresivo; materialización batch; rate limiting existente |
 | Complejidad conceptual excesiva para usuarios no expertos | Media | Alto | Capas opcionales; UI simplificada con tooltips explicativos; modo "avanzado" |
 | Paradigmas no aplicables a dominios no científicos | Baja | Bajo | Configuración por dominio; healthcare y default pueden omitir `epistemology` |
+| Fase D bloqueada por implementación de BIBFRAME/WEMI del Spectrum | Alta | Bajo | Fases A-C operan independientes; Fase D es horizonte, no compromiso |
+| Divergencia semántica entre LCSH (Spectrum) y OpenAlex (este RFC) | Media | Medio | Tabla de mapeo LCSH↔OpenAlex concept IDs; priorizar OpenAlex por cobertura, LCSH por normalización canónica |
 
 ---
 
 ## 7. Criterios de Aceptación
 
-### Fase A (MVP)
+### Fase A — Jerarquía de conceptos (Foundation)
+- [ ] `DomainSchema` acepta `concept_relations` opcional sin romper dominios existentes
+- [ ] Al menos 2 niveles de jerarquía navegables desde OpenAlex
+- [ ] Sunburst o tree view funcional en frontend
+- [ ] Cache de conceptos evita >1 request/concepto/semana a OpenAlex
+- [ ] Sin regresiones en tests existentes
+
+### Fase B — Estructura epistémica (Core)
 - [ ] `science.yaml` incluye al menos 3 paradigmas con indicators
 - [ ] El clasificador asigna afinidad paradigmática a >80% de entidades con abstract
 - [ ] La distribución de paradigmas es visible en el frontend
 - [ ] El OLAP cube permite cortar por paradigma
-- [ ] Sin regresiones en tests existentes
+- [ ] Correlación paradigma vs. citation_count visible en analytics
 
-### Fase B
-- [ ] Al menos 2 niveles de jerarquía de conceptos navegables
-- [ ] Sunburst o tree view funcional
-- [ ] Cache de conceptos evita >1 request/concepto/semana a OpenAlex
-
-### Fase C
-- [ ] Al menos 4 métricas de salud calculadas
-- [ ] Dashboard con tendencia temporal
+### Fase C — Métricas de comunidad (Synthesis)
+- [ ] Al menos 4 métricas de salud calculadas (Gini, colaboración, OA, diversidad)
+- [ ] Dashboard con tendencia temporal (mínimo 3 años de ventana)
 - [ ] Comparación entre 2+ dominios
+- [ ] Consume `authority_records` existentes (Sprint 15-16) sin duplicar resolución
+
+### Fase D — Convergencia (horizonte futuro)
+- [ ] `evidence_hierarchy` se combina con tipificación WEMI del Spectrum
+- [ ] Puntaje compuesto `peso_WEMI * peso_epistémico` disponible para Benchmarking Engine
+- [ ] Documentado como extensión, no implementado en este RFC
 
 ---
 
