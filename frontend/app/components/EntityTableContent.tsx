@@ -1,11 +1,13 @@
 "use client";
 
 import type React from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useLanguage } from "../contexts/LanguageContext";
 import { Badge, ErrorBanner, QualityBadge } from "./ui";
 import RecordResultCard from "./RecordResultCard";
 import RecordListRow from "./RecordListRow";
+import { EnrichmentFailureIcon, EnrichmentFailureDetails, parseEnrichmentFailure } from "./EnrichmentFailurePanel";
 import type { EntityTableDomain, EditableFields, Entity } from "./EntityTable.types";
 
 function parseNormalizedJson(normalizedJson: string | null): Record<string, unknown> {
@@ -120,20 +122,20 @@ const CORE_ATTRIBUTE_LABEL_KEYS: Record<string, string> = {
 function enrichmentBadgeMeta(
     status: string | null,
     t: (key: string, params?: Record<string, string | number>) => string,
-): { label: string; variant: "success" | "warning" | "error" | "default" } {
+): { label: string; variant: "success" | "warning" | "error" | "default"; pulse: boolean } {
     switch (status) {
         case "completed":
-            return { label: t("entities.filter.enriched"), variant: "success" };
+            return { label: t("entities.filter.enriched"), variant: "success", pulse: false };
         case "pending":
-            return { label: t("entities.filter.pending"), variant: "warning" };
+            return { label: t("entities.filter.pending"), variant: "warning", pulse: true };
         case "processing":
-            return { label: t("page.entity_table.status_processing"), variant: "warning" };
+            return { label: t("page.entity_table.status_processing"), variant: "warning", pulse: true };
         case "failed":
-            return { label: t("entities.filter.failed"), variant: "error" };
+            return { label: t("entities.filter.failed"), variant: "error", pulse: false };
         case "none":
         case null:
         default:
-            return { label: t("page.entity_table.status_not_started"), variant: "default" };
+            return { label: t("page.entity_table.status_not_started"), variant: "default", pulse: false };
     }
 }
 
@@ -215,6 +217,7 @@ export default function EntityTableContent({
     onEnrichEntity,
 }: EntityTableContentProps) {
     const { t } = useLanguage();
+    const [expandedFailureId, setExpandedFailureId] = useState<number | null>(null);
     const inputClass =
         "h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white";
     const activeAttributes = activeDomain?.attributes ?? [];
@@ -360,7 +363,7 @@ export default function EntityTableContent({
                                             }
                                             authorityScore={entity.quality_score !== null && entity.quality_score !== undefined ? entity.quality_score.toFixed(2) : "—"}
                                             qualityScore={entity.quality_score !== null && entity.quality_score !== undefined ? entity.quality_score.toFixed(2) : "—"}
-                                            statusBadge={<Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>}
+                                            statusBadge={<Badge variant={statusMeta.variant} dot={statusMeta.pulse} dotPulse={statusMeta.pulse}>{statusMeta.label}</Badge>}
                                             owner={secondaryValue ? String(secondaryValue) : sourceLabel}
                                         />
                                     );
@@ -393,7 +396,14 @@ export default function EntityTableContent({
                                             }
                                             statusRow={
                                                 <>
-                                                    <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                                                    <Badge variant={statusMeta.variant} dot={statusMeta.pulse} dotPulse={statusMeta.pulse}>{statusMeta.label}</Badge>
+                                                    {entity.enrichment_status === "failed" && (
+                                                        <EnrichmentFailureIcon
+                                                            failure={parseEnrichmentFailure(entity.attributes_json)}
+                                                            expanded={expandedFailureId === entity.id}
+                                                            onToggle={() => setExpandedFailureId(expandedFailureId === entity.id ? null : entity.id)}
+                                                        />
+                                                    )}
                                                     <QualityBadge score={entity.quality_score} />
                                                     {entity.entity_type ? <Badge variant="default">{entity.entity_type}</Badge> : null}
                                                 </>
@@ -457,6 +467,10 @@ export default function EntityTableContent({
                                                 </>
                                             }
                                         />
+                                        {expandedFailureId === entity.id && entity.enrichment_status === "failed" && (() => {
+                                            const failure = parseEnrichmentFailure(entity.attributes_json);
+                                            return failure ? <EnrichmentFailureDetails failure={failure} /> : null;
+                                        })()}
                                     </div>
                                 );
                             })}

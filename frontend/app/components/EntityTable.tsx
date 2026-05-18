@@ -12,6 +12,7 @@ import EntityTableContent from "./EntityTableContent";
 import EntityTableDetailsModal from "./EntityTableDetailsModal";
 import { useEntityTableController } from "./useEntityTableController";
 import { useEntityTableVirtualization } from "./useEntityTableVirtualization";
+import { EnrichmentProgressToast } from "./EnrichmentProgressToast";
 
 export default function EntityTable() {
     const { activeDomain } = useDomain();
@@ -60,6 +61,8 @@ export default function EntityTable() {
         handleBulkDelete,
         handleBulkEnrich,
         handleBulkExport,
+        enrichmentBatch,
+        handleEnrichmentBatchComplete,
         scrollTop,
         setScrollTop,
     } = useEntityTableController({ toast });
@@ -196,6 +199,12 @@ export default function EntityTable() {
                     entity={selectedEntity}
                     activeDomain={activeDomain}
                     onClose={() => setSelectedEntity(null)}
+                />
+
+                <EnrichmentProgressToast
+                    batch={enrichmentBatch}
+                    onComplete={handleEnrichmentBatchComplete}
+                    onViewFailed={() => handleFacetChange("enrichment_status", "failed")}
                 />
         </div>
     );

@@ -1,14 +1,47 @@
 "use client";
 
+import { useState } from "react";
 import { useLanguage } from "../contexts/LanguageContext";
 import type { EntityTableDomain } from "./EntityTable.types";
 import MonteCarloChart from "./MonteCarloChart";
+import { EnrichmentFailureDetails, parseEnrichmentFailure } from "./EnrichmentFailurePanel";
+import { apiFetch } from "@/lib/api";
 import type { Entity } from "./EntityTable.types";
 
 export interface EntityTableDetailsModalProps {
     entity: Entity | null;
     activeDomain: EntityTableDomain;
     onClose: () => void;
+}
+
+function RetryEnrichmentButton({ entityId }: { entityId: number }) {
+    const { t } = useLanguage();
+    const [retrying, setRetrying] = useState(false);
+    const [retried, setRetried] = useState(false);
+
+    async function handleRetry() {
+        setRetrying(true);
+        try {
+            const res = await apiFetch(`/enrich/row/${entityId}`, { method: "POST" });
+            if (res.ok) setRetried(true);
+        } finally {
+            setRetrying(false);
+        }
+    }
+
+    if (retried) {
+        return <p className="mt-3 text-xs font-medium text-amber-600 dark:text-amber-400">{t("entities.filter.pending")}...</p>;
+    }
+
+    return (
+        <button
+            onClick={handleRetry}
+            disabled={retrying}
+            className="mt-3 rounded-lg bg-purple-100 px-3 py-1.5 text-xs font-bold text-purple-700 transition hover:bg-purple-200 disabled:opacity-50 dark:bg-purple-500/10 dark:text-purple-300 dark:hover:bg-purple-500/20"
+        >
+            {retrying ? "..." : t("page.entity_table.enrichment_retry")}
+        </button>
+    );
 }
 
 const CORE_FIELD_LABEL_KEYS: Record<string, string> = {
@@ -271,6 +304,17 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
                             </section>
                         )}
                     </div>
+                    {entity.enrichment_status === "failed" && (() => {
+                        const failure = parseEnrichmentFailure(entity.attributes_json);
+                        if (!failure) return null;
+                        return (
+                            <div className="mt-6">
+                                <h3 className="mb-2 text-sm font-semibold text-red-700 dark:text-red-400">{t("page.entity_table.enrichment_failure_title")}</h3>
+                                <EnrichmentFailureDetails failure={failure} />
+                                <RetryEnrichmentButton entityId={entity.id} />
+                            </div>
+                        );
+                    })()}
                     {entity.enrichment_status === "completed" && (
                         <div className="mt-8 rounded-xl border border-purple-100 bg-white p-5 shadow-sm dark:border-purple-500/10 dark:bg-gray-800/50">
                             <MonteCarloChart productId={entity.id} />

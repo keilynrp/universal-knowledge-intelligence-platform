@@ -495,9 +495,14 @@ def enrich_bulk_queue(
     return {"message": "Bulk queue triggered", "queued_records": count}
 
 
+class _BulkIdsEnrichPayload(BaseModel):
+    ids: List[int] = Field(..., min_length=1, max_length=500)
+    force: bool = False
+
+
 @router.post("/enrich/bulk-ids", status_code=200)
 def enrich_bulk_by_ids(
-    payload: _BulkIdsPayload,
+    payload: _BulkIdsEnrichPayload,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
 ):
@@ -508,11 +513,45 @@ def enrich_bulk_by_ids(
         .filter(models.RawEntity.id.in_(payload.ids))
         .all()
     )
+    skipped = 0
+    queued = 0
     for entity in entities:
+        if not payload.force and entity.enrichment_status == "completed":
+            skipped += 1
+            continue
         entity.enrichment_status = "pending"
         enrichment_worker.clear_enrichment_failure(entity)
+        queued += 1
     db.commit()
-    return {"queued": len(entities)}
+    return {"queued": queued, "skipped": skipped}
+
+
+@router.post("/enrich/progress", status_code=200)
+def enrich_progress(
+    payload: _BulkIdsPayload,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Return enrichment status breakdown for a specific set of entity IDs."""
+    org_id = resolve_request_org_id(db, current_user)
+    rows = (
+        scope_query_to_org(db.query(models.RawEntity.enrichment_status), models.RawEntity, org_id)
+        .filter(models.RawEntity.id.in_(payload.ids))
+        .all()
+    )
+    counts = {"pending": 0, "processing": 0, "completed": 0, "failed": 0}
+    for (status,) in rows:
+        key = status if status in counts else "pending"
+        if status in ("none", None):
+            continue  # not part of this batch's lifecycle
+        counts[key] += 1
+    return {
+        "total": len(payload.ids),
+        "pending": counts["pending"],
+        "processing": counts["processing"],
+        "completed": counts["completed"],
+        "failed": counts["failed"],
+    }
 
 
 @router.get("/enrich/stats")

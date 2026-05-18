@@ -7,6 +7,7 @@ import { useEnrichment } from "../contexts/EnrichmentContext";
 import type { ActiveFacets } from "./FacetPanel";
 import type { EditableFields, Entity } from "./EntityTable.types";
 import type { ToastVariant } from "./ui";
+import type { EnrichmentBatchState } from "./EnrichmentProgressToast";
 import { apiFetch } from "@/lib/api";
 
 interface UseEntityTableControllerOptions {
@@ -55,6 +56,7 @@ export function useEntityTableController({ toast }: UseEntityTableControllerOpti
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [bulkDeleting, setBulkDeleting] = useState(false);
     const [bulkEnriching, setBulkEnriching] = useState(false);
+    const [enrichmentBatch, setEnrichmentBatch] = useState<EnrichmentBatchState | null>(null);
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [activeFacets, setActiveFacets] = useState<ActiveFacets>(readFacetParams);
     const [facetRefreshKey, setFacetRefreshKey] = useState(0);
@@ -289,16 +291,23 @@ export function useEntityTableController({ toast }: UseEntityTableControllerOpti
 
     async function handleBulkEnrich() {
         setBulkEnriching(true);
+        const batchIds = Array.from(selectedIds);
         try {
             const res = await apiFetch("/enrich/bulk-ids", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ids: Array.from(selectedIds) }),
+                body: JSON.stringify({ ids: batchIds }),
             });
             if (!res.ok) throw new Error(t("page.entity_table.bulk_enrich_failed"));
             const data = await res.json();
             setSelectedIds(new Set());
-            toast(t("page.entity_table.bulk_enrich_success", { count: data.queued }), "success");
+            if (data.queued > 0) {
+                // Start progress tracking via EnrichmentProgressToast
+                const queuedIds = batchIds.slice(0, data.queued + data.skipped);
+                setEnrichmentBatch({ ids: queuedIds, skipped: data.skipped });
+            } else if (data.skipped > 0) {
+                toast(t("page.entity_table.enrichment_all_skipped", { count: data.skipped }), "info");
+            }
             // Refresh entity rows immediately, then poll rows + global stats
             await fetchEntities();
             startRowPolling();
@@ -308,6 +317,11 @@ export function useEntityTableController({ toast }: UseEntityTableControllerOpti
         } finally {
             setBulkEnriching(false);
         }
+    }
+
+    function handleEnrichmentBatchComplete() {
+        setEnrichmentBatch(null);
+        fetchEntities();
     }
 
     function handleBulkExport() {
@@ -397,6 +411,8 @@ export function useEntityTableController({ toast }: UseEntityTableControllerOpti
         handleBulkDelete,
         handleBulkEnrich,
         handleBulkExport,
+        enrichmentBatch,
+        handleEnrichmentBatchComplete,
         scrollTop,
         setScrollTop,
         portalByBatchId,
