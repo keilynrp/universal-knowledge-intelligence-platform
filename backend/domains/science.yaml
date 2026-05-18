@@ -208,3 +208,74 @@ epistemology:
     - level: 6
       label: "Expert Opinion / Editorial"
       weight: 0.25
+
+discourse_community:
+  authority_sources:
+    identity:
+      - orcid
+      - viaf
+      - openalex
+    bibliographic:
+      - doi
+      - isbn
+      - pmid
+    institutional:
+      - ror
+      - grid
+      - wikidata
+
+  communication_channels:
+    tier_1:
+      label: "Core journals"
+      description: "Venues with highest concentration of domain production"
+      auto_detect: true
+      manual_seeds:
+        - "Nature"
+        - "Science"
+        - "PLOS ONE"
+    tier_2:
+      label: "Conference proceedings"
+      description: "Relevant conference proceedings"
+      manual_seeds: []
+    tier_3:
+      label: "Preprints and grey literature"
+      manual_seeds:
+        - "arXiv"
+        - "bioRxiv"
+        - "SSRN"
+
+  validation_practices:
+    - id: peer_review
+      label: "Peer Review"
+      weight: 1.0
+      detectable: false
+    - id: reproducibility
+      label: "Reproducibility / Data Sharing"
+      weight: 0.8
+      detectable: true
+      indicators:
+        - "data availability"
+        - "code repository"
+        - "replication"
+    - id: open_access
+      label: "Open Access Publication"
+      weight: 0.6
+      detectable: true
+      field: "is_open_access"
+
+  health_metrics:
+    - id: gini_authorship
+      label: "Gini coefficient of authorship concentration"
+      description: "0 = distributed production, 1 = concentrated in few authors"
+    - id: international_collaboration_rate
+      label: "Rate of multi-country co-authorships"
+      description: "Fraction of entities with authors from 2+ countries"
+    - id: open_access_rate
+      label: "Open Access publication rate"
+      description: "Fraction of entities published as Open Access"
+    - id: epistemic_diversity
+      label: "Shannon entropy over paradigm distribution"
+      description: "0 = single paradigm dominates, 1 = perfectly diverse"
+    - id: newcomer_rate
+      label: "Fraction of first-time authors per year"
+      description: "Rate of new entrants to the domain community"

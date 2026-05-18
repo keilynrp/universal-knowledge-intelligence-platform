@@ -39,6 +39,44 @@ class EpistemologyConfig(BaseModel):
     evidence_hierarchy: List[EvidenceLevel] = []
 
 
+# ── Discourse community configuration models ─────────────────────────────────
+
+class HealthMetricDef(BaseModel):
+    id: str
+    label: str
+    description: str = ""
+
+class AuthoritySources(BaseModel):
+    identity: List[str] = []
+    bibliographic: List[str] = []
+    institutional: List[str] = []
+
+class ChannelTier(BaseModel):
+    label: str
+    description: str = ""
+    auto_detect: bool = False
+    manual_seeds: List[str] = []
+
+class CommunicationChannels(BaseModel):
+    tier_1: Optional[ChannelTier] = None
+    tier_2: Optional[ChannelTier] = None
+    tier_3: Optional[ChannelTier] = None
+
+class ValidationPractice(BaseModel):
+    id: str
+    label: str
+    weight: float = 1.0
+    detectable: bool = False
+    indicators: List[str] = []
+    field: Optional[str] = None
+
+class DiscourseConfig(BaseModel):
+    authority_sources: Optional[AuthoritySources] = None
+    communication_channels: Optional[CommunicationChannels] = None
+    validation_practices: List[ValidationPractice] = []
+    health_metrics: List[HealthMetricDef] = []
+
+
 # ── Domain schema ─────────────────────────────────────────────────────────────
 
 class DomainSchema(BaseModel):
@@ -49,6 +87,7 @@ class DomainSchema(BaseModel):
     icon: Optional[str] = "Database"
     attributes: List[AttributeSchema]
     epistemology: Optional[EpistemologyConfig] = None
+    discourse_community: Optional[DiscourseConfig] = None
 
 class SchemaRegistry:
     def __init__(self):

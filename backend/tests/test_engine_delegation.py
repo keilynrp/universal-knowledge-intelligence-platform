@@ -261,8 +261,8 @@ class TestAnalyticsDelegationHelpers:
             try_engine_analytics(client, "default", "topics", 30)
         )
         assert result is not None
-        assert result[0]["concept"] == "AI"
-        assert result[0]["count"] == 10
+        assert result["topics"][0]["concept"] == "AI"
+        assert result["topics"][0]["count"] == 10
 
     def test_cooccurrence_conversion(self):
         client = AsyncMock()
@@ -271,8 +271,8 @@ class TestAnalyticsDelegationHelpers:
             try_engine_analytics(client, "default", "cooccurrence", 20)
         )
         assert result is not None
-        assert result[0]["concept_a"] == "AI"
-        assert result[0]["pmi"] == 2.3
+        assert result["pairs"][0]["concept_a"] == "AI"
+        assert result["pairs"][0]["pmi"] == 2.3
 
     def test_clusters_conversion(self):
         client = AsyncMock()
@@ -281,9 +281,9 @@ class TestAnalyticsDelegationHelpers:
             try_engine_analytics(client, "default", "clusters", 6)
         )
         assert result is not None
-        assert result[0]["seed"] == "AI"
-        assert "AI" in result[0]["members"]
-        assert result[0]["cluster_id"] == 0
+        assert result["clusters"][0]["seed"] == "AI"
+        assert result["clusters"][0]["members"][0]["concept"] == "AI"
+        assert result["clusters"][0]["id"] == 0
 
     def test_correlation_conversion(self):
         client = AsyncMock()
@@ -292,9 +292,9 @@ class TestAnalyticsDelegationHelpers:
             try_engine_analytics(client, "default", "correlation", 20)
         )
         assert result is not None
-        assert result[0]["field_a"] == "year"
-        assert result[0]["cramers_v"] == 0.42
-        assert result[0]["strength"] == "moderate"
+        assert result["correlations"][0]["field_a"] == "year"
+        assert result["correlations"][0]["cramers_v"] == 0.42
+        assert result["correlations"][0]["strength"] == "moderate"
 
     def test_engine_unavailable_returns_none(self):
         client = AsyncMock()

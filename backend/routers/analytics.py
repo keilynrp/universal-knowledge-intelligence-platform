@@ -49,6 +49,7 @@ from backend.analyzers.concept_hierarchy import (
     materialize_domain_concepts,
 )
 from backend.analyzers.epistemic_classifier import classify_batch
+from backend.analyzers.domain_health import compute_health_metrics
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
 from threading import Lock
@@ -1041,3 +1042,53 @@ def epistemic_distribution(
         ],
         "by_year": temporal,
     }
+
+
+# ── Domain health (community metrics) endpoints ─────────────────────────────
+
+
+def _require_discourse_community(domain_id: str):
+    """Validate domain exists and has discourse_community config. Raises 400 if not."""
+    from backend.schema_registry import registry as _reg
+
+    domain = _reg.get_domain(domain_id)
+    if not domain:
+        raise HTTPException(status_code=404, detail=f"Domain '{domain_id}' not found")
+    if not domain.discourse_community:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Domain '{domain_id}' has no discourse_community configuration",
+        )
+    return domain
+
+
+@router.get(
+    "/analytics/domain-health/compare",
+    dependencies=[Depends(get_current_user)],
+)
+def domain_health_compare(
+    domains: str = Query(..., description="Comma-separated domain IDs"),
+    db: Session = Depends(get_db),
+):
+    from backend.schema_registry import registry as _reg
+
+    domain_ids = [d.strip() for d in domains.split(",") if d.strip()]
+    result = {}
+    for did in domain_ids:
+        domain = _reg.get_domain(did)
+        if domain and domain.discourse_community:
+            result[did] = compute_health_metrics(db, did)
+    return result
+
+
+@router.get(
+    "/analytics/domain-health/{domain_id}",
+    dependencies=[Depends(get_current_user)],
+)
+def domain_health(
+    domain_id: str,
+    db: Session = Depends(get_db),
+):
+    _validate_domain_id(domain_id)
+    _require_discourse_community(domain_id)
+    return compute_health_metrics(db, domain_id)
