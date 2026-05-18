@@ -278,6 +278,7 @@ _TABLES_TO_CLEAN = [
     "organization_members",
     "organizations",
     "entity_relationships",
+    "concept_nodes",
     # Note: "users" is intentionally excluded — the super_admin/editor/viewer
     # test accounts must persist across the entire test session.
 ]

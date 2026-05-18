@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, DateTime, Text, Float
+from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, DateTime, Text, Float, UniqueConstraint
 from .database import Base
 
 
@@ -765,6 +765,28 @@ class WorkflowRun(Base):
     error        = Column(Text, nullable=True)
     started_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime, nullable=True)
+
+
+# ── Concept Hierarchy (Domain Analysis Fase A) ────────────────────────────────
+
+class ConceptNode(Base):
+    """
+    Hierarchical concept node materialized from OpenAlex.
+    Scoped per domain; self-referential tree via parent_id.
+    """
+    __tablename__ = "concept_nodes"
+    __table_args__ = (
+        UniqueConstraint("openalex_id", "domain", name="uq_concept_openalex_domain"),
+    )
+
+    id             = Column(Integer, primary_key=True, index=True)
+    openalex_id    = Column(String, nullable=False, index=True)
+    display_name   = Column(String, nullable=False)
+    level          = Column(Integer, nullable=False, default=0)
+    parent_id      = Column(Integer, ForeignKey("concept_nodes.id"), nullable=True, index=True)
+    entity_count   = Column(Integer, default=0)
+    domain         = Column(String, nullable=False, index=True)
+    last_fetched_at = Column(DateTime, nullable=True)
 
 
 # ── Sprint 93: Embed Widgets (Widget SDK) ─────────────────────────────────────

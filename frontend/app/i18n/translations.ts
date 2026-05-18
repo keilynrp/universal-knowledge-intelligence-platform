@@ -36,6 +36,7 @@ export const translations = {
         'nav.scheduled_reports': 'Scheduled Reports',
         'nav.nlq': 'Natural Language Query',
         'nav.trends': 'Trend Topics',
+        'nav.concept_hierarchy': 'Concept Hierarchy',
         'nav.authors': 'Author Productivity',
         'nav.coauthorship': 'Co-authorship Network',
         'nav.geographic': 'Geographic Analysis',
@@ -55,6 +56,23 @@ export const translations = {
         'nav.bulk_editor': 'Bulk Editor',
         'nav.developer': 'Developer',
         'nav.catalogs': 'Catalog Portals',
+
+        // Concept Hierarchy
+        'concepts.title': 'Concept Hierarchy',
+        'concepts.subtitle': 'Explore the hierarchical structure of concepts extracted from your enriched entities.',
+        'concepts.empty_title': 'No concepts materialized yet',
+        'concepts.empty_description': 'Run materialization to build the concept hierarchy from your enriched entities.',
+        'concepts.refresh': 'Refresh Hierarchy',
+        'concepts.refreshing': 'Materializing...',
+        'concepts.refresh_success': 'Concept hierarchy updated successfully.',
+        'concepts.refresh_error': 'Failed to refresh concept hierarchy.',
+        'concepts.tree_view': 'Tree',
+        'concepts.sunburst_view': 'Sunburst',
+        'concepts.entities_count': 'entities',
+        'concepts.level': 'Level',
+        'concepts.parent': 'Parent',
+        'concepts.root': 'Root',
+        'concepts.view_entities': 'View Entities',
 
         // Catalog portals
         'catalogs.title': 'Catalog Portals',
@@ -3169,6 +3187,7 @@ export const translations = {
         'nav.scheduled_reports': 'Reportes Programados',
         'nav.nlq': 'Consulta en Lenguaje Natural',
         'nav.trends': 'Tendencias Temáticas',
+        'nav.concept_hierarchy': 'Jerarquía de Conceptos',
         'nav.authors': 'Productividad de Autores',
         'nav.coauthorship': 'Red de Coautoría',
         'nav.geographic': 'Análisis Geográfico',
@@ -3188,6 +3207,23 @@ export const translations = {
         'nav.bulk_editor': 'Editor Masivo',
         'nav.developer': 'Desarrollador',
         'nav.catalogs': 'Portales de catálogo',
+
+        // Concept Hierarchy
+        'concepts.title': 'Jerarquía de Conceptos',
+        'concepts.subtitle': 'Explora la estructura jerárquica de los conceptos extraídos de tus entidades enriquecidas.',
+        'concepts.empty_title': 'No hay conceptos materializados aún',
+        'concepts.empty_description': 'Ejecuta la materialización para construir la jerarquía de conceptos desde tus entidades enriquecidas.',
+        'concepts.refresh': 'Actualizar Jerarquía',
+        'concepts.refreshing': 'Materializando...',
+        'concepts.refresh_success': 'Jerarquía de conceptos actualizada exitosamente.',
+        'concepts.refresh_error': 'Error al actualizar la jerarquía de conceptos.',
+        'concepts.tree_view': 'Árbol',
+        'concepts.sunburst_view': 'Sunburst',
+        'concepts.entities_count': 'entidades',
+        'concepts.level': 'Nivel',
+        'concepts.parent': 'Padre',
+        'concepts.root': 'Raíz',
+        'concepts.view_entities': 'Ver Entidades',
 
         // Catalog portals
         'catalogs.title': 'Portales de catálogo',

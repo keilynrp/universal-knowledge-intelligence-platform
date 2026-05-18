@@ -44,6 +44,10 @@ from backend.services.engine_delegation import (
     try_engine_analytics,
 )
 from backend.services.pattern_discovery import PatternDiscoveryService
+from backend.analyzers.concept_hierarchy import (
+    build_concept_tree,
+    materialize_domain_concepts,
+)
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
 from threading import Lock
@@ -845,3 +849,84 @@ def tenant_model(
 ):
     """Internal target model and migration waves for tenant isolation."""
     return get_tenant_scoping_report()
+
+
+# ── Concept Hierarchy (Domain Analysis Fase A) ──────────────────────────────
+
+@router.post("/analytics/concepts/{domain_id}/materialize", tags=["analytics"], status_code=200)
+async def materialize_concepts(
+    domain_id: str,
+    _: models.User = Depends(require_role("super_admin", "admin")),
+    db: Session = Depends(get_db),
+):
+    """Materialize the concept hierarchy from OpenAlex for a domain's enriched entities."""
+    _validate_domain_id(domain_id)
+    result = await materialize_domain_concepts(db, domain_id)
+    return result
+
+
+@router.get("/analytics/concepts/{domain_id}/tree", tags=["analytics"])
+def concept_tree(
+    domain_id: str,
+    root_level: int | None = Query(default=None, ge=0, le=5),
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the materialized concept hierarchy as a nested JSON tree."""
+    _validate_domain_id(domain_id)
+    return build_concept_tree(db, domain_id, root_level=root_level)
+
+
+@router.get("/analytics/concepts/{domain_id}/{concept_node_id}", tags=["analytics"])
+def concept_detail(
+    domain_id: str,
+    concept_node_id: int,
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
+    _: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return concept node metadata and paginated entities tagged with that concept."""
+    _validate_domain_id(domain_id)
+    node = (
+        db.query(models.ConceptNode)
+        .filter(
+            models.ConceptNode.id == concept_node_id,
+            models.ConceptNode.domain == domain_id,
+        )
+        .first()
+    )
+    if not node:
+        raise HTTPException(status_code=404, detail="Concept node not found")
+
+    # Find entities whose enrichment_concepts contain this concept name
+    concept_name = node.display_name
+    query = (
+        db.query(models.RawEntity)
+        .filter(
+            models.RawEntity.domain == domain_id,
+            models.RawEntity.enrichment_status == "completed",
+            models.RawEntity.enrichment_concepts.like(f"%{concept_name}%"),
+        )
+    )
+    total = query.count()
+    entities = (
+        query.offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    return {
+        "id": node.id,
+        "name": node.display_name,
+        "level": node.level,
+        "openalex_id": node.openalex_id,
+        "entity_count": node.entity_count,
+        "entities": [
+            {"id": e.id, "primary_label": e.primary_label}
+            for e in entities
+        ],
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+    }

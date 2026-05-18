@@ -60,6 +60,7 @@ class OpenAlexAdapter(BaseScientometricAdapter):
         
         # 4. Extract concepts from concepts, topics, and keywords fields
         concept_list = []
+        concept_id_list = []  # Positional OpenAlex concept IDs (None for topics/keywords)
         seen_concepts: set[str] = set()
         for concept in raw_openalex.get("concepts", []):
             concept_name = concept.get("display_name")
@@ -68,6 +69,7 @@ class OpenAlexAdapter(BaseScientometricAdapter):
                 if key not in seen_concepts:
                     seen_concepts.add(key)
                     concept_list.append(concept_name)
+                    concept_id_list.append(concept.get("id"))
         for topic in raw_openalex.get("topics", []):
             topic_name = topic.get("display_name")
             if topic_name and topic.get("score", 0) >= 0.4:
@@ -75,6 +77,7 @@ class OpenAlexAdapter(BaseScientometricAdapter):
                 if key not in seen_concepts:
                     seen_concepts.add(key)
                     concept_list.append(topic_name)
+                    concept_id_list.append(None)
         for kw in raw_openalex.get("keywords", []):
             kw_name = kw.get("display_name") if isinstance(kw, dict) else (kw if isinstance(kw, str) else None)
             if kw_name:
@@ -82,6 +85,7 @@ class OpenAlexAdapter(BaseScientometricAdapter):
                 if key not in seen_concepts:
                     seen_concepts.add(key)
                     concept_list.append(kw_name)
+                    concept_id_list.append(None)
 
         # 5. Get publisher / venue
         publisher = None
@@ -102,6 +106,7 @@ class OpenAlexAdapter(BaseScientometricAdapter):
             publisher=publisher,
             is_open_access=oa_status,
             concepts=concept_list,
+            concept_ids=concept_id_list,
             source_api="OpenAlex",
             raw_response=raw_openalex # Attach whole tree for potential late parsing rules
         )
