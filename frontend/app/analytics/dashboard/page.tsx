@@ -19,7 +19,6 @@ import { useDomain } from "../../contexts/DomainContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { apiFetch } from "@/lib/api";
 import { Analytics } from "@/lib/analytics";
-import { AgenticResearchChat } from "../../components/ukip";
 
 const REFRESH_INTERVAL_SEC = 5 * 60; // 5 minutes
 
@@ -190,14 +189,6 @@ function stripInlineHtml(value: string): string {
     .trim();
 }
 
-function attentionSeverityClass(severity: "low" | "medium" | "high") {
-  return severity === "high"
-    ? "border-red-200 bg-red-50 text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200"
-    : severity === "medium"
-      ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200"
-      : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-200";
-}
-
 const showcaseCardClass = "rounded-2xl border border-[var(--ukip-border)] bg-white shadow-[0_16px_50px_rgb(91_72_163/0.05)]";
 const showcaseSectionClass = `${showcaseCardClass} p-5`;
 const showcaseLabelClass = "text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-600";
@@ -312,6 +303,36 @@ function StoryMetricCard({
           <p className="mt-2 text-sm text-slate-500">{description}</p>
           {footer ? <div className="mt-3">{footer}</div> : null}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ReferenceRing({ value, label }: { value: number; label: string }) {
+  const radius = 42;
+  const circumference = 2 * Math.PI * radius;
+  const boundedValue = Math.max(0, Math.min(100, value));
+  const offset = circumference * (1 - boundedValue / 100);
+
+  return (
+    <div className="relative h-48 w-48">
+      <svg className="h-full w-full -rotate-90" viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r={radius} fill="none" stroke="#eadcff" strokeWidth="8" />
+        <circle
+          cx="50"
+          cy="50"
+          r={radius}
+          fill="none"
+          stroke="#7c3aed"
+          strokeLinecap="round"
+          strokeWidth="8"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <p className="text-5xl font-semibold text-violet-600">{Math.round(boundedValue)}%</p>
+        <p className="mt-1 text-xs font-medium text-slate-600">{label}</p>
       </div>
     </div>
   );
@@ -638,7 +659,7 @@ export default function ExecutiveDashboardPage() {
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_22%_0%,rgba(124,58,237,0.08),transparent_28%),linear-gradient(180deg,#fbfbff_0%,#ffffff_52%,#fbfbff_100%)] px-5 py-7 text-[var(--ukip-text)] sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-[1380px] space-y-6">
+      <div className="mx-auto max-w-[1240px] space-y-6">
         <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="flex items-center gap-3">
@@ -685,6 +706,24 @@ export default function ExecutiveDashboardPage() {
               {refreshing
                 ? tr("page.exec_dashboard.refreshing", "Refreshing...")
                 : tr("page.exec_dashboard.refresh", "Refresh")}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof navigator !== "undefined" && navigator.share) {
+                  void navigator.share({ title: tr("page.exec_dashboard.title", "Executive Dashboard"), url: window.location.href });
+                } else if (typeof navigator !== "undefined" && navigator.clipboard) {
+                  void navigator.clipboard.writeText(window.location.href);
+                  toast(tr("page.exec_dashboard.share_link_copied", "Dashboard link copied."), "success");
+                }
+              }}
+              className="inline-flex h-11 items-center gap-2 rounded-lg border border-[var(--ukip-border)] bg-white px-5 text-sm font-medium text-[var(--ukip-text)] transition hover:bg-violet-50"
+            >
+              <svg className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.935-2.186 2.25 2.25 0 00-3.935 2.186z" />
+              </svg>
+              {tr("page.exec_dashboard.share", "Compartir")}
             </button>
 
             {/* Export Dashboard PDF */}
@@ -871,28 +910,26 @@ export default function ExecutiveDashboardPage() {
 
       {data?.institutional_benchmark && (
         <div className={`${showcaseCardClass} p-6`}>
-          <p className={showcaseLabelClass}>{tr("page.exec_dashboard.benchmark_baseline", "Institutional Benchmark Baseline")}</p>
-          <div className="mt-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="max-w-2xl">
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <p className="text-xl font-semibold text-slate-950">
-                  {translateBenchmarkProfileName(
-                    data.institutional_benchmark.profile_id,
-                    data.institutional_benchmark.profile_name,
-                  )}
-                </p>
-                <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold uppercase text-violet-600">
-                  {translateBenchmarkStatus(data.institutional_benchmark.status)}
-                </span>
-              </div>
-              <div className="mt-3 max-w-sm">
-                <label className="block text-xs font-semibold text-slate-700">
-                  {tr("page.exec_dashboard.benchmark_profile", "Benchmark profile")}
+          <p className={showcaseLabelClass}>{tr("page.exec_dashboard.benchmark_baseline", "Línea base de referencia institucional")}</p>
+          <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_0.75fr_1fr]">
+            <div className="min-w-0 xl:border-r xl:border-slate-200 xl:pr-8">
+              <h2 className="text-2xl font-semibold tracking-normal text-slate-950">
+                {translateBenchmarkProfileName(
+                  data.institutional_benchmark.profile_id,
+                  data.institutional_benchmark.profile_name,
+                )}
+              </h2>
+              <span className="mt-4 inline-flex rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold uppercase text-violet-600">
+                {translateBenchmarkStatus(data.institutional_benchmark.status)}
+              </span>
+              <div className="mt-5 max-w-xl">
+                <label className="block text-sm font-medium text-slate-700">
+                  {tr("page.exec_dashboard.benchmark_profile", "Perfil de referencia")}
                 </label>
                 <select
                   value={selectedBenchmarkProfile}
                   onChange={(e) => setSelectedBenchmarkProfile(e.target.value)}
-                  className="mt-2 h-11 w-full rounded-lg border border-[var(--ukip-border)] bg-white px-3 text-sm text-slate-700"
+                  className="mt-2 h-12 w-full rounded-lg border border-[var(--ukip-border)] bg-white px-4 text-sm text-slate-700 outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100"
                 >
                   {benchmarkProfiles.map((profile) => (
                     <option key={profile.id} value={profile.id}>
@@ -901,42 +938,94 @@ export default function ExecutiveDashboardPage() {
                   ))}
                 </select>
               </div>
-              <p className="mt-4 text-sm text-violet-700">
+              <p className="mt-5 text-sm font-medium text-violet-700">
                 {t("page.exec_dashboard.readiness_summary", {
                   readiness: data.institutional_benchmark.readiness_pct,
                   passed: data.institutional_benchmark.passed_rules,
                   total: data.institutional_benchmark.total_rules,
                 })}
               </p>
+              <div className="mt-7 rounded-xl border border-[var(--ukip-border)] bg-white p-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-base font-semibold text-slate-950">
+                    {leadingGap ? translateRuleLabel(leadingGap.id, leadingGap.label) : tr("page.exec_dashboard.no_active_gap", "Sin restricción activa")}
+                  </p>
+                  {leadingGap && (
+                    <span className="rounded-md bg-orange-100 px-2 py-1 text-xs font-semibold uppercase text-orange-500">
+                      {translatePriority(leadingGap.priority)}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-3 text-sm leading-6 text-slate-500">
+                  {leadingGap
+                    ? translateBenchmarkEvidence(data.institutional_benchmark.profile_id, leadingGap)
+                    : tr("page.exec_dashboard.story_clear_path", "La evidencia permite avanzar hacia recomendación ejecutiva.")}
+                </p>
+              </div>
             </div>
-            <div className="min-w-[180px] rounded-xl border border-[var(--ukip-border)] p-5 text-center">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-600">
-                {tr("page.exec_dashboard.benchmark_score", "Benchmark Score")}
+
+            <div className="flex flex-col items-center justify-center border-slate-200 xl:border-r xl:px-6">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+                {tr("page.exec_dashboard.benchmark_score", "Puntaje de referencia")}
               </p>
-              <p className="mt-3 text-5xl font-semibold text-violet-600">
-                {Math.round(data.institutional_benchmark.readiness_pct)}%
+              <ReferenceRing
+                value={data.institutional_benchmark.readiness_pct}
+                label={tr("page.exec_dashboard.benchmark_percentile", "Percentil")}
+              />
+            </div>
+
+            <div className="min-w-0 xl:pl-2">
+              <p className="text-sm font-semibold text-violet-700">
+                {tr("page.exec_dashboard.rules_currently_met", "Reglas actualmente satisfechas")}
               </p>
-              <p className="mt-1 text-xs text-slate-500">
-                {data.institutional_benchmark.passed_rules}/{data.institutional_benchmark.total_rules} {tr("page.exec_dashboard.rules_met_short", "rules")}
-              </p>
+              <div className="mt-5 space-y-5">
+                {data.institutional_benchmark.top_gaps.slice(0, 3).map((gap) => (
+                  <div key={gap.id} className="flex items-center gap-3">
+                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm ${
+                      gap.passed
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-600"
+                        : "border-slate-200 bg-white text-slate-300"
+                    }`}>
+                      ✓
+                    </span>
+                    <span className="text-sm text-slate-600">{translateRuleLabel(gap.id, gap.label)}</span>
+                  </div>
+                ))}
+                {data.institutional_benchmark.top_gaps.length === 0 && (
+                  <p className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+                    {tr("page.exec_dashboard.all_rules_met", "Todas las reglas principales están satisfechas.")}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 
-          {data.institutional_benchmark.top_gaps.length > 0 && (
+          {decisionHighlights.length > 0 && (
             <div className="mt-8 grid grid-cols-1 gap-5 xl:grid-cols-3">
-              {data.institutional_benchmark.top_gaps.map((gap) => (
-                <div key={gap.id} className="rounded-xl border border-[var(--ukip-border)] p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-slate-950">
-                      {translateRuleLabel(gap.id, gap.label)}
-                    </p>
-                    <span className="rounded-md bg-orange-100 px-2 py-1 text-xs font-semibold uppercase text-orange-500">
-                      {translatePriority(gap.priority)}
-                    </span>
-                  </div>
-                  <p className="mt-3 text-sm text-slate-500">
-                    {translateBenchmarkEvidence(data.institutional_benchmark.profile_id, gap)}
+              {decisionHighlights.slice(0, 3).map((highlight) => (
+                <div
+                  key={highlight.title}
+                  className={`rounded-xl border p-5 ${toneStyles[highlight.tone]}`}
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-500">
+                    {tr("page.exec_dashboard.suggested_next_action", "Acción sugerida")}
                   </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-950">{highlight.title}</p>
+                  <p className="mt-2 text-xs leading-5 text-slate-600">{highlight.evidence}</p>
+                  <p className="mt-4 text-xs font-semibold text-slate-800">
+                    {tr("page.exec_dashboard.expected_impact", "Impacto esperado: +6-12pp")}
+                  </p>
+                  {highlight.id === "bulk_enrichment" && (
+                    <button
+                      onClick={handleBulkEnrichment}
+                      disabled={queueingBulkEnrichment}
+                      className="mt-4 inline-flex h-10 items-center rounded-lg bg-white px-4 text-xs font-semibold text-slate-900 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {queueingBulkEnrichment
+                        ? tr("page.exec_dashboard.bulk_enrich_queueing", "Queueing enrichment…")
+                        : tr("page.exec_dashboard.bulk_enrich_cta", "Queue bulk enrichment")}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -944,33 +1033,9 @@ export default function ExecutiveDashboardPage() {
         </div>
       )}
 
-      {decisionHighlights.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-          {decisionHighlights.map((highlight) => (
-            <div
-              key={highlight.title}
-              className={`rounded-xl border p-5 ${toneStyles[highlight.tone]}`}
-            >
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] opacity-70">
-                {tr("page.exec_dashboard.suggested_next_action", "Suggested Next Action")}
-              </p>
-              <p className="mt-2 text-base font-semibold">{highlight.title}</p>
-              <p className="mt-3 text-sm opacity-75">{highlight.evidence}</p>
-              {highlight.id === "bulk_enrichment" && (
-                <button
-                  onClick={handleBulkEnrichment}
-                  disabled={queueingBulkEnrichment}
-                  className="mt-4 inline-flex h-10 items-center rounded-lg bg-white px-4 text-xs font-semibold text-slate-900 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {queueingBulkEnrichment
-                    ? tr("page.exec_dashboard.bulk_enrich_queueing", "Queueing enrichment…")
-                    : tr("page.exec_dashboard.bulk_enrich_cta", "Queue bulk enrichment")}
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+
+
+
 
       {/* ── Section 1: Signal KPIs ── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -1036,97 +1101,23 @@ export default function ExecutiveDashboardPage() {
         ) : null}
       </div>
 
-      {data?.external_attention && data.external_attention.summary.active_entities > 0 && (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.8fr_1.2fr]">
-          <div className={`${showcaseCardClass} p-6`}>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className={showcaseBlueLabelClass}>{tr("page.exec_dashboard.external_attention_eyebrow", "External attention")}</p>
-                <h3 className="mt-1 text-lg font-semibold text-slate-950">
-                  {tr("page.exec_dashboard.external_attention_title", "Attention Signals")}
-                </h3>
-                <p className="mt-2 text-sm text-slate-500">
-                  {tr("page.exec_dashboard.external_attention_body", "Contextual attention from external observations. This is not a quality score.")}
-                </p>
-              </div>
-              <div className="rounded-xl border border-[var(--ukip-border)] bg-white px-6 py-4 text-center">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  {tr("page.exec_dashboard.external_attention_avg", "Average")}
-                </p>
-                <p className="mt-1 text-3xl font-semibold text-slate-950">
-                  {data.external_attention.summary.avg_attention_score}
-                </p>
-              </div>
-            </div>
-            <div className="mt-5 grid grid-cols-3 gap-3">
-              <div className="rounded-xl border border-[var(--ukip-border)] bg-white p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{tr("page.exec_dashboard.external_attention_entities", "Entities")}</p>
-                <p className="mt-1 text-xl font-semibold text-slate-950">{data.external_attention.summary.active_entities}</p>
-              </div>
-              <div className="rounded-xl border border-[var(--ukip-border)] bg-white p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{tr("page.exec_dashboard.external_attention_mentions", "Mentions")}</p>
-                <p className="mt-1 text-xl font-semibold text-slate-950">{data.external_attention.summary.total_mentions}</p>
-              </div>
-              <div className="rounded-xl border border-[var(--ukip-border)] bg-white p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{tr("page.exec_dashboard.external_attention_top", "Top")}</p>
-                <p className="mt-1 text-xl font-semibold text-slate-950">{data.external_attention.summary.top_score}</p>
-              </div>
-            </div>
-          </div>
-          <div className={`${showcaseCardClass} p-6`}>
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className={showcaseBlueLabelClass}>{tr("page.exec_dashboard.external_attention_alerts", "Top alerts")}</p>
-                <h3 className="mt-1 text-base font-semibold text-slate-950">
-                  {tr("page.exec_dashboard.external_attention_alert_title", "Signals needing review")}
-                </h3>
-              </div>
-              <Link href="/analytics/dashboard" className="text-xs font-semibold text-violet-600 hover:text-violet-700">
-                {tr("page.exec_dashboard.external_attention_view_all", "Dashboard")}
-              </Link>
-            </div>
-            <div className="mt-4 space-y-3">
-              {data.external_attention.alerts.length > 0 ? data.external_attention.alerts.map((alert) => (
-                <Link
-                  key={`${alert.entity_id}-${alert.type}-${alert.period ?? "current"}`}
-                  href={`/entities/${alert.entity_id}`}
-                  className={`block rounded-xl border p-3 transition hover:shadow-sm ${attentionSeverityClass(alert.severity)}`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold">{alert.label}</p>
-                      <p className="mt-1 text-xs font-semibold opacity-85">{stripInlineHtml(alert.entity_label)}</p>
-                      <p className="mt-1 text-xs leading-5 opacity-75">{alert.evidence}</p>
-                    </div>
-                    <span className="shrink-0 rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
-                      {alert.confidence}
-                    </span>
-                  </div>
-                </Link>
-              )) : (
-                <p className="rounded-xl border border-dashed border-[var(--ukip-border)] p-4 text-sm text-slate-500">
-                  {tr("page.exec_dashboard.external_attention_no_alerts", "No attention alerts yet.")}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
-      {data?.impact_projection && (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+
+      {(data?.impact_projection || (data?.hidden_patterns && data.hidden_patterns.patterns.length > 0)) && (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          {data?.impact_projection && (
           <div className={`${showcaseCardClass} overflow-hidden p-6`}>
-            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start justify-between gap-4">
               <div>
                 <p className={showcaseLabelClass}>{tr("page.exec_dashboard.impact_projection_eyebrow", "Monte Carlo projection")}</p>
                 <h3 className="mt-1 text-lg font-semibold text-slate-950">
                   {tr("page.exec_dashboard.impact_projection_title", "Impact Projection")}
                 </h3>
-                <p className="mt-2 max-w-2xl text-sm text-slate-500">
+                <p className="mt-2 text-sm leading-6 text-slate-500">
                   {data.impact_projection.explanation}
                 </p>
               </div>
-              <div className="rounded-xl border border-[var(--ukip-border)] bg-white px-7 py-5 text-center">
+              <div className="shrink-0 rounded-xl border border-[var(--ukip-border)] bg-white px-5 py-4 text-center">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                   {tr("page.exec_dashboard.impact_expected", "Expected")}
                 </p>
@@ -1137,7 +1128,20 @@ export default function ExecutiveDashboardPage() {
               </div>
             </div>
             <div className="mt-6">
-              <div className="relative h-3 rounded-full bg-slate-100">
+              <div className="relative h-28">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={storySparklineData} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="impactMiniFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.28} />
+                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="count" stroke="#8b5cf6" strokeWidth={2.5} fill="url(#impactMiniFill)" dot={{ r: 2, fill: "#8b5cf6", strokeWidth: 0 }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="relative mt-3 h-3 rounded-full bg-slate-100">
                 <div
                   className="absolute top-0 h-3 rounded-full bg-violet-300/40"
                   style={{
@@ -1157,6 +1161,8 @@ export default function ExecutiveDashboardPage() {
               </div>
             </div>
           </div>
+          )}
+          {data?.impact_projection && (
           <div className={`${showcaseCardClass} p-6`}>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -1182,62 +1188,45 @@ export default function ExecutiveDashboardPage() {
               {tr("page.exec_dashboard.open_brief_with_projection", "Open brief with projection")}
             </Link>
           </div>
-        </div>
-      )}
-
-      {data?.hidden_patterns && data.hidden_patterns.patterns.length > 0 && (
-        <div className={`${showcaseCardClass} p-6`}>
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div>
-              <p className={showcaseLabelClass}>{tr("page.exec_dashboard.hidden_patterns_eyebrow", "Pattern discovery")}</p>
-              <h3 className="mt-1 text-lg font-semibold text-slate-950">
-                {tr("page.exec_dashboard.hidden_patterns_title", "Hidden Patterns")}
-              </h3>
-              <p className="mt-2 max-w-2xl text-sm text-slate-500">
-                {tr("page.exec_dashboard.hidden_patterns_body", "Non-obvious clusters, outliers, gaps and graph signals detected from the current portfolio.")}
-              </p>
-            </div>
-            <div className="rounded-xl border border-[var(--ukip-border)] bg-white px-4 py-3 text-sm font-semibold text-slate-950">
-              {data.hidden_patterns.summary.patterns_found} {tr("page.exec_dashboard.hidden_patterns_found", "signals")}
-            </div>
-          </div>
-          <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
-            {data.hidden_patterns.patterns.slice(0, 6).map((pattern) => (
-              <div key={pattern.id} className="rounded-xl border border-[var(--ukip-border)] bg-white p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                      {translatePatternType(pattern.type)}
-                    </p>
-                    <h4 className="mt-1 text-sm font-semibold text-slate-950">{pattern.label}</h4>
-                  </div>
-                  <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-semibold text-violet-700">
-                    {translateConfidence(pattern.confidence)}
-                  </span>
+          )}
+          {data?.hidden_patterns && data.hidden_patterns.patterns.length > 0 && (
+            <div className={`${showcaseCardClass} p-6`}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className={showcaseLabelClass}>{tr("page.exec_dashboard.hidden_patterns_eyebrow", "Distribución de impacto")}</p>
+                  <h3 className="mt-1 text-lg font-semibold text-slate-950">
+                    {tr("page.exec_dashboard.hidden_patterns_title", "Patrones ocultos")}
+                  </h3>
                 </div>
-                <p className="mt-3 text-xs leading-5 text-slate-500">{pattern.evidence}</p>
-                <div className="mt-4">
-                  <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    <span>{tr("page.exec_dashboard.hidden_patterns_impact", "Impact")}</span>
-                    <span>{pattern.impact_score}</span>
-                  </div>
-                  <div className="mt-2 h-2 rounded-full bg-slate-100">
-                    <div className="h-2 rounded-full bg-violet-500" style={{ width: `${pattern.impact_score}%` }} />
-                  </div>
-                </div>
-                <p className="mt-4 text-xs font-semibold text-slate-950">
-                  {pattern.recommended_action}
-                </p>
+                <span className="rounded-full border border-[var(--ukip-border)] bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                  {data.hidden_patterns.summary.patterns_found} {tr("page.exec_dashboard.hidden_patterns_found", "señales")}
+                </span>
               </div>
-            ))}
-          </div>
+              <p className="mt-4 text-sm leading-6 text-slate-500">
+                {tr("page.exec_dashboard.hidden_patterns_body", "Clústeres, valores atípicos, brechas y señales de grano no evidentes.")}
+              </p>
+              <div className="mt-5 space-y-3">
+                {data.hidden_patterns.patterns.slice(0, 3).map((pattern) => (
+                  <div key={pattern.id} className="grid grid-cols-[1fr_auto] gap-3 rounded-xl bg-slate-50 px-4 py-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">{pattern.label}</p>
+                      <p className="mt-1 text-xs text-slate-500">{translatePatternType(pattern.type)}</p>
+                    </div>
+                    <span className="text-right text-sm text-slate-500">
+                      {pattern.impact_score >= 70 ? tr("page.exec_dashboard.high_impact", "Alto impacto") : tr("page.exec_dashboard.medium_impact", "Medio impacto")}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <Link href="/analytics/dashboard" className="mt-5 inline-flex w-full justify-end text-sm font-semibold text-violet-600 hover:text-violet-700">
+                {tr("page.exec_dashboard.view_all_signals", "Ver todas las señales")}
+              </Link>
+            </div>
+          )}
         </div>
       )}
 
-      <AgenticResearchChat
-        domainId={activeDomainId}
-        title={tr("page.exec_dashboard.agentic_chat_title", "Ask your research portfolio")}
-      />
+
 
       {/* ── Section 2: Impact Over Time ── */}
       <div className={`${showcaseCardClass} p-6`}>
