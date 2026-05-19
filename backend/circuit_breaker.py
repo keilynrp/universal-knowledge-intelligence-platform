@@ -65,6 +65,7 @@ class CircuitBreaker:
         self._failure_count = 0
         self._success_count = 0
         self._last_failure_time: float = 0.0
+        self._last_used_time: float = 0.0
         self._lock = Lock()
 
     # ── Public API ────────────────────────────────────────────────────────────
@@ -86,6 +87,10 @@ class CircuitBreaker:
     def last_failure_time(self) -> float:
         return self._last_failure_time
 
+    @property
+    def last_used_time(self) -> float:
+        return self._last_used_time
+
     def call(self, func: Callable, *args: Any, **kwargs: Any) -> Any:
         """
         Execute *func* if the circuit allows it.
@@ -104,6 +109,7 @@ class CircuitBreaker:
                 logger.info(
                     f"Circuit '{self.name}' is HALF_OPEN — sending probe request."
                 )
+            self._last_used_time = time.time()
 
         try:
             result = func(*args, **kwargs)
@@ -121,6 +127,7 @@ class CircuitBreaker:
             self._failure_count = 0
             self._success_count = 0
             self._last_failure_time = 0.0
+            self._last_used_time = 0.0
         logger.info(f"Circuit '{self.name}' manually reset to CLOSED.")
 
     # ── Internal helpers ──────────────────────────────────────────────────────

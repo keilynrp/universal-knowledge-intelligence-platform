@@ -19,7 +19,7 @@ from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import func, text
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 from backend import models
@@ -901,14 +901,25 @@ def concept_detail(
     if not node:
         raise HTTPException(status_code=404, detail="Concept node not found")
 
-    # Find entities whose enrichment_concepts contain this concept name
+    # Prefer exact OpenAlex concept ID matches; fall back to concept names for
+    # legacy records enriched before enrichment_concept_ids existed.
     concept_name = node.display_name
+    concept_id_marker = f'"{node.openalex_id}"'
     query = (
         db.query(models.RawEntity)
         .filter(
             models.RawEntity.domain == domain_id,
             models.RawEntity.enrichment_status == "completed",
-            models.RawEntity.enrichment_concepts.like(f"%{concept_name}%"),
+            or_(
+                models.RawEntity.attributes_json.like(f"%{concept_id_marker}%"),
+                (
+                    or_(
+                        models.RawEntity.attributes_json.is_(None),
+                        models.RawEntity.attributes_json.notlike("%enrichment_concept_ids%"),
+                    )
+                    & models.RawEntity.enrichment_concepts.like(f"%{concept_name}%")
+                ),
+            ),
         )
     )
     total = query.count()

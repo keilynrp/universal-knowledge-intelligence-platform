@@ -111,6 +111,15 @@ class TestEntityFacetFilters:
         data = res.json()
         assert all(e["source"] == "demo" for e in data)
 
+    def test_filter_by_concept(self, client, auth_headers, db_session):
+        _seed(db_session, primary_label="ML Paper", enrichment_concepts="Machine Learning, AI")
+        _seed(db_session, primary_label="Bio Paper", enrichment_concepts="Biology")
+        res = client.get("/entities?concept=Machine%20Learning", headers=auth_headers)
+        assert res.status_code == 200
+        labels = [e["primary_label"] for e in res.json()]
+        assert "ML Paper" in labels
+        assert "Bio Paper" not in labels
+
     def test_combined_facet_filters(self, client, auth_headers, db_session):
         _seed(db_session, primary_label="Match",    entity_type="paper", domain="science")
         _seed(db_session, primary_label="NoMatch1", entity_type="book",  domain="science")

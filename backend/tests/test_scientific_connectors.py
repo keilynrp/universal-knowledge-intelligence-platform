@@ -510,10 +510,12 @@ class TestProviderHealthEndpoint:
         data = resp.json()
         for provider in data:
             assert "circuit_breaker" in provider
+            assert "last_used_at" in provider
             cb = provider["circuit_breaker"]
             assert "state" in cb
             assert "failure_count" in cb
             assert "success_count" in cb
+            assert "last_used_at" in cb
 
 
 # ── 9. Circuit Breaker Introspection ─────────────────────────────────────────
@@ -545,3 +547,10 @@ class TestCircuitBreakerIntrospection:
         except ValueError:
             pass
         assert cb.last_failure_time > 0.0
+
+    def test_last_used_time_property(self):
+        from backend.circuit_breaker import CircuitBreaker
+        cb = CircuitBreaker(name="test", failure_threshold=3)
+        assert cb.last_used_time == 0.0
+        cb.call(lambda: "ok")
+        assert cb.last_used_time > 0.0

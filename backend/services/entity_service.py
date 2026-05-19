@@ -36,6 +36,7 @@ class EntityService:
         ft_validation_status: Optional[str] = None,
         ft_enrichment_status: Optional[str] = None,
         ft_source: Optional[str] = None,
+        concept: Optional[str] = None,
         org_id: int | None = None,
     ) -> dict:
         requested = [f.strip() for f in fields_raw.split(",") if f.strip()]
@@ -65,6 +66,8 @@ class EntityService:
                 query = query.filter(models.RawEntity.quality_score >= min_quality)
             if import_batch_id is not None:
                 query = query.filter(models.RawEntity.import_batch_id == import_batch_id)
+            if concept:
+                query = query.filter(models.RawEntity.enrichment_concepts.ilike(f"%{concept}%"))
 
             if ft_entity_type and field != "entity_type":
                 query = query.filter(models.RawEntity.entity_type == ft_entity_type)
@@ -101,6 +104,7 @@ class EntityService:
         ft_validation_status: Optional[str],
         ft_enrichment_status: Optional[str],
         ft_source: Optional[str],
+        concept: Optional[str] = None,
         org_id: int | None = None,
     ) -> tuple[int, list[models.RawEntity]]:
         query = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
@@ -118,6 +122,8 @@ class EntityService:
 
         if min_quality is not None:
             query = query.filter(models.RawEntity.quality_score >= min_quality)
+        if concept:
+            query = query.filter(models.RawEntity.enrichment_concepts.ilike(f"%{concept}%"))
 
         if ft_entity_type:
             query = query.filter(models.RawEntity.entity_type == ft_entity_type)

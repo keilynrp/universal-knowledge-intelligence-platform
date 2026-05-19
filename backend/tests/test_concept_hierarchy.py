@@ -234,18 +234,23 @@ class TestConceptEndpoints:
 
     def test_concept_detail_endpoint(self, client, auth_headers, db_session):
         node = _make_concept_node(db_session, "C0", "Biology", 0, entity_count=2)
-        _make_entity(db_session, "Bio Paper", concepts="Biology")
+        _make_entity(db_session, "Bio Paper", concepts="Biology", concept_ids=["C0"])
+        _make_entity(db_session, "Biology Legacy", concepts="Biology")
+        _make_entity(db_session, "Biology Mismatch", concepts="Biology", concept_ids=["C_OTHER"])
 
         resp = client.get(f"/analytics/concepts/science/{node.id}", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data["name"] == "Biology"
-        assert data["total"] >= 1
+        names = {entity["primary_label"] for entity in data["entities"]}
+        assert "Bio Paper" in names
+        assert "Biology Legacy" in names
+        assert "Biology Mismatch" not in names
 
     def test_concept_detail_pagination(self, client, auth_headers, db_session):
         node = _make_concept_node(db_session, "C0", "Biology", 0)
         for i in range(5):
-            _make_entity(db_session, f"Paper {i}", concepts="Biology")
+            _make_entity(db_session, f"Paper {i}", concepts="Biology", concept_ids=["C0"])
 
         resp = client.get(f"/analytics/concepts/science/{node.id}?page=1&per_page=2", headers=auth_headers)
         assert resp.status_code == 200

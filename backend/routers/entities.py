@@ -53,6 +53,7 @@ def get_entity_facets(
     ft_validation_status: Optional[str] = Query(default=None),
     ft_enrichment_status: Optional[str] = Query(default=None),
     ft_source: Optional[str] = Query(default=None),
+    concept: Optional[str] = Query(default=None, min_length=1),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -72,6 +73,7 @@ def get_entity_facets(
         ft_validation_status=ft_validation_status,
         ft_enrichment_status=ft_enrichment_status,
         ft_source=ft_source,
+        concept=concept,
         org_id=org_id,
     )
 
@@ -90,6 +92,7 @@ def get_entities(
     ft_validation_status: Optional[str] = Query(default=None),
     ft_enrichment_status: Optional[str] = Query(default=None),
     ft_source:            Optional[str] = Query(default=None),
+    concept:              Optional[str] = Query(default=None, min_length=1),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -107,6 +110,7 @@ def get_entities(
         ft_validation_status=ft_validation_status,
         ft_enrichment_status=ft_enrichment_status,
         ft_source=ft_source,
+        concept=concept,
         org_id=org_id,
     )
     response.headers["X-Total-Count"] = str(total)
@@ -662,11 +666,13 @@ def get_enrichment_providers(
         providers.append({
             "name": name,
             "is_active": is_active,
+            "last_used_at": cb.last_used_time,
             "circuit_breaker": {
                 "state": cb.state.value,
                 "failure_count": cb.failure_count,
                 "success_count": cb.success_count,
                 "last_failure_time": cb.last_failure_time,
+                "last_used_at": cb.last_used_time,
             },
         })
     return providers

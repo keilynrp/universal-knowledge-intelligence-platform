@@ -103,7 +103,7 @@ function TreeNode({
   );
 }
 
-// ── Sunburst Component (Treemap-based) ──────────────────────────────────────
+// ── Sunburst Component ──────────────────────────────────────────────────────
 
 function flattenForSunburst(nodes: ConceptNode[]): { name: string; level: number; count: number; parent: string }[] {
   const items: { name: string; level: number; count: number; parent: string }[] = [];
@@ -303,7 +303,7 @@ export default function ConceptHierarchyPage() {
   };
 
   const handleClickConcept = (conceptName: string) => {
-    router.push(`/?concept=${encodeURIComponent(conceptName)}`);
+    router.push(`/entities?concept=${encodeURIComponent(conceptName)}`);
   };
 
   const isEmpty = !tree || tree.nodes.length === 0;

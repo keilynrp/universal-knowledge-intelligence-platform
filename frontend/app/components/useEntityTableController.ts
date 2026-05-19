@@ -35,6 +35,7 @@ export function useEntityTableController({ toast }: UseEntityTableControllerOpti
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState(searchParams.get("q") ?? "");
     const [debouncedSearch, setDebouncedSearch] = useState(searchParams.get("q") ?? "");
+    const [conceptFilter, setConceptFilter] = useState(searchParams.get("concept") ?? "");
     const [page, setPage] = useState(0);
     const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
     const [limit, setLimit] = useState(20);
@@ -77,9 +78,11 @@ export function useEntityTableController({ toast }: UseEntityTableControllerOpti
     useEffect(() => {
         const nextSearch = searchParams.get("q") ?? "";
         const nextMinQuality = searchParams.get("min_quality") ?? "";
+        const nextConcept = searchParams.get("concept") ?? "";
         setSearch(nextSearch);
         setDebouncedSearch(nextSearch);
         setMinQuality(nextMinQuality);
+        setConceptFilter(nextConcept);
         setActiveFacets(readFacetParams());
         setPage(0);
     }, [paramSignature, readFacetParams, searchParams]);
@@ -99,6 +102,7 @@ export function useEntityTableController({ toast }: UseEntityTableControllerOpti
 
             if (debouncedSearch) queryParams.append("search", debouncedSearch);
             if (minQuality) queryParams.append("min_quality", minQuality);
+            if (conceptFilter) queryParams.append("concept", conceptFilter);
             if (activeFacets.entity_type) queryParams.append("ft_entity_type", activeFacets.entity_type);
             if (activeFacets.domain) queryParams.append("ft_domain", activeFacets.domain);
             if (activeFacets.validation_status) queryParams.append("ft_validation_status", activeFacets.validation_status);
@@ -116,7 +120,7 @@ export function useEntityTableController({ toast }: UseEntityTableControllerOpti
         } finally {
             setLoading(false);
         }
-    }, [activeFacets, debouncedSearch, limit, minQuality, page, sortBy, sortOrder, t]);
+    }, [activeFacets, conceptFilter, debouncedSearch, limit, minQuality, page, sortBy, sortOrder, t]);
 
     useEffect(() => {
         fetchEntities();
