@@ -236,7 +236,6 @@ export default function Header() {
     if (activeDomainId === "default") return t("header.workspace.default_name");
     return activeDomainId || t("header.workspace.none");
   }, [activeDomain?.name, activeDomainId, isLoading, t, tr]);
-  const hasDomains = domains.length > 0;
   const currentTitle = t(page.titleKey) === page.titleKey ? page.titleFallback : t(page.titleKey);
 
   return (
@@ -299,23 +298,14 @@ export default function Header() {
                   onChange={(e) => setActiveDomainId(e.target.value)}
                   aria-label={t("header.workspace.aria")}
                   title={activeDomainLabel || branding.platform_name}
-                  disabled={!hasDomains}
-                  className="ukip-focus h-10 max-w-[13rem] cursor-pointer appearance-none rounded-xl border border-slate-200 bg-white py-0 pl-4 pr-9 text-sm font-medium text-slate-700 shadow-sm outline-none transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)] dark:hover:bg-[var(--ukip-panel-strong)] xl:max-w-[16rem]"
+                  className="ukip-focus h-10 max-w-[13rem] cursor-pointer appearance-none rounded-xl border border-slate-200 bg-white py-0 pl-4 pr-9 text-sm font-medium text-slate-700 shadow-sm outline-none transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)] dark:hover:bg-[var(--ukip-panel-strong)] xl:max-w-[16rem]"
                 >
-                  {hasDomains ? (
-                    <>
-                      <option value="all">{tr("header.workspace.all_domains", "Todos los dominios")}</option>
-                      {domains.map((domain) => (
-                        <option key={domain.id} value={domain.id}>
-                          {domain.name}
-                        </option>
-                      ))}
-                    </>
-                  ) : (
-                    <option value={activeDomainId || "default"}>
-                      {t("header.workspace.none")}
+                  <option value="all">{tr("header.workspace.all_domains", "Todos los dominios")}</option>
+                  {domains.map((domain) => (
+                    <option key={domain.id} value={domain.id}>
+                      {domain.name}
                     </option>
-                  )}
+                  ))}
                 </select>
                 <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-[var(--ukip-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.25 9.75L12 13.5l3.75-3.75" />

@@ -8,6 +8,7 @@ import os
 import shutil
 import pytest
 
+from backend import models
 from backend.schema_registry import SchemaRegistry, DomainSchema, AttributeSchema, _BUILTIN_DOMAIN_IDS
 import backend.schema_registry as _sr_mod
 
@@ -245,6 +246,20 @@ class TestGetDomains:
     def test_default_domain_first_in_list(self, client, auth_headers):
         resp = client.get("/domains", headers=auth_headers)
         assert resp.json()[0]["id"] == "default"
+
+    def test_ingested_domains_are_ordered_before_registry_domains(self, client, auth_headers, db_session):
+        db_session.add(models.RawEntity(primary_label="First Imported", domain="first_ingested_domain"))
+        db_session.add(models.RawEntity(primary_label="Second Imported", domain="second_ingested_domain"))
+        db_session.commit()
+
+        resp = client.get("/domains", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data[0]["id"] == "first_ingested_domain"
+        assert data[0]["entity_count"] == 1
+        assert data[1]["id"] == "second_ingested_domain"
+        assert data[1]["entity_count"] == 1
 
     def test_domain_schema_has_required_fields(self, client, auth_headers):
         resp = client.get("/domains", headers=auth_headers)

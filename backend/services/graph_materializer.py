@@ -64,6 +64,36 @@ def _split_concepts(entity: models.RawEntity, attrs: dict[str, Any]) -> list[str
     return concepts[:20]
 
 
+def _authors_from_enrichment(attrs: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_authors = attrs.get("canonical_authors")
+    if isinstance(raw_authors, list) and raw_authors:
+        return [author for author in raw_authors if isinstance(author, dict)]
+
+    enriched_authors = attrs.get("enrichment_authors")
+    if not isinstance(enriched_authors, list):
+        return []
+
+    orcids = attrs.get("enrichment_author_orcids")
+    author_orcids = orcids if isinstance(orcids, list) else []
+    authors: list[dict[str, Any]] = []
+    for index, author in enumerate(enriched_authors):
+        if isinstance(author, dict):
+            name = _clean_text(author.get("name") or author.get("display_name") or author.get("author"))
+            if not name:
+                continue
+            authors.append({**author, "name": name, "order": author.get("order") or index + 1})
+            continue
+        name = _clean_text(author)
+        if not name:
+            continue
+        authors.append({
+            "name": name,
+            "order": index + 1,
+            "orcid": author_orcids[index] if index < len(author_orcids) else None,
+        })
+    return authors
+
+
 def _node_attrs(kind: str, import_batch_id: int, metadata: dict[str, Any]) -> str:
     payload = {
         "derived": True,
@@ -216,8 +246,7 @@ def materialize_scientific_import_graph(
         domain = publication.domain or "science"
         pub_id = publication.id
 
-        raw_authors = attrs.get("canonical_authors")
-        authors = raw_authors if isinstance(raw_authors, list) else []
+        authors = _authors_from_enrichment(attrs)
         author_pairs: list[tuple[dict[str, Any], models.RawEntity]] = []
         for author in authors:
             if not isinstance(author, dict):
@@ -303,7 +332,7 @@ def materialize_scientific_import_graph(
                     publication_id=pub_id,
                 ))
 
-        source_title = _clean_text(attrs.get("journal") or attrs.get("source_title"))
+        source_title = _clean_text(attrs.get("journal") or attrs.get("source_title") or attrs.get("venue"))
         raw_record = attrs.get("raw_record")
         if not source_title and isinstance(raw_record, dict):
             source_title = _clean_text(raw_record.get("journal") or raw_record.get("source") or raw_record.get("SO"))

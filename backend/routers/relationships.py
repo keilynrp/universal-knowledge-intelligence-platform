@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from backend import graph_analytics, models, schemas
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
+from backend.services.graph_materializer import materialize_scientific_import_graph
 from backend.tenant_access import get_scoped_record, resolve_request_org_id, scope_query_to_org
 
 logger = logging.getLogger(__name__)
@@ -393,6 +394,49 @@ def get_graph_visualization(
             "top_pagerank_leader": label_map.get(leader_id) if leader_id else None,
             "top_pagerank_score": round(pr_filtered[leader_id], 2) if leader_id else 0.0,
         },
+    }
+
+
+@router.post("/graph/materialize")
+def materialize_graph(
+    import_batch_id: int | None = Query(default=None, ge=1),
+    domain: str | None = Query(default=None, min_length=1, max_length=80),
+    limit: int = Query(default=25, ge=1, le=250),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
+):
+    """Backfill graph relationships for previously ingested/enriched records."""
+    org_id = resolve_request_org_id(db, current_user)
+    scoped_domain = _normalize_graph_domain(domain)
+
+    batch_query = scope_query_to_org(db.query(models.RawEntity.import_batch_id), models.RawEntity, org_id)
+    batch_query = batch_query.filter(models.RawEntity.import_batch_id.isnot(None))
+    if import_batch_id:
+        batch_query = batch_query.filter(models.RawEntity.import_batch_id == import_batch_id)
+    if scoped_domain:
+        batch_query = batch_query.filter(models.RawEntity.domain == scoped_domain)
+
+    batch_ids = [
+        row[0]
+        for row in batch_query.distinct().order_by(models.RawEntity.import_batch_id.asc()).limit(limit).all()
+        if row[0] is not None
+    ]
+    results = []
+    totals = {"batches": 0, "publications": 0, "nodes_created": 0, "relationships_created": 0}
+    for batch_id in batch_ids:
+        result = materialize_scientific_import_graph(db, batch_id, org_id=org_id)
+        results.append({"import_batch_id": batch_id, **result})
+        totals["batches"] += 1
+        totals["publications"] += int(result.get("publications") or 0)
+        totals["nodes_created"] += int(result.get("nodes_created") or 0)
+        totals["relationships_created"] += int(result.get("relationships_created") or 0)
+
+    return {
+        "domain": scoped_domain,
+        "import_batch_id": import_batch_id,
+        "limit": limit,
+        "totals": totals,
+        "results": results,
     }
 
 

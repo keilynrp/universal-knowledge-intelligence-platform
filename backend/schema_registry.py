@@ -86,6 +86,8 @@ class DomainSchema(BaseModel):
     primary_entity: str
     icon: Optional[str] = "Database"
     attributes: List[AttributeSchema]
+    entity_count: Optional[int] = None
+    first_entity_id: Optional[int] = None
     epistemology: Optional[EpistemologyConfig] = None
     discourse_community: Optional[DiscourseConfig] = None
 

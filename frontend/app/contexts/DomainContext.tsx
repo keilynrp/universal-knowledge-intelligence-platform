@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "./AuthContext";
 
 const DOMAIN_STORAGE_KEY = "ukip_active_domain";
 const ALL_DOMAINS_ID = "all";
@@ -21,6 +22,8 @@ export interface DomainSchema {
     primary_entity: string;
     icon: string;
     attributes: DomainAttribute[];
+    entity_count?: number | null;
+    first_entity_id?: number | null;
 }
 
 interface DomainContextType {
@@ -41,45 +44,62 @@ function readStoredDomain(): string | null {
 }
 
 export function DomainProvider({ children }: { children: React.ReactNode }) {
+    const { token, isAuthenticated } = useAuth();
     const [domains, setDomains] = useState<DomainSchema[]>([]);
     const [activeDomainId, setActiveDomainId] = useState<string>(() => readStoredDomain() || ALL_DOMAINS_ID);
     const [isLoading, setIsLoading] = useState(true);
 
-    const resolveDomainSelection = useCallback((availableDomains: DomainSchema[], currentActiveDomainId: string) => {
+    const firstIngestedDomain = useCallback((availableDomains: DomainSchema[]) => {
+        return [...availableDomains]
+            .filter((domain) => (domain.entity_count ?? 0) > 0)
+            .sort((a, b) => (a.first_entity_id ?? Number.MAX_SAFE_INTEGER) - (b.first_entity_id ?? Number.MAX_SAFE_INTEGER))[0];
+    }, []);
+
+    const resolveDomainSelection = useCallback((availableDomains: DomainSchema[], currentActiveDomainId: string, preferStored: boolean) => {
         if (availableDomains.length === 0) {
-            return currentActiveDomainId || ALL_DOMAINS_ID;
-        }
-
-        const savedDomain = readStoredDomain();
-
-        if (currentActiveDomainId === ALL_DOMAINS_ID) {
             return ALL_DOMAINS_ID;
         }
 
-        if (currentActiveDomainId && availableDomains.some((d) => d.id === currentActiveDomainId)) {
+        const firstIngested = firstIngestedDomain(availableDomains);
+        const savedDomain = readStoredDomain();
+
+        if (!firstIngested) {
+            return ALL_DOMAINS_ID;
+        }
+
+        if (preferStored && currentActiveDomainId && currentActiveDomainId !== ALL_DOMAINS_ID && availableDomains.some((d) => d.id === currentActiveDomainId)) {
             return currentActiveDomainId;
         }
 
-        if (savedDomain === ALL_DOMAINS_ID) {
-            return ALL_DOMAINS_ID;
-        }
-
-        if (savedDomain && availableDomains.some((d) => d.id === savedDomain)) {
+        if (preferStored && savedDomain && savedDomain !== ALL_DOMAINS_ID && availableDomains.some((d) => d.id === savedDomain)) {
             return savedDomain;
         }
 
-        return ALL_DOMAINS_ID;
-    }, []);
+        return firstIngested.id;
+    }, [firstIngestedDomain]);
 
-    const fetchDomains = useCallback(async () => {
+    const fetchDomains = useCallback(async ({ preferStored = true }: { preferStored?: boolean } = {}) => {
+        if (!isAuthenticated || !token) {
+            setDomains([]);
+            setActiveDomainId(ALL_DOMAINS_ID);
+            setIsLoading(false);
+            return;
+        }
+        setIsLoading(true);
         try {
             const res = await apiFetch("/domains");
             if (res.ok) {
-                const data = await res.json();
-                setDomains(data);
+                const data: DomainSchema[] = await res.json();
+                const ordered = [...data].sort((a, b) => {
+                    const aHasData = (a.entity_count ?? 0) > 0;
+                    const bHasData = (b.entity_count ?? 0) > 0;
+                    if (aHasData !== bHasData) return aHasData ? -1 : 1;
+                    return (a.first_entity_id ?? Number.MAX_SAFE_INTEGER) - (b.first_entity_id ?? Number.MAX_SAFE_INTEGER);
+                });
+                setDomains(ordered);
 
                 setActiveDomainId((prev) => {
-                    const next = resolveDomainSelection(data, prev);
+                    const next = resolveDomainSelection(ordered, prev, preferStored);
                     if (typeof window !== "undefined") {
                         window.localStorage.setItem(DOMAIN_STORAGE_KEY, next);
                     }
@@ -87,10 +107,12 @@ export function DomainProvider({ children }: { children: React.ReactNode }) {
                 });
             }
         } catch {
+            setDomains([]);
+            setActiveDomainId(ALL_DOMAINS_ID);
         } finally {
             setIsLoading(false);
         }
-    }, [resolveDomainSelection]);
+    }, [isAuthenticated, resolveDomainSelection, token]);
 
     useEffect(() => {
         const storedDomain = readStoredDomain();
@@ -99,7 +121,9 @@ export function DomainProvider({ children }: { children: React.ReactNode }) {
         }
     }, []);
 
-    useEffect(() => { void fetchDomains(); }, [fetchDomains]);
+    useEffect(() => {
+        void fetchDomains({ preferStored: false });
+    }, [fetchDomains, token]);
 
     const handleSetActiveDomain = (id: string) => {
         if (!id) return;

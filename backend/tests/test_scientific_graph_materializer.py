@@ -182,3 +182,61 @@ def test_graph_path_respects_domain_scope(client, auth_headers, db_session):
     assert aggregate.json()["found"] is True
     assert scoped.status_code == 200
     assert scoped.json()["found"] is False
+
+
+def test_materializer_uses_enrichment_metadata_for_existing_records(db_session):
+    batch = _create_science_batch(db_session)
+    publication = models.RawEntity(
+        org_id=None,
+        import_batch_id=batch.id,
+        domain="science",
+        entity_type="publication",
+        primary_label="Enriched Graph Record",
+        enrichment_doi="10.555/enriched",
+        enrichment_concepts="graph enrichment, research intelligence",
+        enrichment_source="openalex",
+        enrichment_status="completed",
+        attributes_json=json.dumps({
+            "enrichment_authors": ["Ada Lovelace", "Grace Hopper"],
+            "enrichment_author_orcids": ["0000-0001", "0000-0002"],
+            "venue": "Journal of Enriched Graphs",
+        }),
+    )
+    db_session.add(publication)
+    db_session.commit()
+
+    result = materialize_scientific_import_graph(db_session, batch.id, org_id=None)
+    labels = {
+        row.primary_label
+        for row in db_session.query(models.RawEntity).filter(models.RawEntity.import_batch_id == batch.id).all()
+    }
+    relation_types = {
+        row.relation_type
+        for row in db_session.query(models.EntityRelationship).all()
+    }
+
+    assert result["relationships_created"] >= 6
+    assert {"Ada Lovelace", "Grace Hopper", "Journal of Enriched Graphs", "graph enrichment"} <= labels
+    assert {"authored-by", "published-in", "has-concept", "identified-by", "coauthor-with"} <= relation_types
+
+
+def test_graph_materialize_endpoint_backfills_existing_batch(client, auth_headers, db_session):
+    batch = _create_science_batch(db_session)
+    db_session.add(models.RawEntity(
+        org_id=None,
+        import_batch_id=batch.id,
+        domain="science",
+        entity_type="publication",
+        primary_label="Backfill Graph Record",
+        enrichment_doi="10.777/backfill",
+        enrichment_concepts="backfill graph",
+        enrichment_status="completed",
+    ))
+    db_session.commit()
+
+    response = client.post(f"/graph/materialize?import_batch_id={batch.id}", headers=auth_headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["totals"]["batches"] == 1
+    assert payload["totals"]["relationships_created"] >= 2

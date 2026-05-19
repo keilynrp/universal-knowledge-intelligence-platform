@@ -13,23 +13,86 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend import models
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
 from backend.olap import olap_engine
-from backend.schema_registry import DomainSchema, registry
+from backend.schema_registry import AttributeSchema, DomainSchema, registry
+from backend.tenant_access import resolve_request_org_id, scope_query_to_org
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["domains"])
 
 
+def _domain_label(domain_id: str) -> str:
+    return domain_id.replace("_", " ").replace("-", " ").title() or "Domain"
+
+
+def _synthetic_ingested_domain(domain_id: str, entity_count: int, first_entity_id: int) -> DomainSchema:
+    return DomainSchema(
+        id=domain_id,
+        name=_domain_label(domain_id),
+        description=f"Ingested domain detected from {entity_count} active records.",
+        primary_entity="Entity",
+        icon="Database",
+        entity_count=entity_count,
+        first_entity_id=first_entity_id,
+        attributes=[
+            AttributeSchema(name="primary_label", type="string", label="Primary Label", required=True, is_core=True),
+            AttributeSchema(name="domain", type="string", label="Domain", required=True, is_core=True),
+            AttributeSchema(name="entity_type", type="string", label="Entity Type", required=False, is_core=True),
+        ],
+    )
+
+
 @router.get("/domains", response_model=List[DomainSchema])
-def get_domains(_: models.User = Depends(get_current_user)):
-    """Returns all available domain schemas in the registry."""
-    return registry.get_all_domains()
+def get_domains(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Returns available domain schemas, enriched with ingestion-derived ordering metadata."""
+    org_id = resolve_request_org_id(db, current_user)
+    registry_domains = {domain.id: domain for domain in registry.get_all_domains()}
+    ingested_rows = (
+        scope_query_to_org(
+            db.query(
+                models.RawEntity.domain,
+                func.count(models.RawEntity.id),
+                func.min(models.RawEntity.id),
+            ),
+            models.RawEntity,
+            org_id,
+        )
+        .filter(models.RawEntity.domain.isnot(None), models.RawEntity.domain != "")
+        .group_by(models.RawEntity.domain)
+        .order_by(func.min(models.RawEntity.id).asc())
+        .all()
+    )
+
+    result: list[DomainSchema] = []
+    seen: set[str] = set()
+    for domain_id, count, first_entity_id in ingested_rows:
+        if not domain_id:
+            continue
+        count_value = int(count or 0)
+        first_id_value = int(first_entity_id or 0)
+        schema = registry_domains.get(domain_id)
+        if schema:
+            enriched = schema.model_copy(update={"entity_count": count_value, "first_entity_id": first_id_value})
+        else:
+            enriched = _synthetic_ingested_domain(domain_id, count_value, first_id_value)
+        result.append(enriched)
+        seen.add(domain_id)
+
+    for domain in registry.get_all_domains():
+        if domain.id not in seen:
+            result.append(domain.model_copy(update={"entity_count": 0, "first_entity_id": None}))
+
+    return result
 
 
 @router.post("/domains", response_model=DomainSchema, status_code=201)

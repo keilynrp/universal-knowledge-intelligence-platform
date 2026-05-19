@@ -309,6 +309,15 @@ def _after_enrichment_commit(
     except Exception as exc:
         logger.warning("Failed to incrementally index enriched entity %s: %s", entity.id, exc)
 
+    if entity.import_batch_id:
+        try:
+            from backend.services.graph_materializer import materialize_scientific_import_graph
+
+            result = materialize_scientific_import_graph(db, entity.import_batch_id, org_id=entity.org_id)
+            logger.debug("Graph materialization result after enrichment for entity %s: %s", entity.id, result)
+        except Exception as exc:
+            logger.warning("Failed to materialize graph after enrichment for entity %s: %s", entity.id, exc)
+
 
 def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEntity:
     """
