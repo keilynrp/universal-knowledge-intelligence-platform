@@ -6,24 +6,19 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  ADMIN_USERNAME: testadmin
+  ADMIN_PASSWORD: testpassword
+  JWT_SECRET_KEY: test-jwt-secret-key-for-ci-only-not-production
+  ENCRYPTION_KEY: "vRHc0zVcTXbRfUBZEsKNal2lMCfINwDh90EXE8vu2Ew="
+  ALLOWED_ORIGINS: "http://localhost:3004"
+  UKIP_SKIP_STARTUP_SIDE_EFFECTS: "1"
+  SENTRY_ENABLED: "0"
+
 jobs:
   test:
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: ukip_test
-          POSTGRES_PASSWORD: ukip_test_pw
-          POSTGRES_DB: ukip_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U ukip_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
 
     strategy:
       fail-fast: false
@@ -32,10 +27,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -45,15 +40,8 @@ jobs:
 
       - name: Run tests with coverage
         env:
-          ADMIN_USERNAME: testadmin
-          ADMIN_PASSWORD: testpassword
-          JWT_SECRET_KEY: test-jwt-secret-key-for-ci-only-not-production
-          ENCRYPTION_KEY: "vRHc0zVcTXbRfUBZEsKNal2lMCfINwDh90EXE8vu2Ew="
-          DATABASE_URL: "postgresql+psycopg2://ukip_test:ukip_test_pw@localhost:5432/ukip_test"
-          UKIP_DB_MODE: postgres
-          ALLOWED_ORIGINS: "http://localhost:3004"
-          UKIP_SKIP_STARTUP_SIDE_EFFECTS: "1"
-          SENTRY_ENABLED: "0"
+          DATABASE_URL: "sqlite:///:memory:"
+          UKIP_DB_MODE: sqlite
         run: |
           pip install pytest-cov -c requirements.lock
           pytest backend/tests/ \
@@ -71,3 +59,40 @@ jobs:
           name: coverage-report
           path: coverage.xml
           retention-days: 14
+
+  postgres-smoke:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ukip_test
+          POSTGRES_PASSWORD: ukip_test_pw
+          POSTGRES_DB: ukip_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ukip_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -c requirements.lock
+
+      - name: Validate PostgreSQL migrations
+        env:
+          DATABASE_URL: "postgresql+psycopg2://ukip_test:ukip_test_pw@localhost:5432/ukip_test"
+          UKIP_DB_MODE: postgres
+        run: python -m alembic upgrade head
