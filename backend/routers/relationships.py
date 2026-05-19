@@ -13,6 +13,7 @@ Sprint 73 — Graph Analytics
   GET  /graph/communities              — community summaries
 """
 import logging
+import json
 from collections import defaultdict, deque
 from typing import List
 
@@ -69,6 +70,34 @@ def _filter_edges_by_domain(
         .all()
     }
     return [(src, dst, rel, weight) for src, dst, rel, weight in edges if src in domain_node_ids and dst in domain_node_ids]
+
+
+def _safe_json(raw: str | None) -> dict:
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _concept_set(entity: models.RawEntity) -> set[str]:
+    attrs = _safe_json(entity.attributes_json)
+    values = [entity.enrichment_concepts, attrs.get("keywords"), attrs.get("concepts")]
+    concepts: set[str] = set()
+    for raw in values:
+        if isinstance(raw, list):
+            candidates = raw
+        elif isinstance(raw, str):
+            candidates = raw.replace("|", ",").replace(";", ",").split(",")
+        else:
+            candidates = []
+        for candidate in candidates:
+            value = str(candidate).strip().lower()
+            if value:
+                concepts.add(value)
+    return concepts
 
 
 @router.get("/graph/stats")
@@ -400,6 +429,7 @@ def get_graph_visualization(
 @router.post("/graph/materialize")
 def materialize_graph(
     import_batch_id: int | None = Query(default=None, ge=1),
+    entity_id: int | None = Query(default=None, ge=1),
     domain: str | None = Query(default=None, min_length=1, max_length=80),
     limit: int = Query(default=25, ge=1, le=250),
     db: Session = Depends(get_db),
@@ -408,6 +438,20 @@ def materialize_graph(
     """Backfill graph relationships for previously ingested/enriched records."""
     org_id = resolve_request_org_id(db, current_user)
     scoped_domain = _normalize_graph_domain(domain)
+    if entity_id:
+        entity = _get_entity_or_404(entity_id, db, org_id)
+        import_batch_id = import_batch_id or entity.import_batch_id
+        scoped_domain = scoped_domain or _normalize_graph_domain(entity.domain)
+        if not import_batch_id:
+            return {
+                "domain": scoped_domain,
+                "entity_id": entity_id,
+                "import_batch_id": None,
+                "limit": limit,
+                "totals": {"batches": 0, "publications": 0, "nodes_created": 0, "relationships_created": 0},
+                "results": [],
+                "diagnostic": "Entity has no import_batch_id, so automatic graph materialization cannot infer a batch.",
+            }
 
     batch_query = scope_query_to_org(db.query(models.RawEntity.import_batch_id), models.RawEntity, org_id)
     batch_query = batch_query.filter(models.RawEntity.import_batch_id.isnot(None))
@@ -433,11 +477,154 @@ def materialize_graph(
 
     return {
         "domain": scoped_domain,
+        "entity_id": entity_id,
         "import_batch_id": import_batch_id,
         "limit": limit,
         "totals": totals,
         "results": results,
     }
+
+
+@router.get("/entities/{entity_id}/graph/diagnostics")
+def get_entity_graph_diagnostics(
+    entity_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Explain why an entity graph is empty and what action can populate it."""
+    org_id = resolve_request_org_id(db, current_user)
+    entity = _get_entity_or_404(entity_id, db, org_id)
+    attrs = _safe_json(entity.attributes_json)
+    relationship_count = (
+        scope_query_to_org(db.query(models.EntityRelationship), models.EntityRelationship, org_id)
+        .filter(
+            (models.EntityRelationship.source_id == entity_id)
+            | (models.EntityRelationship.target_id == entity_id)
+        )
+        .count()
+    )
+    concepts = _concept_set(entity)
+    author_count = len(attrs.get("canonical_authors") or attrs.get("enrichment_authors") or [])
+    has_identifier = bool(entity.enrichment_doi or entity.canonical_id)
+    has_venue = bool(attrs.get("journal") or attrs.get("source_title") or attrs.get("venue"))
+    can_materialize = bool(entity.import_batch_id and (concepts or author_count or has_identifier or has_venue))
+    missing = []
+    if not entity.import_batch_id:
+        missing.append("import_batch_id")
+    if not concepts:
+        missing.append("concepts_or_keywords")
+    if not author_count:
+        missing.append("authors")
+    if not has_identifier:
+        missing.append("doi_or_identifier")
+    if not has_venue:
+        missing.append("venue_or_journal")
+
+    if relationship_count > 0:
+        status = "ready"
+        action = "Explore direct and two-hop relationships."
+    elif can_materialize:
+        status = "materializable"
+        action = "Run graph materialization for this record or its import batch."
+    elif entity.enrichment_status != "completed":
+        status = "needs_enrichment"
+        action = "Run enrichment first so the graph can infer authors, concepts, DOI, or venue."
+    else:
+        status = "insufficient_metadata"
+        action = "Add authors, concepts, DOI, venue, or create manual relationships."
+
+    return {
+        "entity_id": entity_id,
+        "domain": entity.domain,
+        "import_batch_id": entity.import_batch_id,
+        "relationship_count": relationship_count,
+        "status": status,
+        "action": action,
+        "can_materialize": can_materialize,
+        "signals": {
+            "concept_count": len(concepts),
+            "author_count": author_count,
+            "has_identifier": has_identifier,
+            "has_venue": has_venue,
+            "enrichment_status": entity.enrichment_status,
+        },
+        "missing": missing,
+    }
+
+
+@router.get("/entities/{entity_id}/relationships/suggestions")
+def suggest_relationships(
+    entity_id: int = Path(..., ge=1),
+    limit: int = Query(default=8, ge=1, le=25),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Suggest concrete relationships from shared concepts, batch context, and derived graph nodes."""
+    org_id = resolve_request_org_id(db, current_user)
+    entity = _get_entity_or_404(entity_id, db, org_id)
+    existing_ids = {
+        row[0]
+        for row in scope_query_to_org(
+            db.query(models.EntityRelationship.target_id), models.EntityRelationship, org_id
+        )
+        .filter(models.EntityRelationship.source_id == entity_id)
+        .all()
+    } | {
+        row[0]
+        for row in scope_query_to_org(
+            db.query(models.EntityRelationship.source_id), models.EntityRelationship, org_id
+        )
+        .filter(models.EntityRelationship.target_id == entity_id)
+        .all()
+    }
+    source_concepts = _concept_set(entity)
+    candidates_query = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id).filter(models.RawEntity.id != entity_id)
+    if entity.domain:
+        candidates_query = candidates_query.filter(models.RawEntity.domain == entity.domain)
+    if entity.import_batch_id:
+        candidates_query = candidates_query.filter(models.RawEntity.import_batch_id == entity.import_batch_id)
+
+    suggestions = []
+    for candidate in candidates_query.order_by(models.RawEntity.id.asc()).limit(250).all():
+        if candidate.id in existing_ids:
+            continue
+        attrs = _safe_json(candidate.attributes_json)
+        candidate_concepts = _concept_set(candidate)
+        shared = sorted(source_concepts & candidate_concepts)
+        relation_type = "related-to"
+        reason = ""
+        weight = 0.6
+        if attrs.get("derived") and candidate.entity_type == "author":
+            relation_type = "authored-by"
+            reason = "Author node derived from the same import batch."
+            weight = 1.0
+        elif attrs.get("derived") and candidate.entity_type == "journal":
+            relation_type = "published-in"
+            reason = "Publication venue derived from the same import batch."
+            weight = 0.9
+        elif attrs.get("derived") and candidate.entity_type == "concept":
+            relation_type = "has-concept"
+            reason = "Concept node derived from enrichment or ingest keywords."
+            weight = 0.8
+        elif shared:
+            reason = f"Shared concepts: {', '.join(shared[:3])}"
+            weight = min(1.0, 0.5 + len(shared) * 0.1)
+        elif entity.import_batch_id and candidate.import_batch_id == entity.import_batch_id:
+            reason = "Same import batch and domain."
+            weight = 0.4
+        else:
+            continue
+        suggestions.append({
+            "target_id": candidate.id,
+            "target_label": candidate.primary_label or f"Entity #{candidate.id}",
+            "target_type": candidate.entity_type,
+            "relation_type": relation_type,
+            "weight": round(weight, 2),
+            "reason": reason,
+        })
+        if len(suggestions) >= limit:
+            break
+    return {"entity_id": entity_id, "suggestions": suggestions}
 
 
 @router.get("/entities/{entity_id}/graph/metrics")

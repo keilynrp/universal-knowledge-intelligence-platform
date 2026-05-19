@@ -14,12 +14,32 @@ interface Relationship {
     created_at: string;
 }
 
-const RELATION_TYPES = ["cites", "authored-by", "belongs-to", "related-to"];
+interface EntitySearchHit {
+    id: number;
+    primary_label: string | null;
+    entity_type: string | null;
+    domain: string | null;
+}
+
+interface RelationshipSuggestion {
+    target_id: number;
+    target_label: string;
+    target_type: string | null;
+    relation_type: string;
+    weight: number;
+    reason: string;
+}
+
+const RELATION_TYPES = ["related-to", "cites", "authored-by", "belongs-to", "published-in", "has-concept", "identified-by", "coauthor-with"];
 
 const TYPE_COLORS: Record<string, string> = {
     "cites":       "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400",
     "authored-by": "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
     "belongs-to":  "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
+    "published-in": "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-400",
+    "has-concept": "bg-pink-100 text-pink-700 dark:bg-pink-500/10 dark:text-pink-400",
+    "identified-by": "bg-slate-100 text-slate-700 dark:bg-slate-500/10 dark:text-slate-300",
+    "coauthor-with": "bg-teal-100 text-teal-700 dark:bg-teal-500/10 dark:text-teal-400",
     "related-to":  "bg-violet-100 text-violet-700 dark:bg-violet-500/10 dark:text-violet-400",
 };
 
@@ -32,9 +52,14 @@ export default function RelationshipManager({
 }) {
     const [relationships, setRelationships] = useState<Relationship[]>([]);
     const [loading, setLoading] = useState(true);
+    const [suggestions, setSuggestions] = useState<RelationshipSuggestion[]>([]);
+    const [loadingSuggestions, setLoadingSuggestions] = useState(true);
 
     // Add form state
     const [targetId, setTargetId] = useState("");
+    const [targetQuery, setTargetQuery] = useState("");
+    const [targetResults, setTargetResults] = useState<EntitySearchHit[]>([]);
+    const [searchingTarget, setSearchingTarget] = useState(false);
     const [relType, setRelType] = useState("related-to");
     const [weight, setWeight] = useState("1.0");
     const [notes, setNotes] = useState("");
@@ -45,8 +70,33 @@ export default function RelationshipManager({
 
     useEffect(() => {
         fetchRelationships();
+        fetchSuggestions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [entityId]);
+
+    useEffect(() => {
+        const trimmed = targetQuery.trim();
+        if (trimmed.length < 2) {
+            setTargetResults([]);
+            return;
+        }
+        let active = true;
+        const timer = window.setTimeout(async () => {
+            setSearchingTarget(true);
+            try {
+                const res = await apiFetch(`/entities?search=${encodeURIComponent(trimmed)}&limit=6`);
+                if (!active) return;
+                const rows = res.ok ? await res.json() : [];
+                setTargetResults((rows as EntitySearchHit[]).filter((row) => row.id !== entityId));
+            } finally {
+                if (active) setSearchingTarget(false);
+            }
+        }, 220);
+        return () => {
+            active = false;
+            window.clearTimeout(timer);
+        };
+    }, [entityId, targetQuery]);
 
     async function fetchRelationships() {
         setLoading(true);
@@ -58,6 +108,39 @@ export default function RelationshipManager({
         }
     }
 
+    async function fetchSuggestions() {
+        setLoadingSuggestions(true);
+        try {
+            const res = await apiFetch(`/entities/${entityId}/relationships/suggestions?limit=6`);
+            if (res.ok) {
+                const data = await res.json();
+                setSuggestions(data.suggestions ?? []);
+            }
+        } finally {
+            setLoadingSuggestions(false);
+        }
+    }
+
+    async function createRelationship(target: number, type: string, relationshipWeight: number, relationshipNotes?: string | null) {
+        const res = await apiFetch(`/entities/${entityId}/relationships`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                target_id: target,
+                relation_type: type,
+                weight: relationshipWeight,
+                notes: relationshipNotes,
+            }),
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail ?? "Failed to add relationship");
+        }
+        await fetchRelationships();
+        await fetchSuggestions();
+        onRefreshGraph();
+    }
+
     async function handleAdd(e: React.FormEvent) {
         e.preventDefault();
         setAddError(null);
@@ -65,26 +148,14 @@ export default function RelationshipManager({
         if (!tid || isNaN(tid)) { setAddError("Target entity ID must be a number"); return; }
         setAdding(true);
         try {
-            const res = await apiFetch(`/entities/${entityId}/relationships`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    target_id: tid,
-                    relation_type: relType,
-                    weight: parseFloat(weight) || 1.0,
-                    notes: notes.trim() || null,
-                }),
-            });
-            if (!res.ok) {
-                const err = await res.json();
-                setAddError(err.detail ?? "Failed to add relationship");
-                return;
-            }
+            await createRelationship(tid, relType, parseFloat(weight) || 1.0, notes.trim() || null);
             setTargetId("");
+            setTargetQuery("");
+            setTargetResults([]);
             setNotes("");
             setWeight("1.0");
-            await fetchRelationships();
-            onRefreshGraph();
+        } catch (error) {
+            setAddError(error instanceof Error ? error.message : "Failed to add relationship");
         } finally {
             setAdding(false);
         }
@@ -95,6 +166,7 @@ export default function RelationshipManager({
         try {
             await apiFetch(`/relationships/${relId}`, { method: "DELETE" });
             setRelationships((prev) => prev.filter((r) => r.id !== relId));
+            await fetchSuggestions();
             onRefreshGraph();
         } finally {
             setDeletingId(null);
@@ -103,14 +175,79 @@ export default function RelationshipManager({
 
     return (
         <div className="space-y-5">
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                        <p className="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">Relaciones sugeridas</p>
+                        <p className="mt-1 text-xs text-indigo-700/70 dark:text-indigo-200/70">Conexiones inferidas desde batch, conceptos, autores y nodos derivados.</p>
+                    </div>
+                    {loadingSuggestions && <span className="text-xs font-semibold text-indigo-500">Analizando...</span>}
+                </div>
+                {!loadingSuggestions && suggestions.length === 0 ? (
+                    <p className="text-xs text-indigo-700/70 dark:text-indigo-200/70">No hay sugerencias automáticas todavía. Genera relaciones desde el grafo o busca una entidad por nombre.</p>
+                ) : (
+                    <div className="grid gap-2 md:grid-cols-2">
+                        {suggestions.map((suggestion) => (
+                            <div key={`${suggestion.target_id}-${suggestion.relation_type}`} className="rounded-xl border border-white/70 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-slate-950/40">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{suggestion.target_label}</p>
+                                        <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{suggestion.reason}</p>
+                                    </div>
+                                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${TYPE_COLORS[suggestion.relation_type] ?? TYPE_COLORS["related-to"]}`}>
+                                        {suggestion.relation_type}
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={() => void createRelationship(suggestion.target_id, suggestion.relation_type, suggestion.weight, suggestion.reason)}
+                                    className="mt-3 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-indigo-700"
+                                >
+                                    Aceptar relación
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
             {/* Add form */}
             <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50">
                 <p className="mb-3 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Add Relationship
                 </p>
                 <form onSubmit={handleAdd} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="relative col-span-2">
+                        <label className="mb-1 block text-[10px] font-medium text-gray-500">Buscar entidad destino</label>
+                        <input
+                            type="text"
+                            value={targetQuery}
+                            onChange={(e) => setTargetQuery(e.target.value)}
+                            placeholder="Nombre, DOI, concepto..."
+                            className="h-8 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                        />
+                        {(targetResults.length > 0 || searchingTarget) && (
+                            <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900">
+                                {searchingTarget && <p className="px-3 py-2 text-xs text-gray-400">Buscando...</p>}
+                                {targetResults.map((result) => (
+                                    <button
+                                        type="button"
+                                        key={result.id}
+                                        onClick={() => {
+                                            setTargetId(String(result.id));
+                                            setTargetQuery(result.primary_label || `Entity #${result.id}`);
+                                            setTargetResults([]);
+                                        }}
+                                        className="block w-full px-3 py-2 text-left hover:bg-indigo-50 dark:hover:bg-indigo-500/10"
+                                    >
+                                        <span className="block truncate text-xs font-bold text-gray-800 dark:text-white">{result.primary_label || `Entity #${result.id}`}</span>
+                                        <span className="text-[10px] text-gray-400">#{result.id} · {result.entity_type || "entity"} · {result.domain || "domain"}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                     <div>
-                        <label className="mb-1 block text-[10px] font-medium text-gray-500">Target Entity ID</label>
+                        <label className="mb-1 block text-[10px] font-medium text-gray-500">Target ID</label>
                         <input
                             type="number"
                             min="1"

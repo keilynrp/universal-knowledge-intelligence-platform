@@ -46,12 +46,32 @@ interface GraphMetrics {
     };
 }
 
+interface GraphDiagnostics {
+    status: "ready" | "materializable" | "needs_enrichment" | "insufficient_metadata";
+    action: string;
+    can_materialize: boolean;
+    relationship_count: number;
+    import_batch_id: number | null;
+    signals: {
+        concept_count: number;
+        author_count: number;
+        has_identifier: boolean;
+        has_venue: boolean;
+        enrichment_status: string | null;
+    };
+    missing: string[];
+}
+
 interface Position { x: number; y: number; }
 
 const RELATION_COLORS: Record<string, string> = {
     "cites":       "#6366f1",   // indigo
     "authored-by": "#10b981",   // emerald
     "belongs-to":  "#f59e0b",   // amber
+    "published-in": "#06b6d4",  // cyan
+    "has-concept": "#ec4899",   // pink
+    "identified-by": "#64748b", // slate
+    "coauthor-with": "#14b8a6", // teal
     "related-to":  "#8b5cf6",   // violet
 };
 
@@ -59,6 +79,10 @@ const RELATION_LABEL_COLORS: Record<string, string> = {
     "cites":       "#818cf8",
     "authored-by": "#34d399",
     "belongs-to":  "#fbbf24",
+    "published-in": "#22d3ee",
+    "has-concept": "#f472b6",
+    "identified-by": "#94a3b8",
+    "coauthor-with": "#2dd4bf",
     "related-to":  "#a78bfa",
 };
 
@@ -90,7 +114,10 @@ export default function EntityGraph({ entityId }: { entityId: number }) {
     const [hovered, setHovered] = useState<number | null>(null);
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
     const [metrics, setMetrics] = useState<GraphMetrics | null>(null);
+    const [diagnostics, setDiagnostics] = useState<GraphDiagnostics | null>(null);
     const [resolvedKey, setResolvedKey] = useState<string | null>(null);
+    const [materializing, setMaterializing] = useState(false);
+    const [materializeMessage, setMaterializeMessage] = useState<string | null>(null);
     const svgRef = useRef<SVGSVGElement>(null);
 
     const W = 600;
@@ -108,12 +135,16 @@ export default function EntityGraph({ entityId }: { entityId: number }) {
             apiFetch(`/entities/${entityId}/graph/metrics`)
                 .then((r) => r.ok ? r.json() : null)
                 .catch(() => null),
-        ]).then(([graphData, metricsData]) => {
+            apiFetch(`/entities/${entityId}/graph/diagnostics`)
+                .then((r) => r.ok ? r.json() : null)
+                .catch(() => null),
+        ]).then(([graphData, metricsData, diagnosticsData]) => {
             if (!active) {
                 return;
             }
             setGraph(graphData);
             setMetrics(metricsData);
+            setDiagnostics(diagnosticsData);
             setResolvedKey(requestKey);
         });
 
@@ -123,6 +154,22 @@ export default function EntityGraph({ entityId }: { entityId: number }) {
     }, [entityId, depth, requestKey]);
 
     const positions = usePositions(graph?.nodes ?? [], W, H);
+
+    async function materializeForEntity() {
+        setMaterializing(true);
+        setMaterializeMessage(null);
+        try {
+            const response = await apiFetch(`/graph/materialize?entity_id=${entityId}`, { method: "POST" });
+            const payload = response.ok ? await response.json() : null;
+            const created = payload?.totals?.relationships_created ?? 0;
+            setMaterializeMessage(created > 0 ? `Generated ${created} relationships.` : "No new relationships were generated.");
+            setResolvedKey(null);
+        } catch {
+            setMaterializeMessage("Could not generate relationships.");
+        } finally {
+            setMaterializing(false);
+        }
+    }
 
     if (loading) {
         return (
@@ -135,16 +182,46 @@ export default function EntityGraph({ entityId }: { entityId: number }) {
         );
     }
 
-    if (!graph || graph.nodes.length === 0) {
+    if (!graph || graph.edges.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="space-y-4 rounded-2xl border border-dashed border-slate-200 bg-white p-5 text-center dark:border-white/10 dark:bg-slate-950/40">
                 <svg className="mb-3 h-10 w-10 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                 </svg>
-                <p className="text-sm text-gray-500 dark:text-gray-400">No relationships yet</p>
-                <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                    No relationships — add one below to see graph metrics.
-                </p>
+                <div>
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200">No hay relaciones activas para este registro</p>
+                    <p className="mx-auto mt-1 max-w-xl text-xs leading-5 text-slate-500 dark:text-slate-400">
+                        {diagnostics?.action || "Genera relaciones desde enrichment o crea una conexión manual para activar métricas del grafo."}
+                    </p>
+                </div>
+                {diagnostics && (
+                    <div className="mx-auto grid max-w-2xl grid-cols-2 gap-2 text-left sm:grid-cols-4">
+                        {[
+                            ["Conceptos", diagnostics.signals.concept_count],
+                            ["Autores", diagnostics.signals.author_count],
+                            ["Identificador", diagnostics.signals.has_identifier ? "sí" : "no"],
+                            ["Venue", diagnostics.signals.has_venue ? "sí" : "no"],
+                        ].map(([label, value]) => (
+                            <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
+                                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
+                                <p className="mt-1 text-sm font-black text-slate-800 dark:text-white">{value}</p>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                <div className="flex flex-wrap justify-center gap-2">
+                    <button
+                        onClick={materializeForEntity}
+                        disabled={materializing || !diagnostics?.can_materialize}
+                        className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        {materializing ? "Generando..." : "Generar relaciones"}
+                    </button>
+                    <Link href="/analytics/graph" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
+                        Ver grafo global
+                    </Link>
+                </div>
+                {materializeMessage && <p className="text-xs font-semibold text-slate-500">{materializeMessage}</p>}
             </div>
         );
     }

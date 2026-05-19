@@ -648,7 +648,16 @@ class AnalysisContextResponse(BaseModel):
 
 # ── Entity Relationship Graph ──────────────────────────────────────────────────
 
-VALID_RELATION_TYPES = {"cites", "authored-by", "belongs-to", "related-to"}
+VALID_RELATION_TYPES = {
+    "cites",
+    "authored-by",
+    "belongs-to",
+    "related-to",
+    "published-in",
+    "has-concept",
+    "identified-by",
+    "coauthor-with",
+}
 
 class EntityRelationshipCreate(BaseModel):
     target_id:     int   = Field(..., ge=1)

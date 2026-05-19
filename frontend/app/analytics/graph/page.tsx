@@ -238,6 +238,8 @@ export default function GraphExplorerPage() {
 
   // Export
   const [exporting, setExporting] = useState(false);
+  const [materializing, setMaterializing] = useState(false);
+  const [materializeMessage, setMaterializeMessage] = useState<string | null>(null);
 
   const activeGraphDomain = activeDomainId && activeDomainId !== "all" ? activeDomainId : null;
   const activeGraphScopeLabel = activeGraphDomain ? (activeDomain?.name || activeGraphDomain) : "Todos los dominios";
@@ -300,6 +302,26 @@ export default function GraphExplorerPage() {
     } finally { setExporting(false); }
   }
 
+  async function handleMaterialize() {
+    setMaterializing(true);
+    setMaterializeMessage(null);
+    try {
+      const query = buildScopedQuery({ limit: "50" });
+      const r = await apiFetch(`/graph/materialize?${query.toString()}`, { method: "POST" });
+      const payload = r.ok ? await r.json() : null;
+      const created = payload?.totals?.relationships_created ?? 0;
+      const batches = payload?.totals?.batches ?? 0;
+      setMaterializeMessage(created > 0 ? `${created} relaciones generadas en ${batches} batches.` : `Sin relaciones nuevas en ${batches} batches.`);
+      const refreshQuery = buildScopedQuery({ limit: "500" });
+      const refreshed = await apiFetch(`/graph/visualization?${refreshQuery.toString()}`);
+      if (refreshed.ok) setData(await refreshed.json());
+    } catch {
+      setMaterializeMessage("No se pudo generar el grafo para este contexto.");
+    } finally {
+      setMaterializing(false);
+    }
+  }
+
   const stats = data?.stats;
   const activeFilters = data?.filters ? Object.entries(data.filters).filter(([, value]) => value !== null && value !== undefined && value !== "") : [];
   const edgeTypeLabels: Record<string, string> = {
@@ -340,6 +362,11 @@ export default function GraphExplorerPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={handleMaterialize} disabled={materializing}
+            className="flex items-center gap-2 rounded-xl bg-[var(--ukip-primary)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.5 12a7.5 7.5 0 0112.728-5.364M19.5 12a7.5 7.5 0 01-12.728 5.364M16.5 6.75h1.5V5.25M7.5 17.25H6v1.5" /></svg>
+            {materializing ? "Generando..." : "Generar grafo"}
+          </button>
           <button onClick={() => { setShowPath(p => !p); setPathResult(null); setHighlightIds(new Set()); }}
             className="flex items-center gap-2 rounded-xl bg-[var(--ukip-primary-soft)] px-4 py-2 text-sm font-semibold text-[var(--ukip-primary-strong)] transition hover:opacity-90">
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
@@ -352,6 +379,11 @@ export default function GraphExplorerPage() {
           </button>
         </div>
       </div>
+      {materializeMessage && (
+        <div className="shrink-0 border-b border-[var(--ukip-border)] bg-[var(--ukip-primary-soft)] px-6 py-2 text-xs font-semibold text-[var(--ukip-primary-strong)]">
+          {materializeMessage}
+        </div>
+      )}
 
       {/* KPI Row */}
       {stats && (
@@ -425,6 +457,11 @@ export default function GraphExplorerPage() {
             <div className="flex h-full flex-col items-center justify-center gap-3 text-[var(--ukip-muted)]">
               <svg className="h-12 w-12 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5z" /></svg>
               <p className="text-sm">{t("page.graph.no_relationships") || "Sin relaciones. Añade relaciones entre entidades para visualizar el grafo."}</p>
+              <p className="max-w-md text-center text-xs text-[var(--ukip-muted-soft)]">Este contexto puede tener entidades enriquecidas pero aún no relaciones materializadas. Usa “Generar grafo” para reconstruir nodos y aristas desde autores, conceptos, DOI y venues.</p>
+              <button onClick={handleMaterialize} disabled={materializing}
+                className="rounded-xl bg-[var(--ukip-primary)] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+                {materializing ? "Generando..." : "Generar grafo para este contexto"}
+              </button>
             </div>
           )}
           {!loading && !error && data && data.nodes.length > 0 && (

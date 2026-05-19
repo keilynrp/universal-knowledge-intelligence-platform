@@ -240,3 +240,68 @@ def test_graph_materialize_endpoint_backfills_existing_batch(client, auth_header
     payload = response.json()
     assert payload["totals"]["batches"] == 1
     assert payload["totals"]["relationships_created"] >= 2
+
+
+def test_entity_graph_diagnostics_explains_materializable_record(client, auth_headers, db_session):
+    batch = _create_science_batch(db_session)
+    entity = models.RawEntity(
+        org_id=None,
+        import_batch_id=batch.id,
+        domain="science",
+        entity_type="publication",
+        primary_label="Diagnostic Graph Record",
+        enrichment_concepts="diagnostic, graph",
+        enrichment_status="completed",
+    )
+    db_session.add(entity)
+    db_session.commit()
+
+    response = client.get(f"/entities/{entity.id}/graph/diagnostics", headers=auth_headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "materializable"
+    assert payload["can_materialize"] is True
+    assert payload["signals"]["concept_count"] == 2
+
+
+def test_relationship_suggestions_use_shared_concepts(client, auth_headers, db_session):
+    source = models.RawEntity(
+        primary_label="Source Graph Paper",
+        domain="suggestions",
+        import_batch_id=91,
+        enrichment_concepts="open science, graph analytics",
+    )
+    target = models.RawEntity(
+        primary_label="Target Graph Paper",
+        domain="suggestions",
+        import_batch_id=91,
+        enrichment_concepts="graph analytics, research intelligence",
+    )
+    db_session.add_all([source, target])
+    db_session.commit()
+
+    response = client.get(f"/entities/{source.id}/relationships/suggestions", headers=auth_headers)
+
+    assert response.status_code == 200
+    suggestions = response.json()["suggestions"]
+    assert suggestions
+    assert suggestions[0]["target_id"] == target.id
+    assert suggestions[0]["relation_type"] == "related-to"
+    assert "graph analytics" in suggestions[0]["reason"]
+
+
+def test_manual_relationship_accepts_derived_relation_types(client, auth_headers, db_session):
+    source = models.RawEntity(primary_label="Publication", domain="manual_graph")
+    concept = models.RawEntity(primary_label="Knowledge Graph", domain="manual_graph", entity_type="concept")
+    db_session.add_all([source, concept])
+    db_session.commit()
+
+    response = client.post(
+        f"/entities/{source.id}/relationships",
+        headers=auth_headers,
+        json={"target_id": concept.id, "relation_type": "has-concept", "weight": 0.8},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["relation_type"] == "has-concept"
