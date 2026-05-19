@@ -457,6 +457,58 @@ function hasMeaningfulValue(value: unknown): boolean {
     return true;
 }
 
+const SYSTEM_ATTRIBUTE_KEYS = new Set([
+    "validation_status",
+    "enrichment_status",
+    "enrichment_source",
+    "enrichment_doi",
+    "enrichment_citation_count",
+    "enrichment_concepts",
+    "enrichment_authors",
+    "enrichment_author_orcids",
+    "enrichment_failure",
+    "import_batch_id",
+    "quality_score",
+    "attention_score",
+]);
+
+const PRIMARY_ATTRIBUTE_KEYS = new Set([
+    "primary_label",
+    "secondary_label",
+    "canonical_id",
+    "entity_type",
+    "domain",
+]);
+
+function comparableValue(value: unknown): string | null {
+    if (value === null || value === undefined || value === "") return null;
+    if (Array.isArray(value)) {
+        const normalizedItems = value
+            .map((item) => comparableValue(item))
+            .filter((item): item is string => Boolean(item));
+        return normalizedItems.length ? normalizedItems.join("|") : null;
+    }
+    if (typeof value === "object") return null;
+    return stripInlineHtml(String(value)).trim().toLocaleLowerCase();
+}
+
+function fieldGroup(key: string): string {
+    const normalizedKey = key.toLocaleLowerCase();
+    if (["title", "name", "primary_label"].includes(normalizedKey)) return "title";
+    if (["authors", "author", "full_authors", "secondary_label"].includes(normalizedKey)) return "authors";
+    if (["doi", "raw_di", "enrichment_doi", "canonical_id"].includes(normalizedKey)) return "identifier";
+    if (["citation_count", "citations", "enrichment_citation_count", "raw_ct"].includes(normalizedKey)) return "citations";
+    if (["source", "source_name", "_source_name", "enrichment_source"].includes(normalizedKey)) return "source";
+    return normalizedKey;
+}
+
+function hasDisplayedEquivalent(key: string, value: unknown, displayedValuesByGroup: Record<string, unknown[]>): boolean {
+    const group = fieldGroup(key);
+    const comparable = comparableValue(value);
+    if (!comparable) return false;
+    return (displayedValuesByGroup[group] ?? []).some((displayedValue) => comparableValue(displayedValue) === comparable);
+}
+
 function IconGlyph({ name, className = "h-5 w-5" }: { name: string; className?: string }) {
     const common = {
         className,
@@ -982,8 +1034,20 @@ export default function EntityDetailPage() {
         { label: tr("entities.detail.enrichment.academic_source", "Fuente académica"), value: entity.enrichment_source || shortSource || "—", icon: "database" },
         { label: tr("entities.detail.enrichment.normalized_doi", "DOI normalizado"), value: entity.enrichment_doi || entity.canonical_id, icon: "link", href: entity.enrichment_doi ? `https://doi.org/${entity.enrichment_doi}` : undefined },
     ];
+    const displayedValuesByGroup: Record<string, unknown[]> = {
+        title: [displayTitle, entity.primary_label],
+        authors: [entity.secondary_label],
+        identifier: [entity.canonical_id, entity.enrichment_doi],
+        citations: [entity.enrichment_citation_count],
+        source: [entity.source, entity.enrichment_source, shortSource],
+    };
     const extendedEntries = Object.entries(mergedAttributes).filter(
-        ([key]) => !["primary_label", "secondary_label", "canonical_id", "entity_type", "domain"].includes(key) && !ABSTRACT_FIELD_KEYS.has(key)
+        ([key, value]) =>
+            hasMeaningfulValue(value) &&
+            !PRIMARY_ATTRIBUTE_KEYS.has(key) &&
+            !SYSTEM_ATTRIBUTE_KEYS.has(key) &&
+            !ABSTRACT_FIELD_KEYS.has(key) &&
+            !hasDisplayedEquivalent(key, value, displayedValuesByGroup)
     );
 
     async function copyValue(value: unknown) {

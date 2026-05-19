@@ -164,6 +164,58 @@ function wordCount(text: string): number {
     return text.split(/\s+/).filter(Boolean).length;
 }
 
+const SYSTEM_ATTRIBUTE_KEYS = new Set([
+    "validation_status",
+    "enrichment_status",
+    "enrichment_source",
+    "enrichment_doi",
+    "enrichment_citation_count",
+    "enrichment_concepts",
+    "enrichment_authors",
+    "enrichment_author_orcids",
+    "enrichment_failure",
+    "import_batch_id",
+    "quality_score",
+    "attention_score",
+]);
+
+const PRIMARY_ATTRIBUTE_KEYS = new Set([
+    "primary_label",
+    "secondary_label",
+    "canonical_id",
+    "entity_type",
+    "domain",
+]);
+
+function comparableValue(value: unknown): string | null {
+    if (value === null || value === undefined || value === "") return null;
+    if (Array.isArray(value)) {
+        const normalizedItems = value
+            .map((item) => comparableValue(item))
+            .filter((item): item is string => Boolean(item));
+        return normalizedItems.length ? normalizedItems.join("|") : null;
+    }
+    if (typeof value === "object") return null;
+    return stripInlineHtml(String(value)).trim().toLocaleLowerCase();
+}
+
+function fieldGroup(key: string): string {
+    const normalizedKey = key.toLocaleLowerCase();
+    if (["title", "name", "primary_label"].includes(normalizedKey)) return "title";
+    if (["authors", "author", "full_authors", "secondary_label"].includes(normalizedKey)) return "authors";
+    if (["doi", "raw_di", "enrichment_doi", "canonical_id"].includes(normalizedKey)) return "identifier";
+    if (["citation_count", "citations", "enrichment_citation_count", "raw_ct"].includes(normalizedKey)) return "citations";
+    if (["source", "source_name", "_source_name", "enrichment_source"].includes(normalizedKey)) return "source";
+    return normalizedKey;
+}
+
+function hasDisplayedEquivalent(key: string, value: unknown, displayedValuesByGroup: Record<string, unknown[]>): boolean {
+    const group = fieldGroup(key);
+    const comparable = comparableValue(value);
+    if (!comparable) return false;
+    return (displayedValuesByGroup[group] ?? []).some((displayedValue) => comparableValue(displayedValue) === comparable);
+}
+
 /**
  * Renders a list of authors paired with their ORCIDs (when available).
  * Each ORCID links to the official orcid.org profile.
@@ -353,6 +405,13 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
         label: t(field.labelKey),
         value: entity[field.key],
     }));
+    const displayedValuesByGroup: Record<string, unknown[]> = {
+        title: [entity.primary_label, mergedExtendedAttributes.title, mergedExtendedAttributes.name],
+        authors: [entity.secondary_label],
+        identifier: [entity.canonical_id, mergedExtendedAttributes.enrichment_doi],
+        citations: [entity.enrichment_citation_count],
+        source: [entity.source, mergedExtendedAttributes.enrichment_source, mergedExtendedAttributes.source_name, mergedExtendedAttributes.source],
+    };
 
     // Pair authors with ORCIDs for rich rendering
     const enrichmentOrcids = (sourceAttributes.enrichment_author_orcids ?? []) as (string | null)[];
@@ -361,7 +420,15 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
     const extendedFields = sortExtendedFields(
         activeDomain?.id,
         Object.entries(mergedExtendedAttributes)
-        .filter(([key, value]) => value !== null && value !== undefined && value !== "" && key !== "enrichment_author_orcids" && key !== "enrichment_authors" && !ABSTRACT_FIELD_KEYS.has(key))
+        .filter(([key, value]) =>
+            value !== null &&
+            value !== undefined &&
+            value !== "" &&
+            !PRIMARY_ATTRIBUTE_KEYS.has(key) &&
+            !SYSTEM_ATTRIBUTE_KEYS.has(key) &&
+            !ABSTRACT_FIELD_KEYS.has(key) &&
+            !hasDisplayedEquivalent(key, value, displayedValuesByGroup)
+        )
         .map(([key, value]) => ({
             key,
             label: activeDomain?.attributes.find((attribute) => attribute.name === key)?.label ?? titleCaseKey(key),
