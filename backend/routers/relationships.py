@@ -37,6 +37,39 @@ def _get_entity_or_404(entity_id: int, db: Session, org_id: int | None) -> model
     return entity
 
 
+def _normalize_graph_domain(domain: str | None) -> str | None:
+    if not domain:
+        return None
+    value = domain.strip()
+    if not value or value.lower() == "all":
+        return None
+    return value
+
+
+def _filter_edges_by_domain(
+    db: Session,
+    edges: list[tuple[int, int, str, float]],
+    org_id: int | None,
+    domain: str | None,
+) -> list[tuple[int, int, str, float]]:
+    scoped_domain = _normalize_graph_domain(domain)
+    if not scoped_domain or not edges:
+        return edges
+
+    node_ids: set[int] = set()
+    for src, dst, _, _ in edges:
+        node_ids.add(src)
+        node_ids.add(dst)
+
+    domain_node_ids = {
+        row[0]
+        for row in scope_query_to_org(db.query(models.RawEntity.id), models.RawEntity, org_id)
+        .filter(models.RawEntity.id.in_(node_ids), models.RawEntity.domain == scoped_domain)
+        .all()
+    }
+    return [(src, dst, rel, weight) for src, dst, rel, weight in edges if src in domain_node_ids and dst in domain_node_ids]
+
+
 @router.get("/graph/stats")
 def get_graph_stats(
     db: Session = Depends(get_db),
@@ -100,6 +133,7 @@ def get_graph_stats(
 def get_shortest_path(
     from_id: int = Query(..., ge=1),
     to_id:   int = Query(..., ge=1),
+    domain: str | None = Query(default=None, min_length=1, max_length=80),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -113,7 +147,8 @@ def get_shortest_path(
         if not get_scoped_record(db, models.RawEntity, eid, org_id):
             raise HTTPException(status_code=404, detail=f"Entity {eid} not found")
 
-    edges = graph_analytics.fetch_edges(db, org_id=org_id)
+    scoped_domain = _normalize_graph_domain(domain)
+    edges = _filter_edges_by_domain(db, graph_analytics.fetch_edges(db, org_id=org_id), org_id, scoped_domain)
     result = graph_analytics.shortest_path(from_id, to_id, edges)
 
     if result is None:
@@ -232,7 +267,7 @@ def get_graph_visualization(
     org_id = resolve_request_org_id(db, current_user)
     portal_ref = portal_slug or portal
     scoped_import_batch_id = import_batch_id
-    scoped_domain = domain
+    scoped_domain = _normalize_graph_domain(domain)
 
     if portal_ref:
         portal_record = (
@@ -243,7 +278,7 @@ def get_graph_visualization(
         if not portal_record:
             raise HTTPException(status_code=404, detail="Catalog portal not found")
         scoped_import_batch_id = scoped_import_batch_id or portal_record.source_batch_id
-        scoped_domain = scoped_domain or portal_record.domain_id
+        scoped_domain = scoped_domain or _normalize_graph_domain(portal_record.domain_id)
 
     filters_active = bool(scoped_import_batch_id or provider or scoped_domain)
     if not filters_active:

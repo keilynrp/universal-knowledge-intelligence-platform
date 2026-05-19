@@ -133,3 +133,52 @@ def test_graph_visualization_filters_by_import_batch(client, auth_headers, db_se
     assert "Knowledge Graphs for Research Intelligence" in labels
     assert "Excluded Publication" not in labels
     assert payload["filters"]["import_batch_id"] == included_batch.id
+
+
+def test_graph_visualization_scopes_by_domain_and_treats_all_as_aggregate(client, auth_headers, db_session):
+    science_a = models.RawEntity(primary_label="Science A", domain="graph_science", entity_type="publication")
+    science_b = models.RawEntity(primary_label="Science B", domain="graph_science", entity_type="publication")
+    business_a = models.RawEntity(primary_label="Business A", domain="graph_business", entity_type="publication")
+    business_b = models.RawEntity(primary_label="Business B", domain="graph_business", entity_type="publication")
+    db_session.add_all([science_a, science_b, business_a, business_b])
+    db_session.flush()
+    db_session.add_all([
+        models.EntityRelationship(source_id=science_a.id, target_id=science_b.id, relation_type="cites", weight=1.0),
+        models.EntityRelationship(source_id=business_a.id, target_id=business_b.id, relation_type="cites", weight=1.0),
+    ])
+    db_session.commit()
+
+    scoped = client.get("/graph/visualization?domain=graph_science&limit=100", headers=auth_headers)
+    aggregate = client.get("/graph/visualization?domain=all&limit=100", headers=auth_headers)
+
+    assert scoped.status_code == 200
+    scoped_labels = {node["label"] for node in scoped.json()["nodes"]}
+    assert {"Science A", "Science B"} <= scoped_labels
+    assert "Business A" not in scoped_labels
+    assert scoped.json()["filters"]["domain"] == "graph_science"
+
+    assert aggregate.status_code == 200
+    aggregate_labels = {node["label"] for node in aggregate.json()["nodes"]}
+    assert {"Science A", "Science B", "Business A", "Business B"} <= aggregate_labels
+    assert aggregate.json()["filters"]["domain"] is None
+
+
+def test_graph_path_respects_domain_scope(client, auth_headers, db_session):
+    science_a = models.RawEntity(primary_label="Path Science A", domain="path_science", entity_type="publication")
+    science_b = models.RawEntity(primary_label="Path Science B", domain="path_science", entity_type="publication")
+    business_mid = models.RawEntity(primary_label="Path Business Mid", domain="path_business", entity_type="publication")
+    db_session.add_all([science_a, science_b, business_mid])
+    db_session.flush()
+    db_session.add_all([
+        models.EntityRelationship(source_id=science_a.id, target_id=business_mid.id, relation_type="related-to", weight=1.0),
+        models.EntityRelationship(source_id=business_mid.id, target_id=science_b.id, relation_type="related-to", weight=1.0),
+    ])
+    db_session.commit()
+
+    aggregate = client.get(f"/graph/path?from_id={science_a.id}&to_id={science_b.id}&domain=all", headers=auth_headers)
+    scoped = client.get(f"/graph/path?from_id={science_a.id}&to_id={science_b.id}&domain=path_science", headers=auth_headers)
+
+    assert aggregate.status_code == 200
+    assert aggregate.json()["found"] is True
+    assert scoped.status_code == 200
+    assert scoped.json()["found"] is False

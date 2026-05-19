@@ -69,9 +69,13 @@ def _fetch_graph(db: Session, domain: Optional[str]):
         node_ids.add(e.source_id)
         node_ids.add(e.target_id)
 
+    scoped_domain = domain.strip() if domain else None
+    if scoped_domain and scoped_domain.lower() == "all":
+        scoped_domain = None
+
     q = db.query(models.RawEntity).filter(models.RawEntity.id.in_(node_ids))
-    if domain:
-        q = q.filter(models.RawEntity.domain == domain)
+    if scoped_domain:
+        q = q.filter(models.RawEntity.domain == scoped_domain)
     entities: dict[int, models.RawEntity] = {e.id: e for e in q.all()}
 
     edges = [
@@ -257,9 +261,13 @@ def export_graph(
     Nodes are entities; edges are typed, weighted relationships.
     Optional `domain` parameter scopes the export to a single domain.
     """
-    entities, edges = _fetch_graph(db, domain)
+    scoped_domain = domain.strip() if domain else None
+    if scoped_domain and scoped_domain.lower() == "all":
+        scoped_domain = None
+
+    entities, edges = _fetch_graph(db, scoped_domain)
     now = datetime.now(timezone.utc).isoformat()
-    domain_slug = f"_{domain}" if domain else ""
+    domain_slug = f"_{scoped_domain}" if scoped_domain else ""
     filename = f"ukip_graph{domain_slug}.{_EXTENSIONS[format]}"
 
     if format == "graphml":

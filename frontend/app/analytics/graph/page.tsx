@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
+import { useDomain } from "../../contexts/DomainContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -221,6 +222,7 @@ function ForceGraph({ nodes, links, highlightIds }: ForceGraphProps) {
 
 export default function GraphExplorerPage() {
   const { t } = useLanguage();
+  const { activeDomainId, activeDomain } = useDomain();
   const [data, setData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -237,26 +239,47 @@ export default function GraphExplorerPage() {
   // Export
   const [exporting, setExporting] = useState(false);
 
-  useEffect(() => {
-    const query = new URLSearchParams({ limit: "500" });
-    const current = new URLSearchParams(window.location.search);
-    ["import_batch_id", "provider", "domain", "portal", "portal_slug"].forEach((key) => {
-      const value = current.get(key);
-      if (value) query.set(key, value);
-    });
+  const activeGraphDomain = activeDomainId && activeDomainId !== "all" ? activeDomainId : null;
+  const activeGraphScopeLabel = activeGraphDomain ? (activeDomain?.name || activeGraphDomain) : "Todos los dominios";
 
+  const buildScopedQuery = useCallback((base?: Record<string, string>) => {
+    const query = new URLSearchParams(base);
+    if (typeof window !== "undefined") {
+      const current = new URLSearchParams(window.location.search);
+      ["import_batch_id", "provider", "portal", "portal_slug"].forEach((key) => {
+        const value = current.get(key);
+        if (value) query.set(key, value);
+      });
+      const urlDomain = current.get("domain");
+      if (!activeGraphDomain && urlDomain && urlDomain !== "all") query.set("domain", urlDomain);
+    }
+    if (activeGraphDomain) query.set("domain", activeGraphDomain);
+    else query.delete("domain");
+    return query;
+  }, [activeGraphDomain]);
+
+  useEffect(() => {
+    const query = buildScopedQuery({ limit: "500" });
+
+    setLoading(true);
+    setError(null);
+    setData(null);
+    setPathResult(null);
+    setPathError(null);
+    setHighlightIds(new Set());
     apiFetch(`/graph/visualization?${query.toString()}`)
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(setData)
       .catch(e => setError(`Failed to load graph (${e})`))
       .finally(() => setLoading(false));
-  }, []);
+  }, [buildScopedQuery]);
 
   async function findPath() {
     if (!fromId || !toId) return;
     setLoadingPath(true); setPathResult(null); setPathError(null); setHighlightIds(new Set());
     try {
-      const r = await apiFetch(`/graph/path?from_id=${fromId}&to_id=${toId}`);
+      const query = buildScopedQuery({ from_id: fromId, to_id: toId });
+      const r = await apiFetch(`/graph/path?${query.toString()}`);
       const result: PathResult = await r.json();
       setPathResult(result);
       if (result.found && result.steps) setHighlightIds(new Set(result.steps.map(s => s.entity_id)));
@@ -267,10 +290,12 @@ export default function GraphExplorerPage() {
   async function handleExport() {
     setExporting(true);
     try {
-      const r = await apiFetch("/export/graph?format=graphml");
+      const query = buildScopedQuery({ format: "graphml" });
+      const r = await apiFetch(`/export/graph?${query.toString()}`);
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a"); a.href = url; a.download = "ukip_graph.graphml"; a.click();
+      const suffix = activeGraphDomain ? `_${activeGraphDomain}` : "";
+      const a = document.createElement("a"); a.href = url; a.download = `ukip_graph${suffix}.graphml`; a.click();
       URL.revokeObjectURL(url);
     } finally { setExporting(false); }
   }
@@ -309,6 +334,9 @@ export default function GraphExplorerPage() {
                 <span className="mr-1 uppercase opacity-70">{key}</span>{String(value)}
               </span>
             ))}
+            <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-mono text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300">
+              <span className="mr-1 uppercase opacity-70">scope</span>{activeGraphScopeLabel}
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-2">
