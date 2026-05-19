@@ -95,16 +95,16 @@ export default function EpistemicAnalysisPage() {
       });
       if (resp.ok) {
         const result = await resp.json();
-        toast({
-          title: `${t("epistemic.classify_success")} (${result.classified} ${t("epistemic.classified")})`,
-          variant: "default",
-        });
+        toast(
+          `${t("epistemic.classify_success")} (${result.classified} ${t("epistemic.classified")})`,
+          "success",
+        );
         await fetchDistribution();
       } else {
-        toast({ title: t("epistemic.classify_error"), variant: "destructive" });
+        toast(t("epistemic.classify_error"), "error");
       }
     } catch {
-      toast({ title: t("epistemic.classify_error"), variant: "destructive" });
+      toast(t("epistemic.classify_error"), "error");
     } finally {
       setClassifying(false);
     }
@@ -238,7 +238,7 @@ export default function EpistemicAnalysisPage() {
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number) => [`${value} ${t("epistemic.entities")}`, ""]}
+                    formatter={(value) => [`${Number(value ?? 0)} ${t("epistemic.entities")}`, ""]}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -277,7 +277,7 @@ export default function EpistemicAnalysisPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--ukip-border)" />
                   <XAxis dataKey="year" tick={{ fontSize: 12 }} />
                   <YAxis tick={{ fontSize: 12 }} unit="%" />
-                  <Tooltip formatter={(value: number) => [`${value}%`, ""]} />
+                  <Tooltip formatter={(value) => [`${Number(value ?? 0)}%`, ""]} />
                   <Legend />
                   {paradigmIds.map((pid, i) => (
                     <Area

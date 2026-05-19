@@ -290,13 +290,13 @@ export default function ConceptHierarchyPage() {
         method: "POST",
       });
       if (resp.ok) {
-        toast({ title: t("concepts.refresh_success"), variant: "default" });
+        toast(t("concepts.refresh_success"), "success");
         await fetchTree();
       } else {
-        toast({ title: t("concepts.refresh_error"), variant: "destructive" });
+        toast(t("concepts.refresh_error"), "error");
       }
     } catch {
-      toast({ title: t("concepts.refresh_error"), variant: "destructive" });
+      toast(t("concepts.refresh_error"), "error");
     } finally {
       setMaterializing(false);
     }
