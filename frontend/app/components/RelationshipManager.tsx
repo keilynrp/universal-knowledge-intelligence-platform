@@ -40,6 +40,9 @@ const TYPE_COLORS: Record<string, string> = {
     "has-concept": "bg-pink-100 text-pink-700 dark:bg-pink-500/10 dark:text-pink-400",
     "identified-by": "bg-slate-100 text-slate-700 dark:bg-slate-500/10 dark:text-slate-300",
     "coauthor-with": "bg-teal-100 text-teal-700 dark:bg-teal-500/10 dark:text-teal-400",
+    "keyword-co-occurs-with": "bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400",
+    "same-as": "bg-slate-200 text-slate-900 dark:bg-slate-400/20 dark:text-slate-100",
+    "equivalent-to": "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-300",
     "related-to":  "bg-violet-100 text-violet-700 dark:bg-violet-500/10 dark:text-violet-400",
 };
 

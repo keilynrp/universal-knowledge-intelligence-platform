@@ -72,6 +72,9 @@ const RELATION_COLORS: Record<string, string> = {
     "has-concept": "#ec4899",   // pink
     "identified-by": "#64748b", // slate
     "coauthor-with": "#14b8a6", // teal
+    "keyword-co-occurs-with": "#f97316", // orange
+    "same-as": "#0f172a", // slate strong
+    "equivalent-to": "#a855f7", // purple
     "related-to":  "#8b5cf6",   // violet
 };
 
@@ -83,6 +86,9 @@ const RELATION_LABEL_COLORS: Record<string, string> = {
     "has-concept": "#f472b6",
     "identified-by": "#94a3b8",
     "coauthor-with": "#2dd4bf",
+    "keyword-co-occurs-with": "#fb923c",
+    "same-as": "#334155",
+    "equivalent-to": "#c084fc",
     "related-to":  "#a78bfa",
 };
 

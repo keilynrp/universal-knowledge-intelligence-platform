@@ -657,6 +657,9 @@ VALID_RELATION_TYPES = {
     "has-concept",
     "identified-by",
     "coauthor-with",
+    "keyword-co-occurs-with",
+    "same-as",
+    "equivalent-to",
 }
 
 class EntityRelationshipCreate(BaseModel):

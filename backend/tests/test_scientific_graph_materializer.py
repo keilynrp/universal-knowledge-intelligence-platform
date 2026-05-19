@@ -305,3 +305,76 @@ def test_manual_relationship_accepts_derived_relation_types(client, auth_headers
 
     assert response.status_code == 201
     assert response.json()["relation_type"] == "has-concept"
+
+
+def test_materializer_derives_bibliometric_concept_networks(db_session):
+    batch = _create_science_batch(db_session)
+    records = [
+        ("Paper A", "AI, Artificial Intelligence, Open Science"),
+        ("Paper B", "AI, Artificial Intelligence, Open Science"),
+        ("Paper C", "AI, Artificial Intelligence, Research Data"),
+    ]
+    for title, concepts in records:
+        db_session.add(models.RawEntity(
+            org_id=None,
+            import_batch_id=batch.id,
+            domain="science",
+            entity_type="publication",
+            primary_label=title,
+            enrichment_concepts=concepts,
+            enrichment_status="completed",
+        ))
+    db_session.commit()
+
+    result = materialize_scientific_import_graph(db_session, batch.id, org_id=None)
+    relationships = db_session.query(models.EntityRelationship).all()
+    by_type = {}
+    for relationship in relationships:
+        by_type.setdefault(relationship.relation_type, []).append(relationship)
+
+    assert result["relationships_created"] > 0
+    assert "keyword-co-occurs-with" in by_type
+    assert "related-to" in by_type
+    assert "equivalent-to" in by_type
+
+    co_word = by_type["keyword-co-occurs-with"][0]
+    notes = json.loads(co_word.notes)
+    assert notes["algorithm"] == "association_strength"
+    assert notes["support_count"] >= 2
+    assert "source_fields" in notes
+
+    related = by_type["related-to"][0]
+    related_notes = json.loads(related.notes)
+    assert related_notes["algorithm"] == "concept_jaccard"
+    assert len(related_notes["evidence"]["shared_concepts"]) >= 2
+
+    equivalent = by_type["equivalent-to"][0]
+    equivalent_notes = json.loads(equivalent.notes)
+    assert equivalent_notes["algorithm"] == "acronym_initials"
+
+
+def test_materializer_derives_same_as_from_shared_doi(db_session):
+    batch = _create_science_batch(db_session)
+    for title in ("Duplicate A", "Duplicate B"):
+        db_session.add(models.RawEntity(
+            org_id=None,
+            import_batch_id=batch.id,
+            domain="science",
+            entity_type="publication",
+            primary_label=title,
+            enrichment_doi="10.123/shared",
+            enrichment_status="completed",
+        ))
+    db_session.commit()
+
+    materialize_scientific_import_graph(db_session, batch.id, org_id=None)
+    same_as = (
+        db_session.query(models.EntityRelationship)
+        .filter(models.EntityRelationship.relation_type == "same-as")
+        .first()
+    )
+
+    assert same_as is not None
+    notes = json.loads(same_as.notes)
+    assert notes["algorithm"] == "stable_identifier_match"
+    assert notes["evidence"]["scheme"] == "doi"
