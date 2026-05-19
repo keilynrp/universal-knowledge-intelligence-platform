@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
@@ -22,6 +22,8 @@ type EntityValue =
     | string[]
     | number[]
     | Record<string, unknown>;
+
+type EnrichmentPhase = "idle" | "running" | "syncing" | "complete" | "error";
 
 interface QualityBreakdownDimension {
     weight?: number;
@@ -425,6 +427,28 @@ const DETAIL_CARD =
 const DETAIL_ROW =
     "grid gap-1 border-b border-slate-100 pb-4 last:border-b-0 dark:border-white/10";
 
+function enrichmentPhaseLabel(
+    phase: EnrichmentPhase,
+    tr: (key: string, fallback: string) => string,
+): string {
+    if (phase === "running") return tr("entities.detail.enrichment.phase_running", "Enriqueciendo registro");
+    if (phase === "syncing") return tr("entities.detail.enrichment.phase_syncing", "Sincronizando resultados");
+    if (phase === "complete") return tr("entities.detail.enrichment.phase_complete", "Enriquecimiento actualizado");
+    if (phase === "error") return tr("entities.detail.enrichment.phase_error", "No se pudo completar el enriquecimiento");
+    return "";
+}
+
+function enrichmentPhaseDescription(
+    phase: EnrichmentPhase,
+    tr: (key: string, fallback: string) => string,
+): string {
+    if (phase === "running") return tr("entities.detail.enrichment.phase_running_help", "La vista se mantiene estable mientras se consultan las fuentes externas.");
+    if (phase === "syncing") return tr("entities.detail.enrichment.phase_syncing_help", "Estamos aplicando los nuevos metadatos sin desmontar los cards actuales.");
+    if (phase === "complete") return tr("entities.detail.enrichment.phase_complete_help", "Los datos enriquecidos ya están reflejados en esta vista.");
+    if (phase === "error") return tr("entities.detail.enrichment.phase_error_help", "Conservamos los datos previos para que puedas revisar o reintentar.");
+    return "";
+}
+
 const QUALITY_FALLBACK_DIMENSIONS = [
     { key: "primary_label", label: "Primary Label", weight: 0.15, icon: "type" },
     { key: "secondary_label", label: "Secondary Label", weight: 0.10, icon: "tag" },
@@ -761,6 +785,8 @@ export default function EntityDetailPage() {
 
     // Enrichment
     const [enriching, setEnriching] = useState(false);
+    const [enrichmentPhase, setEnrichmentPhase] = useState<EnrichmentPhase>("idle");
+    const enrichmentResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Authority tab
     const [authorityRecords, setAuthorityRecords] = useState<AuthorityRecord[]>([]);
@@ -776,6 +802,12 @@ export default function EntityDetailPage() {
     // Quality score
     const [qualityData, setQualityData] = useState<EntityQualityData | null>(null);
     const [attentionData, setAttentionData] = useState<EntityAttentionData | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (enrichmentResetRef.current) clearTimeout(enrichmentResetRef.current);
+        };
+    }, []);
 
     const fetchEntity = useCallback(async () => {
         setLoading(true);
@@ -842,6 +874,20 @@ export default function EntityDetailPage() {
         }
     }, [tab, entity, qualityData, attentionData]);
 
+    async function refreshAnalysisData(targetEntityId: number) {
+        const [qualityResult, attentionResult] = await Promise.allSettled([
+            apiFetch(`/entities/${targetEntityId}/quality`).then((r) => r.ok ? r.json() as Promise<EntityQualityData> : null),
+            apiFetch(`/entities/${targetEntityId}/attention`).then((r) => r.ok ? r.json() as Promise<EntityAttentionData> : null),
+        ]);
+
+        if (qualityResult.status === "fulfilled" && qualityResult.value) {
+            setQualityData(qualityResult.value);
+        }
+        if (attentionResult.status === "fulfilled" && attentionResult.value) {
+            setAttentionData(attentionResult.value);
+        }
+    }
+
     function startEdit() {
         if (!entity) return;
         const data: Partial<Entity> = {};
@@ -879,13 +925,26 @@ export default function EntityDetailPage() {
     }
 
     async function handleEnrich() {
+        if (!entity) return;
+        if (enrichmentResetRef.current) clearTimeout(enrichmentResetRef.current);
         setEnriching(true);
+        setEnrichmentPhase("running");
+        setEntity((current) => current ? { ...current, enrichment_status: "processing" } : current);
         try {
             const res = await apiFetch(`/enrich/row/${entityId}`, { method: "POST" });
-            if (res.ok) {
-                setEntity(await res.json());
-                setTab("enrichment");
-            }
+            if (!res.ok) throw new Error("Enrichment failed");
+            setEnrichmentPhase("syncing");
+            const enrichedEntity = await res.json() as Entity;
+            setEntity((current) => current ? { ...current, ...enrichedEntity } : enrichedEntity);
+            await refreshAnalysisData(enrichedEntity.id);
+            setEnrichmentPhase("complete");
+            toast(tr("entities.detail.enrichment.phase_complete", "Enriquecimiento actualizado"), "success");
+            enrichmentResetRef.current = setTimeout(() => setEnrichmentPhase("idle"), 2800);
+        } catch {
+            setEnrichmentPhase("error");
+            setEntity((current) => current ? { ...current, enrichment_status: entity.enrichment_status } : current);
+            toast(tr("entities.detail.enrichment.phase_error", "No se pudo completar el enriquecimiento"), "error");
+            enrichmentResetRef.current = setTimeout(() => setEnrichmentPhase("idle"), 4200);
         } finally {
             setEnriching(false);
         }
@@ -957,6 +1016,9 @@ export default function EntityDetailPage() {
         const value = t(key);
         return value === key ? fallback : value;
     };
+    const enrichmentFeedbackActive = enrichmentPhase !== "idle";
+    const enrichmentFeedbackLabel = enrichmentPhaseLabel(enrichmentPhase, tr);
+    const enrichmentFeedbackDescription = enrichmentPhaseDescription(enrichmentPhase, tr);
     const qualityPercent = normalizePercent(qualityData?.score ?? entity.quality_score);
     const qualityHealthState = qualityHealth(qualityPercent);
     const qualityRows = qualityData
@@ -1135,10 +1197,13 @@ export default function EntityDetailPage() {
                             <button
                                 onClick={handleEnrich}
                                 disabled={enriching}
-                                className="flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-bold text-white shadow-[0_14px_35px_rgba(124,58,237,0.28)] transition hover:bg-violet-700 disabled:opacity-50"
+                                aria-busy={enriching}
+                                className="flex min-w-[10.5rem] items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-bold text-white shadow-[0_14px_35px_rgba(124,58,237,0.28)] transition hover:bg-violet-700 disabled:opacity-80"
                             >
                                 {enriching ? <Spinner /> : <IconGlyph name="spark" className="h-4 w-4" />}
-                                {enriching ? tr("entities.detail.btn.enriching", "Enriqueciendo") : tr("entities.detail.btn.enrich", "Enriquecer")}
+                                {enrichmentFeedbackActive && enrichmentPhase !== "complete"
+                                    ? enrichmentFeedbackLabel
+                                    : tr("entities.detail.btn.enrich", "Enriquecer")}
                             </button>
                         </div>
                     </div>
@@ -1166,6 +1231,30 @@ export default function EntityDetailPage() {
                             </button>
                         ))}
                     </nav>
+
+                    {enrichmentFeedbackActive ? (
+                        <div
+                            role={enrichmentPhase === "error" ? "alert" : "status"}
+                            aria-live="polite"
+                            className={`rounded-2xl border p-4 shadow-sm ${
+                                enrichmentPhase === "error"
+                                    ? "border-red-200 bg-red-50 text-red-800 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-100"
+                                    : enrichmentPhase === "complete"
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-100"
+                                    : "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-400/20 dark:bg-violet-400/10 dark:text-violet-100"
+                            }`}
+                        >
+                            <div className="flex items-start gap-3">
+                                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/80 text-violet-600 shadow-sm dark:bg-white/10 dark:text-violet-200">
+                                    {enriching ? <Spinner /> : <IconGlyph name={enrichmentPhase === "error" ? "shield" : "spark"} className="h-4 w-4" />}
+                                </span>
+                                <div className="min-w-0">
+                                    <p className="text-sm font-black">{enrichmentFeedbackLabel}</p>
+                                    <p className="mt-1 text-xs font-semibold opacity-80">{enrichmentFeedbackDescription}</p>
+                                </div>
+                            </div>
+                        </div>
+                    ) : null}
                 </header>
 
             {/* ── Overview ── */}
