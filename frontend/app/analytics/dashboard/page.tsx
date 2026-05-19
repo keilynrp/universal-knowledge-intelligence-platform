@@ -361,6 +361,7 @@ export default function ExecutiveDashboardPage() {
   const importedFlag = searchParams.get("imported") === "1";
   const importedDomain = searchParams.get("domain");
   const importedRows = searchParams.get("rows");
+  const dashboardDomainId = importedDomain || "all";
   const tr = useCallback((key: string, fallback: string) => {
     const value = t(key);
     return value === key ? fallback : value;
@@ -418,7 +419,7 @@ export default function ExecutiveDashboardPage() {
     setError(null);
     try {
       const params = new URLSearchParams({
-        domain_id: activeDomainId,
+        domain_id: dashboardDomainId,
         _sync: `${Date.now()}-${requestId}`,
       });
       if (selectedBenchmarkProfile) params.set("profile_id", selectedBenchmarkProfile);
@@ -446,7 +447,7 @@ export default function ExecutiveDashboardPage() {
         setRefreshing(false);
       }
     }
-  }, [activeDomainId, selectedBenchmarkProfile, tr]);
+  }, [dashboardDomainId, selectedBenchmarkProfile, tr]);
 
   useEffect(() => { void fetchDashboard({ forceRefresh: true }); }, [fetchDashboard]);
 
@@ -492,13 +493,13 @@ export default function ExecutiveDashboardPage() {
   const handleExportPDF = async () => {
     if (!data) return;
     setExporting(true);
-    Analytics.dashboardExportPDF(activeDomainId);
+    Analytics.dashboardExportPDF(dashboardDomainId);
     try {
       const res = await apiFetch("/exports/pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          domain_id: activeDomainId,
+          domain_id: dashboardDomainId,
           benchmark_profile_id: selectedBenchmarkProfile,
           sections: ["entity_stats", "enrichment_coverage", "decision_recommendations", "institutional_benchmark", "top_brands", "topic_clusters"],
           title: tr("page.exec_dashboard.export_title", "Executive Dashboard Report"),
@@ -520,7 +521,7 @@ export default function ExecutiveDashboardPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `dashboard_${activeDomainId}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.download = `dashboard_${dashboardDomainId}_${new Date().toISOString().slice(0, 10)}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
@@ -534,8 +535,8 @@ export default function ExecutiveDashboardPage() {
     setQueueingBulkEnrichment(true);
     try {
       const params = new URLSearchParams({ limit: "250" });
-      if (activeDomainId) {
-        params.set("domain_id", activeDomainId);
+      if (dashboardDomainId) {
+        params.set("domain_id", dashboardDomainId);
       }
       const response = await apiFetch(`/enrich/bulk?${params.toString()}`, {
         method: "POST",
@@ -575,13 +576,13 @@ export default function ExecutiveDashboardPage() {
     } finally {
       setQueueingBulkEnrichment(false);
     }
-  }, [activeDomainId, fetchDashboard, t, toast, tr]);
+  }, [dashboardDomainId, fetchDashboard, t, toast, tr]);
 
   // Compute heatmap max for scaling
   const heatMax = data
     ? Math.max(1, ...data.brand_year_matrix.matrix.flat())
     : 1;
-  const briefBuilderHref = `/reports?preset=pilot-brief&domain=${encodeURIComponent(importedDomain ?? activeDomainId)}&rows=${encodeURIComponent(importedRows ?? String(data?.kpis.total_entities ?? 0))}&format=pdf&benchmark_profile=${encodeURIComponent(selectedBenchmarkProfile)}&title=${encodeURIComponent(`UKIP Pilot Brief — ${importedDomain ?? activeDomainId}`)}`;
+  const briefBuilderHref = `/reports?preset=pilot-brief&domain=${encodeURIComponent(dashboardDomainId)}&rows=${encodeURIComponent(importedRows ?? String(data?.kpis.total_entities ?? 0))}&format=pdf&benchmark_profile=${encodeURIComponent(selectedBenchmarkProfile)}&title=${encodeURIComponent(`UKIP Pilot Brief — ${dashboardDomainId}`)}`;
   const enrichedExplorerHref = "/?ft_enrichment_status=completed&min_quality=0.7";
   const latestImportExplorerHref = importedDomain
     ? `/?ft_domain=${encodeURIComponent(importedDomain)}`

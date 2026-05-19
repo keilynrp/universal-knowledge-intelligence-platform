@@ -338,6 +338,44 @@ def test_dashboard_counts_legacy_enriched_status_aliases(client, auth_headers, d
     ]
 
 
+def test_dashboard_all_domain_counts_enrichment_across_domains(client, auth_headers, db_session):
+    db_session.add_all([
+        models.RawEntity(
+            primary_label="Science Completed",
+            domain="science",
+            enrichment_status="completed",
+            enrichment_citation_count=12,
+            enrichment_source="openalex",
+            enrichment_concepts="Open Science",
+        ),
+        models.RawEntity(
+            primary_label="Catalog Done",
+            domain="universal_catalog",
+            enrichment_status="done",
+            enrichment_citation_count=8,
+            enrichment_source="openalex",
+            enrichment_concepts="Knowledge Graphs",
+        ),
+        models.RawEntity(
+            primary_label="Default Pending",
+            domain="default",
+            enrichment_status="pending",
+        ),
+    ])
+    db_session.commit()
+
+    response = client.get("/dashboard/summary?domain_id=all&force_refresh=true", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["domain_id"] == "all"
+    assert data["kpis"]["total_entities"] >= 3
+    assert data["kpis"]["enriched_count"] >= 2
+    assert data["kpis"]["enrichment_pct"] > 0
+    top_labels = {entity["primary_label"] for entity in data["top_entities"]}
+    assert {"Science Completed", "Catalog Done"}.issubset(top_labels)
+
+
 def test_dashboard_summary_disables_http_cache_for_refresh_controls(client, auth_headers):
     response = client.get("/dashboard/summary?domain_id=default&force_refresh=true", headers=auth_headers)
 
