@@ -231,10 +231,11 @@ export default function Header() {
   };
   const activeDomainLabel = useMemo(() => {
     if (isLoading) return t("header.workspace.loading");
+    if (activeDomainId === "all") return tr("header.workspace.all_domains", "Todos los dominios");
     if (activeDomain?.name) return activeDomain.name;
     if (activeDomainId === "default") return t("header.workspace.default_name");
     return activeDomainId || t("header.workspace.none");
-  }, [activeDomain?.name, activeDomainId, isLoading, t]);
+  }, [activeDomain?.name, activeDomainId, isLoading, t, tr]);
   const hasDomains = domains.length > 0;
   const currentTitle = t(page.titleKey) === page.titleKey ? page.titleFallback : t(page.titleKey);
 
@@ -302,11 +303,14 @@ export default function Header() {
                   className="ukip-focus h-10 max-w-[13rem] cursor-pointer appearance-none rounded-xl border border-slate-200 bg-white py-0 pl-4 pr-9 text-sm font-medium text-slate-700 shadow-sm outline-none transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)] dark:hover:bg-[var(--ukip-panel-strong)] xl:max-w-[16rem]"
                 >
                   {hasDomains ? (
-                    domains.map((domain) => (
-                      <option key={domain.id} value={domain.id}>
-                        {domain.name}
-                      </option>
-                    ))
+                    <>
+                      <option value="all">{tr("header.workspace.all_domains", "Todos los dominios")}</option>
+                      {domains.map((domain) => (
+                        <option key={domain.id} value={domain.id}>
+                          {domain.name}
+                        </option>
+                      ))}
+                    </>
                   ) : (
                     <option value={activeDomainId || "default"}>
                       {t("header.workspace.none")}

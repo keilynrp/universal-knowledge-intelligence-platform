@@ -361,7 +361,7 @@ export default function ExecutiveDashboardPage() {
   const importedFlag = searchParams.get("imported") === "1";
   const importedDomain = searchParams.get("domain");
   const importedRows = searchParams.get("rows");
-  const dashboardDomainId = importedDomain || "all";
+  const dashboardDomainId = importedDomain || activeDomainId || "all";
   const tr = useCallback((key: string, fallback: string) => {
     const value = t(key);
     return value === key ? fallback : value;
@@ -535,7 +535,7 @@ export default function ExecutiveDashboardPage() {
     setQueueingBulkEnrichment(true);
     try {
       const params = new URLSearchParams({ limit: "250" });
-      if (dashboardDomainId) {
+      if (dashboardDomainId && dashboardDomainId !== "all") {
         params.set("domain_id", dashboardDomainId);
       }
       const response = await apiFetch(`/enrich/bulk?${params.toString()}`, {

@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { apiFetch } from "@/lib/api";
 
 const DOMAIN_STORAGE_KEY = "ukip_active_domain";
+const ALL_DOMAINS_ID = "all";
 
 export interface DomainAttribute {
     name: string;
@@ -40,26 +41,33 @@ function readStoredDomain(): string | null {
 
 export function DomainProvider({ children }: { children: React.ReactNode }) {
     const [domains, setDomains] = useState<DomainSchema[]>([]);
-    const [activeDomainId, setActiveDomainId] = useState<string>(() => readStoredDomain() || "default");
+    const [activeDomainId, setActiveDomainId] = useState<string>(() => readStoredDomain() || ALL_DOMAINS_ID);
     const [isLoading, setIsLoading] = useState(true);
 
     const resolveDomainSelection = useCallback((availableDomains: DomainSchema[], currentActiveDomainId: string) => {
         if (availableDomains.length === 0) {
-            return currentActiveDomainId || "default";
+            return currentActiveDomainId || ALL_DOMAINS_ID;
         }
 
         const savedDomain = readStoredDomain();
 
+        if (currentActiveDomainId === ALL_DOMAINS_ID) {
+            return ALL_DOMAINS_ID;
+        }
+
         if (currentActiveDomainId && availableDomains.some((d) => d.id === currentActiveDomainId)) {
             return currentActiveDomainId;
+        }
+
+        if (savedDomain === ALL_DOMAINS_ID) {
+            return ALL_DOMAINS_ID;
         }
 
         if (savedDomain && availableDomains.some((d) => d.id === savedDomain)) {
             return savedDomain;
         }
 
-        const defaultDomain = availableDomains.find((d) => d.id === "default");
-        return defaultDomain ? defaultDomain.id : availableDomains[0].id;
+        return ALL_DOMAINS_ID;
     }, []);
 
     const fetchDomains = useCallback(async () => {
@@ -101,11 +109,15 @@ export function DomainProvider({ children }: { children: React.ReactNode }) {
     };
 
     const activeDomain =
-        domains.find((d) => d.id === activeDomainId)
-        || domains.find((d) => d.id === "default")
-        || domains[0]
-        || null;
-    const resolvedActiveDomainId = activeDomain?.id || activeDomainId || "default";
+        activeDomainId === ALL_DOMAINS_ID
+            ? null
+            : domains.find((d) => d.id === activeDomainId)
+              || domains.find((d) => d.id === "default")
+              || domains[0]
+              || null;
+    const resolvedActiveDomainId = activeDomainId === ALL_DOMAINS_ID
+        ? ALL_DOMAINS_ID
+        : activeDomain?.id || activeDomainId || ALL_DOMAINS_ID;
 
     return (
         <DomainContext.Provider value={{
