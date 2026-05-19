@@ -9,8 +9,14 @@ import { useLanguage } from "../contexts/LanguageContext";
 interface RAGSource {
     id: string | number;
     similarity_score: number;
+    text?: string;
+    snippet?: string;
     metadata?: {
         entity_name?: string | null;
+        doi?: string | null;
+        journal?: string | null;
+        year?: string | number | null;
+        embedding_model?: string | null;
     } | null;
 }
 
@@ -156,6 +162,13 @@ export default function RAGChatInterface() {
         return `${name} (${score}%)`;
     };
 
+    const formatSourceMeta = (src: RAGSource) => {
+        const parts = [src.metadata?.journal, src.metadata?.year, src.metadata?.doi ? `DOI ${src.metadata.doi}` : null]
+            .filter(Boolean)
+            .map(String);
+        return parts.join(" · ");
+    };
+
     return (
         <div className="flex h-[calc(100vh-160px)] sm:h-[calc(100vh-200px)] flex-col rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 overflow-hidden">
             {/* Header */}
@@ -219,25 +232,43 @@ export default function RAGChatInterface() {
                                 )}
                             </div>
 
-                            {/* Source pills */}
+                            {/* Sources */}
                             {msg.sources && msg.sources.length > 0 && (
-                                <div className="flex flex-wrap gap-1.5">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{t('rag.sources')}:</span>
-                                    {msg.sources.map((src, j) => (
-                                        <span key={j} className="rounded-full border border-indigo-100 bg-white px-2 py-0.5 text-[10px] font-medium text-indigo-600 dark:border-indigo-500/20 dark:bg-gray-800 dark:text-indigo-400">
-                                            {formatSourceLabel(src)}
-                                        </span>
-                                    ))}
-                                    {msg.provider && (
-                                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500 dark:bg-gray-700 dark:text-gray-400">
-                                            via {msg.provider} / {msg.model}
-                                        </span>
-                                    )}
-                                    {msg.agentic && msg.iterations !== undefined && (
-                                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
-                                            agentic · {msg.iterations} iter
-                                        </span>
-                                    )}
+                                <div className="space-y-2">
+                                    <div className="flex flex-wrap gap-1.5">
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{t('rag.sources')}:</span>
+                                        {msg.provider && (
+                                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+                                                via {msg.provider} / {msg.model}
+                                            </span>
+                                        )}
+                                        {msg.agentic && msg.iterations !== undefined && (
+                                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+                                                agentic · {msg.iterations} iter
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        {msg.sources.map((src, j) => {
+                                            const sourceMeta = formatSourceMeta(src);
+                                            const snippet = src.snippet || src.text;
+                                            return (
+                                                <details key={j} className="rounded-lg border border-indigo-100 bg-white px-3 py-2 text-xs dark:border-indigo-500/20 dark:bg-gray-800">
+                                                    <summary className="cursor-pointer font-semibold text-indigo-700 dark:text-indigo-300">
+                                                        {formatSourceLabel(src)}
+                                                    </summary>
+                                                    {sourceMeta ? (
+                                                        <p className="mt-1 text-[11px] font-medium text-gray-500 dark:text-gray-400">{sourceMeta}</p>
+                                                    ) : null}
+                                                    {snippet ? (
+                                                        <p className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap text-[11px] leading-5 text-gray-600 dark:text-gray-300">
+                                                            {snippet}
+                                                        </p>
+                                                    ) : null}
+                                                </details>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                             )}
 

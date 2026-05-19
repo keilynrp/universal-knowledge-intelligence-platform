@@ -43,7 +43,13 @@ class VectorStoreService:
         )
 
     @classmethod
-    def query(cls, query_embedding: List[float], top_k: int = 5) -> List[Dict[str, Any]]:
+    def query(
+        cls,
+        query_embedding: List[float],
+        top_k: int = 5,
+        min_similarity: float = 0.0,
+        embedding_model: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """
         Retrieve the top_k most semantically relevant documents given a query vector.
         Returns list of dicts with 'text', 'id', and 'metadata'.
@@ -53,19 +59,27 @@ class VectorStoreService:
         if count == 0:
             return []
 
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=min(top_k, count),
-            include=["documents", "metadatas", "distances"]
-        )
+        query_kwargs = {
+            "query_embeddings": [query_embedding],
+            "n_results": min(top_k, count),
+            "include": ["documents", "metadatas", "distances"],
+        }
+        if embedding_model:
+            query_kwargs["where"] = {"embedding_model": embedding_model}
+
+        results = collection.query(**query_kwargs)
 
         docs = []
         for i, doc in enumerate(results["documents"][0]):
+            similarity_score = round(1 - results["distances"][0][i], 4)
+            if similarity_score < min_similarity:
+                continue
             docs.append({
                 "id": results["ids"][0][i],
                 "text": doc,
+                "snippet": doc[:700],
                 "metadata": results["metadatas"][0][i],
-                "similarity_score": round(1 - results["distances"][0][i], 4)
+                "similarity_score": similarity_score
             })
         return docs
 

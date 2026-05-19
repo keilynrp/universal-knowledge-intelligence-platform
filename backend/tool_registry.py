@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session
+from backend.analytics.rag_engine import ENRICHED_STATUSES
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ def _tool_entity_stats(params: Dict[str, Any], db: Session) -> Dict[str, Any]:
     domain_id = params.get("domain_id", "default")
     total    = db.query(models.RawEntity).count()
     enriched = db.query(models.RawEntity).filter(
-        models.RawEntity.enrichment_status == "done"
+        models.RawEntity.enrichment_status.in_(ENRICHED_STATUSES)
     ).count()
     pending  = db.query(models.RawEntity).filter(
         models.RawEntity.enrichment_status == "pending"
@@ -136,7 +137,7 @@ def _tool_enrichment_stats(params: Dict[str, Any], db: Session) -> Dict[str, Any
     from sqlalchemy import func
     domain_id      = params.get("domain_id", "default")
     total_enriched = db.query(models.RawEntity).filter(
-        models.RawEntity.enrichment_status == "done"
+        models.RawEntity.enrichment_status.in_(ENRICHED_STATUSES)
     ).count()
     avg_citations  = db.query(func.avg(models.RawEntity.enrichment_citation_count)).filter(
         models.RawEntity.enrichment_citation_count.isnot(None),

@@ -7,7 +7,8 @@ Coordinates the full Retrieval-Augmented Generation pipeline:
   4. Query the vector store and generate responses
 """
 import logging
-from typing import Optional, List, Dict, Any
+import json
+from typing import Optional, List, Dict, Any, Iterable, Tuple
 
 from backend.analytics.vector_store import VectorStoreService
 
@@ -20,6 +21,9 @@ Answer questions directly based on the catalog entries, citations, and concepts 
 If the context doesn't contain enough information to answer confidently, say so transparently.
 Be concise, structured, and factual. Respond in the same language used in the question.
 """
+
+MIN_SIMILARITY_SCORE = 0.35
+ENRICHED_STATUSES = ("completed", "done", "enriched")
 
 
 def _build_adapter(integration_record) -> Optional[object]:
@@ -71,6 +75,94 @@ def _build_adapter(integration_record) -> Optional[object]:
         return None
 
 
+def _parse_json_object(raw: Optional[str]) -> Dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _first_text(*values: Any) -> str:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return " ".join(value.split())
+        if isinstance(value, list):
+            items = [str(item).strip() for item in value if str(item).strip()]
+            if items:
+                return ", ".join(items)
+    return ""
+
+
+def _read_nested_text(attrs: Dict[str, Any], keys: Iterable[str]) -> str:
+    for key in keys:
+        value = attrs.get(key)
+        if isinstance(value, str) and value.strip():
+            return " ".join(value.split())
+        if isinstance(value, list) and value:
+            return ", ".join(str(item).strip() for item in value if str(item).strip())
+    raw_record = attrs.get("raw_record")
+    if isinstance(raw_record, dict):
+        return _read_nested_text(raw_record, keys)
+    return ""
+
+
+def _embedding_signature(adapter: object) -> str:
+    provider = getattr(adapter, "provider_name", "unknown")
+    model = getattr(adapter, "_embedding_model", None) or getattr(adapter, "_model_name", "unknown")
+    return f"{provider}:{model}"
+
+
+def build_entity_rag_document(entity) -> Tuple[str, Dict[str, Any]]:
+    """Build the canonical RAG document and metadata for one entity."""
+    source_attrs = _parse_json_object(getattr(entity, "attributes_json", None))
+    normalized_attrs = _parse_json_object(getattr(entity, "normalized_json", None))
+    attrs = {**source_attrs, **normalized_attrs}
+
+    abstract = _read_nested_text(attrs, ("abstract", "abstract_text", "summary", "resumen", "description", "raw_ab", "raw_abstract"))
+    doi = _first_text(getattr(entity, "enrichment_doi", None), getattr(entity, "canonical_id", None), attrs.get("doi"), attrs.get("raw_di"))
+    journal = _first_text(attrs.get("journal"), attrs.get("venue"), attrs.get("source_title"), attrs.get("raw_so"))
+    year = _first_text(attrs.get("year"), attrs.get("publication_year"), attrs.get("raw_py"))
+    authors = _first_text(attrs.get("authors"), attrs.get("full_authors"), attrs.get("enrichment_authors"), attrs.get("raw_au"), attrs.get("raw_af"), getattr(entity, "secondary_label", None))
+    document_type = _first_text(attrs.get("document_type"), attrs.get("type"), attrs.get("raw_dt"), getattr(entity, "entity_type", None))
+    keywords = _first_text(
+        getattr(entity, "enrichment_concepts", None),
+        attrs.get("keywords"),
+        attrs.get("concepts"),
+        attrs.get("normalized_keywords"),
+    )
+
+    fields = [
+        ("Title", getattr(entity, "primary_label", None) or attrs.get("title") or attrs.get("name")),
+        ("Authors", authors),
+        ("Document Type", document_type),
+        ("DOI", doi),
+        ("Journal", journal),
+        ("Year", year),
+        ("Keywords", keywords),
+        ("Abstract", abstract),
+        ("Citation Count", getattr(entity, "enrichment_citation_count", None) or 0),
+        ("Source API", getattr(entity, "enrichment_source", None) or attrs.get("source_name") or attrs.get("source")),
+    ]
+    text = "\n".join(f"{label}: {value}" for label, value in fields if value not in (None, ""))
+    metadata = {
+        "entity_id": entity.id,
+        "entity_name": getattr(entity, "primary_label", None) or "",
+        "doi": doi,
+        "journal": journal,
+        "year": year,
+        "authors": authors,
+        "document_type": document_type,
+        "keywords": keywords,
+        "abstract_preview": abstract[:500],
+        "citation_count": getattr(entity, "enrichment_citation_count", None) or 0,
+        "source": getattr(entity, "enrichment_source", None) or "unknown",
+    }
+    return text, metadata
+
+
 def index_entity(entity, integration_record) -> Dict[str, Any]:
     """
     Phase 5 / Indexing Step:
@@ -80,22 +172,14 @@ def index_entity(entity, integration_record) -> Dict[str, Any]:
     if not adapter:
         return {"status": "error", "message": "No active AI provider configured."}
 
-    # Build the canonical text representation of the entity for embedding
-    parts = [
-        f"Name: {entity.primary_label or ''}",
-        f"Brand: {entity.secondary_label or ''}",
-        f"Type: {entity.entity_type or ''}",
-        f"Concepts: {entity.enrichment_concepts or ''}",
-        f"Citation Count: {entity.enrichment_citation_count or 0}",
-        f"Source API: {entity.enrichment_source or ''}",
-    ]
-    text = " | ".join(p for p in parts if p.split(": ")[1])
+    text, metadata = build_entity_rag_document(entity)
 
     if not text.strip() or len(text) < 20:
         return {"status": "skipped", "message": "Insufficient data for indexing."}
 
     try:
         embedding = adapter.get_embedding(text)
+        embedding_signature = _embedding_signature(adapter)
         doc_id = f"entity-{entity.id}"
 
         VectorStoreService.upsert_document(
@@ -103,14 +187,12 @@ def index_entity(entity, integration_record) -> Dict[str, Any]:
             text=text,
             embedding=embedding,
             metadata={
-                "entity_id": entity.id,
-                "entity_name": entity.primary_label or "",
-                "citation_count": entity.enrichment_citation_count or 0,
-                "source": entity.enrichment_source or "unknown",
+                **metadata,
                 "provider_used": adapter.provider_name,
+                "embedding_model": embedding_signature,
             }
         )
-        return {"status": "indexed", "doc_id": doc_id, "provider": adapter.provider_name}
+        return {"status": "indexed", "doc_id": doc_id, "provider": adapter.provider_name, "embedding_model": embedding_signature}
     except Exception as e:
         logger.error(f"RAGEngine index error for entity {entity.id}: {e}")
         return {"status": "error", "message": str(e)}
@@ -121,6 +203,7 @@ def query_catalog(
     integration_record,
     top_k: int = 5,
     extra_system_context: Optional[str] = None,
+    min_similarity: float = MIN_SIMILARITY_SCORE,
 ) -> Dict[str, Any]:
     """
     Phase 5 / 11 — Generation Step:
@@ -140,12 +223,19 @@ def query_catalog(
         query_embedding = adapter.get_embedding(user_question)
 
         # Step 2: Retrieve relevant context
-        retrieved_docs = VectorStoreService.query(query_embedding, top_k=top_k)
+        embedding_signature = _embedding_signature(adapter)
+        retrieved_docs = VectorStoreService.query(
+            query_embedding,
+            top_k=top_k,
+            min_similarity=min_similarity,
+            embedding_model=embedding_signature,
+        )
 
         if not retrieved_docs:
             return {
-                "answer": "The catalog knowledge base is empty. Please index your catalog records first using the 'Index Catalog' button.",
-                "sources": []
+                "answer": "No sufficiently relevant catalog sources were found for this question. Try lowering the similarity threshold or rebuilding the index if the catalog was recently enriched.",
+                "sources": [],
+                "min_similarity": min_similarity,
             }
 
         context_chunks = [doc["text"] for doc in retrieved_docs]
@@ -166,7 +256,9 @@ def query_catalog(
             "provider": adapter.provider_name,
             "model": getattr(adapter, "_model_name", "unknown"),
             "sources": retrieved_docs,
-            "context_chunks_used": len(context_chunks)
+            "context_chunks_used": len(context_chunks),
+            "min_similarity": min_similarity,
+            "embedding_model": embedding_signature,
         }
 
     except Exception as e:
@@ -181,6 +273,7 @@ def query_catalog_agentic(
     top_k: int = 5,
     extra_system_context: Optional[str] = None,
     max_iterations: int = 5,
+    min_similarity: float = MIN_SIMILARITY_SCORE,
 ) -> Dict[str, Any]:
     """
     Sprint 69C — Agentic RAG with function calling.
@@ -195,15 +288,22 @@ def query_catalog_agentic(
 
     try:
         query_embedding = adapter.get_embedding(user_question)
-        retrieved_docs = VectorStoreService.query(query_embedding, top_k=top_k)
+        embedding_signature = _embedding_signature(adapter)
+        retrieved_docs = VectorStoreService.query(
+            query_embedding,
+            top_k=top_k,
+            min_similarity=min_similarity,
+            embedding_model=embedding_signature,
+        )
 
         if not retrieved_docs:
             return {
-                "answer": "The catalog knowledge base is empty. Please index your catalog records first.",
+                "answer": "No sufficiently relevant catalog sources were found for this question. Try lowering the similarity threshold or rebuilding the index if the catalog was recently enriched.",
                 "sources": [],
                 "tools_used": [],
                 "iterations": 0,
                 "agentic": True,
+                "min_similarity": min_similarity,
             }
 
         context_chunks = [doc["text"] for doc in retrieved_docs]
@@ -236,6 +336,8 @@ def query_catalog_agentic(
             "tools_used":           agentic_result["tools_used"],
             "iterations":           agentic_result["iterations"],
             "agentic":              True,
+            "min_similarity":        min_similarity,
+            "embedding_model":       embedding_signature,
         }
 
     except Exception as e:

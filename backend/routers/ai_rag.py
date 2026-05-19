@@ -23,6 +23,7 @@ from backend.database import get_db
 from backend.encryption import encrypt
 from backend.routers.deps import _get_active_integration
 from backend.routers.limiter import limiter
+from backend.tenant_access import get_scoped_record, resolve_request_org_id, scope_query_to_org
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ class AIIntegrationUpdate(schemas.BaseModel):
 class RAGQueryPayload(BaseModel):
     question:    str          = Field(min_length=1, max_length=5000)
     top_k:       int          = Field(default=5, ge=1, le=20)
+    min_similarity: float     = Field(default=rag_engine.MIN_SIMILARITY_SCORE, ge=0.0, le=1.0)
     use_context: bool         = Field(default=False)
     domain_id:   str | None   = Field(default=None, max_length=64)
     session_id:  int | None   = Field(default=None, ge=1)
@@ -165,7 +167,7 @@ def delete_ai_integration(
 def rag_index_catalog(
     request: Request,
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_role("super_admin", "admin")),
+    current_user: models.User = Depends(require_role("super_admin", "admin")),
 ):
     """Phase 5: Bulk index all enriched entities into the ChromaDB Vector Store."""
     integration = _get_active_integration(db)
@@ -175,8 +177,9 @@ def rag_index_catalog(
             detail="No active AI provider. Configure one in Integrations → AI Language Models.",
         )
 
-    entities = db.query(models.RawEntity).filter(
-        models.RawEntity.enrichment_status == "completed"
+    org_id = resolve_request_org_id(db, current_user)
+    entities = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id).filter(
+        models.RawEntity.enrichment_status.in_(rag_engine.ENRICHED_STATUSES)
     ).all()
 
     indexed = skipped = errors = 0
@@ -196,6 +199,32 @@ def rag_index_catalog(
         "errors":        errors,
         "provider_used": integration.provider_name,
     }
+
+
+@router.post("/rag/index/entities/{entity_id}")
+@limiter.limit("60/minute")
+def rag_index_entity(
+    request: Request,
+    entity_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
+):
+    """Incrementally index one enriched entity into the vector store."""
+    integration = _get_active_integration(db)
+    if not integration:
+        raise HTTPException(status_code=400, detail="No active AI provider configured.")
+
+    org_id = resolve_request_org_id(db, current_user)
+    entity = get_scoped_record(db, models.RawEntity, entity_id, org_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    if entity.enrichment_status not in rag_engine.ENRICHED_STATUSES:
+        raise HTTPException(status_code=409, detail="Entity is not enriched yet.")
+
+    result = rag_engine.index_entity(entity, integration)
+    if result["status"] == "error":
+        raise HTTPException(status_code=500, detail=result.get("message", "Indexing failed"))
+    return result
 
 
 @router.post("/rag/query")
@@ -243,6 +272,7 @@ def rag_query(
             db=db,
             top_k=payload.top_k,
             extra_system_context=extra_system,
+            min_similarity=payload.min_similarity,
         )
     else:
         result = rag_engine.query_catalog(
@@ -250,6 +280,7 @@ def rag_query(
             integration_record=integration,
             top_k=payload.top_k,
             extra_system_context=extra_system,
+            min_similarity=payload.min_similarity,
         )
 
     result["context_injected"]    = extra_system is not None

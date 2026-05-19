@@ -59,9 +59,10 @@ class ContextEngine:
 
     def _get_entity_stats(self, domain_id: str, db: Session) -> Dict[str, Any]:
         from backend import models
+        from backend.analytics.rag_engine import ENRICHED_STATUSES
         total    = db.query(models.RawEntity).count()
         enriched = db.query(models.RawEntity).filter(
-            models.RawEntity.enrichment_status == "done"
+            models.RawEntity.enrichment_status.in_(ENRICHED_STATUSES)
         ).count()
         return {
             "total":        total,

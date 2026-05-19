@@ -12,6 +12,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.analytics.rag_engine import ENRICHED_STATUSES
 from backend.schema_registry import SchemaRegistry
 
 _registry = SchemaRegistry()
@@ -51,7 +52,7 @@ class GapAnalyzer:
             return []
         not_done = (
             db.query(models.RawEntity)
-            .filter(models.RawEntity.enrichment_status != "done")
+            .filter(models.RawEntity.enrichment_status.notin_(ENRICHED_STATUSES))
             .count()
         )
         pct = not_done / total * 100
@@ -102,7 +103,7 @@ class GapAnalyzer:
     def _concept_density(self, db: Session) -> List[GapItem]:
         enriched = (
             db.query(models.RawEntity)
-            .filter(models.RawEntity.enrichment_status == "done")
+            .filter(models.RawEntity.enrichment_status.in_(ENRICHED_STATUSES))
             .all()
         )
         if not enriched:
