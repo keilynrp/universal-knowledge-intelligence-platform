@@ -12,6 +12,7 @@ import { apiFetch } from "@/lib/api";
 
 interface UseEntityTableControllerOptions {
     toast: (message: string, variant?: ToastVariant) => void;
+    activeDomainId?: string;
 }
 
 interface CatalogPortalSummary {
@@ -19,7 +20,7 @@ interface CatalogPortalSummary {
     source_batch_id: number | null;
 }
 
-export function useEntityTableController({ toast }: UseEntityTableControllerOptions) {
+export function useEntityTableController({ toast, activeDomainId = "all" }: UseEntityTableControllerOptions) {
     const { t } = useLanguage();
     const { startPolling: startEnrichmentStatsPolling } = useEnrichment();
     const searchParams = useSearchParams();
@@ -104,7 +105,8 @@ export function useEntityTableController({ toast }: UseEntityTableControllerOpti
             if (minQuality) queryParams.append("min_quality", minQuality);
             if (conceptFilter) queryParams.append("concept", conceptFilter);
             if (activeFacets.entity_type) queryParams.append("ft_entity_type", activeFacets.entity_type);
-            if (activeFacets.domain) queryParams.append("ft_domain", activeFacets.domain);
+            const effectiveDomain = activeFacets.domain || (activeDomainId !== "all" ? activeDomainId : null);
+            if (effectiveDomain) queryParams.append("ft_domain", effectiveDomain);
             if (activeFacets.validation_status) queryParams.append("ft_validation_status", activeFacets.validation_status);
             if (activeFacets.enrichment_status) queryParams.append("ft_enrichment_status", activeFacets.enrichment_status);
             if (activeFacets.source) queryParams.append("ft_source", activeFacets.source);
@@ -120,7 +122,7 @@ export function useEntityTableController({ toast }: UseEntityTableControllerOpti
         } finally {
             setLoading(false);
         }
-    }, [activeFacets, conceptFilter, debouncedSearch, limit, minQuality, page, sortBy, sortOrder, t]);
+    }, [activeDomainId, activeFacets, conceptFilter, debouncedSearch, limit, minQuality, page, sortBy, sortOrder, t]);
 
     useEffect(() => {
         fetchEntities();

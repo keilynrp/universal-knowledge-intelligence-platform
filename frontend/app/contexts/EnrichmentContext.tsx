@@ -10,6 +10,7 @@ import {
 } from "react";
 import { apiFetch } from "@/lib/api";
 import type { EnrichStats } from "../analytics/analyticsTypes";
+import { useDomain } from "./DomainContext";
 
 interface EnrichmentContextValue {
   enrichStats: EnrichStats | null;
@@ -28,13 +29,15 @@ const EnrichmentContext = createContext<EnrichmentContextValue>({
 });
 
 export function EnrichmentProvider({ children }: { children: React.ReactNode }) {
+  const { activeDomainId } = useDomain();
   const [enrichStats, setEnrichStats] = useState<EnrichStats | null>(null);
   const [isPolling, setIsPolling] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await apiFetch("/enrich/stats");
+      const params = new URLSearchParams({ domain_id: activeDomainId || "all" });
+      const res = await apiFetch(`/enrich/stats?${params.toString()}`);
       if (!res.ok) return;
       const data: EnrichStats = await res.json();
       setEnrichStats(data);
@@ -47,12 +50,15 @@ export function EnrichmentProvider({ children }: { children: React.ReactNode }) 
     } catch {
       // Non-critical — leave existing stats in place
     }
-  }, []);
+  }, [activeDomainId]);
 
   // Initial load
   useEffect(() => {
-    fetchStats();
+    const timer = window.setTimeout(() => {
+      void fetchStats();
+    }, 0);
     return () => {
+      window.clearTimeout(timer);
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [fetchStats]);

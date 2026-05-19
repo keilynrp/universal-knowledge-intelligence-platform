@@ -376,6 +376,26 @@ def test_dashboard_all_domain_counts_enrichment_across_domains(client, auth_head
     assert {"Science Completed", "Catalog Done"}.issubset(top_labels)
 
 
+def test_stats_endpoint_scopes_counts_by_domain(client, auth_headers, db_session):
+    db_session.add_all([
+        models.RawEntity(primary_label="Scoped Science", domain="stats_science", entity_type="paper"),
+        models.RawEntity(primary_label="Scoped Catalog", domain="stats_catalog", entity_type="record"),
+        models.RawEntity(primary_label="Scoped Catalog 2", domain="stats_catalog", entity_type="record"),
+    ])
+    db_session.commit()
+
+    all_response = client.get("/stats?domain_id=all", headers=auth_headers)
+    science_response = client.get("/stats?domain_id=stats_science", headers=auth_headers)
+    catalog_response = client.get("/stats?domain_id=stats_catalog", headers=auth_headers)
+
+    assert all_response.status_code == 200
+    assert science_response.status_code == 200
+    assert catalog_response.status_code == 200
+    assert all_response.json()["total_entities"] >= 3
+    assert science_response.json()["total_entities"] == 1
+    assert catalog_response.json()["total_entities"] == 2
+
+
 def test_dashboard_summary_disables_http_cache_for_refresh_controls(client, auth_headers):
     response = client.get("/dashboard/summary?domain_id=default&force_refresh=true", headers=auth_headers)
 

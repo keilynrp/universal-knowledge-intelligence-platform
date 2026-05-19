@@ -719,11 +719,12 @@ def invalidate_analytics_for_domain(domain_id: str) -> None:
 
 @router.get("/stats")
 def get_stats(
+    domain_id: str = Query(default="all", min_length=1, max_length=64),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
     org_id = resolve_request_org_id(db, current_user)
-    return AnalyticsService.get_stats(db, org_id=org_id)
+    return AnalyticsService.get_stats(db, org_id=org_id, domain_id=domain_id)
 
 
 @router.get("/brands")

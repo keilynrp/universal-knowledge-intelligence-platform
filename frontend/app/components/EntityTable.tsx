@@ -15,7 +15,7 @@ import { useEntityTableVirtualization } from "./useEntityTableVirtualization";
 import { EnrichmentProgressToast } from "./EnrichmentProgressToast";
 
 export default function EntityTable() {
-    const { activeDomain } = useDomain();
+    const { activeDomain, activeDomainId } = useDomain();
     const { t } = useLanguage();
     const { toast } = useToast();
     const {
@@ -65,7 +65,7 @@ export default function EntityTable() {
         handleEnrichmentBatchComplete,
         scrollTop,
         setScrollTop,
-    } = useEntityTableController({ toast });
+    } = useEntityTableController({ toast, activeDomainId });
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 

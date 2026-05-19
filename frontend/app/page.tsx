@@ -12,6 +12,7 @@ import { KpiSummaryCard } from "./components/ui";
 import { apiFetch } from "../lib/api";
 import { useAuth } from "./contexts/AuthContext";
 import { useLanguage } from "./contexts/LanguageContext";
+import { useDomain } from "./contexts/DomainContext";
 import { Analytics } from "../lib/analytics";
 import {
   getStoredPilotPersona,
@@ -66,6 +67,7 @@ export default function Home() {
   const [pilotPersona, setPilotPersona] = useState<PilotPersonaId>("research");
   const { token } = useAuth();
   const { t } = useLanguage();
+  const { activeDomainId } = useDomain();
   const tr = useCallback((key: string, fallback: string) => {
     const value = t(key);
     return value === key ? fallback : value;
@@ -182,7 +184,8 @@ export default function Home() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const statsRes = await apiFetch("/stats");
+      const params = new URLSearchParams({ domain_id: activeDomainId || "all" });
+      const statsRes = await apiFetch(`/stats?${params.toString()}`);
       const s = await statsRes.json();
       setStats(s);
       setDomainCount(
@@ -193,7 +196,7 @@ export default function Home() {
     } catch {
       // stats are non-critical
     }
-  }, []);
+  }, [activeDomainId]);
 
   useEffect(() => {
     if (token) {

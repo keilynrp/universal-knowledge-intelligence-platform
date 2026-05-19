@@ -405,55 +405,51 @@ class AnalyticsService:
         return snapshot
 
     @staticmethod
-    def get_stats(db: Session, org_id: int | None = None) -> dict:
+    def get_stats(db: Session, org_id: int | None = None, domain_id: str | None = None) -> dict:
+        def _q(*entities):
+            query = scope_query_to_org(db.query(*entities), models.RawEntity, org_id)
+            if domain_id and domain_id != "all":
+                if domain_id == "default":
+                    query = query.filter(
+                        (models.RawEntity.domain == domain_id)
+                        | (models.RawEntity.domain == None)  # noqa: E711
+                    )
+                else:
+                    query = query.filter(models.RawEntity.domain == domain_id)
+            return query
+
         total_entities = (
-            scope_query_to_org(db.query(func.count(models.RawEntity.id)), models.RawEntity, org_id)
+            _q(func.count(models.RawEntity.id))
             .scalar()
             or 0
         )
 
         unique_secondary_labels = (
-            scope_query_to_org(
-                db.query(func.count(func.distinct(models.RawEntity.secondary_label))),
-                models.RawEntity,
-                org_id,
-            )
+            _q(func.count(func.distinct(models.RawEntity.secondary_label)))
             .filter(models.RawEntity.secondary_label != None)
             .scalar() or 0
         )
         unique_entity_types = (
-            scope_query_to_org(
-                db.query(func.count(func.distinct(models.RawEntity.entity_type))),
-                models.RawEntity,
-                org_id,
-            )
+            _q(func.count(func.distinct(models.RawEntity.entity_type)))
             .filter(models.RawEntity.entity_type != None)
             .scalar() or 0
         )
 
         validation_rows = (
-            scope_query_to_org(
-                db.query(models.RawEntity.validation_status, func.count(models.RawEntity.id)),
-                models.RawEntity,
-                org_id,
-            )
+            _q(models.RawEntity.validation_status, func.count(models.RawEntity.id))
             .group_by(models.RawEntity.validation_status)
             .all()
         )
         validation_status = {row[0] or "pending": row[1] for row in validation_rows}
 
         with_canonical_id = (
-            scope_query_to_org(db.query(func.count(models.RawEntity.id)), models.RawEntity, org_id)
+            _q(func.count(models.RawEntity.id))
             .filter(models.RawEntity.canonical_id != None, models.RawEntity.canonical_id != "")
             .scalar() or 0
         )
 
         top_secondary_labels = (
-            scope_query_to_org(
-                db.query(models.RawEntity.secondary_label, func.count(models.RawEntity.id).label("count")),
-                models.RawEntity,
-                org_id,
-            )
+            _q(models.RawEntity.secondary_label, func.count(models.RawEntity.id).label("count"))
             .filter(models.RawEntity.secondary_label != None)
             .group_by(models.RawEntity.secondary_label)
             .order_by(func.count(models.RawEntity.id).desc())
@@ -461,11 +457,7 @@ class AnalyticsService:
             .all()
         )
         type_distribution = (
-            scope_query_to_org(
-                db.query(models.RawEntity.entity_type, func.count(models.RawEntity.id).label("count")),
-                models.RawEntity,
-                org_id,
-            )
+            _q(models.RawEntity.entity_type, func.count(models.RawEntity.id).label("count"))
             .filter(models.RawEntity.entity_type != None)
             .group_by(models.RawEntity.entity_type)
             .order_by(func.count(models.RawEntity.id).desc())
@@ -473,11 +465,7 @@ class AnalyticsService:
             .all()
         )
         domain_distribution = (
-            scope_query_to_org(
-                db.query(models.RawEntity.domain, func.count(models.RawEntity.id).label("count")),
-                models.RawEntity,
-                org_id,
-            )
+            _q(models.RawEntity.domain, func.count(models.RawEntity.id).label("count"))
             .filter(models.RawEntity.domain != None)
             .group_by(models.RawEntity.domain)
             .order_by(func.count(models.RawEntity.id).desc())
@@ -485,7 +473,7 @@ class AnalyticsService:
         )
 
         quality_rows = (
-            scope_query_to_org(db.query(models.RawEntity.quality_score), models.RawEntity, org_id)
+            _q(models.RawEntity.quality_score)
             .filter(models.RawEntity.quality_score != None)
             .all()
         )
@@ -496,7 +484,7 @@ class AnalyticsService:
             "medium":   sum(1 for v in quality_values if 0.3 <= v < 0.7),
             "low":      sum(1 for v in quality_values if v < 0.3),
             "unscored": (
-                scope_query_to_org(db.query(func.count(models.RawEntity.id)), models.RawEntity, org_id)
+                _q(func.count(models.RawEntity.id))
                 .filter(models.RawEntity.quality_score == None)
                 .scalar()
                 or 0

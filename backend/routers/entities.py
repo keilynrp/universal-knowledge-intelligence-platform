@@ -565,35 +565,48 @@ def enrich_progress(
 
 @router.get("/enrich/stats")
 def get_enrichment_stats(
+    domain_id: str = Query(default="all", min_length=1, max_length=64),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
     """Returns enrichment statistics for the predictive analytics dashboard."""
     org_id = resolve_request_org_id(db, current_user)
+    def _q(*entities):
+        query = scope_query_to_org(db.query(*entities), models.RawEntity, org_id)
+        if domain_id and domain_id != "all":
+            if domain_id == "default":
+                query = query.filter(
+                    (models.RawEntity.domain == domain_id)
+                    | (models.RawEntity.domain == None)  # noqa: E711
+                )
+            else:
+                query = query.filter(models.RawEntity.domain == domain_id)
+        return query
+
     total = (
-        scope_query_to_org(db.query(func.count(models.RawEntity.id)), models.RawEntity, org_id)
+        _q(func.count(models.RawEntity.id))
         .scalar()
         or 0
     )
 
     status_rows = (
-        scope_query_to_org(
-            db.query(models.RawEntity.enrichment_status, func.count(models.RawEntity.id)),
-            models.RawEntity,
-            org_id,
-        )
+        _q(models.RawEntity.enrichment_status, func.count(models.RawEntity.id))
         .group_by(models.RawEntity.enrichment_status)
         .all()
     )
     status_breakdown = {row[0] or "none": row[1] for row in status_rows}
 
-    enriched_count = status_breakdown.get("completed", 0)
+    enriched_count = (
+        status_breakdown.get("completed", 0)
+        + status_breakdown.get("done", 0)
+        + status_breakdown.get("enriched", 0)
+    )
     pending_count  = status_breakdown.get("pending", 0)
     failed_count   = status_breakdown.get("failed", 0)
     none_count     = status_breakdown.get("none", 0)
 
     enriched_entities = (
-        scope_query_to_org(db.query(models.RawEntity.enrichment_concepts), models.RawEntity, org_id)
+        _q(models.RawEntity.enrichment_concepts)
         .filter(
             models.RawEntity.enrichment_concepts != None,
             models.RawEntity.enrichment_concepts != "",
@@ -612,11 +625,9 @@ def get_enrichment_stats(
     top_concepts = sorted(concept_freq.items(), key=lambda x: x[1], reverse=True)[:20]
 
     citation_rows = (
-        scope_query_to_org(
-            db.query(models.RawEntity.enrichment_citation_count), models.RawEntity, org_id
-        )
+        _q(models.RawEntity.enrichment_citation_count)
         .filter(
-            models.RawEntity.enrichment_status == "completed",
+            models.RawEntity.enrichment_status.in_(("completed", "done", "enriched")),
             models.RawEntity.enrichment_citation_count != None,
             models.RawEntity.enrichment_citation_count > 0,
         )
