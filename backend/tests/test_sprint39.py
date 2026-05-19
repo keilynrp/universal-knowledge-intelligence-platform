@@ -338,6 +338,15 @@ def test_dashboard_counts_legacy_enriched_status_aliases(client, auth_headers, d
     ]
 
 
+def test_dashboard_summary_disables_http_cache_for_refresh_controls(client, auth_headers):
+    response = client.get("/dashboard/summary?domain_id=default&force_refresh=true", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store, max-age=0, must-revalidate"
+    assert response.headers["pragma"] == "no-cache"
+    assert response.headers["expires"] == "0"
+
+
 def test_dashboard_skips_noisy_author_list_labels_in_year_matrix(client, auth_headers, db_session):
     db_session.add(models.RawEntity(
         primary_label="Ana Perez; Luis Soto; Marta Ruiz; Diego Leon",

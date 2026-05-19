@@ -17,7 +17,7 @@ import re
 import time
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
@@ -541,6 +541,7 @@ def analyzer_coauthorship(
 
 @router.get("/dashboard/summary", tags=["analytics"])
 def dashboard_summary(
+    response: Response,
     domain_id: str = Query(default="default", min_length=1, max_length=64),
     profile_id: str = Query(default="", max_length=80),
     force_refresh: bool = Query(default=False),
@@ -548,6 +549,9 @@ def dashboard_summary(
     current_user: models.User = Depends(get_current_user),
 ):
     """Aggregated KPIs + timeline + heatmap + concepts for the Executive Dashboard."""
+    response.headers["Cache-Control"] = "no-store, max-age=0, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     org_id = resolve_request_org_id(db, current_user)
     benchmark_org = db.get(models.Organization, org_id) if org_id else None
     profile_key = profile_id or "default_profile"

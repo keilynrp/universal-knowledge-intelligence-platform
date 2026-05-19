@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -336,6 +336,7 @@ export default function ExecutiveDashboardPage() {
   const [selectedBenchmarkProfile, setSelectedBenchmarkProfile] = useState(
     searchParams.get("benchmark_profile") || "",
   );
+  const dashboardRequestId = useRef(0);
   const importedFlag = searchParams.get("imported") === "1";
   const importedDomain = searchParams.get("domain");
   const importedRows = searchParams.get("rows");
@@ -386,6 +387,8 @@ export default function ExecutiveDashboardPage() {
   const fetchDashboard = useCallback(async (options?: { forceRefresh?: boolean; preserveData?: boolean }) => {
     const forceRefresh = options?.forceRefresh ?? false;
     const preserveData = options?.preserveData ?? false;
+    const requestId = dashboardRequestId.current + 1;
+    dashboardRequestId.current = requestId;
     if (preserveData) {
       setRefreshing(true);
     } else {
@@ -393,24 +396,38 @@ export default function ExecutiveDashboardPage() {
     }
     setError(null);
     try {
-      const profileQuery = selectedBenchmarkProfile
-        ? `&profile_id=${encodeURIComponent(selectedBenchmarkProfile)}`
-        : "";
-      const forceQuery = forceRefresh ? "&force_refresh=true" : "";
-      const res = await apiFetch(`/dashboard/summary?domain_id=${activeDomainId}${profileQuery}${forceQuery}`, {
+      const params = new URLSearchParams({
+        domain_id: activeDomainId,
+        _sync: `${Date.now()}-${requestId}`,
+      });
+      if (selectedBenchmarkProfile) params.set("profile_id", selectedBenchmarkProfile);
+      if (forceRefresh) params.set("force_refresh", "true");
+      const res = await apiFetch(`/dashboard/summary?${params.toString()}`, {
         cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache",
+          "Pragma": "no-cache",
+        },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setData(await res.json());
+      const nextData = await res.json();
+      if (dashboardRequestId.current === requestId) {
+        setData(nextData);
+        setCountdown(REFRESH_INTERVAL_SEC);
+      }
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : tr("page.exec_dashboard.dashboard_load_failed", "Failed to load dashboard"));
+      if (dashboardRequestId.current === requestId) {
+        setError(error instanceof Error ? error.message : tr("page.exec_dashboard.dashboard_load_failed", "Failed to load dashboard"));
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (dashboardRequestId.current === requestId) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [activeDomainId, selectedBenchmarkProfile, tr]);
 
-  useEffect(() => { void fetchDashboard(); }, [fetchDashboard]);
+  useEffect(() => { void fetchDashboard({ forceRefresh: true }); }, [fetchDashboard]);
 
   useEffect(() => {
     let cancelled = false;
