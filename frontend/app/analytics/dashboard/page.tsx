@@ -361,7 +361,7 @@ export default function ExecutiveDashboardPage() {
   const importedFlag = searchParams.get("imported") === "1";
   const importedDomain = searchParams.get("domain");
   const importedRows = searchParams.get("rows");
-  const dashboardDomainId = importedDomain || activeDomainId || "all";
+  const dashboardDomainId = activeDomainId || "all";
   const tr = useCallback((key: string, fallback: string) => {
     const value = t(key);
     return value === key ? fallback : value;
@@ -470,10 +470,10 @@ export default function ExecutiveDashboardPage() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (importedDomain && importedDomain !== activeDomainId) {
+    if (importedFlag && importedDomain && importedDomain !== activeDomainId) {
       setActiveDomainId(importedDomain);
     }
-  }, [activeDomainId, importedDomain, setActiveDomainId]);
+  }, [activeDomainId, importedDomain, importedFlag, setActiveDomainId]);
 
   // Auto-refresh countdown
   useEffect(() => {

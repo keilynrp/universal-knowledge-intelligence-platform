@@ -9,6 +9,8 @@ import { useFocusTrap } from "../hooks/useFocusTrap";
 import { useLanguage } from "../contexts/LanguageContext";
 
 const BUILTIN_IDS = new Set(["default", "science", "healthcare"]);
+const ALL_DOMAINS_ID = "all";
+const ALL_DOMAINS_LABEL = "Todos los dominios";
 
 const ICON_OPTIONS = ["Database", "Microscope", "Heart", "Building", "BookOpen", "Globe", "Briefcase", "FlaskConical"];
 
@@ -43,6 +45,10 @@ export default function DomainsPage() {
   const { user } = useAuth();
   const { t } = useLanguage();
   const isAdmin = user?.role === "super_admin" || user?.role === "admin";
+  const tr = (key: string, fallback: string, params?: Record<string, string | number>) => {
+    const value = t(key, params);
+    return value === key ? fallback : value;
+  };
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -61,7 +67,7 @@ export default function DomainsPage() {
   const slideOverRef = useFocusTrap<HTMLDivElement>(showForm);
 
   const selectedDomain = domains.find(d => d.id === selectedId) ?? null;
-  const activeDomainLabel = activeDomainId ?? "—";
+  const activeDomainLabel = activeDomainId === ALL_DOMAINS_ID ? ALL_DOMAINS_LABEL : activeDomainId ?? "—";
 
   const getIconLabel = (icon: string) => t(`page.domains.icon.${icon}`);
 
@@ -157,6 +163,64 @@ export default function DomainsPage() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-6 flex-1 min-h-0">
         {/* Domain list */}
         <div className="flex flex-col gap-3 overflow-y-auto">
+          <div
+            onClick={() => setSelectedId(null)}
+            onKeyDown={e => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setSelectedId(null);
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-pressed={selectedId === null}
+            className={`w-full text-left rounded-xl border p-4 transition-all ${
+              selectedId === null
+                ? "border-violet-500 bg-violet-50 ring-1 ring-violet-500 dark:bg-violet-900/10"
+                : "border-gray-200 bg-white shadow-sm hover:border-gray-300 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg ${
+                  activeDomainId === ALL_DOMAINS_ID
+                    ? "bg-violet-100 text-violet-600 dark:bg-violet-600/20 dark:text-violet-300"
+                    : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                }`}>
+                  <DomainIcon icon="Globe" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="truncate text-sm font-medium text-gray-900 dark:text-white">{ALL_DOMAINS_LABEL}</span>
+                    <Badge variant="purple" dot>{tr("page.domains.default_badge", "Default")}</Badge>
+                    {activeDomainId === ALL_DOMAINS_ID && (
+                      <Badge variant="info" dot>{t("page.domains.active_badge")}</Badge>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {t("page.domains.all_domains_meta", { count: domains.length }) === "page.domains.all_domains_meta"
+                      ? `${domains.length} dominios activos agregados`
+                      : t("page.domains.all_domains_meta", { count: domains.length })}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              {t("page.domains.all_domains_description") === "page.domains.all_domains_description"
+                ? "Clasificación por defecto que suma los registros e ingestas activas de todos los dominios."
+                : t("page.domains.all_domains_description")}
+            </p>
+            <div className="mt-3">
+              {activeDomainId !== ALL_DOMAINS_ID && (
+                <button
+                  onClick={e => { e.stopPropagation(); setActiveDomainId(ALL_DOMAINS_ID); }}
+                  className="rounded-md bg-violet-100 px-2.5 py-1 text-xs font-medium text-violet-700 transition-colors hover:bg-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:hover:bg-violet-900/50"
+                >
+                  {tr("page.domains.set_default_scope", "Usar sumatoria por defecto")}
+                </button>
+              )}
+            </div>
+          </div>
           {domains.map(d => (
             <div
               key={d.id}

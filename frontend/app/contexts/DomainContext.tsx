@@ -36,7 +36,8 @@ const DomainContext = createContext<DomainContextType | undefined>(undefined);
 
 function readStoredDomain(): string | null {
     if (typeof window === "undefined") return null;
-    return window.localStorage.getItem(DOMAIN_STORAGE_KEY);
+    const stored = window.localStorage.getItem(DOMAIN_STORAGE_KEY);
+    return stored === "default" ? ALL_DOMAINS_ID : stored;
 }
 
 export function DomainProvider({ children }: { children: React.ReactNode }) {
