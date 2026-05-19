@@ -63,7 +63,10 @@ const SYSTEM_FIELDS: Array<{ key: keyof Entity; labelKey: string }> = [
 function parseJsonObject(raw: string | null): Record<string, unknown> {
     if (!raw) return {};
     try {
-        return JSON.parse(raw) as Record<string, unknown>;
+        const parsed = JSON.parse(raw) as unknown;
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+            ? parsed as Record<string, unknown>
+            : {};
     } catch {
         return {};
     }
@@ -81,6 +84,84 @@ function formatValue(value: unknown, emptyLabel: string): string {
     if (Array.isArray(value)) return value.join(", ");
     if (typeof value === "object") return JSON.stringify(value);
     return String(value);
+}
+
+const ABSTRACT_FIELD_KEYS = new Set([
+    "abstract",
+    "abstract_text",
+    "summary",
+    "resumen",
+    "description",
+    "raw_ab",
+    "raw_abstract",
+]);
+
+interface AbstractMapping {
+    key: string;
+    label: string;
+    source: string;
+    text: string;
+}
+
+function stripInlineHtml(value: string): string {
+    return value
+        .replace(/<\s*br\s*\/?\s*>/gi, " ")
+        .replace(/<\s*\/?\s*(sup|sub|i|em|b|strong|span)\b[^>]*>/gi, "")
+        .replace(/<[^>]+>/g, "")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function resolveAbstractMapping(
+    normalizedAttributes: Record<string, unknown>,
+    sourceAttributes: Record<string, unknown>,
+): AbstractMapping | null {
+    const sources = [
+        { source: "normalized_json", attrs: normalizedAttributes },
+        { source: "attributes_json", attrs: sourceAttributes },
+    ];
+
+    for (const candidate of sources) {
+        for (const key of ABSTRACT_FIELD_KEYS) {
+            const value = candidate.attrs[key];
+            if (typeof value === "string" && value.trim()) {
+                return {
+                    key,
+                    label: titleCaseKey(key),
+                    source: candidate.source,
+                    text: stripInlineHtml(value),
+                };
+            }
+        }
+
+        const rawRecord = candidate.attrs.raw_record;
+        if (rawRecord && typeof rawRecord === "object" && !Array.isArray(rawRecord)) {
+            const rawAttrs = rawRecord as Record<string, unknown>;
+            for (const key of ABSTRACT_FIELD_KEYS) {
+                const value = rawAttrs[key];
+                if (typeof value === "string" && value.trim()) {
+                    return {
+                        key: `raw_record.${key}`,
+                        label: titleCaseKey(key),
+                        source: `${candidate.source}.raw_record`,
+                        text: stripInlineHtml(value),
+                    };
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
+function wordCount(text: string): number {
+    return text.split(/\s+/).filter(Boolean).length;
 }
 
 /**
@@ -253,6 +334,7 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
     const normalizedAttributes = parseJsonObject(entity.normalized_json);
     const sourceAttributes = parseJsonObject(entity.attributes_json);
     const mergedExtendedAttributes = { ...sourceAttributes, ...normalizedAttributes };
+    const abstractMapping = resolveAbstractMapping(normalizedAttributes, sourceAttributes);
 
     const coreFields = activeDomain
         ? activeDomain.attributes.filter((attribute) => attribute.is_core).map((attribute) => ({
@@ -279,7 +361,7 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
     const extendedFields = sortExtendedFields(
         activeDomain?.id,
         Object.entries(mergedExtendedAttributes)
-        .filter(([key, value]) => value !== null && value !== undefined && value !== "" && key !== "enrichment_author_orcids" && key !== "enrichment_authors")
+        .filter(([key, value]) => value !== null && value !== undefined && value !== "" && key !== "enrichment_author_orcids" && key !== "enrichment_authors" && !ABSTRACT_FIELD_KEYS.has(key))
         .map(([key, value]) => ({
             key,
             label: activeDomain?.attributes.find((attribute) => attribute.name === key)?.label ?? titleCaseKey(key),
@@ -333,6 +415,31 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
                                 ))}
                             </div>
                         </section>
+
+                        {abstractMapping && (
+                            <section>
+                                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{t("page.entity_table.section_abstract")}</h3>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+                                            {t("page.entity_table.abstract_source")}: {abstractMapping.source}
+                                        </span>
+                                        <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-bold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                                            {t("page.entity_table.abstract_word_count", { count: wordCount(abstractMapping.text) })}
+                                        </span>
+                                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                                            {t("page.entity_table.abstract_pattern_ready")}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 dark:border-gray-800 dark:bg-gray-800/40">
+                                    <span className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-gray-400">{abstractMapping.label}</span>
+                                    <p className="max-h-56 overflow-y-auto whitespace-pre-wrap text-sm leading-6 text-gray-700 dark:text-gray-300">
+                                        {abstractMapping.text}
+                                    </p>
+                                </div>
+                            </section>
+                        )}
 
                         {extendedFields.length > 0 && (
                             <section>

@@ -328,6 +328,69 @@ function stripInlineHtml(value: string): string {
         .trim();
 }
 
+const ABSTRACT_FIELD_KEYS = new Set([
+    "abstract",
+    "abstract_text",
+    "summary",
+    "resumen",
+    "description",
+    "raw_ab",
+    "raw_abstract",
+]);
+
+interface AbstractMapping {
+    key: string;
+    label: string;
+    source: string;
+    text: string;
+}
+
+function resolveAbstractMapping(
+    normalizedAttributes: Record<string, unknown>,
+    sourceAttributes: Record<string, unknown>,
+): AbstractMapping | null {
+    const sources = [
+        { source: "normalized_json", attrs: normalizedAttributes },
+        { source: "attributes_json", attrs: sourceAttributes },
+    ];
+
+    for (const candidate of sources) {
+        for (const key of ABSTRACT_FIELD_KEYS) {
+            const value = candidate.attrs[key];
+            if (typeof value === "string" && value.trim()) {
+                return {
+                    key,
+                    label: fieldLabel(key),
+                    source: candidate.source,
+                    text: stripInlineHtml(value),
+                };
+            }
+        }
+
+        const rawRecord = candidate.attrs.raw_record;
+        if (rawRecord && typeof rawRecord === "object" && !Array.isArray(rawRecord)) {
+            const rawAttrs = rawRecord as Record<string, unknown>;
+            for (const key of ABSTRACT_FIELD_KEYS) {
+                const value = rawAttrs[key];
+                if (typeof value === "string" && value.trim()) {
+                    return {
+                        key: `raw_record.${key}`,
+                        label: fieldLabel(key),
+                        source: `${candidate.source}.raw_record`,
+                        text: stripInlineHtml(value),
+                    };
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
+function wordCount(text: string): number {
+    return text.split(/\s+/).filter(Boolean).length;
+}
+
 function formatValue(value: unknown): React.ReactNode {
     if (value === null || value === undefined || value === "") {
         return <span className="italic text-gray-300 dark:text-gray-600">—</span>;
@@ -831,6 +894,7 @@ export default function EntityDetailPage() {
         ...sourceAttributes,
         ...normalizedAttributes,
     };
+    const abstractMapping = resolveAbstractMapping(normalizedAttributes, sourceAttributes);
     const displayTitle = entity.primary_label || String(mergedAttributes.title || mergedAttributes.name || `Entity #${entityId}`);
     const description = [
         entity.secondary_label,
@@ -919,7 +983,7 @@ export default function EntityDetailPage() {
         { label: tr("entities.detail.enrichment.normalized_doi", "DOI normalizado"), value: entity.enrichment_doi || entity.canonical_id, icon: "link", href: entity.enrichment_doi ? `https://doi.org/${entity.enrichment_doi}` : undefined },
     ];
     const extendedEntries = Object.entries(mergedAttributes).filter(
-        ([key]) => !["primary_label", "secondary_label", "canonical_id", "entity_type", "domain"].includes(key)
+        ([key]) => !["primary_label", "secondary_label", "canonical_id", "entity_type", "domain"].includes(key) && !ABSTRACT_FIELD_KEYS.has(key)
     );
 
     async function copyValue(value: unknown) {
@@ -1359,6 +1423,42 @@ export default function EntityDetailPage() {
                             ) : null}
                         </section>
                     </div>
+
+                    {abstractMapping && (
+                        <section className={`${DETAIL_CARD} p-6 md:p-8`}>
+                            <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-200">
+                                        <IconGlyph name="file" className="h-6 w-6" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-sm font-black uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">
+                                            {tr("page.entity_table.section_abstract", "Abstract / resumen")}
+                                        </h2>
+                                        <p className="mt-1 text-xs font-semibold text-slate-400">
+                                            {tr("page.entity_table.abstract_source", "Fuente mapeada")}: {abstractMapping.source}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500 dark:bg-white/10 dark:text-slate-300">
+                                        {t("page.entity_table.abstract_word_count", { count: wordCount(abstractMapping.text) })}
+                                    </span>
+                                    <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-400/20">
+                                        {tr("page.entity_table.abstract_pattern_ready", "Listo para análisis de patrones")}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-5 dark:border-white/10 dark:bg-white/5">
+                                <span className="mb-3 block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
+                                    {abstractMapping.label}
+                                </span>
+                                <p className="whitespace-pre-wrap text-sm font-medium leading-7 text-slate-700 dark:text-slate-200">
+                                    {abstractMapping.text}
+                                </p>
+                            </div>
+                        </section>
+                    )}
 
                     {extendedEntries.length > 0 && (
                         <section className={`${DETAIL_CARD} p-6 md:p-8`}>
