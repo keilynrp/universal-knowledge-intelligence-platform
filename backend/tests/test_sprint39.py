@@ -296,6 +296,48 @@ def test_dashboard_derives_quality_when_scores_are_not_persisted(client, auth_he
     assert quality["average"] > 0.0
 
 
+def test_dashboard_counts_legacy_enriched_status_aliases(client, auth_headers, db_session):
+    db_session.add_all([
+        models.RawEntity(
+            primary_label="Legacy Done Paper",
+            domain="legacy_enriched_status_test",
+            enrichment_status="done",
+            enrichment_citation_count=30,
+            enrichment_source="openalex",
+            enrichment_concepts="Knowledge Graphs",
+        ),
+        models.RawEntity(
+            primary_label="Legacy Enriched Paper",
+            domain="legacy_enriched_status_test",
+            enrichment_status="enriched",
+            enrichment_citation_count=10,
+            enrichment_source="openalex",
+            enrichment_concepts="Pattern Analysis",
+        ),
+        models.RawEntity(
+            primary_label="Pending Paper",
+            domain="legacy_enriched_status_test",
+            enrichment_status="pending",
+            enrichment_citation_count=1000,
+            enrichment_source="openalex",
+        ),
+    ])
+    db_session.commit()
+
+    response = client.get("/dashboard/summary?domain_id=legacy_enriched_status_test", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["kpis"]["total_entities"] == 3
+    assert data["kpis"]["enriched_count"] == 2
+    assert data["kpis"]["enrichment_pct"] == 66.7
+    assert data["kpis"]["avg_citations"] == 20.0
+    assert [entity["primary_label"] for entity in data["top_entities"]] == [
+        "Legacy Done Paper",
+        "Legacy Enriched Paper",
+    ]
+
+
 def test_dashboard_skips_noisy_author_list_labels_in_year_matrix(client, auth_headers, db_session):
     db_session.add(models.RawEntity(
         primary_label="Ana Perez; Luis Soto; Marta Ruiz; Diego Leon",

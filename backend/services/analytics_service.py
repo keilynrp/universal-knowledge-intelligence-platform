@@ -15,6 +15,9 @@ from backend.tenant_access import scope_query_to_org
 from backend.schema_registry import registry
 
 
+ENRICHED_STATUSES = ("completed", "done", "enriched")
+
+
 class AnalyticsService:
     """
     Core business logic and complex persistence queries for dashboard KPIs and Analytics.
@@ -237,13 +240,13 @@ class AnalyticsService:
         total_entities = _q().with_entities(func.count(models.RawEntity.id)).scalar() or 0
         enriched_count = (
             _q().with_entities(func.count(models.RawEntity.id))
-            .filter(models.RawEntity.enrichment_status == "completed")
+            .filter(models.RawEntity.enrichment_status.in_(ENRICHED_STATUSES))
             .scalar() or 0
         )
         enrichment_pct = round(enriched_count / total_entities * 100, 1) if total_entities else 0.0
         avg_citations_raw = (
             _q().with_entities(func.avg(models.RawEntity.enrichment_citation_count))
-            .filter(models.RawEntity.enrichment_status == "completed")
+            .filter(models.RawEntity.enrichment_status.in_(ENRICHED_STATUSES))
             .scalar()
         )
         avg_citations = round(float(avg_citations_raw), 1) if avg_citations_raw else 0.0
@@ -321,7 +324,7 @@ class AnalyticsService:
             .with_entities(models.RawEntity.id, models.RawEntity.primary_label,
                            models.RawEntity.enrichment_citation_count,
                            models.RawEntity.enrichment_source)
-            .filter(models.RawEntity.enrichment_status == "completed")
+            .filter(models.RawEntity.enrichment_status.in_(ENRICHED_STATUSES))
             .order_by(models.RawEntity.enrichment_citation_count.desc())
             .limit(top_n_entities * 5)
             .all()
