@@ -358,6 +358,7 @@ export default function ExecutiveDashboardPage() {
     searchParams.get("benchmark_profile") || "",
   );
   const dashboardRequestId = useRef(0);
+  const appliedImportedDomainRef = useRef(false);
   const importedFlag = searchParams.get("imported") === "1";
   const importedDomain = searchParams.get("domain");
   const importedRows = searchParams.get("rows");
@@ -470,7 +471,13 @@ export default function ExecutiveDashboardPage() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (importedFlag && importedDomain && importedDomain !== activeDomainId) {
+    if (
+      importedFlag
+      && importedDomain
+      && !appliedImportedDomainRef.current
+      && importedDomain !== activeDomainId
+    ) {
+      appliedImportedDomainRef.current = true;
       setActiveDomainId(importedDomain);
     }
   }, [activeDomainId, importedDomain, importedFlag, setActiveDomainId]);
