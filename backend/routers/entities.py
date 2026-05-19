@@ -29,12 +29,11 @@ import os
 from backend import database, models, schemas
 from backend.analyzers.external_attention import compute_attention_summary
 from backend.analytics.montecarlo import simulate_citation_impact
-from backend.analytics import rag_engine
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
 from backend import enrichment_worker
 from backend import entity_linker as _entity_linker
-from backend.routers.deps import _audit, _dispatch_webhook, _get_active_integration
+from backend.routers.deps import _audit, _dispatch_webhook
 from backend.routers.limiter import limiter
 from backend.services.entity_service import EntityService
 from backend.tenant_access import get_scoped_record, resolve_request_org_id, scope_query_to_org
@@ -475,10 +474,6 @@ def enrich_single_entity(
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
     enriched = enrichment_worker.enrich_single_record(db, entity)
-    if enriched.enrichment_status in rag_engine.ENRICHED_STATUSES:
-        integration = _get_active_integration(db)
-        if integration:
-            rag_engine.index_entity(enriched, integration)
     return enriched
 
 
@@ -494,14 +489,19 @@ def enrich_bulk_queue(
 ):
     """Queues missing records for background enrichment."""
     org_id = resolve_request_org_id(db, current_user)
-    count = enrichment_worker.trigger_enrichment_bulk(
+    queued_ids = enrichment_worker.trigger_enrichment_bulk(
         db,
         skip=skip,
         limit=limit,
         org_id=org_id,
         domain_id=domain_id,
+        return_ids=True,
     )
-    return {"message": "Bulk queue triggered", "queued_records": count}
+    return {
+        "message": "Bulk queue triggered",
+        "queued_records": len(queued_ids),
+        "queued_ids": queued_ids,
+    }
 
 
 class _BulkIdsEnrichPayload(BaseModel):

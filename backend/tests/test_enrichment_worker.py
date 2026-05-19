@@ -150,14 +150,25 @@ def test_enrich_marks_completed_on_openalex_success(db_session):
     mock_result.concepts = ["Biology", "Genetics"]
     mock_result.authors = ["Alice Smith", "Bob Jones"]
     mock_result.author_orcids = ["0000-0001-2345-6789", None]
+    mock_result.concept_ids = []
+    mock_result.funding = None
+    mock_result.tldr = None
+    mock_result.mesh_terms = None
+    mock_result.influential_citation_count = None
+    mock_result.references_count = None
+    mock_result.license = None
+    mock_result.venue = None
+
+    mock_openalex = MagicMock()
+    mock_openalex.is_active = True
+    mock_openalex.search_by_title.return_value = [mock_result]
+    mock_cb = MagicMock()
+    mock_cb.call = lambda fn, *a, **kw: fn(*a, **kw)
 
     with (
-        patch("backend.enrichment_worker.adapter_wos") as mock_wos,
-        patch("backend.enrichment_worker.adapter_openalex") as mock_openalex,
+        patch("backend.enrichment_worker._ACTIVE_CASCADE", ["openalex"]),
+        patch("backend.enrichment_worker._PROVIDER_MAP", {"openalex": (mock_openalex, mock_cb)}),
     ):
-        mock_wos.is_active = False
-        mock_openalex.search_by_title.return_value = [mock_result]
-
         result = enrich_single_record(db_session, entity)
 
     assert result.enrichment_status == "completed"
@@ -170,14 +181,64 @@ def test_enrich_marks_completed_on_openalex_success(db_session):
     assert attrs["enrichment_author_orcids"] == ["0000-0001-2345-6789", None]
 
 
+def test_enrich_completion_syncs_dashboard_workflows_and_rag(db_session):
+    entity = make_entity(db_session, "Sync Paper", status="processing")
+    entity.domain = "sync_domain"
+    db_session.commit()
+
+    mock_result = MagicMock()
+    mock_result.doi = "10.5555/sync"
+    mock_result.citation_count = 7
+    mock_result.concepts = ["Knowledge Graphs"]
+    mock_result.authors = []
+    mock_result.author_orcids = []
+    mock_result.concept_ids = []
+    mock_result.funding = None
+    mock_result.tldr = None
+    mock_result.mesh_terms = None
+    mock_result.influential_citation_count = None
+    mock_result.references_count = None
+    mock_result.license = None
+    mock_result.venue = None
+
+    mock_openalex = MagicMock()
+    mock_openalex.is_active = True
+    mock_openalex.search_by_title.return_value = [mock_result]
+    mock_cb = MagicMock()
+    mock_cb.call = lambda fn, *a, **kw: fn(*a, **kw)
+    integration = MagicMock()
+
+    with (
+        patch("backend.enrichment_worker._ACTIVE_CASCADE", ["openalex"]),
+        patch("backend.enrichment_worker._PROVIDER_MAP", {"openalex": (mock_openalex, mock_cb)}),
+        patch("backend.routers.analytics.invalidate_analytics_for_domain") as invalidate,
+        patch("backend.workflow_engine.fire_trigger") as fire_trigger,
+        patch("backend.routers.deps._get_active_integration", return_value=integration),
+        patch("backend.analytics.rag_engine.index_entity") as index_entity,
+    ):
+        result = enrich_single_record(db_session, entity)
+
+    assert result.enrichment_status == "completed"
+    invalidate.assert_called_once_with("sync_domain")
+    fire_trigger.assert_called_once()
+    assert fire_trigger.call_args.args[:2] == ("entity.enriched", result)
+    index_entity.assert_called_once_with(result, integration)
+
+
 def test_enrich_marks_failed_on_unexpected_exception(db_session):
     entity = make_entity(db_session, "Crash Entity", status="processing")
 
-    with patch("backend.enrichment_worker.adapter_openalex") as mock_openalex:
-        mock_openalex.search_by_title.side_effect = RuntimeError("network down")
-        with patch("backend.enrichment_worker.adapter_wos") as mock_wos:
-            mock_wos.is_active = False
-            result = enrich_single_record(db_session, entity)
+    mock_openalex = MagicMock()
+    mock_openalex.is_active = True
+    mock_openalex.search_by_title.side_effect = RuntimeError("network down")
+    mock_cb = MagicMock()
+    mock_cb.call = lambda fn, *a, **kw: fn(*a, **kw)
+
+    with (
+        patch("backend.enrichment_worker._ACTIVE_CASCADE", ["openalex"]),
+        patch("backend.enrichment_worker._PROVIDER_MAP", {"openalex": (mock_openalex, mock_cb)}),
+    ):
+        result = enrich_single_record(db_session, entity)
 
     assert result.enrichment_status == "failed"
     failure = json.loads(result.attributes_json)["enrichment_failure"]
@@ -222,3 +283,14 @@ def test_trigger_bulk_can_scope_to_domain(db_session):
     db_session.refresh(other)
     assert target.enrichment_status == "pending"
     assert other.enrichment_status == "none"
+
+
+def test_trigger_bulk_can_return_queued_ids(db_session):
+    first = make_entity(db_session, "Queued 1", status="none")
+    second = make_entity(db_session, "Queued 2", status="failed")
+    completed = make_entity(db_session, "Already Done", status="completed")
+
+    queued_ids = trigger_enrichment_bulk(db_session, return_ids=True)
+
+    assert queued_ids == [first.id, second.id]
+    assert completed.id not in queued_ids

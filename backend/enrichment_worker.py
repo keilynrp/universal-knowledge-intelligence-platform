@@ -266,12 +266,58 @@ def _try_epistemic_classify(db: Session, entity: models.RawEntity) -> None:
         logger.debug("Epistemic classification skipped for entity %s: %s", entity.id, e)
 
 
+def _after_enrichment_commit(
+    db: Session,
+    entity: models.RawEntity,
+    *,
+    previous_status: str | None,
+) -> None:
+    """Synchronize downstream analytics/RAG surfaces after enrichment writes commit."""
+    domain_id = entity.domain or "default"
+    logger.debug(
+        "Post-enrichment sync for entity %s: %s -> %s",
+        entity.id,
+        previous_status,
+        entity.enrichment_status,
+    )
+
+    try:
+        from backend.routers.analytics import invalidate_analytics_for_domain
+
+        invalidate_analytics_for_domain(domain_id)
+    except Exception as exc:
+        logger.warning("Failed to invalidate analytics cache for entity %s: %s", entity.id, exc)
+
+    if entity.enrichment_status != "completed":
+        return
+
+    try:
+        from backend.workflow_engine import fire_trigger
+
+        fire_trigger("entity.enriched", entity, db)
+    except Exception as exc:
+        logger.warning("Failed to fire entity.enriched workflow for entity %s: %s", entity.id, exc)
+
+    try:
+        from backend.analytics import rag_engine
+        from backend.routers.deps import _get_active_integration
+
+        integration = _get_active_integration(db)
+        if integration:
+            result = rag_engine.index_entity(entity, integration)
+            logger.debug("RAG incremental index result for entity %s: %s", entity.id, result)
+    except Exception as exc:
+        logger.warning("Failed to incrementally index enriched entity %s: %s", entity.id, exc)
+
+
 def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEntity:
     """
     Synchronously enriches a single record by title or DOI.
     Uses a cascade fallback strategy prioritizing Premium Data:
     Web of Science (BYOK) -> OpenAlex (Free API) -> Google Scholar (Scraping).
     """
+    previous_status = entity.enrichment_status
+
     if not entity.primary_label:
         _set_enrichment_failed(
             entity,
@@ -279,6 +325,7 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
             evidence="El registro no tiene título o etiqueta principal para buscar en fuentes externas.",
         )
         db.commit()
+        _after_enrichment_commit(db, entity, previous_status=previous_status)
         return entity
 
     query = entity.primary_label
@@ -383,6 +430,8 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
         )
 
     db.commit()
+    if previous_status != entity.enrichment_status or entity.enrichment_status == "completed":
+        _after_enrichment_commit(db, entity, previous_status=previous_status)
     return entity
 
 
@@ -470,7 +519,8 @@ def trigger_enrichment_bulk(
     limit: int = 100,
     org_id: int | None = None,
     domain_id: str | None = None,
-) -> int:
+    return_ids: bool = False,
+) -> int | list[int]:
     """
     Marks a batch of 'none' or 'failed' entities as 'pending' so the background
     worker picks them up. Does NOT re-queue records already 'processing' or 'completed'.
@@ -487,9 +537,11 @@ def trigger_enrichment_bulk(
             )
         else:
             entities = entities.filter(models.RawEntity.domain == domain_id)
-    entities = entities.offset(skip).limit(limit).all()
+    entities = entities.order_by(models.RawEntity.id.asc()).offset(skip).limit(limit).all()
+    queued_ids: list[int] = []
     for entity in entities:
         entity.enrichment_status = "pending"
         _clear_enrichment_failure(entity)
+        queued_ids.append(entity.id)
     db.commit()
-    return len(entities)
+    return queued_ids if return_ids else len(queued_ids)
