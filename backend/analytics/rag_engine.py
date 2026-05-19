@@ -93,6 +93,8 @@ def _first_text(*values: Any) -> str:
             items = [str(item).strip() for item in value if str(item).strip()]
             if items:
                 return ", ".join(items)
+        if value is not None and not isinstance(value, (dict, tuple, set)):
+            return str(value).strip()
     return ""
 
 
