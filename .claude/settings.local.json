@@ -23,7 +23,30 @@
       "Bash(npx tsc:*)",
       "Bash(npm install:*)",
       "Bash(npx vitest:*)",
-      "Bash(npm test:*)"
+      "Bash(npm test:*)",
+      "Bash(\"D:/universal-knowledge-intelligence-platform/.venv/Scripts/python\":*)",
+      "Bash(D:/universal-knowledge-intelligence-platform/.venv/Scripts/python:*)",
+      "Bash(pip install:*)",
+      "Bash(gh run:*)",
+      "Bash(powershell:*)",
+      "Bash(tasklist:*)",
+      "Bash(while read pid)",
+      "Bash(do taskkill //PID $pid //F)",
+      "Bash(done)",
+      "Bash(rustc:*)",
+      "Bash(openspec instructions:*)",
+      "mcp__plugin_everything-claude-code_exa__web_search_exa",
+      "Bash(/tmp/feature_inventory.txt:*)",
+      "Read(//tmp/**)",
+      "Bash(npx openspec:*)",
+      "Bash(openspec new:*)",
+      "Bash(sed:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo test:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(test:*)",
+      "Bash(openspec status:*)",
+      "mcp__plugin_everything-claude-code_playwright__browser_navigate"
     ]
   }
 }
