@@ -649,6 +649,29 @@ def get_enrichment_stats(
     }
 
 
+@router.get("/enrichment/providers")
+def get_enrichment_providers(
+    current_user: models.User = Depends(get_current_user),
+):
+    """Returns status of all registered enrichment providers and their circuit breakers."""
+    from backend.enrichment_worker import get_provider_registry
+
+    providers = []
+    for name, (adapter, cb) in get_provider_registry().items():
+        is_active = getattr(adapter, "is_active", True) if adapter else False
+        providers.append({
+            "name": name,
+            "is_active": is_active,
+            "circuit_breaker": {
+                "state": cb.state.value,
+                "failure_count": cb.failure_count,
+                "success_count": cb.success_count,
+                "last_failure_time": cb.last_failure_time,
+            },
+        })
+    return providers
+
+
 @router.get("/enrich/montecarlo/{entity_id}")
 def get_montecarlo_prediction(
     entity_id: int = Path(..., ge=1),

@@ -23,6 +23,7 @@ from typing import List, Optional
 import requests
 
 from backend.schemas_enrichment import EnrichedRecord
+from backend.adapters.enrichment.base import BaseScientometricAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +33,17 @@ _FETCH_BATCH = 100
 _MAX_LIMIT = 500
 
 
-class PubMedAdapter:
+class PubMedAdapter(BaseScientometricAdapter):
     """Queries PubMed via NCBI E-utilities (eSearch + eFetch)."""
 
     def __init__(self) -> None:
         self._api_key: Optional[str] = os.environ.get("NCBI_API_KEY") or None
         # Polite rate: 3 req/s without key, 10 req/s with key
         self._delay = 1 / 10 if self._api_key else 1 / 3
+
+    @property
+    def is_active(self) -> bool:
+        return True
 
     def _base_params(self) -> dict:
         params: dict = {"retmode": "xml"}
@@ -146,6 +151,9 @@ class PubMedAdapter:
             affil_el = art.find(".//AffiliationInfo/Affiliation")
             affiliation = affil_el.text if affil_el is not None else None
 
+            # Journal / Venue
+            venue = self._text(art, "Journal/Title")
+
             # DOI from ArticleIdList
             doi: Optional[str] = None
             pubmed_data = article_el.find("PubmedData")
@@ -154,6 +162,15 @@ class PubMedAdapter:
                     if aid.get("IdType") == "doi" and aid.text:
                         doi = aid.text
                         break
+
+            # MeSH terms
+            mesh_terms: List[str] = []
+            mesh_list = medline.find("MeshHeadingList")
+            if mesh_list is not None:
+                for heading in mesh_list.findall("MeshHeading"):
+                    descriptor = heading.find("DescriptorName")
+                    if descriptor is not None and descriptor.text:
+                        mesh_terms.append(descriptor.text)
 
             return EnrichedRecord(
                 id=f"pmid:{pmid}",
@@ -166,6 +183,8 @@ class PubMedAdapter:
                 publisher=affiliation,
                 is_open_access=False,
                 source_api="PubMed",
+                mesh_terms=mesh_terms if mesh_terms else None,
+                venue=venue,
             )
         except Exception as exc:
             logger.debug("Skipping malformed PubMed record: %s", exc)
@@ -188,7 +207,28 @@ class PubMedAdapter:
         return records
 
     # ------------------------------------------------------------------
-    # Public API
+    # BaseScientometricAdapter ABC methods
+    # ------------------------------------------------------------------
+
+    def search_by_doi(self, doi: str) -> Optional[EnrichedRecord]:
+        """Search PubMed by DOI using a field-qualified query."""
+        pmids = self._esearch(f"{doi}[DOI]", limit=1)
+        if not pmids:
+            return None
+        xml_text = self._efetch(pmids)
+        records = self._parse_xml(xml_text)
+        return records[0] if records else None
+
+    def search_by_title(self, title: str, limit: int = 5) -> List[EnrichedRecord]:
+        """Search PubMed by title (wraps search_bulk)."""
+        return self.search_bulk(f"{title}[Title]", limit=limit)
+
+    def search_by_author(self, name: str, limit: int = 10) -> List[EnrichedRecord]:
+        """Search PubMed by author name using a field-qualified query."""
+        return self.search_bulk(f"{name}[Author]", limit=limit)
+
+    # ------------------------------------------------------------------
+    # Original bulk API (kept for backward compatibility)
     # ------------------------------------------------------------------
 
     def search_bulk(self, query: str, limit: int = 100) -> List[EnrichedRecord]:

@@ -19,3 +19,11 @@ class EnrichedRecord(BaseModel):
     is_open_access: bool = Field(default=False, description="Whether the artifact is OA (Open Access)")
     source_api: str = Field(description="Which API provided this data (e.g., 'OpenAlex', 'Scopus')", default="Unknown")
     raw_response: Optional[Dict[str, Any]] = Field(default=None, description="Snapshot of the original JSON for audit and fallback extraction")
+    # Extended fields from scientific connectors
+    funding: Optional[List[str]] = Field(default=None, description="Funding sources / grant IDs")
+    references_count: Optional[int] = Field(default=None, description="Number of references cited")
+    tldr: Optional[str] = Field(default=None, description="Auto-generated TL;DR summary (Semantic Scholar)")
+    influential_citation_count: Optional[int] = Field(default=None, description="Citations from influential papers (Semantic Scholar)")
+    license: Optional[str] = Field(default=None, description="License URL or identifier")
+    mesh_terms: Optional[List[str]] = Field(default=None, description="MeSH descriptors (PubMed)")
+    venue: Optional[str] = Field(default=None, description="Publication venue (journal/conference name)")

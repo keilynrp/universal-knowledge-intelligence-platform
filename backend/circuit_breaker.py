@@ -63,6 +63,7 @@ class CircuitBreaker:
 
         self._state = CircuitState.CLOSED
         self._failure_count = 0
+        self._success_count = 0
         self._last_failure_time: float = 0.0
         self._lock = Lock()
 
@@ -72,6 +73,18 @@ class CircuitBreaker:
     def state(self) -> CircuitState:
         with self._lock:
             return self._current_state()
+
+    @property
+    def failure_count(self) -> int:
+        return self._failure_count
+
+    @property
+    def success_count(self) -> int:
+        return self._success_count
+
+    @property
+    def last_failure_time(self) -> float:
+        return self._last_failure_time
 
     def call(self, func: Callable, *args: Any, **kwargs: Any) -> Any:
         """
@@ -106,6 +119,7 @@ class CircuitBreaker:
         with self._lock:
             self._state = CircuitState.CLOSED
             self._failure_count = 0
+            self._success_count = 0
             self._last_failure_time = 0.0
         logger.info(f"Circuit '{self.name}' manually reset to CLOSED.")
 
@@ -139,6 +153,7 @@ class CircuitBreaker:
 
     def _record_success(self) -> None:
         with self._lock:
+            self._success_count += 1
             if self._state != CircuitState.CLOSED:
                 logger.info(
                     f"Circuit '{self.name}' recovered — returning to CLOSED."

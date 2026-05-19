@@ -11,6 +11,9 @@ from backend import models
 from backend.adapters.enrichment.openalex import OpenAlexAdapter
 from backend.adapters.enrichment.scopus import ScopusAdapter
 from backend.adapters.enrichment.wos import WebOfScienceAdapter
+from backend.adapters.enrichment.crossref import CrossrefAdapter
+from backend.adapters.enrichment.pubmed import PubMedAdapter
+from backend.adapters.enrichment.dblp import DBLPAdapter
 from backend.circuit_breaker import CircuitBreaker, CircuitOpenError
 from backend.tenant_access import LEGACY_GLOBAL_ORG_ID, scope_query_to_org
 
@@ -28,6 +31,16 @@ def _scholar_use_free_proxies() -> bool:
 adapter_wos = WebOfScienceAdapter(api_key=os.environ.get("WOS_API_KEY"))
 adapter_scopus = ScopusAdapter(api_key=os.environ.get("SCOPUS_API_KEY"))
 adapter_openalex = OpenAlexAdapter()
+adapter_crossref = CrossrefAdapter()
+adapter_pubmed = PubMedAdapter()
+adapter_dblp = DBLPAdapter()
+adapter_s2 = None  # Lazy-import to avoid hard dep on semantic_scholar module at startup
+try:
+    from backend.adapters.enrichment.semantic_scholar import SemanticScholarAdapter
+    adapter_s2 = SemanticScholarAdapter()
+except ImportError:
+    logger.info("SemanticScholarAdapter not available — skipping.")
+
 adapter_scholar = None
 if _scholar_enabled():
     try:
@@ -40,7 +53,50 @@ if _scholar_enabled():
 _cb_wos = CircuitBreaker(name="wos", failure_threshold=3, recovery_timeout=60)
 _cb_scopus = CircuitBreaker(name="scopus", failure_threshold=3, recovery_timeout=60)
 _cb_openalex = CircuitBreaker(name="openalex", failure_threshold=3, recovery_timeout=60)
+_cb_crossref = CircuitBreaker(name="crossref", failure_threshold=3, recovery_timeout=60)
+_cb_pubmed = CircuitBreaker(name="pubmed", failure_threshold=3, recovery_timeout=60)
+_cb_s2 = CircuitBreaker(name="semantic_scholar", failure_threshold=3, recovery_timeout=90)
+_cb_dblp = CircuitBreaker(name="dblp", failure_threshold=3, recovery_timeout=60)
 _cb_scholar = CircuitBreaker(name="scholar", failure_threshold=5, recovery_timeout=120)
+
+# ── Provider Registry ────────────────────────────────────────────────────────
+# Maps provider ID → (adapter_instance, circuit_breaker)
+# Default cascade order: BYOK first, then free by coverage breadth
+_DEFAULT_CASCADE = ["scopus", "wos", "openalex", "crossref", "pubmed", "semantic_scholar", "dblp", "scholar"]
+
+_PROVIDER_MAP: dict[str, tuple] = {
+    "scopus": (adapter_scopus, _cb_scopus),
+    "wos": (adapter_wos, _cb_wos),
+    "openalex": (adapter_openalex, _cb_openalex),
+    "crossref": (adapter_crossref, _cb_crossref),
+    "pubmed": (adapter_pubmed, _cb_pubmed),
+    "semantic_scholar": (adapter_s2, _cb_s2),
+    "dblp": (adapter_dblp, _cb_dblp),
+    "scholar": (adapter_scholar, _cb_scholar),
+}
+
+
+def _parse_cascade() -> list[str]:
+    """Parse ENRICHMENT_CASCADE env var or return default order."""
+    raw = os.environ.get("ENRICHMENT_CASCADE", "").strip()
+    if not raw:
+        return _DEFAULT_CASCADE
+    names = [n.strip() for n in raw.split(",") if n.strip()]
+    valid = []
+    for name in names:
+        if name in _PROVIDER_MAP:
+            valid.append(name)
+        else:
+            logger.warning("ENRICHMENT_CASCADE: unrecognized provider '%s' — skipping.", name)
+    return valid if valid else _DEFAULT_CASCADE
+
+
+_ACTIVE_CASCADE: list[str] = _parse_cascade()
+
+
+def get_provider_registry() -> dict[str, tuple]:
+    """Returns the provider registry for introspection (used by /enrichment/providers)."""
+    return {name: _PROVIDER_MAP[name] for name in _ACTIVE_CASCADE if name in _PROVIDER_MAP}
 
 # Any record stuck in "processing" for longer than this after a server
 # crash will be reclaimed on the next startup.
@@ -231,53 +287,25 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
     provider_attempts: list[str] = []
 
     try:
-        # Phase 3: Premium BYOK Priority
-        # Phase 3: Premium BYOK Priority (Scopus -> WoS)
-        if adapter_scopus.is_active:
-            provider_attempts.append("Elsevier Scopus")
-            try:
-                results_scopus = _cb_scopus.call(adapter_scopus.search_by_title, query, limit=1)
-                if results_scopus:
-                    enriched_data = results_scopus[0]
-                    source = "Elsevier Scopus"
-            except CircuitOpenError as e:
-                logger.warning(str(e))
+        # Cascade through configured providers in order
+        for provider_name in _ACTIVE_CASCADE:
+            if enriched_data:
+                break
+            entry = _PROVIDER_MAP.get(provider_name)
+            if not entry:
+                continue
+            adapter, cb = entry
+            if adapter is None:
+                continue
+            if not getattr(adapter, "is_active", False):
+                continue
 
-        if not enriched_data and adapter_wos.is_active:
-            provider_attempts.append("Web of Science")
+            provider_attempts.append(provider_name)
             try:
-                results_wos = _cb_wos.call(adapter_wos.search_by_title, query, limit=1)
-                if results_wos:
-                    enriched_data = results_wos[0]
-                    source = "Web of Science"
-            except CircuitOpenError as e:
-                logger.warning(str(e))
-
-        # Phase 1: Free Open API
-        if not enriched_data:
-            provider_attempts.append("OpenAlex")
-            try:
-                results = _cb_openalex.call(adapter_openalex.search_by_title, query, limit=1)
+                results = cb.call(adapter.search_by_title, query, limit=1)
                 if results:
                     enriched_data = results[0]
-                    source = "OpenAlex"
-                else:
-                    # Phase 2: Scraping Fallback
-                    if adapter_scholar is not None:
-                        provider_attempts.append("Google Scholar")
-                        logger.info(f"OpenAlex found nothing for '{query}'. Falling back to Google Scholar.")
-                        try:
-                            results_scholar = _cb_scholar.call(adapter_scholar.search_by_title, query, limit=1)
-                            if results_scholar:
-                                enriched_data = results_scholar[0]
-                                source = "Google Scholar"
-                        except CircuitOpenError as e:
-                            logger.warning(str(e))
-                    else:
-                        logger.info(
-                            "OpenAlex found nothing for '%s'. Scholar fallback skipped because SCHOLAR_ENABLED is disabled.",
-                            query,
-                        )
+                    source = provider_name
             except CircuitOpenError as e:
                 logger.warning(str(e))
 
@@ -299,6 +327,21 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
                     attrs["enrichment_author_orcids"] = enriched_data.author_orcids
             if enriched_data.concept_ids and any(enriched_data.concept_ids):
                 attrs["enrichment_concept_ids"] = enriched_data.concept_ids
+            # Persist extended fields from scientific connectors
+            if enriched_data.funding:
+                attrs["funding"] = enriched_data.funding
+            if enriched_data.tldr:
+                attrs["tldr"] = enriched_data.tldr
+            if enriched_data.mesh_terms:
+                attrs["mesh_terms"] = enriched_data.mesh_terms
+            if enriched_data.influential_citation_count is not None:
+                attrs["influential_citation_count"] = enriched_data.influential_citation_count
+            if enriched_data.references_count is not None:
+                attrs["references_count"] = enriched_data.references_count
+            if enriched_data.license:
+                attrs["license"] = enriched_data.license
+            if enriched_data.venue:
+                attrs["venue"] = enriched_data.venue
             entity.attributes_json = json.dumps(attrs, ensure_ascii=False)
 
             # Extract and cache country from affiliation data

@@ -99,35 +99,43 @@ def test_enrich_marks_failed_on_empty_name(db_session):
 def test_enrich_marks_failed_when_all_adapters_return_nothing(db_session):
     entity = make_entity(db_session, "Some Unknown Entity", status="processing")
 
-    with (
-        patch("backend.enrichment_worker.adapter_wos") as mock_wos,
-        patch("backend.enrichment_worker.adapter_openalex") as mock_openalex,
-        patch("backend.enrichment_worker.adapter_scholar") as mock_scholar,
-    ):
-        mock_wos.is_active = False
-        mock_openalex.search_by_title.return_value = []
-        mock_scholar.search_by_title.return_value = []
+    mock_wos = MagicMock(); mock_wos.is_active = False
+    mock_openalex = MagicMock(); mock_openalex.is_active = True; mock_openalex.search_by_title.return_value = []
+    mock_cb = MagicMock(); mock_cb.call = lambda fn, *a, **kw: fn(*a, **kw)
 
+    with (
+        patch("backend.enrichment_worker._ACTIVE_CASCADE", ["wos", "openalex"]),
+        patch("backend.enrichment_worker._PROVIDER_MAP", {
+            "wos": (mock_wos, mock_cb),
+            "openalex": (mock_openalex, mock_cb),
+        }),
+        patch("backend.enrichment_worker.enrich_with_web_scrapers", return_value=False),
+    ):
         result = enrich_single_record(db_session, entity)
 
     assert result.enrichment_status == "failed"
     failure = json.loads(result.attributes_json)["enrichment_failure"]
     assert failure["code"] == "no_provider_match"
-    assert "OpenAlex" in failure["provider_attempts"]
+    assert "openalex" in failure["provider_attempts"]
     assert "Some Unknown Entity" in failure["evidence"]
 
 
 def test_enrich_skips_scholar_when_disabled(db_session):
     entity = make_entity(db_session, "No Scholar Fallback", status="processing")
 
-    with (
-        patch("backend.enrichment_worker.adapter_wos") as mock_wos,
-        patch("backend.enrichment_worker.adapter_openalex") as mock_openalex,
-        patch("backend.enrichment_worker.adapter_scholar", None),
-    ):
-        mock_wos.is_active = False
-        mock_openalex.search_by_title.return_value = []
+    mock_wos = MagicMock(); mock_wos.is_active = False
+    mock_openalex = MagicMock(); mock_openalex.is_active = True; mock_openalex.search_by_title.return_value = []
+    mock_cb = MagicMock(); mock_cb.call = lambda fn, *a, **kw: fn(*a, **kw)
 
+    with (
+        patch("backend.enrichment_worker._ACTIVE_CASCADE", ["wos", "openalex", "scholar"]),
+        patch("backend.enrichment_worker._PROVIDER_MAP", {
+            "wos": (mock_wos, mock_cb),
+            "openalex": (mock_openalex, mock_cb),
+            "scholar": (None, mock_cb),
+        }),
+        patch("backend.enrichment_worker.enrich_with_web_scrapers", return_value=False),
+    ):
         result = enrich_single_record(db_session, entity)
 
     assert result.enrichment_status == "failed"
