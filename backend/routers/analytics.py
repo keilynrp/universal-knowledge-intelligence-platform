@@ -44,6 +44,7 @@ from backend.services.engine_delegation import (
     try_engine_analytics,
 )
 from backend.services.pattern_discovery import PatternDiscoveryService
+from backend.services.semantic_keyword_signal_engine import materialize_keyword_signals
 from backend.analyzers.concept_hierarchy import (
     build_concept_tree,
     materialize_domain_concepts,
@@ -139,6 +140,35 @@ def _dashboard_external_attention(
         "top_entities": entities[:limit],
         "alerts": alerts[:3],
     }
+
+
+@router.post("/analytics/keywords/{domain_id}/materialize", tags=["analytics"])
+def materialize_semantic_keyword_signals(
+    domain_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    persist: bool = Query(default=True),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
+):
+    """Materialize semantic keyword opportunity signals for a domain."""
+    if domain_id != "all":
+        _validate_domain_id(domain_id)
+    org_id = resolve_request_org_id(db, current_user)
+    return materialize_keyword_signals(db, domain_id, org_id=org_id, persist=persist, limit=limit)
+
+
+@router.get("/analytics/keywords/{domain_id}/signals", tags=["analytics"])
+def get_semantic_keyword_signals(
+    domain_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Preview semantic keyword opportunity signals without persisting them."""
+    if domain_id != "all":
+        _validate_domain_id(domain_id)
+    org_id = resolve_request_org_id(db, current_user)
+    return materialize_keyword_signals(db, domain_id, org_id=org_id, persist=False, limit=limit)
 
 # ── In-memory TTL analytics cache (Sprint 83) ─────────────────────────────────
 
