@@ -13,7 +13,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { PageHeader, StatCard, ErrorBanner, SkeletonCard, useToast } from "../../components/ui";
+import { StatCard, ErrorBanner, SkeletonCard, useToast } from "../../components/ui";
 import ConceptCloud from "../../components/ConceptCloud";
 import { useDomain } from "../../contexts/DomainContext";
 import { useLanguage } from "../../contexts/LanguageContext";
@@ -599,24 +599,43 @@ export default function ExecutiveDashboardPage() {
       ];
 
   return (
-    <div className="flex flex-col gap-6 pb-10">
-      <PageHeader
-        title={tr("page.exec_dashboard.title", "Executive Dashboard")}
-        description={tr("page.exec_dashboard.description", "Signal, readiness, impact, and next action.")}
-        breadcrumbs={[
-          { label: tr("page.exec_dashboard.breadcrumb_analytics", "Analytics"), href: "/analytics" },
-          { label: tr("page.exec_dashboard.title", "Executive Dashboard") },
-        ]}
-        actions={
-          <div className="flex items-center gap-2">
+    <main className="-m-4 min-h-screen bg-[radial-gradient(circle_at_22%_0%,rgba(124,58,237,0.08),transparent_28%),linear-gradient(180deg,#fbfbff_0%,#ffffff_52%,#fbfbff_100%)] p-4 text-[var(--ukip-text)] dark:bg-[radial-gradient(circle_at_22%_0%,rgba(124,58,237,0.18),transparent_28%),linear-gradient(180deg,#020617_0%,#0f172a_52%,#020617_100%)] sm:-m-6 sm:p-6 lg:-m-8 lg:p-8">
+      <div className="mx-auto flex max-w-[1380px] flex-col gap-6 pb-10">
+        <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+              <Link href="/analytics" className="transition-colors hover:text-violet-600 dark:hover:text-violet-300">
+                {tr("page.exec_dashboard.breadcrumb_analytics", "Analytics")}
+              </Link>
+              <span>/</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-200">
+                {tr("page.exec_dashboard.title", "Executive Dashboard")}
+              </span>
+            </div>
+            <div className="mt-4 flex items-center gap-3">
+              <h1 className="text-3xl font-semibold tracking-normal text-slate-950 dark:text-white">
+                {tr("page.exec_dashboard.title", "Executive Dashboard")}
+              </h1>
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--ukip-border)] bg-white text-violet-500 shadow-sm dark:bg-white/10 dark:text-violet-200">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M11.48 3.499a.6.6 0 011.04 0l2.125 3.78 4.252.85a.6.6 0 01.321 1.008l-2.946 3.18.5 4.31a.6.6 0 01-.841.619L12 15.42l-3.93 1.826a.6.6 0 01-.842-.619l.5-4.31-2.946-3.18a.6.6 0 01.321-1.008l4.252-.85 2.125-3.78z" />
+                </svg>
+              </span>
+            </div>
+            <p className="mt-3 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+              {tr("page.exec_dashboard.description", "Signal, readiness, impact, and next action.")}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
             {/* Auto-refresh toggle */}
             <button
               onClick={() => setAutoRefresh(v => !v)}
               title={autoRefresh ? `${tr("page.exec_dashboard.auto_refresh_active", "Auto-refresh on")} — next in ${mm}:${ss}` : tr("page.exec_dashboard.auto_refresh_enable", "Enable auto-refresh every 5 min")}
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium shadow-sm transition ${
+              className={`inline-flex h-11 items-center gap-2 rounded-lg border px-4 text-sm font-medium shadow-sm transition ${
                 autoRefresh
                   ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
-                  : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                  : "border-[var(--ukip-border)] bg-white text-[var(--ukip-text)] hover:bg-violet-50 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
               }`}
             >
               <svg className={`h-3.5 w-3.5 ${autoRefresh ? "animate-spin" : ""}`} aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -629,7 +648,7 @@ export default function ExecutiveDashboardPage() {
             <button
               onClick={() => void fetchDashboard({ forceRefresh: true, preserveData: true })}
               disabled={refreshing || loading}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              className="inline-flex h-11 items-center gap-2 rounded-lg border border-[var(--ukip-border)] bg-white px-4 text-sm font-medium text-[var(--ukip-text)] shadow-sm transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
             >
               <svg className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
@@ -643,7 +662,7 @@ export default function ExecutiveDashboardPage() {
             <button
               onClick={handleExportPDF}
               disabled={exporting || loading || !data}
-              className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50"
+              className="inline-flex h-11 items-center gap-2 rounded-lg border border-violet-600 bg-violet-600 px-5 text-sm font-medium text-white shadow-[0_12px_26px_rgb(124_58_237/0.22)] transition hover:bg-violet-700 disabled:opacity-50"
             >
               {exporting ? (
                 <svg className="h-4 w-4 animate-spin" aria-hidden="true" fill="none" viewBox="0 0 24 24">
@@ -658,8 +677,7 @@ export default function ExecutiveDashboardPage() {
               {exporting ? tr("page.exec_dashboard.exporting", "Exporting…") : tr("page.exec_dashboard.export_pdf", "Export PDF")}
             </button>
           </div>
-        }
-      />
+        </header>
 
       {error && <ErrorBanner message={error} onRetry={fetchDashboard} variant="card" />}
 
@@ -1244,7 +1262,7 @@ export default function ExecutiveDashboardPage() {
       </div>
 
       {/* ── Section 3: Brand × Year Heatmap ── */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <div className="rounded-2xl border border-[var(--ukip-border)] bg-white p-6 shadow-[0_16px_50px_rgb(91_72_163/0.05)] dark:bg-slate-950/80">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <h3 className="text-base font-semibold text-gray-900 dark:text-white">
@@ -1453,6 +1471,7 @@ export default function ExecutiveDashboardPage() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </main>
   );
 }
