@@ -95,7 +95,7 @@
 - [x] **TASK-020** Run frontend type check
   - `npx tsc --noEmit` — zero type errors
 
-- [ ] **TASK-021** Manual smoke test
+- [x] **TASK-021** Manual smoke test
   - With `domain_id = "all"`: analytics and OLAP endpoints return aggregate data (no WHERE clause on domain)
   - With `domain_id = "domain:science"`: only science-domain records returned
   - With `domain_id = "legacy_default"`: records where `domain = "default"` OR `domain IS NULL` are included
