@@ -15,6 +15,24 @@ export interface DomainAttribute {
     is_core: boolean;
 }
 
+export interface ParadigmIndicators {
+    terms: string[];
+    document_types: string[];
+    journals_affinity: string[];
+}
+
+export interface Paradigm {
+    id: string;
+    label: string;
+    description: string;
+    indicators: ParadigmIndicators;
+}
+
+export interface EpistemologyConfig {
+    paradigms: Paradigm[];
+    evidence_hierarchy: { level: number; label: string; weight: number }[];
+}
+
 export interface DomainSchema {
     id: string;
     name: string;
@@ -24,6 +42,7 @@ export interface DomainSchema {
     attributes: DomainAttribute[];
     entity_count?: number | null;
     first_entity_id?: number | null;
+    epistemology?: EpistemologyConfig | null;
 }
 
 interface DomainContextType {

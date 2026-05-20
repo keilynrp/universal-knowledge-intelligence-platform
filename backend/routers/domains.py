@@ -20,7 +20,15 @@ from backend import models
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
 from backend.olap import olap_engine
-from backend.schema_registry import AttributeSchema, DomainSchema, registry
+from backend.schema_registry import (
+    AttributeSchema,
+    DomainSchema,
+    EpistemologyConfig,
+    EvidenceLevel,
+    Paradigm,
+    ParadigmIndicators,
+    registry,
+)
 from backend.tenant_access import resolve_request_org_id, scope_query_to_org
 
 logger = logging.getLogger(__name__)
@@ -132,6 +140,67 @@ def get_domain(domain_id: str, _: models.User = Depends(get_current_user)):
     if not domain:
         raise HTTPException(status_code=404, detail="Domain schema not found")
     return domain
+
+
+class _ParadigmIndicatorsPayload(BaseModel):
+    terms: List[str] = []
+    document_types: List[str] = []
+    journals_affinity: List[str] = []
+
+
+class _ParadigmPayload(BaseModel):
+    id: str = Field(min_length=1, max_length=64)
+    label: str = Field(min_length=1, max_length=128)
+    description: str = ""
+    indicators: _ParadigmIndicatorsPayload = _ParadigmIndicatorsPayload()
+
+
+class _EpistemologyPatch(BaseModel):
+    paradigms: List[_ParadigmPayload] = []
+    evidence_hierarchy: List[dict] = []
+
+
+@router.patch(
+    "/domains/{domain_id}/epistemology",
+    response_model=DomainSchema,
+    dependencies=[Depends(require_role("super_admin", "admin"))],
+)
+def patch_domain_epistemology(domain_id: str, payload: _EpistemologyPatch):
+    """
+    Update (or clear) the epistemology configuration for a domain.
+    Passing an empty `paradigms` list disables epistemic analysis for that domain.
+    """
+    domain = registry.get_domain(domain_id)
+    if not domain:
+        raise HTTPException(status_code=404, detail="Domain schema not found")
+
+    new_epistemology = EpistemologyConfig(
+        paradigms=[
+            Paradigm(
+                id=p.id,
+                label=p.label,
+                description=p.description,
+                indicators=ParadigmIndicators(
+                    terms=p.indicators.terms,
+                    document_types=p.indicators.document_types,
+                    journals_affinity=p.indicators.journals_affinity,
+                ),
+            )
+            for p in payload.paradigms
+        ],
+        evidence_hierarchy=[
+            EvidenceLevel(**ev) for ev in payload.evidence_hierarchy if ev
+        ],
+    )
+
+    updated = domain.model_copy(update={"epistemology": new_epistemology})
+    try:
+        registry.save_domain(updated)
+    except Exception:
+        logger.exception("Failed to save epistemology for domain '%s'", domain_id)
+        raise HTTPException(status_code=500, detail="Failed to persist epistemology config")
+
+    return updated
 
 
 @router.get("/olap/{domain_id}")

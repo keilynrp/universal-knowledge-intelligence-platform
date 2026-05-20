@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PageHeader, Badge } from "../components/ui";
-import { useDomain, DomainAttribute } from "../contexts/DomainContext";
+import { useDomain, DomainAttribute, Paradigm } from "../contexts/DomainContext";
 import { useAuth } from "../contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { useFocusTrap } from "../hooks/useFocusTrap";
@@ -38,7 +38,24 @@ function DomainIcon({ icon }: { icon?: string | null }) {
 type NewAttr = { name: string; label: string; type: string; required: boolean; is_core: boolean };
 const emptyAttr = (): NewAttr => ({ name: "", label: "", type: "string", required: false, is_core: false });
 
+type ParadigmForm = {
+  id: string;
+  label: string;
+  description: string;
+  terms: string;          // comma-separated
+  document_types: string; // comma-separated
+  journals_affinity: string; // comma-separated
+};
+const emptyParadigm = (): ParadigmForm => ({
+  id: "", label: "", description: "", terms: "", document_types: "", journals_affinity: "",
+});
+
 const SLUG_RE = /^[a-z][a-z0-9_]*$/;
+const PARADIGM_ID_RE = /^[a-z][a-z0-9_]*$/;
+
+function splitCSV(s: string): string[] {
+  return s.split(",").map(t => t.trim()).filter(Boolean);
+}
 
 export default function DomainsPage() {
   const { domains, activeDomainId, setActiveDomainId, refreshDomains } = useDomain();
@@ -56,6 +73,14 @@ export default function DomainsPage() {
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
 
+  // Domain detail tabs
+  const [detailTab, setDetailTab] = useState<"attributes" | "epistemic">("attributes");
+
+  // Epistemic config state
+  const [paradigms, setParadigms] = useState<ParadigmForm[]>([]);
+  const [savingEpistemic, setSavingEpistemic] = useState(false);
+  const [expandedParadigm, setExpandedParadigm] = useState<number | null>(null);
+
   // New domain form state
   const [formId, setFormId] = useState("");
   const [formName, setFormName] = useState("");
@@ -68,6 +93,87 @@ export default function DomainsPage() {
 
   const selectedDomain = domains.find(d => d.id === selectedId) ?? null;
   const activeDomainLabel = activeDomainId === ALL_DOMAINS_ID ? ALL_DOMAINS_LABEL : activeDomainId ?? "—";
+
+  // Initialize epistemic form when selected domain changes
+  useEffect(() => {
+    setDetailTab("attributes");
+    setExpandedParadigm(null);
+    if (!selectedId) { setParadigms([]); return; }
+    const d = domains.find(x => x.id === selectedId);
+    const ep = d?.epistemology;
+    if (ep?.paradigms?.length) {
+      setParadigms(ep.paradigms.map((p: Paradigm) => ({
+        id: p.id,
+        label: p.label,
+        description: p.description ?? "",
+        terms: (p.indicators?.terms ?? []).join(", "),
+        document_types: (p.indicators?.document_types ?? []).join(", "),
+        journals_affinity: (p.indicators?.journals_affinity ?? []).join(", "),
+      })));
+    } else {
+      setParadigms([]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  const handleSaveEpistemic = async () => {
+    if (!selectedId) return;
+    // Validate paradigm IDs
+    for (const p of paradigms) {
+      if (!PARADIGM_ID_RE.test(p.id)) {
+        flash("err", `ID de paradigma inválido: "${p.id}". Use solo letras minúsculas, números y guión bajo.`);
+        return;
+      }
+      if (!p.label.trim()) {
+        flash("err", `El paradigma "${p.id}" necesita un nombre.`);
+        return;
+      }
+    }
+    const ids = paradigms.map(p => p.id);
+    if (new Set(ids).size !== ids.length) {
+      flash("err", "Hay IDs de paradigma duplicados.");
+      return;
+    }
+
+    setSavingEpistemic(true);
+    try {
+      const body = {
+        paradigms: paradigms.map(p => ({
+          id: p.id,
+          label: p.label,
+          description: p.description,
+          indicators: {
+            terms: splitCSV(p.terms),
+            document_types: splitCSV(p.document_types),
+            journals_affinity: splitCSV(p.journals_affinity),
+          },
+        })),
+        evidence_hierarchy: [],
+      };
+      const res = await apiFetch(`/domains/${selectedId}/epistemology`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Error desconocido" }));
+        flash("err", err.detail ?? "Error al guardar la configuración epistémica");
+      } else {
+        await refreshDomains();
+        flash("ok", paradigms.length === 0
+          ? "Análisis epistémico desactivado para este dominio."
+          : `Configuración epistémica guardada (${paradigms.length} paradigma${paradigms.length !== 1 ? "s" : ""}).`);
+      }
+    } catch {
+      flash("err", "Error de red al guardar la configuración epistémica");
+    } finally {
+      setSavingEpistemic(false);
+    }
+  };
+
+  const updateParadigm = (i: number, field: keyof ParadigmForm, value: string) => {
+    setParadigms(prev => prev.map((p, idx) => idx === i ? { ...p, [field]: value } : p));
+  };
 
   const getIconLabel = (icon: string) => t(`page.domains.icon.${icon}`);
 
@@ -285,15 +391,16 @@ export default function DomainsPage() {
           ))}
         </div>
 
-        {/* Attributes panel */}
+        {/* Detail panel */}
         <div className="col-span-2 rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 overflow-hidden flex flex-col">
           {selectedDomain ? (
             <>
+              {/* Panel header */}
               <div className="flex items-center gap-3 border-b border-gray-200 dark:border-gray-800 px-6 py-4">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-600/20 dark:text-blue-400">
                   <DomainIcon icon={selectedDomain.icon} />
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-gray-900 dark:text-white">{selectedDomain.name}</h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     {t("page.domains.primary_entity_label")} <span className="font-medium">{selectedDomain.primary_entity}</span>
@@ -302,48 +409,257 @@ export default function DomainsPage() {
                   </p>
                 </div>
               </div>
-              <div className="overflow-y-auto flex-1">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 dark:bg-gray-800/50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('page.domains.table_field_name_header')}</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('page.domains.table_label_header')}</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('page.domains.table_type_header')}</th>
-                      <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('page.domains.table_required_header')}</th>
-                      <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{t("page.domains.table_core_header")}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                    {selectedDomain.attributes.map((attr: DomainAttribute) => (
-                      <tr key={attr.name} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
-                        <td className="px-6 py-3 font-mono text-xs text-gray-700 dark:text-gray-300">{attr.name}</td>
-                        <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{attr.label}</td>
-                        <td className="px-4 py-3">
-                          <Badge variant={
-                            attr.type === "string"  ? "info" :
-                            attr.type === "integer" ? "purple" :
-                            attr.type === "float"   ? "warning" :
-                            attr.type === "boolean" ? "success" :
-                            attr.type === "array"   ? "error" : "default"
-                          }>
-                            {attr.type}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {attr.required
-                            ? <span className="text-green-500 dark:text-green-400 font-bold">✓</span>
-                            : <span className="text-gray-300 dark:text-gray-600">–</span>}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {attr.is_core
-                            ? <Badge variant="info">{t("page.domains.core_badge")}</Badge>
-                            : <span className="text-gray-300 dark:text-gray-600">–</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+
+              {/* Tabs — epistemic tab only visible to admins */}
+              <div className="flex border-b border-gray-200 dark:border-gray-800 px-4">
+                <button
+                  onClick={() => setDetailTab("attributes")}
+                  className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+                    detailTab === "attributes"
+                      ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
+                      : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                  }`}
+                >
+                  Atributos
+                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => setDetailTab("epistemic")}
+                    className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+                      detailTab === "epistemic"
+                        ? "border-violet-600 text-violet-600 dark:border-violet-400 dark:text-violet-400"
+                        : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                    }`}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    Análisis Epistémico
+                    {paradigms.length > 0 && (
+                      <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
+                        {paradigms.length}
+                      </span>
+                    )}
+                  </button>
+                )}
               </div>
+
+              {/* Tab content */}
+              {detailTab === "attributes" ? (
+                <div className="overflow-y-auto flex-1">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 dark:bg-gray-800/50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('page.domains.table_field_name_header')}</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('page.domains.table_label_header')}</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('page.domains.table_type_header')}</th>
+                        <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{t('page.domains.table_required_header')}</th>
+                        <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{t("page.domains.table_core_header")}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {selectedDomain.attributes.map((attr: DomainAttribute) => (
+                        <tr key={attr.name} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                          <td className="px-6 py-3 font-mono text-xs text-gray-700 dark:text-gray-300">{attr.name}</td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{attr.label}</td>
+                          <td className="px-4 py-3">
+                            <Badge variant={
+                              attr.type === "string"  ? "info" :
+                              attr.type === "integer" ? "purple" :
+                              attr.type === "float"   ? "warning" :
+                              attr.type === "boolean" ? "success" :
+                              attr.type === "array"   ? "error" : "default"
+                            }>
+                              {attr.type}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {attr.required
+                              ? <span className="text-green-500 dark:text-green-400 font-bold">✓</span>
+                              : <span className="text-gray-300 dark:text-gray-600">–</span>}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {attr.is_core
+                              ? <Badge variant="info">{t("page.domains.core_badge")}</Badge>
+                              : <span className="text-gray-300 dark:text-gray-600">–</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                /* ── Epistemic configuration panel ── */
+                <div className="flex flex-col flex-1 overflow-hidden">
+                  <div className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
+                    {/* Status banner */}
+                    <div className={`flex items-start gap-3 rounded-lg px-4 py-3 text-sm ${
+                      paradigms.length > 0
+                        ? "bg-violet-50 text-violet-800 dark:bg-violet-900/20 dark:text-violet-300"
+                        : "bg-gray-50 text-gray-600 dark:bg-gray-800/50 dark:text-gray-400"
+                    }`}>
+                      <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>
+                        {paradigms.length > 0
+                          ? `Análisis epistémico activo con ${paradigms.length} paradigma${paradigms.length !== 1 ? "s" : ""}. Los registros enriquecidos se clasificarán automáticamente.`
+                          : "Sin paradigmas configurados. El análisis epistémico está desactivado para este dominio. Agrega al menos un paradigma para activarlo."}
+                      </span>
+                    </div>
+
+                    {/* Paradigm list */}
+                    {paradigms.map((p, i) => (
+                      <div key={i} className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        {/* Paradigm header */}
+                        <div
+                          className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800/40 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800/70 transition-colors"
+                          onClick={() => setExpandedParadigm(expandedParadigm === i ? null : i)}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${expandedParadigm === i ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                            <span className="font-medium text-sm text-gray-900 dark:text-white truncate">
+                              {p.label || <span className="text-gray-400 italic">Sin nombre</span>}
+                            </span>
+                            <span className="font-mono text-xs text-gray-400 dark:text-gray-500 truncate">{p.id}</span>
+                            {p.terms && (
+                              <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 flex-shrink-0">
+                                {splitCSV(p.terms).length} términos
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={e => { e.stopPropagation(); setParadigms(prev => prev.filter((_, idx) => idx !== i)); if (expandedParadigm === i) setExpandedParadigm(null); }}
+                            className="ml-2 flex-shrink-0 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 transition-colors"
+                            aria-label="Eliminar paradigma"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </div>
+
+                        {/* Paradigm form (expanded) */}
+                        {expandedParadigm === i && (
+                          <div className="px-4 py-4 space-y-3 border-t border-gray-200 dark:border-gray-700">
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                                  ID <span className="text-red-500">*</span>
+                                  <span className="ml-1 text-gray-400 font-normal">(slug, ej: empiricist)</span>
+                                </label>
+                                <input
+                                  value={p.id}
+                                  onChange={e => updateParadigm(i, "id", e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                                  placeholder="empiricist"
+                                  className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-mono dark:border-gray-700 dark:bg-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Nombre <span className="text-red-500">*</span></label>
+                                <input
+                                  value={p.label}
+                                  onChange={e => updateParadigm(i, "label", e.target.value)}
+                                  placeholder="Empiricista / Positivista"
+                                  className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Descripción</label>
+                              <input
+                                value={p.description}
+                                onChange={e => updateParadigm(i, "description", e.target.value)}
+                                placeholder="Investigación basada en evidencia empírica y métodos cuantitativos"
+                                className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                                Términos indicadores
+                                <span className="ml-1 text-gray-400 font-normal">(separados por coma)</span>
+                              </label>
+                              <textarea
+                                value={p.terms}
+                                onChange={e => updateParadigm(i, "terms", e.target.value)}
+                                placeholder="randomized controlled trial, p-value, statistical significance, regression, meta-analysis"
+                                rows={2}
+                                className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                              />
+                              {p.terms && (
+                                <p className="mt-0.5 text-xs text-gray-400">{splitCSV(p.terms).length} términos</p>
+                              )}
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                                Tipos de documento
+                                <span className="ml-1 text-gray-400 font-normal">(separados por coma)</span>
+                              </label>
+                              <textarea
+                                value={p.document_types}
+                                onChange={e => updateParadigm(i, "document_types", e.target.value)}
+                                placeholder="randomized controlled trial, systematic review, meta-analysis"
+                                rows={2}
+                                className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                                Journals de afinidad
+                                <span className="ml-1 text-gray-400 font-normal">(separados por coma)</span>
+                              </label>
+                              <textarea
+                                value={p.journals_affinity}
+                                onChange={e => updateParadigm(i, "journals_affinity", e.target.value)}
+                                placeholder="Nature, Science, The Lancet, NEJM"
+                                rows={2}
+                                className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Add paradigm button */}
+                    <button
+                      onClick={() => {
+                        const newIdx = paradigms.length;
+                        setParadigms(prev => [...prev, emptyParadigm()]);
+                        setExpandedParadigm(newIdx);
+                      }}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 px-4 py-3 text-sm text-gray-500 hover:border-violet-400 hover:text-violet-600 dark:border-gray-700 dark:hover:border-violet-500 dark:hover:text-violet-400 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                      Agregar paradigma
+                    </button>
+                  </div>
+
+                  {/* Footer with save/disable actions */}
+                  <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-800 px-6 py-3">
+                    {paradigms.length > 0 && (
+                      <button
+                        onClick={() => { if (confirm("¿Desactivar el análisis epistémico para este dominio?")) setParadigms([]); }}
+                        className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                      >
+                        Desactivar análisis epistémico
+                      </button>
+                    )}
+                    <div className="flex items-center gap-3 ml-auto">
+                      <span className="text-xs text-gray-400">
+                        {paradigms.length === 0 ? "Sin paradigmas — se desactivará" : `${paradigms.length} paradigma${paradigms.length !== 1 ? "s" : ""} configurado${paradigms.length !== 1 ? "s" : ""}`}
+                      </span>
+                      <button
+                        onClick={handleSaveEpistemic}
+                        disabled={savingEpistemic}
+                        className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50 transition-colors"
+                      >
+                        {savingEpistemic ? "Guardando…" : "Guardar configuración"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 text-gray-400 dark:text-gray-600">
