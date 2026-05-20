@@ -547,7 +547,8 @@ function fieldGroup(key: string): string {
     const normalizedKey = key.toLocaleLowerCase();
     if (["title", "name", "primary_label"].includes(normalizedKey)) return "title";
     if (["authors", "author", "full_authors", "secondary_label"].includes(normalizedKey)) return "authors";
-    if (["doi", "raw_di", "enrichment_doi", "canonical_id"].includes(normalizedKey)) return "identifier";
+    if (["doi", "raw_di", "enrichment_doi", "canonical_id", "provider_record_id"].includes(normalizedKey)) return "identifier";
+    if (["entity_type", "type", "document_type", "publication_type", "subtype", "subtypedescription", "raw_dt", "_entry_type", "_ris_type", "_plaintext_type"].includes(normalizedKey)) return "entity_type";
     if (["citation_count", "citations", "enrichment_citation_count", "raw_ct"].includes(normalizedKey)) return "citations";
     if (["source", "source_name", "_source_name", "enrichment_source"].includes(normalizedKey)) return "source";
     return normalizedKey;
@@ -558,6 +559,38 @@ function hasDisplayedEquivalent(key: string, value: unknown, displayedValuesByGr
     const comparable = comparableValue(value);
     if (!comparable) return false;
     return (displayedValuesByGroup[group] ?? []).some((displayedValue) => comparableValue(displayedValue) === comparable);
+}
+
+function getNestedString(source: Record<string, unknown>, path: string[]): string | null {
+    let current: unknown = source;
+    for (const key of path) {
+        if (!current || typeof current !== "object" || Array.isArray(current)) return null;
+        current = (current as Record<string, unknown>)[key];
+    }
+    if (typeof current === "string" && current.trim()) return current.trim();
+    if (typeof current === "number" && Number.isFinite(current)) return String(current);
+    return null;
+}
+
+function firstStringFromAttributes(
+    sources: Record<string, unknown>[],
+    paths: string[][],
+): string | null {
+    for (const source of sources) {
+        for (const path of paths) {
+            const value = getNestedString(source, path);
+            if (value) return value;
+        }
+    }
+    return null;
+}
+
+function normalizeIdentifier(value: string | null | undefined): string {
+    return String(value || "")
+        .trim()
+        .replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")
+        .replace(/^doi:\s*/i, "")
+        .toLocaleLowerCase();
 }
 
 function IconGlyph({ name, className = "h-5 w-5" }: { name: string; className?: string }) {
@@ -1072,11 +1105,45 @@ export default function EntityDetailPage() {
                 icon: item.icon,
             };
         });
+    const attributeSources = [mergedAttributes, sourceAttributes, normalizedAttributes];
+    const resolvedEntityType = entity.entity_type || firstStringFromAttributes(attributeSources, [
+        ["entity_type"],
+        ["publication_type"],
+        ["document_type"],
+        ["type"],
+        ["subtypeDescription"],
+        ["subtype"],
+        ["raw_dt"],
+        ["_entry_type"],
+        ["_ris_type"],
+        ["_plaintext_type"],
+        ["raw_record", "entity_type"],
+        ["raw_record", "publication_type"],
+        ["raw_record", "document_type"],
+        ["raw_record", "type"],
+        ["raw_record", "subtypeDescription"],
+        ["raw_record", "subtype"],
+        ["raw_record", "DT"],
+        ["raw_record", "raw_dt"],
+    ]);
+    const resolvedDoi = entity.enrichment_doi || firstStringFromAttributes(attributeSources, [
+        ["doi"],
+        ["raw_di"],
+        ["raw_record", "doi"],
+        ["raw_record", "DI"],
+        ["raw_record", "prism:doi"],
+    ]);
+    const canonicalDuplicatesDoi = Boolean(
+        entity.canonical_id &&
+        resolvedDoi &&
+        normalizeIdentifier(entity.canonical_id) === normalizeIdentifier(resolvedDoi)
+    );
+    const canonicalDisplayValue = canonicalDuplicatesDoi ? null : entity.canonical_id;
     const primaryFields = [
         { key: "primary_label", label: "Etiqueta principal", value: entity.primary_label, icon: "type" },
         { key: "secondary_label", label: "Etiqueta secundaria (marca / autor)", value: entity.secondary_label, icon: "tag" },
-        { key: "canonical_id", label: tr("entities.detail.fields.canonical_id", "ID canónico (SKU / DOI / código)"), value: entity.canonical_id, icon: "link", copyable: true },
-        { key: "entity_type", label: "Tipo de entidad", value: entity.entity_type, icon: "cube" },
+        { key: "canonical_id", label: tr("entities.detail.fields.canonical_id", "ID canónico (SKU / código)"), value: canonicalDisplayValue, icon: "link", copyable: true },
+        { key: "entity_type", label: "Tipo de entidad", value: resolvedEntityType, icon: "cube" },
         { key: "domain", label: "Dominio", value: entity.domain, icon: "globe" },
     ];
     const systemFields = [
@@ -1096,7 +1163,7 @@ export default function EntityDetailPage() {
         },
         { key: "enrichment_citation_count", label: "Citas", value: entity.enrichment_citation_count ?? 0, icon: "quote" },
         { key: "enrichment_source", label: tr("entities.detail.enrichment.source", "Fuente"), value: entity.enrichment_source === "None" ? tr("common.none", "Ninguno") : entity.enrichment_source, icon: "cube" },
-        { key: "enrichment_doi", label: "DOI", value: entity.enrichment_doi, icon: "link", copyable: true },
+        { key: "enrichment_doi", label: "DOI", value: resolvedDoi, icon: "link", copyable: true },
     ];
     const enrichmentPercent =
         entity.enrichment_status === "completed" ? 100 :
@@ -1121,12 +1188,13 @@ export default function EntityDetailPage() {
         { label: tr("entities.detail.enrichment.status", "Estado"), value: enrichmentLabel, badge: "enrichment", icon: "shield" },
         { label: tr("entities.detail.enrichment.citations_detected", "Citas detectadas"), value: entity.enrichment_citation_count ?? 0, icon: "quote" },
         { label: tr("entities.detail.enrichment.academic_source", "Fuente académica"), value: entity.enrichment_source || shortSource || "—", icon: "database" },
-        { label: tr("entities.detail.enrichment.normalized_doi", "DOI normalizado"), value: entity.enrichment_doi || entity.canonical_id, icon: "link", href: entity.enrichment_doi ? `https://doi.org/${entity.enrichment_doi}` : undefined },
+        { label: tr("entities.detail.enrichment.normalized_doi", "DOI normalizado"), value: resolvedDoi, icon: "link", href: resolvedDoi ? `https://doi.org/${resolvedDoi}` : undefined },
     ];
     const displayedValuesByGroup: Record<string, unknown[]> = {
         title: [displayTitle, entity.primary_label],
         authors: [entity.secondary_label],
-        identifier: [entity.canonical_id, entity.enrichment_doi],
+        identifier: [entity.canonical_id, resolvedDoi],
+        entity_type: [resolvedEntityType],
         citations: [entity.enrichment_citation_count],
         source: [entity.source, entity.enrichment_source, shortSource],
     };

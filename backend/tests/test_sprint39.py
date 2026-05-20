@@ -35,6 +35,11 @@ def test_dashboard_summary_requires_auth(client):
     assert response.status_code in (401, 403)
 
 
+def test_abstract_coverage_requires_auth(client):
+    response = client.get("/analytics/abstract-coverage")
+    assert response.status_code in (401, 403)
+
+
 # ── Shape / contract tests ────────────────────────────────────────────────────
 
 def test_dashboard_summary_returns_shape(client, auth_headers, db_session):
@@ -98,6 +103,50 @@ def test_dashboard_includes_external_attention_summary(client, auth_headers, db_
     assert external_attention["summary"]["total_mentions"] == 6
     assert external_attention["top_entities"][0]["label"] == "Policy Attention Entity"
     assert external_attention["alerts"][0]["type"] == "policy_mention"
+
+
+def test_abstract_coverage_counts_abstract_fields(client, auth_headers, db_session):
+    db_session.add_all([
+        models.RawEntity(
+            primary_label="OpenAlex abstract",
+            domain="abstract_audit",
+            source="openalex",
+            attributes_json=json.dumps({
+                "abstract": "This record contains a normalized abstract for semantic analysis.",
+                "raw_record": {"AB": "Secondary abstract fallback."},
+            }),
+        ),
+        models.RawEntity(
+            primary_label="Summary only",
+            domain="abstract_audit",
+            source="scopus",
+            attributes_json=json.dumps({"summary": "A concise summary is also useful."}),
+        ),
+        models.RawEntity(
+            primary_label="No abstract",
+            domain="abstract_audit",
+            source="manual",
+            attributes_json=json.dumps({"year": 2026}),
+        ),
+    ])
+    db_session.commit()
+
+    response = client.get(
+        "/analytics/abstract-coverage?domain_id=abstract_audit&sample_limit=2",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["summary"]["total_records"] == 3
+    assert data["summary"]["records_with_abstract"] == 2
+    assert data["summary"]["coverage_pct"] == pytest.approx(66.67)
+    assert data["by_domain"]["abstract_audit"]["with_abstract"] == 2
+    assert data["by_source"]["openalex"]["with_abstract"] == 1
+    assert data["field_counts"]["abstract"] == 1
+    assert data["field_counts"]["raw_record.AB"] == 1
+    assert data["field_counts"]["summary"] == 1
+    assert len(data["samples"]) == 2
 
 
 def test_dashboard_kpis_match_entity_count(client, auth_headers, db_session):

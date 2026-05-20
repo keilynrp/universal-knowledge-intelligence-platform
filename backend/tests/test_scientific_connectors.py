@@ -25,6 +25,7 @@ class TestEnrichedRecordExtension:
         assert rec.license is None
         assert rec.mesh_terms is None
         assert rec.venue is None
+        assert rec.affiliations == []
 
     def test_enriched_record_with_extended_fields(self):
         rec = EnrichedRecord(
@@ -38,6 +39,7 @@ class TestEnrichedRecordExtension:
             license="https://creativecommons.org/licenses/by/4.0/",
             mesh_terms=["Genomics", "RNA"],
             venue="Nature",
+            affiliations=["University of Tests, US"],
         )
         assert rec.funding == ["NSF Grant 123"]
         assert rec.references_count == 42
@@ -46,6 +48,7 @@ class TestEnrichedRecordExtension:
         assert rec.license == "https://creativecommons.org/licenses/by/4.0/"
         assert rec.mesh_terms == ["Genomics", "RNA"]
         assert rec.venue == "Nature"
+        assert rec.affiliations == ["University of Tests, US"]
 
 
 # ── 2. PubMed Adapter Upgrade ────────────────────────────────────────────────
@@ -138,6 +141,36 @@ class TestPubMedAdapter:
         rec = adapter._parse_article(article_el)
         assert rec is not None
         assert rec.venue == "The Lancet"
+
+    def test_affiliation_is_not_mapped_as_publisher(self):
+        from backend.adapters.enrichment.pubmed import PubMedAdapter
+        import xml.etree.ElementTree as ET
+
+        xml = """<PubmedArticle>
+          <MedlineCitation>
+            <PMID>88888</PMID>
+            <Article>
+              <ArticleTitle>Affiliation Test</ArticleTitle>
+              <AuthorList>
+                <Author>
+                  <LastName>Doe</LastName>
+                  <ForeName>Jane</ForeName>
+                  <AffiliationInfo><Affiliation>University of Tests, United States</Affiliation></AffiliationInfo>
+                </Author>
+              </AuthorList>
+              <Journal><JournalIssue><PubDate><Year>2024</Year></PubDate></JournalIssue><Title>Medical Journal</Title></Journal>
+            </Article>
+          </MedlineCitation>
+          <PubmedData><ArticleIdList/></PubmedData>
+        </PubmedArticle>"""
+
+        adapter = PubMedAdapter()
+        article_el = ET.fromstring(xml)
+        rec = adapter._parse_article(article_el)
+        assert rec is not None
+        assert rec.publisher is None
+        assert rec.venue == "Medical Journal"
+        assert rec.affiliations == ["University of Tests, United States"]
 
 
 # ── 3. Crossref Adapter ─────────────────────────────────────────────────────

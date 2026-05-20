@@ -180,7 +180,8 @@ class PubMedAdapter(BaseScientometricAdapter):
                 citation_count=0,  # PubMed doesn't provide citation counts
                 publication_year=year,
                 concepts=[],
-                publisher=affiliation,
+                publisher=None,
+                affiliations=[affiliation] if affiliation else [],
                 is_open_access=False,
                 source_api="PubMed",
                 mesh_terms=mesh_terms if mesh_terms else None,

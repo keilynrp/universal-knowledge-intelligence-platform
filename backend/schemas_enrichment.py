@@ -16,6 +16,7 @@ class EnrichedRecord(BaseModel):
     concepts: List[str] = Field(default_factory=list, description="Extracted keywords, subjects or concepts")
     concept_ids: List[Optional[str]] = Field(default_factory=list, description="OpenAlex concept IDs (positional, None for topics/keywords)")
     publisher: Optional[str] = Field(default=None, description="Journal, Conference, or Publisher name")
+    affiliations: List[str] = Field(default_factory=list, description="Institutional or geographic affiliations")
     is_open_access: bool = Field(default=False, description="Whether the artifact is OA (Open Access)")
     source_api: str = Field(description="Which API provided this data (e.g., 'OpenAlex', 'Scopus')", default="Unknown")
     raw_response: Optional[Dict[str, Any]] = Field(default=None, description="Snapshot of the original JSON for audit and fallback extraction")

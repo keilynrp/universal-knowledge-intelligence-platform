@@ -78,8 +78,13 @@ def _ingest_records(
             attrs["authors"] = ", ".join(rec.authors)
         if rec.publication_year:
             attrs["year"] = rec.publication_year
+        if rec.affiliations:
+            attrs["affiliation"] = "; ".join(rec.affiliations)
+            attrs["affiliations"] = rec.affiliations
         if rec.publisher:
-            attrs["affiliation"] = rec.publisher
+            attrs["publisher"] = rec.publisher
+        if rec.venue:
+            attrs["venue"] = rec.venue
 
         entity = models.RawEntity(
             primary_label=rec.title,

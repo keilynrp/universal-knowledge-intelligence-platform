@@ -13,6 +13,7 @@ Analytics, stats, and lookup endpoints.
   GET  /health
 """
 import logging
+import json
 import re
 import time
 from collections import defaultdict
@@ -65,10 +66,70 @@ _trend_analyzer = TrendAnalyzer()
 
 _DOMAIN_RE = re.compile(r"^[a-z][a-z0-9_\-]{0,63}$")
 
+_ABSTRACT_FIELD_PATHS = (
+    ("abstract",),
+    ("abstract_text",),
+    ("summary",),
+    ("resumen",),
+    ("description",),
+    ("raw_abstract",),
+    ("raw_record", "abstract"),
+    ("raw_record", "AB"),
+)
+
 
 def _validate_domain_id(domain_id: str) -> None:
     if not _DOMAIN_RE.match(domain_id):
         raise HTTPException(status_code=422, detail=f"Invalid domain_id '{domain_id}': must match [a-z][a-z0-9_-]{{0,63}}")
+
+
+def _parse_attrs(raw: str | None) -> dict:
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _nested_value(data: dict, path: tuple[str, ...]):
+    current = data
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def _text_value(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        parts = [_text_value(item) for item in value]
+        return " ".join(part for part in parts if part).strip()
+    if isinstance(value, dict):
+        for key in ("text", "value", "abstract", "summary", "description"):
+            text = _text_value(value.get(key))
+            if text:
+                return text
+        return ""
+    return str(value).strip()
+
+
+def _abstract_matches(attrs: dict) -> list[dict]:
+    matches: list[dict] = []
+    for path in _ABSTRACT_FIELD_PATHS:
+        text_value = _text_value(_nested_value(attrs, path))
+        if text_value:
+            matches.append({
+                "field": ".".join(path),
+                "length": len(text_value),
+                "preview": text_value[:220],
+            })
+    return matches
 
 
 def _dashboard_external_attention(
@@ -169,6 +230,86 @@ def get_semantic_keyword_signals(
         _validate_domain_id(domain_id)
     org_id = resolve_request_org_id(db, current_user)
     return materialize_keyword_signals(db, domain_id, org_id=org_id, persist=False, limit=limit)
+
+
+@router.get("/analytics/abstract-coverage", tags=["analytics"])
+def abstract_coverage(
+    domain_id: str = Query(default="all", min_length=1, max_length=64),
+    sample_limit: int = Query(default=5, ge=0, le=25),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Audit whether tenant-scoped records contain abstract or summary text."""
+    if domain_id not in ("all", "default"):
+        _validate_domain_id(domain_id)
+
+    org_id = resolve_request_org_id(db, current_user)
+    query = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
+    if domain_id not in ("all",):
+        query = query.filter(models.RawEntity.domain == domain_id)
+
+    rows = (
+        query.with_entities(
+            models.RawEntity.id,
+            models.RawEntity.domain,
+            models.RawEntity.source,
+            models.RawEntity.primary_label,
+            models.RawEntity.attributes_json,
+        )
+        .all()
+    )
+
+    by_domain: dict[str, dict] = {}
+    by_source: dict[str, dict] = {}
+    field_counts: dict[str, int] = defaultdict(int)
+    samples: list[dict] = []
+    total = len(rows)
+    with_abstract = 0
+
+    def bucket(target: dict[str, dict], key: str, has_abstract: bool) -> None:
+        entry = target.setdefault(key, {"total": 0, "with_abstract": 0, "coverage_pct": 0.0})
+        entry["total"] += 1
+        if has_abstract:
+            entry["with_abstract"] += 1
+
+    for row in rows:
+        attrs = _parse_attrs(row.attributes_json)
+        matches = _abstract_matches(attrs)
+        has_abstract = bool(matches)
+        if has_abstract:
+            with_abstract += 1
+            for match in matches:
+                field_counts[match["field"]] += 1
+            if len(samples) < sample_limit:
+                samples.append({
+                    "id": row.id,
+                    "domain": row.domain or "default",
+                    "source": row.source or "unknown",
+                    "label": row.primary_label,
+                    "fields": matches,
+                })
+
+        bucket(by_domain, row.domain or "default", has_abstract)
+        bucket(by_source, row.source or "unknown", has_abstract)
+
+    for collection in (by_domain, by_source):
+        for entry in collection.values():
+            entry["coverage_pct"] = round((entry["with_abstract"] / entry["total"]) * 100, 2) if entry["total"] else 0.0
+
+    return {
+        "domain_id": domain_id,
+        "org_scope": scope_tag(org_id),
+        "abstract_fields": [".".join(path) for path in _ABSTRACT_FIELD_PATHS],
+        "summary": {
+            "total_records": total,
+            "records_with_abstract": with_abstract,
+            "coverage_pct": round((with_abstract / total) * 100, 2) if total else 0.0,
+        },
+        "by_domain": dict(sorted(by_domain.items())),
+        "by_source": dict(sorted(by_source.items())),
+        "field_counts": dict(sorted(field_counts.items())),
+        "samples": samples,
+    }
 
 # ── In-memory TTL analytics cache (Sprint 83) ─────────────────────────────────
 

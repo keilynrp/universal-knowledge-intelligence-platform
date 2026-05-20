@@ -395,6 +395,9 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
             if enriched_data.concept_ids and any(enriched_data.concept_ids):
                 attrs["enrichment_concept_ids"] = enriched_data.concept_ids
             # Persist extended fields from scientific connectors
+            if enriched_data.affiliations:
+                attrs["affiliation"] = "; ".join(enriched_data.affiliations)
+                attrs["affiliations"] = enriched_data.affiliations
             if enriched_data.funding:
                 attrs["funding"] = enriched_data.funding
             if enriched_data.tldr:
