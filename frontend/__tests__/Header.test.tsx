@@ -22,6 +22,13 @@ vi.mock("../app/contexts/DomainContext", () => ({
     setActiveDomainId: vi.fn(),
     isLoading: false,
   }),
+  isAllScope: (scope: string) => scope === "all",
+  isLegacyScope: (scope: string) => scope === "legacy_default",
+  domainIdFromScope: (scope: string) => {
+    if (scope === "all" || scope === "legacy_default") return null;
+    if (scope.startsWith("domain:")) return scope.slice("domain:".length);
+    return scope || null;
+  },
 }));
 
 vi.mock("../app/contexts/BrandingContext", () => ({

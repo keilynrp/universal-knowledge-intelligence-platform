@@ -236,6 +236,10 @@ def _compute_rag_index(scope: str, db: Session) -> dict[str, Any]:
         base_q = base_q.filter(filt)
     source_count = base_q.count()
 
+    # Short-circuit: no entities → missing, no need to probe ChromaDB
+    if source_count == 0:
+        return _resource_entry(STATUS_MISSING, 0, 0, resource_key="rag_index")
+
     try:
         from backend.analytics.vector_store import VectorStoreService
         derived_count = VectorStoreService.get_stats()["total_indexed"]
@@ -247,9 +251,7 @@ def _compute_rag_index(scope: str, db: Session) -> dict[str, Any]:
             last_error=error_msg, resource_key="rag_index",
         )
 
-    if source_count == 0:
-        status = STATUS_MISSING
-    elif derived_count == 0:
+    if derived_count == 0:
         status = STATUS_MISSING
     elif derived_count >= source_count:
         status = STATUS_READY
