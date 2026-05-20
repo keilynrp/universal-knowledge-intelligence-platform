@@ -27,6 +27,14 @@ interface DashboardStats {
   graph_nodes?: number;
   graph_relationships?: number;
   graph_ready?: boolean;
+  identifier_coverage?: {
+    with_canonical_id: number;
+    total: number;
+  };
+  quality?: {
+    average?: number | null;
+    distribution?: Record<string, number>;
+  };
   domain_distribution?: { domain?: string | null; name?: string | null; count: number }[];
 }
 
@@ -63,6 +71,7 @@ function clampPercent(value: number): number {
 
 export default function Home() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [portfolioStats, setPortfolioStats] = useState<DashboardStats | null>(null);
   const { enrichPct } = useEnrichment();
   const [domainCount, setDomainCount] = useState<number>(0);
   const [demoStatus, setDemoStatus] = useState<DemoStatus | null>(null);
@@ -188,13 +197,19 @@ export default function Home() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const params = new URLSearchParams({ domain_id: activeDomainId || "all" });
-      const statsRes = await apiFetch(`/stats?${params.toString()}`);
+      const scopedParams = new URLSearchParams({ domain_id: activeDomainId || "all" });
+      const globalParams = new URLSearchParams({ domain_id: "all" });
+      const [statsRes, portfolioRes] = await Promise.all([
+        apiFetch(`/stats?${scopedParams.toString()}`),
+        apiFetch(`/stats?${globalParams.toString()}`),
+      ]);
       const s = await statsRes.json();
+      const portfolio = await portfolioRes.json();
       setStats(s);
+      setPortfolioStats(portfolio);
       setDomainCount(
-        Array.isArray(s.domain_distribution)
-          ? s.domain_distribution.filter((item: { count: number }) => item.count > 0).length
+        Array.isArray(portfolio.domain_distribution)
+          ? portfolio.domain_distribution.filter((item: { count: number }) => item.count > 0).length
           : 0,
       );
     } catch {
@@ -357,7 +372,7 @@ export default function Home() {
       iconPath: "M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z",
     },
   ];
-  const activeDomains = (stats?.domain_distribution ?? [])
+  const activeDomains = (portfolioStats?.domain_distribution ?? stats?.domain_distribution ?? [])
     .filter((domain) => domain.count > 0)
     .sort((a, b) => b.count - a.count);
   const topDomains = activeDomains.slice(0, 6);
@@ -368,13 +383,27 @@ export default function Home() {
   }));
   const ingestionScore = hasEntities ? 100 : 0;
   const domainDiversityScore = clampPercent((Math.min(domainCount, 6) / 6) * 100);
-  const entityTypeScore = clampPercent((Math.min(stats?.unique_entity_types ?? 0, 8) / 8) * 100);
-  const qualityScore = hasEntities ? clampPercent((domainDiversityScore + entityTypeScore) / 2) : 0;
+  const entityTypeScore = clampPercent((Math.min(portfolioStats?.unique_entity_types ?? stats?.unique_entity_types ?? 0, 8) / 8) * 100);
+  const identifierCoverageScore = clampPercent(
+    stats?.identifier_coverage?.total
+      ? ((stats.identifier_coverage.with_canonical_id ?? 0) / stats.identifier_coverage.total) * 100
+      : 0,
+  );
+  const metadataScore = hasEntities ? clampPercent((domainDiversityScore + entityTypeScore + identifierCoverageScore) / 3) : 0;
   const enrichmentScore = hasEntities ? clampPercent(enrichPct) : 0;
-  const knowledgePercent = clampPercent((ingestionScore + qualityScore + enrichmentScore) / 3);
-  const intelligencePercent = clampPercent((enrichmentScore + domainDiversityScore + guidedProgress.percent) / 3);
-  const deliveryPercent = clampPercent(Math.min(guidedProgress.percent, enrichmentScore));
-  const pipelineHealthScore = clampPercent((ingestionScore + qualityScore + enrichmentScore) / 3);
+  const graphScore = graphReady ? 100 : (stats?.graph_nodes ?? 0) > 0 ? 50 : 0;
+  const analysisScore = graphReady ? clampPercent((enrichmentScore + graphScore) / 2) : clampPercent(enrichmentScore * 0.45);
+  const reportReadinessScore = clampPercent(Math.min(enrichmentScore, analysisScore));
+  const knowledgePercent = clampPercent((ingestionScore + metadataScore + enrichmentScore) / 3);
+  const intelligencePercent = clampPercent((enrichmentScore + graphScore + analysisScore) / 3);
+  const deliveryPercent = clampPercent((reportReadinessScore + (guidedProgress.readiness === "briefing" ? 100 : 0)) / 2);
+  const weakestPillarPenalty = Math.min(knowledgePercent, intelligencePercent, deliveryPercent) * 0.15;
+  const pipelineHealthScore = clampPercent(
+    (knowledgePercent * 0.34) +
+    (intelligencePercent * 0.36) +
+    (deliveryPercent * 0.15) +
+    weakestPillarPenalty,
+  );
   const insightPillars = [
     {
       id: "knowledge",
@@ -405,9 +434,9 @@ export default function Home() {
     },
   ];
   const healthMetrics = [
-    { label: t("page.home.insights.ingest_short"), value: ingestionScore },
-    { label: t("page.home.insights.quality_short"), value: qualityScore },
-    { label: t("page.home.insights.enrichment_short"), value: enrichmentScore },
+    { label: t("page.home.insights.knowledge"), value: knowledgePercent },
+    { label: t("page.home.insights.intelligence"), value: intelligencePercent },
+    { label: t("page.home.insights.delivery"), value: deliveryPercent },
   ];
 
   return (
@@ -493,7 +522,7 @@ export default function Home() {
           ))}
         </div>
 
-        {stats?.domain_distribution && stats.domain_distribution.filter((d) => d.count > 0).length > 0 && (
+        {(portfolioStats?.domain_distribution ?? stats?.domain_distribution)?.filter((d) => d.count > 0).length ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
             <h2 className="text-base font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">
               {tr("page.home.domain_distribution", "Distribución por dominio")}
@@ -503,7 +532,9 @@ export default function Home() {
             </p>
             <div className="mt-5 space-y-3">
               {(() => {
-                const active = stats.domain_distribution!.filter((d) => d.count > 0).sort((a, b) => b.count - a.count);
+                const active = (portfolioStats?.domain_distribution ?? stats?.domain_distribution ?? [])
+                  .filter((d) => d.count > 0)
+                  .sort((a, b) => b.count - a.count);
                 const max = active[0]?.count ?? 1;
                 return active.map((d) => (
                   <div key={d.domain ?? d.name ?? "unknown"} className="flex items-center gap-3">
@@ -521,7 +552,7 @@ export default function Home() {
               })()}
             </div>
           </div>
-        )}
+        ) : null}
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
           <div className="flex items-center justify-between gap-3">
