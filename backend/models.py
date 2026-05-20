@@ -811,3 +811,39 @@ class EmbedWidget(Base):
     created_by      = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at      = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     last_viewed_at  = Column(DateTime, nullable=True)
+
+
+# ── Enrichment Scheduler ──────────────────────────────────────────────────────
+
+class DomainEnrichmentPolicy(Base):
+    """
+    Per-domain configuration for the enrichment scheduler.
+    Controls whether the scheduler auto-requeues stale entities for a domain.
+    """
+    __tablename__ = "domain_enrichment_policies"
+
+    id                      = Column(Integer, primary_key=True, index=True)
+    domain_id               = Column(String(80), nullable=False, unique=True, index=True)
+    enabled                 = Column(Boolean, default=True, nullable=False)
+    min_enrichment_pct      = Column(Float, default=80.0, nullable=False)
+    max_budget_per_run      = Column(Integer, default=100, nullable=False)
+    staleness_threshold_days = Column(Integer, default=30, nullable=False)
+    created_at              = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at              = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                                    onupdate=lambda: datetime.now(timezone.utc))
+
+
+class EnrichmentSchedulerRun(Base):
+    """
+    Audit log of each enrichment scheduler run (automatic or manual).
+    One row per domain per scheduler cycle.
+    """
+    __tablename__ = "enrichment_scheduler_runs"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    domain_id    = Column(String(80), nullable=False, index=True)
+    triggered_by = Column(String(20), nullable=False, default="scheduler")  # scheduler | manual
+    queued_count = Column(Integer, nullable=False, default=0)
+    started_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    finished_at  = Column(DateTime, nullable=True)
+    notes        = Column(Text, nullable=True)

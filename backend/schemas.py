@@ -776,3 +776,64 @@ class EntityGraphResponse(BaseModel):
     depth:     int
     nodes:     list[GraphNode]
     edges:     list[GraphEdge]
+
+
+# ---------------------------------------------------------------------------
+# Enrichment Scheduler schemas
+# ---------------------------------------------------------------------------
+
+class DomainEnrichmentPolicySchema(BaseModel):
+    """Response schema for a DomainEnrichmentPolicy row."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id:                       int
+    domain_id:                str
+    enabled:                  bool
+    min_enrichment_pct:       float
+    max_budget_per_run:       int
+    staleness_threshold_days: int
+    created_at:               Optional[datetime] = None
+    updated_at:               Optional[datetime] = None
+
+
+class DomainEnrichmentPolicyUpdate(BaseModel):
+    """Request body for creating or updating a DomainEnrichmentPolicy."""
+    enabled:                  Optional[bool]  = None
+    min_enrichment_pct:       Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    max_budget_per_run:       Optional[int]   = Field(default=None, ge=1, le=10000)
+    staleness_threshold_days: Optional[int]   = Field(default=None, ge=1, le=3650)
+
+
+class EnrichmentSchedulerRunSchema(BaseModel):
+    """Response schema for an EnrichmentSchedulerRun row."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id:           int
+    domain_id:    str
+    triggered_by: str
+    queued_count: int
+    started_at:   Optional[datetime] = None
+    finished_at:  Optional[datetime] = None
+    notes:        Optional[str] = None
+
+
+class SchedulerStateResponse(BaseModel):
+    """Global scheduler state returned by GET /enrichment/schedule."""
+    enabled:               bool
+    interval_seconds:      int
+    last_run_at:           Optional[datetime] = None
+    next_run_at:           Optional[datetime] = None
+    domains_monitored:     int
+    total_queued_last_run: int
+
+
+class DomainStalenessReport(BaseModel):
+    """Per-domain staleness report returned by GET /enrichment/schedule/{domain_id}."""
+    domain_id:              str
+    policy:                 Optional[DomainEnrichmentPolicySchema] = None
+    current_enrichment_pct: float
+    total_entities:         int
+    enriched_entities:      int
+    stale_entities:         int
+    last_run:               Optional[EnrichmentSchedulerRunSchema] = None
+    is_stale:               bool

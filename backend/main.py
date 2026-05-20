@@ -22,6 +22,7 @@ from sqlalchemy import text
 
 from backend import database, enrichment_worker, models
 from backend.bootstrap import ensure_bootstrap_super_admin
+from backend.services.enrichment_scheduler import EnrichmentScheduler, scheduler as _enrichment_scheduler_instance
 from backend.logging_utils import RequestLoggingMiddleware, configure_logging
 from backend.telemetry import initialize_telemetry
 from backend.routers.limiter import limiter
@@ -47,6 +48,7 @@ from backend.routers import (
     derived_status,
     disambiguation,
     domains,
+    enrichment_schedule,
     entities,
     entity_linker,
     external_attention,
@@ -78,7 +80,6 @@ from backend.routers import (
 
 configure_logging()
 logger = logging.getLogger(__name__)
-
 
 def _startup_side_effects_enabled() -> bool:
     return os.environ.get("UKIP_SKIP_STARTUP_SIDE_EFFECTS", "0") != "1"
@@ -173,6 +174,42 @@ async def lifespan(app: FastAPI):
                 migrated,
             )
 
+        # Enrichment scheduler tables (idempotent CREATE TABLE IF NOT EXISTS)
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS domain_enrichment_policies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                domain_id VARCHAR(80) NOT NULL UNIQUE,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                min_enrichment_pct REAL NOT NULL DEFAULT 80.0,
+                max_budget_per_run INTEGER NOT NULL DEFAULT 100,
+                staleness_threshold_days INTEGER NOT NULL DEFAULT 30,
+                created_at DATETIME,
+                updated_at DATETIME
+            )
+        """))
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS enrichment_scheduler_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                domain_id VARCHAR(80) NOT NULL,
+                triggered_by VARCHAR(20) NOT NULL DEFAULT 'scheduler',
+                queued_count INTEGER NOT NULL DEFAULT 0,
+                started_at DATETIME,
+                finished_at DATETIME,
+                notes TEXT
+            )
+        """))
+        db.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_dep_domain_id ON domain_enrichment_policies (domain_id)"
+        ))
+        db.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_esr_domain_id ON enrichment_scheduler_runs (domain_id)"
+        ))
+        db.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_esr_started_at ON enrichment_scheduler_runs (started_at)"
+        ))
+        db.commit()
+        logger.info("Startup migration: enrichment scheduler tables ensured")
+
         # Seed built-in artifact templates (only on first run)
         if db.query(models.ArtifactTemplate).count() == 0:
             import json as _json
@@ -196,6 +233,9 @@ async def lifespan(app: FastAPI):
                 db.close()
 
     asyncio.create_task(enrichment_worker.background_enrichment_worker(get_db_gen()))
+
+    # Start the enrichment domain scheduler
+    asyncio.create_task(_enrichment_scheduler_instance.start_loop())
 
     # Start the scheduled-imports scheduler (Sprint 61)
     scheduled_imports.start_scheduler()
@@ -348,6 +388,7 @@ app.include_router(ingest.router)
 app.include_router(domains.router)
 app.include_router(analytics.router)
 app.include_router(derived_status.router)
+app.include_router(enrichment_schedule.router)
 app.include_router(quality.router)
 app.include_router(entities.router)
 app.include_router(disambiguation.router)
