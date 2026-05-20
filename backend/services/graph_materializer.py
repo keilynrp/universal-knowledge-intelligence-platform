@@ -618,6 +618,17 @@ def materialize_scientific_import_graph(
             ))
 
     db.commit()
+
+    # Invalidate the derived-status cache so the next status poll reflects updated graph counts
+    try:
+        from backend.services.derived_status_service import invalidate_derived_status_cache
+        # Determine the domain from the first publication (all share the same domain in a batch)
+        if publications:
+            _domain = publications[0].domain or "default"
+            invalidate_derived_status_cache(_domain)
+    except Exception:
+        pass  # Non-critical; status cache will expire naturally
+
     return {
         "publications": len(publications),
         "nodes_created": nodes_created,

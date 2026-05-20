@@ -9,10 +9,11 @@ import GuidedTour, { resetTour } from "./components/GuidedTour";
 import WelcomeModal from "./components/WelcomeModal";
 import { AdaptiveNarrativeBlock, DashboardInsightMetrics } from "./components/ukip";
 import { KpiSummaryCard } from "./components/ui";
+import DerivedStatusPanel from "./components/DerivedStatusPanel";
 import { apiFetch } from "../lib/api";
 import { useAuth } from "./contexts/AuthContext";
 import { useLanguage } from "./contexts/LanguageContext";
-import { useDomain } from "./contexts/DomainContext";
+import { useDomain, isAllScope } from "./contexts/DomainContext";
 import { Analytics } from "../lib/analytics";
 import {
   getStoredPilotPersona,
@@ -656,8 +657,43 @@ export default function Home() {
         </div>
       </div>
 
+      {/* ── Data Readiness collapsible section (per-domain only) ── */}
+      {token && !isAllScope(activeDomainId) && (
+        <DataReadinessSection domainId={activeDomainId} />
+      )}
+
       {/* Guided tour — auto-starts after demo is seeded */}
       <GuidedTour autoStart={demoStatus?.demo_seeded === true} />
+    </div>
+  );
+}
+
+function DataReadinessSection({ domainId }: { domainId: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+        aria-expanded={open}
+      >
+        <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+          Data Readiness
+        </span>
+        <svg
+          className={`h-4 w-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="border-t border-gray-100 dark:border-gray-800">
+          <DerivedStatusPanel domainId={domainId} />
+        </div>
+      )}
     </div>
   );
 }

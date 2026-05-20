@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import { ErrorBanner, SkeletonCard, useToast } from "../../components/ui";
 import ConceptCloud from "../../components/ConceptCloud";
+import DerivedStatusPanel from "../../components/DerivedStatusPanel";
 import { useDomain, isAllScope } from "../../contexts/DomainContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { apiFetch } from "@/lib/api";
@@ -1146,7 +1147,10 @@ export default function ExecutiveDashboardPage() {
         ) : null}
       </div>
 
-
+      {/* ── Data Readiness panel (per-domain only) ── */}
+      {!isAllScope(dashboardDomainId) && (
+        <DerivedStatusPanel domainId={dashboardDomainId} />
+      )}
 
       {(data?.impact_projection || (data?.hidden_patterns && data.hidden_patterns.patterns.length > 0)) && (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">

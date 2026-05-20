@@ -42,6 +42,7 @@ from backend.routers import (
     context,
     dashboards,
     demo,
+    derived_status,
     disambiguation,
     domains,
     entities,
@@ -330,6 +331,7 @@ app.include_router(platform_auth_settings.router)
 app.include_router(ingest.router)
 app.include_router(domains.router)
 app.include_router(analytics.router)
+app.include_router(derived_status.router)
 app.include_router(quality.router)
 app.include_router(entities.router)
 app.include_router(disambiguation.router)

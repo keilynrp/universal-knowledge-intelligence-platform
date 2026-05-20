@@ -289,6 +289,13 @@ def _after_enrichment_commit(
     except Exception as exc:
         logger.warning("Failed to invalidate analytics cache for entity %s: %s", entity.id, exc)
 
+    try:
+        from backend.services.derived_status_service import invalidate_derived_status_cache
+
+        invalidate_derived_status_cache(domain_id)
+    except Exception as exc:
+        logger.warning("Failed to invalidate derived-status cache for entity %s: %s", entity.id, exc)
+
     if entity.enrichment_status != "completed":
         return
 
