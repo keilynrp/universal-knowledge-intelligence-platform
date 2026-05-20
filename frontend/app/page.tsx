@@ -24,6 +24,9 @@ interface DashboardStats {
   total_entities: number;
   unique_secondary_labels: number;
   unique_entity_types: number;
+  graph_nodes?: number;
+  graph_relationships?: number;
+  graph_ready?: boolean;
   domain_distribution?: { domain?: string | null; name?: string | null; count: number }[];
 }
 
@@ -73,6 +76,7 @@ export default function Home() {
     return value === key ? fallback : value;
   }, [t]);
   const hasEntities = (stats?.total_entities ?? 0) > 0;
+  const graphReady = Boolean(stats?.graph_ready || (stats?.graph_relationships ?? 0) > 0);
   const stakeholderQuery = useMemo(
     () => `stakeholder=${encodeURIComponent(pilotPersonaToStakeholder(pilotPersona))}`,
     [pilotPersona],
@@ -244,8 +248,8 @@ export default function Home() {
     { label: tr("page.home.pipeline.ingest", "Ingesta"), group: "Knowledge", href: "/import-export", status: hasEntities ? "done" : "current", icon: "M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" },
     { label: tr("page.home.pipeline.authority", "Autoridad"), group: "Knowledge", href: "/authority", status: enrichPct >= 30 ? "done" : hasEntities ? "current" : "upcoming", icon: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" },
     { label: tr("page.home.pipeline.enrichment", "Enriquecimiento"), group: "Knowledge", href: "/analytics/dashboard", status: enrichPct >= 60 ? "done" : hasEntities ? "current" : "upcoming", icon: "M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.456-2.456L14.25 6l1.035-.259a3.375 3.375 0 002.456-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" },
-    { label: tr("page.home.pipeline.graph", "Grafo"), group: "Intelligence", href: "/analytics/graph", status: enrichPct >= 60 ? "current" : "upcoming", icon: "M7.5 7.5h.008v.008H7.5V7.5zm9 0h.008v.008H16.5V7.5zm-9 9h.008v.008H7.5V16.5zm9 0h.008v.008H16.5V16.5zM8 8l8 8m0-8l-8 8" },
-    { label: tr("page.home.pipeline.analysis", "Análisis"), group: "Intelligence", href: "/analytics/dashboard", status: enrichPct >= 30 ? "current" : "upcoming", icon: "M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" },
+    { label: tr("page.home.pipeline.graph", "Grafo"), group: "Intelligence", href: "/analytics/graph", status: graphReady ? "done" : enrichPct >= 60 ? "current" : "upcoming", icon: "M7.5 7.5h.008v.008H7.5V7.5zm9 0h.008v.008H16.5V7.5zm-9 9h.008v.008H7.5V16.5zm9 0h.008v.008H16.5V16.5zM8 8l8 8m0-8l-8 8" },
+    { label: tr("page.home.pipeline.analysis", "Análisis"), group: "Intelligence", href: "/analytics/dashboard", status: graphReady ? "done" : enrichPct >= 30 ? "current" : "upcoming", icon: "M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" },
     { label: tr("page.home.pipeline.answers", "Respuestas"), group: "Intelligence", href: "/rag", status: enrichPct >= 60 ? "current" : "upcoming", icon: "M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337L3 21l1.087-5.445A7.94 7.94 0 013 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" },
     { label: tr("page.home.pipeline.delivery", "Entrega"), group: "Delivery", href: `/reports?preset=pilot-brief&${stakeholderQuery}`, status: enrichPct >= 60 ? "current" : "upcoming", icon: "M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5A3.375 3.375 0 0010.125 2.25H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-8.25 6.75h13.5A2.25 2.25 0 0021 15.75V9.75a2.25 2.25 0 00-.659-1.591l-5.25-5.25A2.25 2.25 0 0013.5 2.25H5.25A2.25 2.25 0 003 4.5v15a2.25 2.25 0 002.25 2.25z" },
   ];

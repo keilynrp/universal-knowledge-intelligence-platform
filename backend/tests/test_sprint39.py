@@ -179,6 +179,28 @@ def test_stats_domain_distribution_uses_domain_key(client, auth_headers, db_sess
     assert science["count"] >= 1
 
 
+def test_stats_reports_graph_readiness(client, auth_headers, db_session):
+    source = models.RawEntity(primary_label="Graph Source", domain="graph_ready_test")
+    target = models.RawEntity(primary_label="Graph Target", domain="graph_ready_test")
+    db_session.add_all([source, target])
+    db_session.flush()
+    db_session.add(models.EntityRelationship(
+        source_id=source.id,
+        target_id=target.id,
+        relation_type="semantic-neighbor",
+        weight=0.8,
+    ))
+    db_session.commit()
+
+    response = client.get("/stats?domain_id=graph_ready_test", headers=auth_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["graph_ready"] is True
+    assert data["graph_relationships"] == 1
+    assert data["graph_nodes"] >= 2
+
+
 def test_dashboard_empty_domain_returns_zeros(client, auth_headers):
     """With no entities, KPIs are zero and lists are empty — no server error."""
     response = client.get("/dashboard/summary?domain_id=empty_test_domain", headers=auth_headers)

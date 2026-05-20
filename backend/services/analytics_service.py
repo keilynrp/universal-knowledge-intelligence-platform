@@ -3,7 +3,7 @@ import json
 import re
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from backend import models
 from backend.analyzers.topic_modeling import TopicAnalyzer
@@ -504,6 +504,33 @@ class AnalyticsService:
                     query = query.filter(models.RawEntity.domain == domain_id)
             return query
 
+        def _relationship_query(*entities):
+            query = scope_query_to_org(db.query(*entities), models.EntityRelationship, org_id)
+            if domain_id and domain_id != "all":
+                source_entity = aliased(models.RawEntity)
+                target_entity = aliased(models.RawEntity)
+                query = (
+                    query.join(source_entity, models.EntityRelationship.source_id == source_entity.id)
+                    .join(target_entity, models.EntityRelationship.target_id == target_entity.id)
+                )
+                if domain_id == "default":
+                    query = query.filter(
+                        (
+                            (source_entity.domain == domain_id)
+                            | (source_entity.domain == None)  # noqa: E711
+                        )
+                        | (
+                            (target_entity.domain == domain_id)
+                            | (target_entity.domain == None)  # noqa: E711
+                        )
+                    )
+                else:
+                    query = query.filter(
+                        (source_entity.domain == domain_id)
+                        | (target_entity.domain == domain_id)
+                    )
+            return query
+
         total_entities = (
             _q(func.count(models.RawEntity.id))
             .scalar()
@@ -576,11 +603,27 @@ class AnalyticsService:
                 or 0
             ),
         }
+        graph_relationships = (
+            _relationship_query(func.count(models.EntityRelationship.id))
+            .scalar()
+            or 0
+        )
+        graph_nodes = (
+            _relationship_query(
+                func.count(func.distinct(models.EntityRelationship.source_id))
+                + func.count(func.distinct(models.EntityRelationship.target_id))
+            )
+            .scalar()
+            or 0
+        )
 
         return {
             "total_entities": total_entities,
             "unique_secondary_labels": unique_secondary_labels,
             "unique_entity_types": unique_entity_types,
+            "graph_nodes": graph_nodes,
+            "graph_relationships": graph_relationships,
+            "graph_ready": graph_relationships > 0,
             "validation_status": validation_status,
             "identifier_coverage": {
                 "with_canonical_id": with_canonical_id,
