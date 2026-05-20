@@ -125,6 +125,7 @@ function usePositions(nodes: GraphNode[], width: number, height: number): Record
 export default function EntityGraph({ entityId }: { entityId: number }) {
     const [graph, setGraph] = useState<GraphData | null>(null);
     const [depth, setDepth] = useState<1 | 2>(1);
+    const [zoom, setZoom] = useState(1);
     const [hovered, setHovered] = useState<number | null>(null);
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
     const [metrics, setMetrics] = useState<GraphMetrics | null>(null);
@@ -136,6 +137,10 @@ export default function EntityGraph({ entityId }: { entityId: number }) {
 
     const W = 600;
     const H = 420;
+    const viewW = W / zoom;
+    const viewH = H / zoom;
+    const viewX = (W - viewW) / 2;
+    const viewY = (H - viewH) / 2;
 
     const requestKey = `${entityId}:${depth}`;
     const loading = resolvedKey !== requestKey;
@@ -261,17 +266,43 @@ export default function EntityGraph({ entityId }: { entityId: number }) {
                 <span className="ml-auto text-xs text-gray-400 dark:text-gray-500">
                     {graph.nodes.length} nodes · {graph.edges.length} edges
                 </span>
+                <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1 dark:border-gray-700 dark:bg-gray-800">
+                    <button
+                        onClick={() => setZoom((value) => Math.max(0.7, Number((value - 0.2).toFixed(1))))}
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-sm font-bold text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                        title="Zoom out"
+                    >
+                        −
+                    </button>
+                    <span className="w-12 text-center text-[11px] font-semibold text-gray-500 dark:text-gray-300">{Math.round(zoom * 100)}%</span>
+                    <button
+                        onClick={() => setZoom((value) => Math.min(2.4, Number((value + 0.2).toFixed(1))))}
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-sm font-bold text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                        title="Zoom in"
+                    >
+                        +
+                    </button>
+                    <button
+                        onClick={() => setZoom(1)}
+                        className="rounded-md px-2 py-1 text-[11px] font-semibold text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                    >
+                        Reset
+                    </button>
+                </div>
             </div>
 
             {/* SVG Canvas */}
             <div className="relative overflow-hidden rounded-xl border border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900/50">
                 <svg
                     ref={svgRef}
-                    viewBox={`0 0 ${W} ${H}`}
+                    viewBox={`${viewX} ${viewY} ${viewW} ${viewH}`}
                     className="w-full"
                     style={{ height: `${H}px` }}
                 >
                     <defs>
+                        <filter id="node-soft-shadow" x="-50%" y="-50%" width="200%" height="200%">
+                            <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#0f172a" floodOpacity="0.18" />
+                        </filter>
                         {Object.entries(RELATION_COLORS).map(([type, color]) => (
                             <marker
                                 key={type}
@@ -285,6 +316,20 @@ export default function EntityGraph({ entityId }: { entityId: number }) {
                                 <path d="M0,0 L0,6 L8,3 z" fill={color} />
                             </marker>
                         ))}
+                        {graph.nodes.map((node) => {
+                            const isCenter = node.is_center;
+                            const base = isCenter ? "#4f46e5" : hovered === node.id ? "#818cf8" : "#c7d2fe";
+                            const light = isCenter ? "#a5b4fc" : hovered === node.id ? "#c7d2fe" : "#eef2ff";
+                            const dark = isCenter ? "#312e81" : hovered === node.id ? "#4f46e5" : "#818cf8";
+                            return (
+                                <radialGradient key={node.id} id={`node-sphere-${node.id}`} cx="35%" cy="28%" r="72%">
+                                    <stop offset="0%" stopColor="#ffffff" stopOpacity="0.92" />
+                                    <stop offset="22%" stopColor={light} />
+                                    <stop offset="58%" stopColor={base} />
+                                    <stop offset="100%" stopColor={dark} />
+                                </radialGradient>
+                            );
+                        })}
                     </defs>
 
                     {/* Edges */}
@@ -335,11 +380,6 @@ export default function EntityGraph({ entityId }: { entityId: number }) {
                         const isCenter = node.is_center;
                         const isHovered = hovered === node.id;
                         const r = isCenter ? 28 : 22;
-                        const fill = isCenter
-                            ? "#4f46e5"
-                            : isHovered
-                            ? "#818cf8"
-                            : "#e0e7ff";
                         const textFill = isCenter || isHovered ? "#fff" : "#3730a3";
                         const stroke = isCenter ? "#3730a3" : isHovered ? "#6366f1" : "#c7d2fe";
 
@@ -363,7 +403,9 @@ export default function EntityGraph({ entityId }: { entityId: number }) {
                                 }}
                                 onMouseLeave={() => { setHovered(null); setTooltip(null); }}
                             >
-                                <circle r={r} fill={fill} stroke={stroke} strokeWidth={isCenter ? 2.5 : 1.5} />
+                                <circle r={r + (isHovered ? 4 : 0)} fill={isHovered ? "#4f46e5" : "#6366f1"} opacity={isHovered ? 0.16 : 0.08} />
+                                <circle r={r} fill={`url(#node-sphere-${node.id})`} stroke={stroke} strokeWidth={isCenter ? 2.5 : 1.5} filter="url(#node-soft-shadow)" />
+                                <circle cx={-r * 0.34} cy={-r * 0.38} r={Math.max(3, r * 0.2)} fill="#fff" opacity={isCenter || isHovered ? 0.55 : 0.42} />
                                 <text
                                     textAnchor="middle"
                                     dy="0.35em"
