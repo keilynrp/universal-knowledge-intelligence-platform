@@ -158,6 +158,7 @@ def test_enrich_marks_completed_on_openalex_success(db_session):
     mock_result.references_count = None
     mock_result.license = None
     mock_result.venue = None
+    mock_result.affiliations = None
 
     mock_openalex = MagicMock()
     mock_openalex.is_active = True
@@ -200,6 +201,7 @@ def test_enrich_completion_syncs_dashboard_workflows_and_rag(db_session):
     mock_result.references_count = None
     mock_result.license = None
     mock_result.venue = None
+    mock_result.affiliations = None
 
     mock_openalex = MagicMock()
     mock_openalex.is_active = True
