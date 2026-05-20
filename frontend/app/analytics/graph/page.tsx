@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useDomain } from "../../contexts/DomainContext";
 import { useLanguage } from "../../contexts/LanguageContext";
@@ -8,7 +9,7 @@ import { useLanguage } from "../../contexts/LanguageContext";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface GNode { id: number; label: string; community: number; pagerank: number; degree: number; }
-interface GLink { source: number; target: number; type: string; }
+interface GLink { source: number; target: number; type: string; weight?: number; }
 interface GraphData {
   nodes: GNode[];
   links: GLink[];
@@ -30,10 +31,27 @@ interface KeywordSignal {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const COMMUNITY_COLORS = ["#8b5cf6","#06b6d4","#10b981","#f59e0b","#f43f5e","#3b82f6","#84cc16","#ec4899","#a78bfa","#22d3ee"];
-const EDGE_TYPE_COLORS: Record<string, string> = { cites: "#8b5cf6", "authored-by": "#06b6d4", "belongs-to": "#10b981", "related-to": "#f59e0b" };
+const EDGE_TYPE_COLORS: Record<string, string> = {
+  cites: "#8b5cf6",
+  "authored-by": "#06b6d4",
+  "belongs-to": "#10b981",
+  "related-to": "#f59e0b",
+  "external-signal-for": "#059669",
+  "semantic-neighbor": "#2563eb",
+  "derived-keyword": "#c026d3",
+  "emerging-from": "#d97706",
+};
+
+const SEMANTIC_EDGE_TYPES = new Set(["external-signal-for", "semantic-neighbor", "derived-keyword", "emerging-from"]);
 
 function edgeColor(type: string) {
   return EDGE_TYPE_COLORS[type] ?? "#94a3b8";
+}
+
+function edgeVisualWeight(type: string, weight?: number) {
+  const base = Math.max(0.8, Math.min(10, Number(weight) || 1));
+  const semanticBoost = SEMANTIC_EDGE_TYPES.has(type) ? 1.35 : 1;
+  return Math.min(5, (0.75 + Math.log1p(base) * 0.85) * semanticBoost);
 }
 
 // ── Force Graph Canvas ────────────────────────────────────────────────────────
@@ -43,8 +61,8 @@ interface ForceGraphProps { nodes: GNode[]; links: GLink[]; highlightIds?: Set<n
 function ForceGraph({ nodes, links, highlightIds }: ForceGraphProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const stateRef = useRef<{ running: boolean; nodes: (GNode & { x: number; y: number; vx: number; vy: number })[]; links: { s: number; t: number; type: string }[]; transform: { x: number; y: number; k: number }; drag: { active: boolean; lastX: number; lastY: number } }>({ running: false, nodes: [], links: [], transform: { x: 0, y: 0, k: 1 }, drag: { active: false, lastX: 0, lastY: 0 } });
-  const [hovered, setHovered] = useState<GNode | null>(null);
+  const stateRef = useRef<{ running: boolean; nodes: (GNode & { x: number; y: number; vx: number; vy: number; visualWeight: number; semanticWeight: number })[]; links: { s: number; t: number; type: string; weight: number }[]; transform: { x: number; y: number; k: number }; drag: { active: boolean; lastX: number; lastY: number } }>({ running: false, nodes: [], links: [], transform: { x: 0, y: 0, k: 1 }, drag: { active: false, lastX: 0, lastY: 0 } });
+  const [hovered, setHovered] = useState<(GNode & { visualWeight?: number }) | null>(null);
   const hoverPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   useEffect(() => {
@@ -61,14 +79,28 @@ function ForceGraph({ nodes, links, highlightIds }: ForceGraphProps) {
     state.running = true;
     state.transform = { x: 0, y: 0, k: 1 };
 
+    const maxDegree = Math.max(1, ...nodes.map((node) => node.degree || 0));
+    const maxPagerank = Math.max(0.0001, ...nodes.map((node) => node.pagerank || 0));
+    const semanticWeightByNode = new Map<number, number>();
+    for (const link of links) {
+      if (!SEMANTIC_EDGE_TYPES.has(link.type)) continue;
+      const weight = edgeVisualWeight(link.type, link.weight);
+      semanticWeightByNode.set(link.source, Math.max(semanticWeightByNode.get(link.source) || 0, weight));
+      semanticWeightByNode.set(link.target, Math.max(semanticWeightByNode.get(link.target) || 0, weight));
+    }
+
     const nodeMap = new Map<number, typeof state.nodes[0]>();
     state.nodes = nodes.map(n => {
-      const sn = { ...n, x: w / 2 + (Math.random() - 0.5) * 200, y: h / 2 + (Math.random() - 0.5) * 200, vx: 0, vy: 0 };
+      const degreeScore = Math.log1p(n.degree || 0) / Math.log1p(maxDegree);
+      const pagerankScore = Math.sqrt((n.pagerank || 0) / maxPagerank);
+      const semanticWeight = semanticWeightByNode.get(n.id) || 0;
+      const visualWeight = 0.45 + degreeScore * 0.55 + pagerankScore * 0.75 + semanticWeight * 0.18;
+      const sn = { ...n, x: w / 2 + (Math.random() - 0.5) * 200, y: h / 2 + (Math.random() - 0.5) * 200, vx: 0, vy: 0, visualWeight, semanticWeight };
       nodeMap.set(n.id, sn);
       return sn;
     });
     state.links = links.filter(l => nodeMap.has(l.source) && nodeMap.has(l.target))
-      .map(l => ({ s: l.source, t: l.target, type: l.type }));
+      .map(l => ({ s: l.source, t: l.target, type: l.type, weight: l.weight ?? 1 }));
 
     let iter = 0;
 
@@ -142,16 +174,26 @@ function ForceGraph({ nodes, links, highlightIds }: ForceGraphProps) {
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
-        ctx.strokeStyle = edgeColor(lk.type) + "55";
-        ctx.lineWidth = 1 / state.transform.k;
+        const edgeWidth = edgeVisualWeight(lk.type, lk.weight);
+        const edgeAlpha = SEMANTIC_EDGE_TYPES.has(lk.type) ? "88" : "55";
+        ctx.strokeStyle = edgeColor(lk.type) + edgeAlpha;
+        ctx.lineWidth = edgeWidth / state.transform.k;
         ctx.stroke();
       }
 
       // Nodes
       for (const n of state.nodes) {
         const color = COMMUNITY_COLORS[n.community % COMMUNITY_COLORS.length];
-        const r = Math.max(4, 4 + Math.log(n.degree + 1) * 1.5);
+        const r = Math.max(5, Math.min(24, 4 + n.visualWeight * 7.5));
         const isHighlighted = highlightIds?.has(n.id);
+        if (n.visualWeight >= 1.65 || isHighlighted) {
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, r + (isHighlighted ? 8 : 5), 0, Math.PI * 2);
+          ctx.fillStyle = SEMANTIC_EDGE_TYPES.has(state.links.find((link) => link.s === n.id || link.t === n.id)?.type || "") ? "#8b5cf6" : color;
+          ctx.globalAlpha = isHighlighted ? 0.12 : 0.08;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
         ctx.beginPath();
         ctx.arc(n.x, n.y, isHighlighted ? r + 3 : r, 0, Math.PI * 2);
         ctx.fillStyle = color;
@@ -160,7 +202,14 @@ function ForceGraph({ nodes, links, highlightIds }: ForceGraphProps) {
         ctx.globalAlpha = 1;
         if (isHighlighted) {
           ctx.strokeStyle = "#fff";
-          ctx.lineWidth = 2 / state.transform.k;
+          ctx.lineWidth = 2.5 / state.transform.k;
+          ctx.stroke();
+          ctx.strokeStyle = "#8b5cf6";
+          ctx.lineWidth = 1.5 / state.transform.k;
+          ctx.stroke();
+        } else if (n.semanticWeight > 0) {
+          ctx.strokeStyle = "#8b5cf6";
+          ctx.lineWidth = 1.5 / state.transform.k;
           ctx.stroke();
         }
       }
@@ -197,7 +246,7 @@ function ForceGraph({ nodes, links, highlightIds }: ForceGraphProps) {
     const mx = (hoverPos.current.x - state.transform.x) / state.transform.k;
     const my = (hoverPos.current.y - state.transform.y) / state.transform.k;
     const hit = state.nodes.find(n => {
-      const r = Math.max(4, 4 + Math.log(n.degree + 1) * 1.5) + 4;
+      const r = Math.max(5, Math.min(24, 4 + n.visualWeight * 7.5)) + 5;
       return (n.x - mx) ** 2 + (n.y - my) ** 2 < r * r;
     });
     setHovered(hit ?? null);
@@ -211,6 +260,7 @@ function ForceGraph({ nodes, links, highlightIds }: ForceGraphProps) {
         <div className="pointer-events-none absolute left-3 top-3 rounded-lg border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-3 py-2 shadow-lg">
           <p className="text-xs font-semibold text-[var(--ukip-text-strong)]">{hovered.label}</p>
           <p className="mt-0.5 text-[11px] text-[var(--ukip-muted)]">C{hovered.community + 1} · PageRank {hovered.pagerank.toFixed(3)} · Degree {hovered.degree}</p>
+          <p className="mt-0.5 text-[11px] text-[var(--ukip-muted)]">Peso visual {(hovered.visualWeight ?? 0).toFixed(2)}</p>
         </div>
       )}
       {/* Zoom controls */}
@@ -231,6 +281,7 @@ function ForceGraph({ nodes, links, highlightIds }: ForceGraphProps) {
 export default function GraphExplorerPage() {
   const { t } = useLanguage();
   const { activeDomainId, activeDomain } = useDomain();
+  const searchParams = useSearchParams();
   const [data, setData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -253,6 +304,7 @@ export default function GraphExplorerPage() {
 
   const activeGraphDomain = activeDomainId && activeDomainId !== "all" ? activeDomainId : null;
   const activeGraphScopeLabel = activeGraphDomain ? (activeDomain?.name || activeGraphDomain) : "Todos los dominios";
+  const focusedSignal = searchParams.get("signal") || searchParams.get("keyword") || "";
 
   const buildScopedQuery = useCallback((base?: Record<string, string>) => {
     const query = new URLSearchParams(base);
@@ -356,6 +408,36 @@ export default function GraphExplorerPage() {
   }
 
   const stats = data?.stats;
+  const semanticFocus = useMemo(() => {
+    const normalized = focusedSignal.trim().toLowerCase();
+    if (!data || !normalized) {
+      return { ids: new Set<number>(), matched: 0, supporting: 0, relationTypes: [] as string[] };
+    }
+    const matchingNodeIds = new Set(
+      data.nodes
+        .filter((node) => node.label.toLowerCase() === normalized || node.label.toLowerCase().includes(normalized))
+        .map((node) => node.id)
+    );
+    const relatedIds = new Set<number>(matchingNodeIds);
+    const relationTypes = new Set<string>();
+    for (const link of data.links) {
+      if (matchingNodeIds.has(link.source) || matchingNodeIds.has(link.target)) {
+        relatedIds.add(link.source);
+        relatedIds.add(link.target);
+        relationTypes.add(link.type);
+      }
+    }
+    return {
+      ids: relatedIds,
+      matched: matchingNodeIds.size,
+      supporting: Math.max(0, relatedIds.size - matchingNodeIds.size),
+      relationTypes: Array.from(relationTypes).sort(),
+    };
+  }, [data, focusedSignal]);
+  const visibleHighlightIds = useMemo(() => {
+    if (highlightIds.size === 0) return semanticFocus.ids;
+    return new Set([...highlightIds, ...semanticFocus.ids]);
+  }, [highlightIds, semanticFocus.ids]);
   const activeFilters = data?.filters ? Object.entries(data.filters).filter(([, value]) => value !== null && value !== undefined && value !== "") : [];
   const edgeTypeLabels: Record<string, string> = {
     cites: t("page.graph.edge_cites") || "Cita",
@@ -396,6 +478,11 @@ export default function GraphExplorerPage() {
             <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-mono text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300">
               <span className="mr-1 uppercase opacity-70">scope</span>{activeGraphScopeLabel}
             </span>
+            {focusedSignal && (
+              <span className="rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-mono text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-300">
+                <span className="mr-1 uppercase opacity-70">signal</span>{focusedSignal}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -502,12 +589,32 @@ export default function GraphExplorerPage() {
             </div>
           )}
           {!loading && !error && data && data.nodes.length > 0 && (
-            <ForceGraph nodes={data.nodes} links={data.links} highlightIds={highlightIds.size > 0 ? highlightIds : undefined} />
+            <ForceGraph nodes={data.nodes} links={data.links} highlightIds={visibleHighlightIds.size > 0 ? visibleHighlightIds : undefined} />
           )}
         </div>
 
         {/* Right info panel */}
         <div className="flex w-64 shrink-0 flex-col gap-4 overflow-y-auto bg-[var(--ukip-panel)] p-4">
+          {focusedSignal && (
+            <div className="rounded-xl border border-violet-200 bg-violet-50/70 p-3 dark:border-violet-900/50 dark:bg-violet-950/20">
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-700 dark:text-violet-300">Foco narrativo</p>
+              <p className="mt-2 text-sm font-semibold text-[var(--ukip-text-strong)]">{focusedSignal}</p>
+              <p className="mt-2 text-xs leading-5 text-[var(--ukip-muted)]">
+                {semanticFocus.matched > 0
+                  ? `${semanticFocus.matched} nodo(s) de señal y ${semanticFocus.supporting} nodo(s) de soporte conectados.`
+                  : "Todavía no hay nodos materializados para esta señal en el grafo visible."}
+              </p>
+              {semanticFocus.relationTypes.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1">
+                  {semanticFocus.relationTypes.slice(0, 4).map((type) => (
+                    <span key={type} className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-violet-700">
+                      {edgeTypeLabels[type] ?? type}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <div>
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--ukip-muted-soft)]">Señales semánticas</p>
@@ -522,7 +629,11 @@ export default function GraphExplorerPage() {
             ) : (
               <div className="space-y-1.5">
                 {keywordSignals.slice(0, 6).map((signal) => (
-                  <div key={signal.keyword} className="rounded-lg border border-[var(--ukip-border)] px-3 py-2">
+                  <a
+                    key={signal.keyword}
+                    href={`/analytics/graph?signal=${encodeURIComponent(signal.keyword)}${activeGraphDomain ? `&domain=${encodeURIComponent(activeGraphDomain)}` : ""}`}
+                    className="block rounded-lg border border-[var(--ukip-border)] px-3 py-2 transition hover:border-[var(--ukip-primary)] hover:bg-[var(--ukip-primary-soft)]"
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <p className="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--ukip-text-strong)]">{signal.keyword}</p>
                       <span className="shrink-0 rounded bg-[var(--ukip-primary-soft)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--ukip-primary-strong)]">
@@ -533,7 +644,7 @@ export default function GraphExplorerPage() {
                       {signal.classification} · {signal.support_count} registros
                       {signal.external_support ? ` · ${signal.external_support} externas` : ""}
                     </p>
-                  </div>
+                  </a>
                 ))}
               </div>
             )}

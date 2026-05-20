@@ -409,7 +409,7 @@ def get_graph_visualization(
             }
             for nid in top_nodes
         ],
-        "links": [{"source": s, "target": d, "type": r} for s, d, r, _ in filtered_edges],
+        "links": [{"source": s, "target": d, "type": r, "weight": round(float(w or 1.0), 2)} for s, d, r, w in filtered_edges],
         "edge_types": edge_types,
         "total_communities": len(visible_communities),
         "filters": {

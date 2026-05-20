@@ -1303,12 +1303,16 @@ export default function ExecutiveDashboardPage() {
               </p>
               <div className="mt-4 space-y-3">
                 {data.semantic_keyword_signals.top_long_tail_keywords.slice(0, 4).map((signal) => (
-                  <div key={signal.keyword} className="flex items-center justify-between gap-3">
+                  <Link
+                    key={signal.keyword}
+                    href={`/analytics/graph?signal=${encodeURIComponent(signal.keyword)}&domain=${encodeURIComponent(data.domain_id || "all")}`}
+                    className="flex items-center justify-between gap-3 rounded-lg px-2 py-1 transition hover:bg-white"
+                  >
                     <span className="min-w-0 truncate text-sm font-semibold text-slate-800">{signal.keyword}</span>
                     <span className="shrink-0 rounded-full bg-white px-2 py-1 text-xs font-semibold text-violet-700">
                       {Math.round(signal.opportunity_score)}
                     </span>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </div>
@@ -1318,10 +1322,14 @@ export default function ExecutiveDashboardPage() {
               </p>
               <div className="mt-4 space-y-3">
                 {data.semantic_keyword_signals.external_supported_signals.slice(0, 4).map((signal) => (
-                  <div key={signal.keyword} className="grid grid-cols-[1fr_auto] gap-3">
+                  <Link
+                    key={signal.keyword}
+                    href={`/analytics/graph?signal=${encodeURIComponent(signal.keyword)}&domain=${encodeURIComponent(data.domain_id || "all")}`}
+                    className="grid grid-cols-[1fr_auto] gap-3 rounded-lg px-2 py-1 transition hover:bg-slate-50"
+                  >
                     <span className="min-w-0 truncate text-sm font-semibold text-slate-800">{signal.keyword}</span>
                     <span className="text-xs font-semibold text-emerald-700">{signal.external_support} ext.</span>
-                  </div>
+                  </Link>
                 ))}
                 {data.semantic_keyword_signals.external_supported_signals.length === 0 && (
                   <p className="text-sm text-slate-500">{tr("page.exec_dashboard.semantic_no_external", "No external support yet for this context.")}</p>
@@ -1334,13 +1342,17 @@ export default function ExecutiveDashboardPage() {
               </p>
               <div className="mt-4 space-y-3">
                 {data.semantic_keyword_signals.recommendations.slice(0, 3).map((item) => (
-                  <div key={item.keyword}>
+                  <Link
+                    key={item.keyword}
+                    href={`/analytics/graph?signal=${encodeURIComponent(item.keyword)}&domain=${encodeURIComponent(data.domain_id || "all")}`}
+                    className="block rounded-lg px-2 py-1 transition hover:bg-white/70"
+                  >
                     <p className="text-sm font-semibold text-slate-900">{item.keyword}</p>
                     <p className="mt-1 text-xs leading-5 text-slate-600">{item.action}</p>
-                  </div>
+                  </Link>
                 ))}
               </div>
-              <Link href="/analytics/graph" className="mt-5 inline-flex text-sm font-semibold text-violet-700 hover:text-violet-800">
+              <Link href={`/analytics/graph?domain=${encodeURIComponent(data.domain_id || "all")}`} className="mt-5 inline-flex text-sm font-semibold text-violet-700 hover:text-violet-800">
                 {tr("page.exec_dashboard.semantic_open_graph", "Open Graph relationships")}
               </Link>
             </div>
