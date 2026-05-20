@@ -23,6 +23,22 @@ jobs:
       - name: Enforce domain scope contract
         run: python scripts/lint_domain_scope.py
 
+  # ── Entity query contract lint (blocking) ─────────────────────────────────
+  entity-query-lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Enforce entity_base_q contract (migrated files)
+        run: python scripts/lint_entity_query.py
+
   # ── Backend lint (ruff) ────────────────────────────────────────────────────
   backend-lint:
     runs-on: ubuntu-latest
