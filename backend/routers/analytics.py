@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.schemas import EnrichmentStatus
+from backend.services.entity_query import entity_base_q
 from backend.analyzers.external_attention import compute_attention_summary
 from backend.analyzers.author_metrics import author_detail, author_rankings
 from backend.analyzers.coauthorship import coauthorship_network
@@ -141,10 +142,7 @@ def _dashboard_external_attention(
     *,
     limit: int = 5,
 ) -> dict:
-    query = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
-    _filt = resolve_domain_filter(parse_scope(domain_id), models.RawEntity)
-    if _filt is not None:
-        query = query.filter(_filt)
+    query = entity_base_q(db, domain_id, org_id)
 
     candidates = (
         query.filter(
@@ -242,11 +240,7 @@ def abstract_coverage(
 ):
     """Audit whether tenant-scoped records contain abstract or summary text."""
     org_id = resolve_request_org_id(db, current_user)
-    scope = parse_scope(domain_id)
-    query = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
-    _filt = resolve_domain_filter(scope, models.RawEntity)
-    if _filt is not None:
-        query = query.filter(_filt)
+    query = entity_base_q(db, domain_id, org_id)
 
     rows = (
         query.with_entities(

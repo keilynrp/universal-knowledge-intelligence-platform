@@ -36,6 +36,7 @@ from backend.tenant_access import (
 from backend.llm_agent import resolve_canonical_name
 from backend.routers.deps import _build_disambig_groups
 from backend.routers.limiter import limiter
+from backend.services.entity_query import entity_base_q
 
 logger = logging.getLogger(__name__)
 
@@ -63,16 +64,19 @@ async def disambiguate_field(
             from sqlalchemy import func as sqla_func
             if _FIELD_RE.match(field) and hasattr(models.RawEntity, field):
                 column = getattr(models.RawEntity, field)
-                count_q = scope_query_to_org(
-                    db.query(sqla_func.count(sqla_func.distinct(column))).filter(column != None),
-                    models.RawEntity, org_id,
-                )
-                unique_count = count_q.scalar() or 0
+                unique_count = (
+                    entity_base_q(db, "all", org_id)
+                    .with_entities(sqla_func.count(sqla_func.distinct(column)))
+                    .filter(column != None)
+                    .scalar()
+                ) or 0
                 if unique_count > ENGINE_DELEGATION_THRESHOLD:
                     # Extract values for engine
-                    vals_q = scope_query_to_org(
-                        db.query(column).distinct().filter(column != None),
-                        models.RawEntity, org_id,
+                    vals_q = (
+                        entity_base_q(db, "all", org_id)
+                        .with_entities(column)
+                        .distinct()
+                        .filter(column != None)
                     )
                     values = [v[0] for v in vals_q.all() if v[0] and str(v[0]).strip()]
                     engine_groups = await try_engine_disambiguation(
@@ -251,7 +255,7 @@ async def apply_rules(
             column = getattr(models.RawEntity, rule.field_name)
             if rule.is_regex:
                 entities = (
-                    scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
+                    entity_base_q(db, "all", org_id)
                     .filter(column != None)
                     .all()
                 )
@@ -278,7 +282,7 @@ async def apply_rules(
                 total_updated += result.rowcount
         else:
             entities = (
-                scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
+                entity_base_q(db, "all", org_id)
                 .filter(models.RawEntity.normalized_json != None)
                 .all()
             )

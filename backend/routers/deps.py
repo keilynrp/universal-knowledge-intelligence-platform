@@ -19,6 +19,7 @@ from thefuzz import fuzz, process
 from backend import database, models
 from backend.adapters import get_adapter
 from backend.encryption import decrypt
+from backend.services.entity_query import entity_base_q
 from backend.tenant_access import scope_query_to_org
 
 logger = logging.getLogger(__name__)
@@ -65,10 +66,11 @@ def _build_disambig_groups(
         )
     if hasattr(models.RawEntity, field):
         column = getattr(models.RawEntity, field)
-        query = scope_query_to_org(
-            db.query(column).distinct().filter(column != None),
-            models.RawEntity,
-            org_id,
+        query = (
+            entity_base_q(db, "all", org_id)
+            .with_entities(column)
+            .distinct()
+            .filter(column != None)
         )
         entries = query.all()
         values = [v[0] for v in entries if v[0] and str(v[0]).strip()]
@@ -80,13 +82,14 @@ def _build_disambig_groups(
             json_col = cast(models.RawEntity.normalized_json, JSONB)[field].astext
         else:
             json_col = func.json_extract(models.RawEntity.normalized_json, f"$.{field}")
-        query = scope_query_to_org(
-            db.query(json_col).distinct().filter(
+        query = (
+            entity_base_q(db, "all", org_id)
+            .with_entities(json_col)
+            .distinct()
+            .filter(
                 models.RawEntity.normalized_json != None,
                 json_col != None,
-            ),
-            models.RawEntity,
-            org_id,
+            )
         )
         entries = query.all()
         values = [v[0] for v in entries if v[0] and str(v[0]).strip()]

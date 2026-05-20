@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.domain_scope import parse_scope, resolve_domain_filter
 from backend.schemas import EnrichmentStatus
+from backend.services.entity_query import entity_base_q
 
 logger = logging.getLogger(__name__)
 
@@ -112,11 +113,7 @@ def _now_iso() -> str:
 
 def _source_count(scope: str, db: Session) -> int:
     """Count total (non-derived) entities in scope."""
-    filt = resolve_domain_filter(scope, models.RawEntity)
-    q = db.query(models.RawEntity).filter(models.RawEntity.source != "graph_materializer")
-    if filt is not None:
-        q = q.filter(filt)
-    return q.count()
+    return entity_base_q(db, scope).count()
 
 
 def _resource_entry(
@@ -145,11 +142,7 @@ def _resource_entry(
 # ---------------------------------------------------------------------------
 
 def _compute_enrichment(scope: str, db: Session) -> dict[str, Any]:
-    filt = resolve_domain_filter(scope, models.RawEntity)
-    base_q = db.query(models.RawEntity).filter(models.RawEntity.source != "graph_materializer")
-    if filt is not None:
-        base_q = base_q.filter(filt)
-
+    base_q = entity_base_q(db, scope)
     source_count = base_q.count()
     if source_count == 0:
         return _resource_entry(STATUS_MISSING, 0, 0, resource_key="enrichment")
@@ -171,25 +164,23 @@ def _compute_enrichment(scope: str, db: Session) -> dict[str, Any]:
 
 
 def _compute_graph(scope: str, db: Session) -> dict[str, Any]:
-    filt = resolve_domain_filter(scope, models.RawEntity)
-    base_q = db.query(models.RawEntity).filter(models.RawEntity.source != "graph_materializer")
-    if filt is not None:
-        base_q = base_q.filter(filt)
-
+    base_q = entity_base_q(db, scope)
     source_count = base_q.count()
     if source_count == 0:
         return _resource_entry(STATUS_MISSING, 0, 0, resource_key="graph")
 
-    # Count distinct entity IDs that appear as source_id in at least one relationship
+    # Count distinct entity IDs that appear as source_id in at least one relationship.
+    # Relationships have no domain column so we scope via a join through RawEntity.
+    parsed = parse_scope(scope)
+    domain_filt = resolve_domain_filter(parsed, models.RawEntity)
     rel_q = db.query(models.EntityRelationship.source_id).distinct()
-    if filt is not None:
-        # Scope relationships to this domain by joining source entity
+    if domain_filt is not None:
         rel_q = (
             db.query(models.EntityRelationship.source_id)
             .join(models.RawEntity, models.RawEntity.id == models.EntityRelationship.source_id)
             .distinct()
         )
-        rel_q = rel_q.filter(filt)
+        rel_q = rel_q.filter(domain_filt)
 
     derived_count = rel_q.count()
 
@@ -204,11 +195,7 @@ def _compute_graph(scope: str, db: Session) -> dict[str, Any]:
 
 
 def _compute_semantic_keyword_signals(scope: str, db: Session) -> dict[str, Any]:
-    filt = resolve_domain_filter(scope, models.RawEntity)
-    base_q = db.query(models.RawEntity).filter(models.RawEntity.source != "graph_materializer")
-    if filt is not None:
-        base_q = base_q.filter(filt)
-
+    base_q = entity_base_q(db, scope)
     source_count = base_q.count()
     if source_count == 0:
         return _resource_entry(STATUS_MISSING, 0, 0, resource_key="semantic_keyword_signals")
@@ -231,11 +218,7 @@ def _compute_semantic_keyword_signals(scope: str, db: Session) -> dict[str, Any]
 
 
 def _compute_rag_index(scope: str, db: Session) -> dict[str, Any]:
-    filt = resolve_domain_filter(scope, models.RawEntity)
-    base_q = db.query(models.RawEntity).filter(models.RawEntity.source != "graph_materializer")
-    if filt is not None:
-        base_q = base_q.filter(filt)
-    source_count = base_q.count()
+    source_count = entity_base_q(db, scope).count()
 
     # Short-circuit: no entities → missing, no need to probe ChromaDB
     if source_count == 0:
@@ -267,11 +250,7 @@ def _compute_executive_dashboard_snapshot(scope: str, db: Session) -> dict[str, 
     Checks whether the dashboard analytics cache has a warm entry for the domain.
     Falls back to entity-existence check if cache inspection is unavailable.
     """
-    filt = resolve_domain_filter(scope, models.RawEntity)
-    base_q = db.query(models.RawEntity).filter(models.RawEntity.source != "graph_materializer")
-    if filt is not None:
-        base_q = base_q.filter(filt)
-    source_count = base_q.count()
+    source_count = entity_base_q(db, scope).count()
 
     if source_count == 0:
         return _resource_entry(STATUS_MISSING, 0, 0, resource_key="executive_dashboard_snapshot")
@@ -311,10 +290,7 @@ def _compute_report_readiness(scope: str, db: Session) -> dict[str, Any]:
     Checks report readiness. Since reports are generated on-demand (not persisted),
     any domain with enriched entities is considered report-ready.
     """
-    filt = resolve_domain_filter(scope, models.RawEntity)
-    base_q = db.query(models.RawEntity).filter(models.RawEntity.source != "graph_materializer")
-    if filt is not None:
-        base_q = base_q.filter(filt)
+    base_q = entity_base_q(db, scope)
     source_count = base_q.count()
 
     if source_count == 0:

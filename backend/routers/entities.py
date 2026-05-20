@@ -28,6 +28,7 @@ import os
 
 from backend import database, models, schemas
 from backend.schemas import EnrichmentStatus
+from backend.services.entity_query import entity_base_q, count_total, count_enriched
 from backend.analyzers.external_attention import compute_attention_summary
 from backend.analytics.montecarlo import simulate_citation_impact
 from backend.auth import get_current_user, require_role
@@ -573,22 +574,13 @@ def get_enrichment_stats(
 ):
     """Returns enrichment statistics for the predictive analytics dashboard."""
     org_id = resolve_request_org_id(db, current_user)
-    _scope = parse_scope(domain_id)
-    _domain_filt = resolve_domain_filter(_scope, models.RawEntity)
-    def _q(*entities):
-        query = scope_query_to_org(db.query(*entities), models.RawEntity, org_id)
-        if _domain_filt is not None:
-            query = query.filter(_domain_filt)
-        return query
+    base_q = entity_base_q(db, domain_id, org_id)
 
-    total = (
-        _q(func.count(models.RawEntity.id))
-        .scalar()
-        or 0
-    )
+    total = count_total(db, domain_id, org_id)
 
     status_rows = (
-        _q(models.RawEntity.enrichment_status, func.count(models.RawEntity.id))
+        base_q
+        .with_entities(models.RawEntity.enrichment_status, func.count(models.RawEntity.id))
         .group_by(models.RawEntity.enrichment_status)
         .all()
     )
@@ -600,7 +592,8 @@ def get_enrichment_stats(
     none_count     = status_breakdown.get("none", 0)
 
     enriched_entities = (
-        _q(models.RawEntity.enrichment_concepts)
+        base_q
+        .with_entities(models.RawEntity.enrichment_concepts)
         .filter(
             models.RawEntity.enrichment_concepts != None,
             models.RawEntity.enrichment_concepts != "",
@@ -619,7 +612,8 @@ def get_enrichment_stats(
     top_concepts = sorted(concept_freq.items(), key=lambda x: x[1], reverse=True)[:20]
 
     citation_rows = (
-        _q(models.RawEntity.enrichment_citation_count)
+        base_q
+        .with_entities(models.RawEntity.enrichment_citation_count)
         .filter(
             models.RawEntity.enrichment_status == EnrichmentStatus.completed,
             models.RawEntity.enrichment_citation_count != None,
