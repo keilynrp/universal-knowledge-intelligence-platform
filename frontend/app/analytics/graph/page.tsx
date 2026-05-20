@@ -365,6 +365,10 @@ export default function GraphExplorerPage() {
     "has-concept": "Concepto",
     "identified-by": "Identificador",
     "coauthor-with": "Coautoría",
+    "external-signal-for": "Soporte externo",
+    "semantic-neighbor": "Vecindad semántica",
+    "derived-keyword": "Keyword derivada",
+    "emerging-from": "Emergente desde",
     "related-to": t("page.graph.edge_related") || "Relacionado",
   };
 

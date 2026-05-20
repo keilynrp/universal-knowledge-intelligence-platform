@@ -124,6 +124,43 @@ interface DashboardData {
       entities: { id: number; label: string; entity_type?: string | null }[];
     }[];
   };
+  semantic_keyword_signals?: {
+    summary: {
+      corpus_size: number;
+      total_candidates: number;
+      long_tail_count: number;
+      external_supported_count: number;
+      top_opportunity_score: number;
+    };
+    top_long_tail_keywords: {
+      keyword: string;
+      classification: string;
+      support_count: number;
+      external_support: number;
+      opportunity_score: number;
+      source_fields: string[];
+    }[];
+    external_supported_signals: {
+      keyword: string;
+      support_count: number;
+      external_support: number;
+      opportunity_score: number;
+      external_source_types?: string[];
+    }[];
+    top_opportunities: {
+      keyword: string;
+      classification: string;
+      support_count: number;
+      external_support: number;
+      opportunity_score: number;
+    }[];
+    recommendations: {
+      keyword: string;
+      action: string;
+      evidence: string;
+      priority: "high" | "medium" | "low";
+    }[];
+  };
   external_attention?: {
     summary: {
       active_entities: number;
@@ -1231,6 +1268,83 @@ export default function ExecutiveDashboardPage() {
               </Link>
             </div>
           )}
+        </div>
+      )}
+
+
+      {data?.semantic_keyword_signals && data.semantic_keyword_signals.summary.total_candidates > 0 && (
+        <div className={`${showcaseCardClass} p-6`}>
+          <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className={showcaseBlueLabelClass}>{tr("page.exec_dashboard.semantic_keywords_eyebrow", "Semantic signal")}</p>
+              <h3 className="mt-1 text-base font-semibold text-slate-950">
+                {tr("page.exec_dashboard.semantic_keywords_title", "Keyword opportunity map")}
+              </h3>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-right">
+              <div className="rounded-xl border border-[var(--ukip-border)] px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Long-tail</p>
+                <p className="text-lg font-semibold text-slate-950">{data.semantic_keyword_signals.summary.long_tail_count}</p>
+              </div>
+              <div className="rounded-xl border border-[var(--ukip-border)] px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">External</p>
+                <p className="text-lg font-semibold text-slate-950">{data.semantic_keyword_signals.summary.external_supported_count}</p>
+              </div>
+              <div className="rounded-xl border border-[var(--ukip-border)] px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Score</p>
+                <p className="text-lg font-semibold text-violet-700">{data.semantic_keyword_signals.summary.top_opportunity_score}</p>
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="rounded-xl border border-[var(--ukip-border)] bg-slate-50/70 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                {tr("page.exec_dashboard.semantic_long_tail", "Top long-tail keywords")}
+              </p>
+              <div className="mt-4 space-y-3">
+                {data.semantic_keyword_signals.top_long_tail_keywords.slice(0, 4).map((signal) => (
+                  <div key={signal.keyword} className="flex items-center justify-between gap-3">
+                    <span className="min-w-0 truncate text-sm font-semibold text-slate-800">{signal.keyword}</span>
+                    <span className="shrink-0 rounded-full bg-white px-2 py-1 text-xs font-semibold text-violet-700">
+                      {Math.round(signal.opportunity_score)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-xl border border-[var(--ukip-border)] bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                {tr("page.exec_dashboard.semantic_external", "Signals with external support")}
+              </p>
+              <div className="mt-4 space-y-3">
+                {data.semantic_keyword_signals.external_supported_signals.slice(0, 4).map((signal) => (
+                  <div key={signal.keyword} className="grid grid-cols-[1fr_auto] gap-3">
+                    <span className="min-w-0 truncate text-sm font-semibold text-slate-800">{signal.keyword}</span>
+                    <span className="text-xs font-semibold text-emerald-700">{signal.external_support} ext.</span>
+                  </div>
+                ))}
+                {data.semantic_keyword_signals.external_supported_signals.length === 0 && (
+                  <p className="text-sm text-slate-500">{tr("page.exec_dashboard.semantic_no_external", "No external support yet for this context.")}</p>
+                )}
+              </div>
+            </div>
+            <div className="rounded-xl border border-[var(--ukip-border)] bg-violet-50/50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-violet-600">
+                {tr("page.exec_dashboard.semantic_actions", "Actionable recommendations")}
+              </p>
+              <div className="mt-4 space-y-3">
+                {data.semantic_keyword_signals.recommendations.slice(0, 3).map((item) => (
+                  <div key={item.keyword}>
+                    <p className="text-sm font-semibold text-slate-900">{item.keyword}</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">{item.action}</p>
+                  </div>
+                ))}
+              </div>
+              <Link href="/analytics/graph" className="mt-5 inline-flex text-sm font-semibold text-violet-700 hover:text-violet-800">
+                {tr("page.exec_dashboard.semantic_open_graph", "Open Graph relationships")}
+              </Link>
+            </div>
+          </div>
         </div>
       )}
 

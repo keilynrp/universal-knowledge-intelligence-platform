@@ -11,6 +11,7 @@ from backend.institutional_benchmarks import evaluate_benchmark
 from backend.quality_scorer import _fetch_lookups, score_entity
 from backend.services.impact_projection import ImpactProjectionService
 from backend.services.pattern_discovery import PatternDiscoveryService
+from backend.services.semantic_keyword_signal_engine import materialize_keyword_signals
 from backend.tenant_access import scope_query_to_org
 from backend.schema_registry import registry
 
@@ -135,6 +136,7 @@ class AnalyticsService:
         quality = snapshot.get("quality") or {}
         top_entities = snapshot.get("top_entities") or []
         top_concepts = snapshot.get("top_concepts") or []
+        semantic_signals = snapshot.get("semantic_keyword_signals") or {}
 
         total_entities = int(kpis.get("total_entities") or 0)
         enrichment_pct = float(kpis.get("enrichment_pct") or 0)
@@ -209,7 +211,67 @@ class AnalyticsService:
                 },
             })
 
+        top_opportunities = semantic_signals.get("top_opportunities") or []
+        if top_opportunities:
+            lead_signal = top_opportunities[0]
+            keyword = lead_signal.get("keyword", "semantic signal")
+            score = float(lead_signal.get("opportunity_score") or 0)
+            external_support = int(lead_signal.get("external_support") or 0)
+            actions.append({
+                "id": "activate_semantic_opportunity",
+                "title": "Turn the strongest semantic signal into an action brief",
+                "detail": "Use the signal as a focused lens for pattern analysis, graph exploration, and external validation.",
+                "evidence": (
+                    f"{keyword} has an opportunity score of {score:.1f}"
+                    + (f" and {external_support} external support mentions." if external_support else ".")
+                ),
+                "priority": "high" if score >= 70 or external_support else "medium",
+                "category": "semantic_signal",
+                "meta": {
+                    "keyword": keyword,
+                    "opportunity_score": round(score, 1),
+                    "external_support": external_support,
+                },
+            })
+
         return actions[:4]
+
+    @staticmethod
+    def _semantic_keyword_summary(raw_signals: dict) -> dict:
+        signals = raw_signals.get("signals") or []
+        long_tail = [signal for signal in signals if signal.get("classification") == "long_tail"]
+        external = [signal for signal in signals if int(signal.get("external_support") or 0) > 0]
+        opportunities = sorted(
+            signals,
+            key=lambda signal: float(signal.get("opportunity_score") or 0),
+            reverse=True,
+        )
+        return {
+            "model_version": raw_signals.get("model_version"),
+            "summary": {
+                "corpus_size": int(raw_signals.get("corpus_size") or 0),
+                "total_candidates": int(raw_signals.get("total_candidates") or 0),
+                "long_tail_count": len(long_tail),
+                "external_supported_count": len(external),
+                "top_opportunity_score": round(float(opportunities[0].get("opportunity_score") or 0), 1) if opportunities else 0,
+            },
+            "top_long_tail_keywords": long_tail[:8],
+            "external_supported_signals": external[:8],
+            "top_opportunities": opportunities[:8],
+            "recommendations": [
+                {
+                    "keyword": signal.get("keyword"),
+                    "action": "Validate external traction and inspect graph neighbors",
+                    "evidence": (
+                        f"{signal.get('support_count', 0)} records, "
+                        f"{signal.get('external_support', 0)} external mentions, "
+                        f"score {signal.get('opportunity_score', 0)}"
+                    ),
+                    "priority": "high" if float(signal.get("opportunity_score") or 0) >= 70 else "medium",
+                }
+                for signal in opportunities[:3]
+            ],
+        }
 
     @classmethod
     def get_domain_snapshot(
@@ -396,6 +458,30 @@ class AnalyticsService:
             org_id=org_id,
             limit=5,
         )
+        try:
+            snapshot["semantic_keyword_signals"] = cls._semantic_keyword_summary(
+                materialize_keyword_signals(
+                    db,
+                    domain_id,
+                    org_id=org_id,
+                    persist=False,
+                    limit=40,
+                )
+            )
+        except Exception:
+            snapshot["semantic_keyword_signals"] = {
+                "summary": {
+                    "corpus_size": 0,
+                    "total_candidates": 0,
+                    "long_tail_count": 0,
+                    "external_supported_count": 0,
+                    "top_opportunity_score": 0,
+                },
+                "top_long_tail_keywords": [],
+                "external_supported_signals": [],
+                "top_opportunities": [],
+                "recommendations": [],
+            }
         snapshot["recommended_actions"] = cls.build_recommended_actions(snapshot)
         snapshot["institutional_benchmark"] = evaluate_benchmark(
             snapshot,

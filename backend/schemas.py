@@ -660,6 +660,10 @@ VALID_RELATION_TYPES = {
     "keyword-co-occurs-with",
     "same-as",
     "equivalent-to",
+    "external-signal-for",
+    "semantic-neighbor",
+    "derived-keyword",
+    "emerging-from",
 }
 
 class EntityRelationshipCreate(BaseModel):

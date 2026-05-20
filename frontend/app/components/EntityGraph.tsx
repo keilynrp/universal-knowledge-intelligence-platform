@@ -75,6 +75,10 @@ const RELATION_COLORS: Record<string, string> = {
     "keyword-co-occurs-with": "#f97316", // orange
     "same-as": "#0f172a", // slate strong
     "equivalent-to": "#a855f7", // purple
+    "external-signal-for": "#059669", // emerald
+    "semantic-neighbor": "#2563eb", // blue
+    "derived-keyword": "#c026d3", // fuchsia
+    "emerging-from": "#d97706", // amber
     "related-to":  "#8b5cf6",   // violet
 };
 
@@ -89,6 +93,10 @@ const RELATION_LABEL_COLORS: Record<string, string> = {
     "keyword-co-occurs-with": "#fb923c",
     "same-as": "#334155",
     "equivalent-to": "#c084fc",
+    "external-signal-for": "#10b981",
+    "semantic-neighbor": "#60a5fa",
+    "derived-keyword": "#e879f9",
+    "emerging-from": "#f59e0b",
     "related-to":  "#a78bfa",
 };
 

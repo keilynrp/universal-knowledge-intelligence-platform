@@ -210,6 +210,37 @@ def test_dashboard_recommended_actions_are_explainable(client, auth_headers, db_
         assert isinstance(action.get("meta") or {}, dict)
 
 
+def test_dashboard_surfaces_semantic_keyword_opportunities(client, auth_headers, db_session):
+    db_session.add(models.RawEntity(
+        primary_label="Executive Semantic Signal",
+        domain="semantic_exec_dashboard",
+        enrichment_status="completed",
+        enrichment_concepts="semantic opportunity signal, executive insight",
+        attributes_json=json.dumps({
+            "abstract": "Semantic opportunity signal analysis for executive insight and portfolio decisions.",
+            "external_attention_observations": [
+                {
+                    "source_type": "news",
+                    "mention_count": 2,
+                    "title": "Semantic opportunity signal",
+                    "description": "External validation of semantic opportunity signal patterns.",
+                }
+            ],
+        }),
+    ))
+    db_session.commit()
+
+    response = client.get("/dashboard/summary?domain_id=semantic_exec_dashboard", headers=auth_headers)
+
+    assert response.status_code == 200
+    semantic = response.json()["semantic_keyword_signals"]
+    assert semantic["summary"]["total_candidates"] > 0
+    assert semantic["top_opportunities"]
+    assert semantic["top_long_tail_keywords"]
+    assert semantic["external_supported_signals"]
+    assert semantic["recommendations"]
+
+
 def test_dashboard_includes_institutional_benchmark_summary(client, auth_headers, db_session):
     _seed_entities(db_session, n=4)
     response = client.get("/dashboard/summary", headers=auth_headers)

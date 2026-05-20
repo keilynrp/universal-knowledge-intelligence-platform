@@ -60,6 +60,56 @@ def test_keyword_signal_endpoint_persists_entity_evidence(client, auth_headers, 
     assert persisted[0]["evidence"]["model_version"] == payload["model_version"]
 
 
+def test_keyword_signal_materialization_persists_graph_relations(db_session):
+    entities = [
+        models.RawEntity(
+            primary_label="Open Science Policy",
+            domain="semantic_graph_relations",
+            enrichment_concepts="open science policy, open science",
+            attributes_json=json.dumps({
+                "abstract": "Open science policy connects research portfolios with institutional strategy.",
+                "external_attention_observations": [
+                    {
+                        "source_type": "policy",
+                        "mention_count": 2,
+                        "title": "Open science policy",
+                        "description": "External signal for open science policy adoption.",
+                    }
+                ],
+            }),
+        ),
+        models.RawEntity(
+            primary_label="Open Science Governance",
+            domain="semantic_graph_relations",
+            enrichment_concepts="open science governance, open science",
+            attributes_json=json.dumps({
+                "abstract": "Open science governance and open science policy are related institutional patterns.",
+            }),
+        ),
+    ]
+    db_session.add_all(entities)
+    db_session.commit()
+
+    payload = materialize_keyword_signals(db_session, "semantic_graph_relations", org_id=None, persist=True, limit=20)
+
+    relation_types = {
+        row.relation_type
+        for row in db_session.query(models.EntityRelationship).all()
+    }
+    keyword_nodes = (
+        db_session.query(models.RawEntity)
+        .filter(models.RawEntity.source == "semantic_keyword_signal_engine")
+        .filter(models.RawEntity.entity_type == "semantic_keyword")
+        .all()
+    )
+
+    assert payload["graph_relations"]["derived-keyword"] > 0
+    assert payload["graph_relations"]["external-signal-for"] > 0
+    assert "semantic-neighbor" in relation_types
+    assert "emerging-from" in relation_types
+    assert keyword_nodes
+
+
 def test_keyword_signal_preview_does_not_persist(client, auth_headers, db_session):
     entity = models.RawEntity(
         primary_label="Preview Keyword Signal",
