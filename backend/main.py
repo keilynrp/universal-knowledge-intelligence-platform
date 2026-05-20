@@ -18,6 +18,8 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
+from sqlalchemy import text
+
 from backend import database, enrichment_worker, models
 from backend.bootstrap import ensure_bootstrap_super_admin
 from backend.logging_utils import RequestLoggingMiddleware, configure_logging
@@ -156,6 +158,20 @@ async def lifespan(app: FastAPI):
         enrichment_worker.reset_stale_processing_records(db)
 
         ensure_bootstrap_super_admin(db)
+
+        # Migrate legacy enrichment_status synonyms → 'completed' (idempotent)
+        migrated = db.execute(
+            text(
+                "UPDATE raw_entities SET enrichment_status = 'completed'"
+                " WHERE enrichment_status IN ('done', 'enriched')"
+            )
+        ).rowcount
+        db.commit()
+        if migrated:
+            logger.info(
+                "Startup migration: consolidated %d legacy enrichment_status rows to 'completed'",
+                migrated,
+            )
 
         # Seed built-in artifact templates (only on first run)
         if db.query(models.ArtifactTemplate).count() == 0:

@@ -8,6 +8,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.schemas import EnrichmentStatus
 from backend.adapters.enrichment.openalex import OpenAlexAdapter
 from backend.adapters.enrichment.scopus import ScopusAdapter
 from backend.adapters.enrichment.wos import WebOfScienceAdapter
@@ -101,7 +102,7 @@ def get_provider_registry() -> dict[str, tuple]:
 
 # Any record stuck in "processing" for longer than this after a server
 # crash will be reclaimed on the next startup.
-VALID_STATUSES = {"none", "pending", "processing", "completed", "failed"}
+VALID_STATUSES = {s.value for s in EnrichmentStatus}
 
 _FAILURE_RECOMMENDATIONS = {
     "missing_title": [
@@ -168,7 +169,7 @@ def _set_enrichment_failed(
         "failed_at": datetime.now(timezone.utc).isoformat(),
     }
     entity.attributes_json = json.dumps(attrs, ensure_ascii=False)
-    entity.enrichment_status = "failed"
+    entity.enrichment_status = EnrichmentStatus.failed
 
 
 def reset_stale_processing_records(db: Session) -> int:
@@ -178,8 +179,8 @@ def reset_stale_processing_records(db: Session) -> int:
     """
     result = db.execute(
         update(models.RawEntity)
-        .where(models.RawEntity.enrichment_status == "processing")
-        .values(enrichment_status="pending")
+        .where(models.RawEntity.enrichment_status == EnrichmentStatus.processing)
+        .values(enrichment_status=EnrichmentStatus.pending.value)
     )
     db.commit()
     count = result.rowcount
@@ -200,7 +201,7 @@ def _atomic_claim_next(db: Session) -> int | None:
     """
     candidate = (
         db.query(models.RawEntity.id)
-        .filter(models.RawEntity.enrichment_status == "pending")
+        .filter(models.RawEntity.enrichment_status == EnrichmentStatus.pending)
         .first()
     )
     if not candidate:
@@ -212,9 +213,9 @@ def _atomic_claim_next(db: Session) -> int | None:
         update(models.RawEntity)
         .where(
             models.RawEntity.id == entity_id,
-            models.RawEntity.enrichment_status == "pending",
+            models.RawEntity.enrichment_status == EnrichmentStatus.pending,
         )
-        .values(enrichment_status="processing")
+        .values(enrichment_status=EnrichmentStatus.processing.value)
     )
     db.commit()
 
@@ -296,7 +297,7 @@ def _after_enrichment_commit(
     except Exception as exc:
         logger.warning("Failed to invalidate derived-status cache for entity %s: %s", entity.id, exc)
 
-    if entity.enrichment_status != "completed":
+    if entity.enrichment_status != EnrichmentStatus.completed:
         return
 
     try:
@@ -391,7 +392,7 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
                 ", ".join(enriched_data.concepts) if enriched_data.concepts else None
             )
             entity.enrichment_source = source
-            entity.enrichment_status = "completed"
+            entity.enrichment_status = EnrichmentStatus.completed
             _clear_enrichment_failure(entity)
 
             # Persist author names, ORCIDs, and concept IDs from enrichment source
@@ -461,7 +462,7 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
         )
 
     db.commit()
-    if previous_status != entity.enrichment_status or entity.enrichment_status == "completed":
+    if previous_status != entity.enrichment_status or entity.enrichment_status == EnrichmentStatus.completed:
         _after_enrichment_commit(db, entity, previous_status=previous_status)
     return entity
 
@@ -534,7 +535,7 @@ def enrich_with_web_scrapers(db: Session, entity: models.RawEntity) -> bool:
                     if hasattr(entity, field):
                         setattr(entity, field, value)
                 entity.enrichment_source = cfg.name
-                entity.enrichment_status = "completed"
+                entity.enrichment_status = EnrichmentStatus.completed
                 return True
         except CircuitOpenError as exc:
             logger.warning("Circuit open for web_scraper_%s: %s", cfg.id, exc)
@@ -558,7 +559,7 @@ def trigger_enrichment_bulk(
     """
     entities = (
         scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
-        .filter(models.RawEntity.enrichment_status.in_(["none", "failed"]))
+        .filter(models.RawEntity.enrichment_status.in_([EnrichmentStatus.none, EnrichmentStatus.failed]))
     )
     _domain_filt = resolve_domain_filter(parse_scope(domain_id), models.RawEntity)
     if _domain_filt is not None:
@@ -566,7 +567,7 @@ def trigger_enrichment_bulk(
     entities = entities.order_by(models.RawEntity.id.asc()).offset(skip).limit(limit).all()
     queued_ids: list[int] = []
     for entity in entities:
-        entity.enrichment_status = "pending"
+        entity.enrichment_status = EnrichmentStatus.pending
         _clear_enrichment_failure(entity)
         queued_ids.append(entity.id)
     db.commit()

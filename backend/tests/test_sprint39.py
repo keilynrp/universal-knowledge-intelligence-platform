@@ -398,20 +398,21 @@ def test_dashboard_derives_quality_when_scores_are_not_persisted(client, auth_he
     assert quality["average"] > 0.0
 
 
-def test_dashboard_counts_legacy_enriched_status_aliases(client, auth_headers, db_session):
+def test_dashboard_counts_completed_enrichment_status(client, auth_headers, db_session):
+    """Verifies dashboard enriched_count uses the canonical 'completed' status value."""
     db_session.add_all([
         models.RawEntity(
-            primary_label="Legacy Done Paper",
+            primary_label="Completed Paper A",
             domain="legacy_enriched_status_test",
-            enrichment_status="done",
+            enrichment_status="completed",
             enrichment_citation_count=30,
             enrichment_source="openalex",
             enrichment_concepts="Knowledge Graphs",
         ),
         models.RawEntity(
-            primary_label="Legacy Enriched Paper",
+            primary_label="Completed Paper B",
             domain="legacy_enriched_status_test",
-            enrichment_status="enriched",
+            enrichment_status="completed",
             enrichment_citation_count=10,
             enrichment_source="openalex",
             enrichment_concepts="Pattern Analysis",
@@ -435,8 +436,8 @@ def test_dashboard_counts_legacy_enriched_status_aliases(client, auth_headers, d
     assert data["kpis"]["enrichment_pct"] == 66.7
     assert data["kpis"]["avg_citations"] == 20.0
     assert [entity["primary_label"] for entity in data["top_entities"]] == [
-        "Legacy Done Paper",
-        "Legacy Enriched Paper",
+        "Completed Paper A",
+        "Completed Paper B",
     ]
 
 
@@ -451,9 +452,9 @@ def test_dashboard_all_domain_counts_enrichment_across_domains(client, auth_head
             enrichment_concepts="Open Science",
         ),
         models.RawEntity(
-            primary_label="Catalog Done",
+            primary_label="Catalog Completed",
             domain="universal_catalog",
-            enrichment_status="done",
+            enrichment_status="completed",
             enrichment_citation_count=8,
             enrichment_source="openalex",
             enrichment_concepts="Knowledge Graphs",
@@ -475,7 +476,7 @@ def test_dashboard_all_domain_counts_enrichment_across_domains(client, auth_head
     assert data["kpis"]["enriched_count"] >= 2
     assert data["kpis"]["enrichment_pct"] > 0
     top_labels = {entity["primary_label"] for entity in data["top_entities"]}
-    assert {"Science Completed", "Catalog Done"}.issubset(top_labels)
+    assert {"Science Completed", "Catalog Completed"}.issubset(top_labels)
 
 
 def test_stats_endpoint_scopes_counts_by_domain(client, auth_headers, db_session):

@@ -132,10 +132,10 @@ class TestEnrichmentResource:
         assert entry["source_count"] == 2
         _cleanup(db_session)
 
-    def test_done_and_enriched_count_as_completed(self, db_session):
+    def test_completed_entities_count_as_ready(self, db_session):
         _cleanup(db_session)
-        _make_entity(db_session, enrichment_status="done")
-        _make_entity(db_session, enrichment_status="enriched")
+        _make_entity(db_session, enrichment_status="completed")
+        _make_entity(db_session, enrichment_status="completed")
 
         entry = DerivedStatusService.compute("enrichment", SCOPE, db_session)
         assert entry["status"] == STATUS_READY

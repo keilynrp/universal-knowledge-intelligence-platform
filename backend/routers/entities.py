@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 import os
 
 from backend import database, models, schemas
+from backend.schemas import EnrichmentStatus
 from backend.analyzers.external_attention import compute_attention_summary
 from backend.analytics.montecarlo import simulate_citation_impact
 from backend.auth import get_current_user, require_role
@@ -526,10 +527,10 @@ def enrich_bulk_by_ids(
     skipped = 0
     queued = 0
     for entity in entities:
-        if not payload.force and entity.enrichment_status == "completed":
+        if not payload.force and entity.enrichment_status == EnrichmentStatus.completed:
             skipped += 1
             continue
-        entity.enrichment_status = "pending"
+        entity.enrichment_status = EnrichmentStatus.pending
         enrichment_worker.clear_enrichment_failure(entity)
         queued += 1
     db.commit()
@@ -593,11 +594,7 @@ def get_enrichment_stats(
     )
     status_breakdown = {row[0] or "none": row[1] for row in status_rows}
 
-    enriched_count = (
-        status_breakdown.get("completed", 0)
-        + status_breakdown.get("done", 0)
-        + status_breakdown.get("enriched", 0)
-    )
+    enriched_count = status_breakdown.get(EnrichmentStatus.completed, 0)
     pending_count  = status_breakdown.get("pending", 0)
     failed_count   = status_breakdown.get("failed", 0)
     none_count     = status_breakdown.get("none", 0)
@@ -624,7 +621,7 @@ def get_enrichment_stats(
     citation_rows = (
         _q(models.RawEntity.enrichment_citation_count)
         .filter(
-            models.RawEntity.enrichment_status.in_(("completed", "done", "enriched")),
+            models.RawEntity.enrichment_status == EnrichmentStatus.completed,
             models.RawEntity.enrichment_citation_count != None,
             models.RawEntity.enrichment_citation_count > 0,
         )
@@ -705,7 +702,7 @@ def get_montecarlo_prediction(
     entity = get_scoped_record(db, models.RawEntity, entity_id, org_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
-    if entity.enrichment_status != "completed":
+    if entity.enrichment_status != EnrichmentStatus.completed:
         raise HTTPException(status_code=400, detail="Cannot predict raw or unenriched data")
 
     citations = entity.enrichment_citation_count or 0

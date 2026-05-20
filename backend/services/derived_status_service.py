@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.domain_scope import parse_scope, resolve_domain_filter
+from backend.schemas import EnrichmentStatus
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +156,7 @@ def _compute_enrichment(scope: str, db: Session) -> dict[str, Any]:
 
     derived_count = (
         base_q
-        .filter(models.RawEntity.enrichment_status.in_(["completed", "done", "enriched"]))
+        .filter(models.RawEntity.enrichment_status == EnrichmentStatus.completed)
         .count()
     )
 
@@ -322,7 +323,7 @@ def _compute_report_readiness(scope: str, db: Session) -> dict[str, Any]:
     # Count enriched entities as a proxy for report-readiness
     derived_count = (
         base_q
-        .filter(models.RawEntity.enrichment_status.in_(["completed", "done", "enriched"]))
+        .filter(models.RawEntity.enrichment_status == EnrichmentStatus.completed)
         .count()
     )
 

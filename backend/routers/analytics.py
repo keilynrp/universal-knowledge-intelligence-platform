@@ -24,6 +24,7 @@ from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.schemas import EnrichmentStatus
 from backend.analyzers.external_attention import compute_attention_summary
 from backend.analyzers.author_metrics import author_detail, author_rankings
 from backend.analyzers.coauthorship import coauthorship_network
@@ -1084,7 +1085,7 @@ def concept_detail(
         db.query(models.RawEntity)
         .filter(
             models.RawEntity.domain == domain_id,
-            models.RawEntity.enrichment_status == "completed",
+            models.RawEntity.enrichment_status == EnrichmentStatus.completed,
             or_(
                 models.RawEntity.attributes_json.like(f"%{concept_id_marker}%"),
                 (
@@ -1169,7 +1170,7 @@ def epistemic_distribution(
         db.query(models.RawEntity.attributes_json, models.RawEntity.normalized_json)
         .filter(
             models.RawEntity.domain == domain_id,
-            models.RawEntity.enrichment_status == "completed",
+            models.RawEntity.enrichment_status == EnrichmentStatus.completed,
         )
         .all()
     )

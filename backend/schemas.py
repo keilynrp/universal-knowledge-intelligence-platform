@@ -4,6 +4,70 @@ from enum import Enum
 import json
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 from typing import Literal, Optional, List
+from typing_extensions import TypedDict
+
+
+# ---------------------------------------------------------------------------
+# Canonical enrichment lifecycle enum
+# ---------------------------------------------------------------------------
+
+class EnrichmentStatus(str, Enum):
+    """Single source of truth for enrichment_status column values.
+
+    Values:
+        none        — entity has never been queued for enrichment
+        pending     — queued, waiting for worker pickup
+        processing  — worker is actively enriching this record
+        completed   — enrichment finished successfully
+        failed      — enrichment finished with an unrecoverable error
+
+    Legacy synonyms 'done' and 'enriched' are migrated to 'completed' at
+    application startup and MUST NOT be written by new code.
+    """
+    none       = "none"
+    pending    = "pending"
+    processing = "processing"
+    completed  = "completed"
+    failed     = "failed"
+
+
+class ValidationStatus(str, Enum):
+    """Canonical values for the validation_status column."""
+    pending = "pending"
+    valid   = "valid"
+    invalid = "invalid"
+
+
+# ---------------------------------------------------------------------------
+# attributes_json contract
+# ---------------------------------------------------------------------------
+
+class EntityAttributesDict(TypedDict, total=False):
+    """Documented top-level keys written by enrichment workers into attributes_json.
+
+    This TypedDict is documentation and IDE-assist only — it is NOT enforced
+    at runtime.  Workers SHOULD only write keys listed here; the test suite
+    asserts that no undocumented keys are present after a successful run.
+    """
+    enrichment_authors: "list[str]"
+    enrichment_author_orcids: "list[str | None]"
+    enrichment_affiliations: "list[str]"
+    enrichment_funding: "list[str]"
+    enrichment_mesh_terms: "list[str]"
+    enrichment_tldr: "str | None"
+    enrichment_influential_citation_count: "int | None"
+    enrichment_references_count: "int | None"
+    enrichment_license: "str | None"
+    enrichment_venue: "str | None"
+    enrichment_failure: str
+
+
+KNOWN_ATTRIBUTE_KEYS: frozenset = frozenset(EntityAttributesDict.__annotations__.keys())
+
+
+# ---------------------------------------------------------------------------
+# Entity schemas
+# ---------------------------------------------------------------------------
 
 class EntityBase(BaseModel):
     primary_label: Optional[str] = None
@@ -16,7 +80,7 @@ class EntityBase(BaseModel):
     enrichment_citation_count: Optional[int] = 0
     enrichment_concepts: Optional[str] = None
     enrichment_source: Optional[str] = None
-    enrichment_status: Optional[str] = "none"
+    enrichment_status: Optional[str] = EnrichmentStatus.none
     quality_score: Optional[float] = None
 
 class Entity(EntityBase):
