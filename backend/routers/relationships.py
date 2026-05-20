@@ -25,6 +25,7 @@ from backend import graph_analytics, models, schemas
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
 from backend.services.graph_materializer import materialize_scientific_import_graph
+from backend.services.semantic_keyword_signal_engine import materialize_keyword_signals
 from backend.tenant_access import get_scoped_record, resolve_request_org_id, scope_query_to_org
 
 logger = logging.getLogger(__name__)
@@ -474,6 +475,13 @@ def materialize_graph(
         totals["publications"] += int(result.get("publications") or 0)
         totals["nodes_created"] += int(result.get("nodes_created") or 0)
         totals["relationships_created"] += int(result.get("relationships_created") or 0)
+    keyword_signals = materialize_keyword_signals(
+        db,
+        scoped_domain or "all",
+        org_id=org_id,
+        persist=True,
+        limit=50,
+    )
 
     return {
         "domain": scoped_domain,
@@ -481,6 +489,11 @@ def materialize_graph(
         "import_batch_id": import_batch_id,
         "limit": limit,
         "totals": totals,
+        "keyword_signals": {
+            "corpus_size": keyword_signals.get("corpus_size"),
+            "total_candidates": keyword_signals.get("total_candidates"),
+            "top": keyword_signals.get("signals", [])[:5],
+        },
         "results": results,
     }
 

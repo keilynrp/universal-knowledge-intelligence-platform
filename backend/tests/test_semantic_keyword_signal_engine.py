@@ -75,3 +75,22 @@ def test_keyword_signal_preview_does_not_persist(client, auth_headers, db_sessio
     db_session.refresh(entity)
     attrs = json.loads(entity.attributes_json or "{}")
     assert "semantic_keyword_signals" not in attrs
+
+
+def test_graph_materialize_returns_keyword_signal_summary(client, auth_headers, db_session):
+    entity = models.RawEntity(
+        primary_label="Graph Signal Record",
+        domain="graph_semantic",
+        import_batch_id=778,
+        enrichment_concepts="graph signal, semantic keyword",
+        attributes_json=json.dumps({"abstract": "Graph signal semantic keyword analysis."}),
+    )
+    db_session.add(entity)
+    db_session.commit()
+
+    response = client.post("/graph/materialize?domain=graph_semantic", headers=auth_headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "keyword_signals" in payload
+    assert payload["keyword_signals"]["total_candidates"] > 0

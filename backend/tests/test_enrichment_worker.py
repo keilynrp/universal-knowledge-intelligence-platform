@@ -215,6 +215,7 @@ def test_enrich_completion_syncs_dashboard_workflows_and_rag(db_session):
         patch("backend.workflow_engine.fire_trigger") as fire_trigger,
         patch("backend.routers.deps._get_active_integration", return_value=integration),
         patch("backend.analytics.rag_engine.index_entity") as index_entity,
+        patch("backend.services.semantic_keyword_signal_engine.materialize_keyword_signals") as materialize_signals,
     ):
         result = enrich_single_record(db_session, entity)
 
@@ -223,6 +224,8 @@ def test_enrich_completion_syncs_dashboard_workflows_and_rag(db_session):
     fire_trigger.assert_called_once()
     assert fire_trigger.call_args.args[:2] == ("entity.enriched", result)
     index_entity.assert_called_once_with(result, integration)
+    materialize_signals.assert_called_once()
+    assert materialize_signals.call_args.args[1] == "sync_domain"
 
 
 def test_enrich_marks_failed_on_unexpected_exception(db_session):

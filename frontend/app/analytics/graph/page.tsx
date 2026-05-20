@@ -18,6 +18,14 @@ interface GraphData {
   stats: { visible_nodes: number; visible_edges: number; top_pagerank_leader: string | null; top_pagerank_score: number; };
 }
 interface PathResult { found: boolean; length?: number; relations?: string[]; steps?: Array<{ entity_id: number; primary_label: string | null }>; }
+interface KeywordSignal {
+  keyword: string;
+  classification: string;
+  support_count: number;
+  external_support: number;
+  opportunity_score: number;
+  source_fields: string[];
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -240,6 +248,8 @@ export default function GraphExplorerPage() {
   const [exporting, setExporting] = useState(false);
   const [materializing, setMaterializing] = useState(false);
   const [materializeMessage, setMaterializeMessage] = useState<string | null>(null);
+  const [keywordSignals, setKeywordSignals] = useState<KeywordSignal[]>([]);
+  const [loadingSignals, setLoadingSignals] = useState(false);
 
   const activeGraphDomain = activeDomainId && activeDomainId !== "all" ? activeDomainId : null;
   const activeGraphScopeLabel = activeGraphDomain ? (activeDomain?.name || activeGraphDomain) : "Todos los dominios";
@@ -275,6 +285,28 @@ export default function GraphExplorerPage() {
       .catch(e => setError(`Failed to load graph (${e})`))
       .finally(() => setLoading(false));
   }, [buildScopedQuery]);
+
+  const fetchKeywordSignals = useCallback(async () => {
+    setLoadingSignals(true);
+    try {
+      const domain = activeGraphDomain || "all";
+      const response = await apiFetch(`/analytics/keywords/${encodeURIComponent(domain)}/signals?limit=8`);
+      if (response.ok) {
+        const payload = await response.json();
+        setKeywordSignals(payload.signals ?? []);
+      } else {
+        setKeywordSignals([]);
+      }
+    } catch {
+      setKeywordSignals([]);
+    } finally {
+      setLoadingSignals(false);
+    }
+  }, [activeGraphDomain]);
+
+  useEffect(() => {
+    void fetchKeywordSignals();
+  }, [fetchKeywordSignals]);
 
   async function findPath() {
     if (!fromId || !toId) return;
@@ -315,6 +347,7 @@ export default function GraphExplorerPage() {
       const refreshQuery = buildScopedQuery({ limit: "500" });
       const refreshed = await apiFetch(`/graph/visualization?${refreshQuery.toString()}`);
       if (refreshed.ok) setData(await refreshed.json());
+      await fetchKeywordSignals();
     } catch {
       setMaterializeMessage("No se pudo generar el grafo para este contexto.");
     } finally {
@@ -471,6 +504,37 @@ export default function GraphExplorerPage() {
 
         {/* Right info panel */}
         <div className="flex w-64 shrink-0 flex-col gap-4 overflow-y-auto bg-[var(--ukip-panel)] p-4">
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--ukip-muted-soft)]">Señales semánticas</p>
+              <button onClick={() => void fetchKeywordSignals()} className="text-[11px] font-semibold text-[var(--ukip-primary-strong)] hover:underline">
+                {loadingSignals ? "..." : "Refrescar"}
+              </button>
+            </div>
+            {keywordSignals.length === 0 ? (
+              <div className="rounded-lg border border-[var(--ukip-border)] px-3 py-2 text-xs text-[var(--ukip-muted)]">
+                Sin señales todavía. Genera el grafo o ejecuta enrichment para poblar keywords long-tail y soporte externo.
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {keywordSignals.slice(0, 6).map((signal) => (
+                  <div key={signal.keyword} className="rounded-lg border border-[var(--ukip-border)] px-3 py-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--ukip-text-strong)]">{signal.keyword}</p>
+                      <span className="shrink-0 rounded bg-[var(--ukip-primary-soft)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--ukip-primary-strong)]">
+                        {Math.round(signal.opportunity_score)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-[var(--ukip-muted)]">
+                      {signal.classification} · {signal.support_count} registros
+                      {signal.external_support ? ` · ${signal.external_support} externas` : ""}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Edge types */}
           {data && data.edge_types.length > 0 && (
             <div>

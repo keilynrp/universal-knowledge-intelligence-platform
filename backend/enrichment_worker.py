@@ -318,6 +318,17 @@ def _after_enrichment_commit(
         except Exception as exc:
             logger.warning("Failed to materialize graph after enrichment for entity %s: %s", entity.id, exc)
 
+    try:
+        from backend.services.semantic_keyword_signal_engine import materialize_keyword_signals
+
+        result = materialize_keyword_signals(db, domain_id, org_id=entity.org_id, persist=True, limit=50)
+        logger.debug("Semantic keyword signal result after enrichment for entity %s: %s", entity.id, {
+            "corpus_size": result.get("corpus_size"),
+            "total_candidates": result.get("total_candidates"),
+        })
+    except Exception as exc:
+        logger.warning("Failed to materialize semantic keyword signals after enrichment for entity %s: %s", entity.id, exc)
+
 
 def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEntity:
     """
