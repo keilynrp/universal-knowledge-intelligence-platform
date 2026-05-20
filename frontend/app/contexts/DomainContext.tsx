@@ -7,6 +7,45 @@ import { useAuth } from "./AuthContext";
 const DOMAIN_STORAGE_KEY = "ukip_active_domain";
 const ALL_DOMAINS_ID = "all";
 
+// ---------------------------------------------------------------------------
+// DomainScope contract
+// ---------------------------------------------------------------------------
+
+/**
+ * Canonical domain scope type.  Legal values:
+ * - `"all"`              — aggregate over all records regardless of domain
+ * - `"domain:{id}"`      — records where domain == id (exact match)
+ * - `"legacy_default"`   — records where domain == "default" OR domain IS NULL
+ *
+ * Use the helper functions below instead of raw string comparisons.
+ */
+export type DomainScope = string;
+
+/** Returns true when the scope represents the aggregate-all view. */
+export function isAllScope(scope: DomainScope): boolean {
+    return scope === "all";
+}
+
+/** Returns true when the scope targets legacy/default-domain records. */
+export function isLegacyScope(scope: DomainScope): boolean {
+    return scope === "legacy_default";
+}
+
+/**
+ * Extracts the concrete domain ID from a DomainScope.
+ *
+ * - `"domain:science"` → `"science"`
+ * - `"all"`            → `null`
+ * - `"legacy_default"` → `null`
+ * - `"science"` (bare) → `"science"` (backward-compatible for current context values)
+ */
+export function domainIdFromScope(scope: DomainScope): string | null {
+    if (isAllScope(scope) || isLegacyScope(scope)) return null;
+    if (scope.startsWith("domain:")) return scope.slice("domain:".length);
+    // Bare domain ID — current context format; return as-is
+    return scope || null;
+}
+
 export interface DomainAttribute {
     name: string;
     type: string;
@@ -47,9 +86,9 @@ export interface DomainSchema {
 
 interface DomainContextType {
     domains: DomainSchema[];
-    activeDomainId: string;
+    activeDomainId: DomainScope;
     activeDomain: DomainSchema | null;
-    setActiveDomainId: (id: string) => void;
+    setActiveDomainId: (scope: DomainScope) => void;
     isLoading: boolean;
     refreshDomains: () => Promise<void>;
 }

@@ -37,6 +37,7 @@ from backend.routers.deps import _audit, _dispatch_webhook
 from backend.routers.limiter import limiter
 from backend.services.entity_service import EntityService
 from backend.tenant_access import get_scoped_record, resolve_request_org_id, scope_query_to_org
+from backend.domain_scope import parse_scope, resolve_domain_filter
 
 router = APIRouter(tags=["entities"])
 
@@ -571,16 +572,12 @@ def get_enrichment_stats(
 ):
     """Returns enrichment statistics for the predictive analytics dashboard."""
     org_id = resolve_request_org_id(db, current_user)
+    _scope = parse_scope(domain_id)
+    _domain_filt = resolve_domain_filter(_scope, models.RawEntity)
     def _q(*entities):
         query = scope_query_to_org(db.query(*entities), models.RawEntity, org_id)
-        if domain_id and domain_id != "all":
-            if domain_id == "default":
-                query = query.filter(
-                    (models.RawEntity.domain == domain_id)
-                    | (models.RawEntity.domain == None)  # noqa: E711
-                )
-            else:
-                query = query.filter(models.RawEntity.domain == domain_id)
+        if _domain_filt is not None:
+            query = query.filter(_domain_filt)
         return query
 
     total = (

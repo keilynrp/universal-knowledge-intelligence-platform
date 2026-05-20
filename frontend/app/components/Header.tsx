@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useDomain } from "../contexts/DomainContext";
+import { useDomain, isAllScope, domainIdFromScope } from "../contexts/DomainContext";
 import { useBranding } from "../contexts/BrandingContext";
 import { useLanguage } from "../contexts/LanguageContext";
 import { useSidebar } from "./SidebarProvider";
@@ -231,10 +231,9 @@ export default function Header() {
   };
   const activeDomainLabel = useMemo(() => {
     if (isLoading) return t("header.workspace.loading");
-    if (activeDomainId === "all") return tr("header.workspace.all_domains", "Todos los dominios");
+    if (isAllScope(activeDomainId)) return tr("header.workspace.all_domains", "Todos los dominios");
     if (activeDomain?.name) return activeDomain.name;
-    if (activeDomainId === "default") return t("header.workspace.default_name");
-    return activeDomainId || t("header.workspace.none");
+    return domainIdFromScope(activeDomainId) || t("header.workspace.none");
   }, [activeDomain?.name, activeDomainId, isLoading, t, tr]);
   const currentTitle = t(page.titleKey) === page.titleKey ? page.titleFallback : t(page.titleKey);
 

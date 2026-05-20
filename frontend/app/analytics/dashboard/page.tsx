@@ -15,7 +15,7 @@ import {
 } from "recharts";
 import { ErrorBanner, SkeletonCard, useToast } from "../../components/ui";
 import ConceptCloud from "../../components/ConceptCloud";
-import { useDomain } from "../../contexts/DomainContext";
+import { useDomain, isAllScope } from "../../contexts/DomainContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { apiFetch } from "@/lib/api";
 import { Analytics } from "@/lib/analytics";
@@ -579,7 +579,7 @@ export default function ExecutiveDashboardPage() {
     setQueueingBulkEnrichment(true);
     try {
       const params = new URLSearchParams({ limit: "250" });
-      if (dashboardDomainId && dashboardDomainId !== "all") {
+      if (dashboardDomainId && !isAllScope(dashboardDomainId)) {
         params.set("domain_id", dashboardDomainId);
       }
       const response = await apiFetch(`/enrich/bulk?${params.toString()}`, {

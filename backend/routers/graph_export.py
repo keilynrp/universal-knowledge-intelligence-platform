@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.auth import get_current_user
 from backend.database import get_db
+from backend.domain_scope import parse_scope, resolve_domain_filter
 
 logger = logging.getLogger(__name__)
 
@@ -69,13 +70,11 @@ def _fetch_graph(db: Session, domain: Optional[str]):
         node_ids.add(e.source_id)
         node_ids.add(e.target_id)
 
-    scoped_domain = domain.strip() if domain else None
-    if scoped_domain and scoped_domain.lower() == "all":
-        scoped_domain = None
-
+    _scope = parse_scope(domain.strip() if domain else None)
+    _domain_filt = resolve_domain_filter(_scope, models.RawEntity)
     q = db.query(models.RawEntity).filter(models.RawEntity.id.in_(node_ids))
-    if scoped_domain:
-        q = q.filter(models.RawEntity.domain == scoped_domain)
+    if _domain_filt is not None:
+        q = q.filter(_domain_filt)
     entities: dict[int, models.RawEntity] = {e.id: e for e in q.all()}
 
     edges = [
@@ -261,11 +260,11 @@ def export_graph(
     Nodes are entities; edges are typed, weighted relationships.
     Optional `domain` parameter scopes the export to a single domain.
     """
-    scoped_domain = domain.strip() if domain else None
-    if scoped_domain and scoped_domain.lower() == "all":
-        scoped_domain = None
-
-    entities, edges = _fetch_graph(db, scoped_domain)
+    _raw = domain.strip() if domain else None
+    _scope = parse_scope(_raw)
+    # concrete-domain slug for the filename (empty for "all" / "legacy_default")
+    scoped_domain = _raw if _scope.startswith("domain:") else None
+    entities, edges = _fetch_graph(db, _raw)
     now = datetime.now(timezone.utc).isoformat()
     domain_slug = f"_{scoped_domain}" if scoped_domain else ""
     filename = f"ukip_graph{domain_slug}.{_EXTENSIONS[format]}"

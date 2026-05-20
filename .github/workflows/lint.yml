@@ -7,6 +7,22 @@ on:
     branches: [main]
 
 jobs:
+  # ── Domain scope contract lint (blocking) ─────────────────────────────────
+  domain-scope-lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Enforce domain scope contract
+        run: python scripts/lint_domain_scope.py
+
   # ── Backend lint (ruff) ────────────────────────────────────────────────────
   backend-lint:
     runs-on: ubuntu-latest

@@ -54,6 +54,7 @@ from backend.analyzers.epistemic_classifier import classify_batch
 from backend.analyzers.domain_health import compute_health_metrics
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
+from backend.domain_scope import parse_scope, resolve_domain_filter
 from threading import Lock
 
 logger = logging.getLogger(__name__)
@@ -140,10 +141,9 @@ def _dashboard_external_attention(
     limit: int = 5,
 ) -> dict:
     query = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
-    if domain_id not in ("all", "default"):
-        query = query.filter(models.RawEntity.domain == domain_id)
-    elif domain_id == "default":
-        query = query.filter((models.RawEntity.domain == domain_id) | (models.RawEntity.domain.is_(None)))
+    _filt = resolve_domain_filter(parse_scope(domain_id), models.RawEntity)
+    if _filt is not None:
+        query = query.filter(_filt)
 
     candidates = (
         query.filter(
@@ -240,13 +240,12 @@ def abstract_coverage(
     current_user: models.User = Depends(get_current_user),
 ):
     """Audit whether tenant-scoped records contain abstract or summary text."""
-    if domain_id not in ("all", "default"):
-        _validate_domain_id(domain_id)
-
     org_id = resolve_request_org_id(db, current_user)
+    scope = parse_scope(domain_id)
     query = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
-    if domain_id not in ("all",):
-        query = query.filter(models.RawEntity.domain == domain_id)
+    _filt = resolve_domain_filter(scope, models.RawEntity)
+    if _filt is not None:
+        query = query.filter(_filt)
 
     rows = (
         query.with_entities(

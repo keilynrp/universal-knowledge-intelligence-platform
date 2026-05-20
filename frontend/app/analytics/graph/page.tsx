@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
-import { useDomain } from "../../contexts/DomainContext";
+import { useDomain, isAllScope } from "../../contexts/DomainContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -412,7 +412,7 @@ export default function GraphExplorerPage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
 
-  const activeGraphDomain = activeDomainId && activeDomainId !== "all" ? activeDomainId : null;
+  const activeGraphDomain = activeDomainId && !isAllScope(activeDomainId) ? activeDomainId : null;
   const activeGraphScopeLabel = activeGraphDomain ? (activeDomain?.name || activeGraphDomain) : "Todos los dominios";
   const focusedSignal = searchParams.get("signal") || searchParams.get("keyword") || "";
 
@@ -425,7 +425,7 @@ export default function GraphExplorerPage() {
         if (value) query.set(key, value);
       });
       const urlDomain = current.get("domain");
-      if (!activeGraphDomain && urlDomain && urlDomain !== "all") query.set("domain", urlDomain);
+      if (!activeGraphDomain && urlDomain && !isAllScope(urlDomain)) query.set("domain", urlDomain);
     }
     if (activeGraphDomain) query.set("domain", activeGraphDomain);
     else query.delete("domain");

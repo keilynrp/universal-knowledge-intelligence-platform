@@ -16,6 +16,7 @@ from backend.adapters.enrichment.pubmed import PubMedAdapter
 from backend.adapters.enrichment.dblp import DBLPAdapter
 from backend.circuit_breaker import CircuitBreaker, CircuitOpenError
 from backend.tenant_access import LEGACY_GLOBAL_ORG_ID, scope_query_to_org
+from backend.domain_scope import parse_scope, resolve_domain_filter
 
 logger = logging.getLogger(__name__)
 
@@ -552,14 +553,9 @@ def trigger_enrichment_bulk(
         scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
         .filter(models.RawEntity.enrichment_status.in_(["none", "failed"]))
     )
-    if domain_id and domain_id != "all":
-        if domain_id == "default":
-            entities = entities.filter(
-                (models.RawEntity.domain == domain_id)
-                | (models.RawEntity.domain == None)  # noqa: E711
-            )
-        else:
-            entities = entities.filter(models.RawEntity.domain == domain_id)
+    _domain_filt = resolve_domain_filter(parse_scope(domain_id), models.RawEntity)
+    if _domain_filt is not None:
+        entities = entities.filter(_domain_filt)
     entities = entities.order_by(models.RawEntity.id.asc()).offset(skip).limit(limit).all()
     queued_ids: list[int] = []
     for entity in entities:

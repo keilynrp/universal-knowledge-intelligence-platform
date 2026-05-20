@@ -27,6 +27,7 @@ from backend.database import get_db
 from backend.services.graph_materializer import materialize_scientific_import_graph
 from backend.services.semantic_keyword_signal_engine import materialize_keyword_signals
 from backend.tenant_access import get_scoped_record, resolve_request_org_id, scope_query_to_org
+from backend.domain_scope import parse_scope
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +42,17 @@ def _get_entity_or_404(entity_id: int, db: Session, org_id: int | None) -> model
 
 
 def _normalize_graph_domain(domain: str | None) -> str | None:
+    """Return None for no-filter scopes (all, empty), else the bare domain string."""
     if not domain:
         return None
     value = domain.strip()
-    if not value or value.lower() == "all":
+    if not value:
         return None
-    return value
+    scope = parse_scope(value)
+    # Only concrete "domain:{id}" scopes map to a real filter; all others mean no filter
+    if not scope.startswith("domain:"):
+        return None
+    return scope[len("domain:"):]
 
 
 def _filter_edges_by_domain(
