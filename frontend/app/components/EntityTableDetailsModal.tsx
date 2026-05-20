@@ -79,10 +79,39 @@ function titleCaseKey(key: string): string {
         .join(" ");
 }
 
+function formatObjectSummary(value: Record<string, unknown>): string {
+    const keyword = value.keyword;
+    const score = value.opportunity_score;
+    const support = value.support_count;
+    const external = value.external_support;
+    if (typeof keyword === "string" && keyword.trim()) {
+        const details = [
+            typeof score === "number" ? `score ${Math.round(score)}` : null,
+            typeof support === "number" ? `${support} registros` : null,
+            typeof external === "number" && external > 0 ? `${external} externas` : null,
+        ].filter(Boolean);
+        return details.length > 0 ? `${keyword} (${details.join(" · ")})` : keyword;
+    }
+    return Object.entries(value)
+        .slice(0, 4)
+        .map(([key, entryValue]) => `${titleCaseKey(key)}: ${Array.isArray(entryValue) ? entryValue.join(", ") : String(entryValue)}`)
+        .join(" · ");
+}
+
 function formatValue(value: unknown, emptyLabel: string): string {
     if (value === null || value === undefined || value === "") return emptyLabel;
-    if (Array.isArray(value)) return value.join(", ");
-    if (typeof value === "object") return JSON.stringify(value);
+    if (Array.isArray(value)) {
+        if (value.length === 0) return emptyLabel;
+        return value
+            .map((item) => {
+                if (item && typeof item === "object" && !Array.isArray(item)) {
+                    return formatObjectSummary(item as Record<string, unknown>);
+                }
+                return String(item);
+            })
+            .join(", ");
+    }
+    if (typeof value === "object") return formatObjectSummary(value as Record<string, unknown>);
     return String(value);
 }
 
