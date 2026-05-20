@@ -83,23 +83,36 @@ function edgeVisualWeight(type: string, weight?: number) {
   return Math.min(5, (0.75 + Math.log1p(base) * 0.85) * semanticBoost);
 }
 
+function shadeHex(hex: string, amount: number) {
+  const clean = hex.replace("#", "");
+  const value = parseInt(clean.length === 3 ? clean.split("").map((char) => char + char).join("") : clean, 16);
+  const clamp = (channel: number) => Math.max(0, Math.min(255, Math.round(channel + amount)));
+  const r = clamp((value >> 16) & 255);
+  const g = clamp((value >> 8) & 255);
+  const b = clamp(value & 255);
+  return `#${[r, g, b].map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+}
+
 // ── Force Graph Canvas ────────────────────────────────────────────────────────
 
 interface ForceGraphProps {
   nodes: GNode[];
   links: GLink[];
   highlightIds?: Set<number>;
+  selectedNodeId?: number | null;
   showCommunities: boolean;
   showSemanticRelations: boolean;
   showVisualWeight: boolean;
+  onNodeSelect?: (node: GNode) => void;
 }
 
-function ForceGraph({ nodes, links, highlightIds, showCommunities, showSemanticRelations, showVisualWeight }: ForceGraphProps) {
+function ForceGraph({ nodes, links, highlightIds, selectedNodeId, showCommunities, showSemanticRelations, showVisualWeight, onNodeSelect }: ForceGraphProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<{ running: boolean; nodes: (GNode & { x: number; y: number; vx: number; vy: number; visualWeight: number; semanticWeight: number })[]; links: { s: number; t: number; type: string; weight: number }[]; transform: { x: number; y: number; k: number }; drag: { active: boolean; lastX: number; lastY: number } }>({ running: false, nodes: [], links: [], transform: { x: 0, y: 0, k: 1 }, drag: { active: false, lastX: 0, lastY: 0 } });
   const [hovered, setHovered] = useState<(GNode & { visualWeight?: number }) | null>(null);
   const hoverPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const dragStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -223,7 +236,8 @@ function ForceGraph({ nodes, links, highlightIds, showCommunities, showSemanticR
       for (const n of state.nodes) {
         const color = showCommunities ? COMMUNITY_COLORS[n.community % COMMUNITY_COLORS.length] : "#64748B";
         const r = Math.max(5, Math.min(24, 4 + n.visualWeight * 7.5));
-        const isHighlighted = highlightIds?.has(n.id);
+        const isSelected = selectedNodeId === n.id;
+        const isHighlighted = isSelected || highlightIds?.has(n.id);
         const hasSemanticRelation = state.links.some((link) => (link.s === n.id || link.t === n.id) && SEMANTIC_EDGE_TYPES.has(link.type));
         if ((showVisualWeight && n.visualWeight >= 1.65) || isHighlighted) {
           ctx.beginPath();
@@ -233,12 +247,50 @@ function ForceGraph({ nodes, links, highlightIds, showCommunities, showSemanticR
           ctx.fill();
           ctx.globalAlpha = 1;
         }
+
+        ctx.save();
+        ctx.shadowColor = withAlpha("#0f172a", isHighlighted ? 0.28 : 0.16);
+        ctx.shadowBlur = isHighlighted ? 16 / state.transform.k : 9 / state.transform.k;
+        ctx.shadowOffsetY = isHighlighted ? 4 / state.transform.k : 2 / state.transform.k;
         ctx.beginPath();
         ctx.arc(n.x, n.y, isHighlighted ? r + 3 : r, 0, Math.PI * 2);
-        ctx.fillStyle = color;
+        const sphereRadius = isHighlighted ? r + 3 : r;
+        const gradient = ctx.createRadialGradient(
+          n.x - sphereRadius * 0.38,
+          n.y - sphereRadius * 0.42,
+          sphereRadius * 0.12,
+          n.x,
+          n.y,
+          sphereRadius
+        );
+        gradient.addColorStop(0, shadeHex(color, 92));
+        gradient.addColorStop(0.42, color);
+        gradient.addColorStop(1, shadeHex(color, -58));
+        ctx.fillStyle = gradient;
         ctx.globalAlpha = isHighlighted ? 1 : (highlightIds && highlightIds.size > 0 ? 0.4 : 0.85);
         ctx.fill();
         ctx.globalAlpha = 1;
+        ctx.restore();
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(n.x - sphereRadius * 0.35, n.y - sphereRadius * 0.42, Math.max(1.6, sphereRadius * 0.22), 0, Math.PI * 2);
+        const highlight = ctx.createRadialGradient(
+          n.x - sphereRadius * 0.4,
+          n.y - sphereRadius * 0.46,
+          0,
+          n.x - sphereRadius * 0.35,
+          n.y - sphereRadius * 0.42,
+          Math.max(2, sphereRadius * 0.32)
+        );
+        highlight.addColorStop(0, "rgba(255,255,255,0.82)");
+        highlight.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = highlight;
+        ctx.globalAlpha = highlightIds && highlightIds.size > 0 && !isHighlighted ? 0.35 : 0.75;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.restore();
+
         if (isHighlighted) {
           ctx.strokeStyle = "#fff";
           ctx.lineWidth = 2.5 / state.transform.k;
@@ -258,7 +310,17 @@ function ForceGraph({ nodes, links, highlightIds, showCommunities, showSemanticR
 
     tick();
     return () => { state.running = false; };
-  }, [nodes, links, highlightIds, showCommunities, showSemanticRelations, showVisualWeight]);
+  }, [nodes, links, highlightIds, selectedNodeId, showCommunities, showSemanticRelations, showVisualWeight]);
+
+  const hitTestNode = useCallback((offsetX: number, offsetY: number) => {
+    const state = stateRef.current;
+    const mx = (offsetX - state.transform.x) / state.transform.k;
+    const my = (offsetY - state.transform.y) / state.transform.k;
+    return state.nodes.find(n => {
+      const r = Math.max(5, Math.min(24, 4 + n.visualWeight * 7.5)) + 5;
+      return (n.x - mx) ** 2 + (n.y - my) ** 2 < r * r;
+    }) ?? null;
+  }, []);
 
   // Zoom
   const onWheel = useCallback((e: React.WheelEvent) => {
@@ -270,6 +332,7 @@ function ForceGraph({ nodes, links, highlightIds, showCommunities, showSemanticR
 
   // Pan
   const onMouseDown = useCallback((e: React.MouseEvent) => {
+    dragStart.current = { x: e.clientX, y: e.clientY };
     stateRef.current.drag = { active: true, lastX: e.clientX, lastY: e.clientY };
   }, []);
   const onMouseMove = useCallback((e: React.MouseEvent) => {
@@ -282,15 +345,17 @@ function ForceGraph({ nodes, links, highlightIds, showCommunities, showSemanticR
       state.drag.lastY = e.clientY;
     }
     // Hover detection
-    const mx = (hoverPos.current.x - state.transform.x) / state.transform.k;
-    const my = (hoverPos.current.y - state.transform.y) / state.transform.k;
-    const hit = state.nodes.find(n => {
-      const r = Math.max(5, Math.min(24, 4 + n.visualWeight * 7.5)) + 5;
-      return (n.x - mx) ** 2 + (n.y - my) ** 2 < r * r;
-    });
+    const hit = hitTestNode(hoverPos.current.x, hoverPos.current.y);
     setHovered(hit ?? null);
-  }, []);
-  const onMouseUp = useCallback(() => { stateRef.current.drag.active = false; }, []);
+  }, [hitTestNode]);
+  const onMouseUp = useCallback((e?: React.MouseEvent) => {
+    stateRef.current.drag.active = false;
+    if (!e || !onNodeSelect) return;
+    const moved = Math.abs(e.clientX - dragStart.current.x) + Math.abs(e.clientY - dragStart.current.y);
+    if (moved > 6) return;
+    const hit = hitTestNode(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+    if (hit) onNodeSelect(hit);
+  }, [hitTestNode, onNodeSelect]);
 
   return (
     <div ref={containerRef} className="relative h-full w-full cursor-grab active:cursor-grabbing" onWheel={onWheel} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}>
@@ -345,6 +410,7 @@ export default function GraphExplorerPage() {
   const [showVisualWeight, setShowVisualWeight] = useState(true);
   const [onlyNarrativeFocus, setOnlyNarrativeFocus] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
 
   const activeGraphDomain = activeDomainId && activeDomainId !== "all" ? activeDomainId : null;
   const activeGraphScopeLabel = activeGraphDomain ? (activeDomain?.name || activeGraphDomain) : "Todos los dominios";
@@ -375,6 +441,7 @@ export default function GraphExplorerPage() {
     setPathResult(null);
     setPathError(null);
     setHighlightIds(new Set());
+    setSelectedNodeId(null);
     apiFetch(`/graph/visualization?${query.toString()}`)
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(setData)
@@ -479,9 +546,33 @@ export default function GraphExplorerPage() {
     };
   }, [data, focusedSignal]);
   const visibleHighlightIds = useMemo(() => {
-    if (highlightIds.size === 0) return semanticFocus.ids;
-    return new Set([...highlightIds, ...semanticFocus.ids]);
-  }, [highlightIds, semanticFocus.ids]);
+    const ids = new Set<number>();
+    for (const id of semanticFocus.ids) ids.add(id);
+    for (const id of highlightIds) ids.add(id);
+    if (selectedNodeId) ids.add(selectedNodeId);
+    return ids;
+  }, [highlightIds, selectedNodeId, semanticFocus.ids]);
+  const selectedNode = useMemo(() => {
+    if (!data || !selectedNodeId) return null;
+    return data.nodes.find((node) => node.id === selectedNodeId) ?? null;
+  }, [data, selectedNodeId]);
+  const selectedNodeConnections = useMemo(() => {
+    if (!data || !selectedNodeId) return [];
+    const nodeById = new Map(data.nodes.map((node) => [node.id, node]));
+    return data.links
+      .filter((link) => link.source === selectedNodeId || link.target === selectedNodeId)
+      .slice(0, 8)
+      .map((link) => {
+        const otherId = link.source === selectedNodeId ? link.target : link.source;
+        return {
+          id: otherId,
+          node: nodeById.get(otherId),
+          type: link.type,
+          weight: link.weight ?? 1,
+        };
+      })
+      .filter((item) => item.node);
+  }, [data, selectedNodeId]);
   const visibleGraph = useMemo(() => {
     if (!data) return null;
     if (!onlyNarrativeFocus || visibleHighlightIds.size === 0) {
@@ -688,6 +779,8 @@ export default function GraphExplorerPage() {
               showCommunities={showCommunities}
               showSemanticRelations={showSemanticRelations}
               showVisualWeight={showVisualWeight}
+              selectedNodeId={selectedNodeId}
+              onNodeSelect={(node) => setSelectedNodeId(node.id)}
             />
           )}
         </div>
@@ -745,6 +838,59 @@ export default function GraphExplorerPage() {
                       {edgeTypeLabels[type] ?? type}
                     </span>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+          {selectedNode && (
+            <div className="rounded-xl border border-[var(--ukip-border)] bg-[var(--ukip-panel-strong)] p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--ukip-muted-soft)]">Nodo seleccionado</p>
+                  <p className="mt-2 truncate text-sm font-semibold text-[var(--ukip-text-strong)]">{selectedNode.label}</p>
+                </div>
+                <button onClick={() => setSelectedNodeId(null)} className="text-xs font-semibold text-[var(--ukip-muted)] hover:text-[var(--ukip-text-strong)]">
+                  Limpiar
+                </button>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-lg border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-2 py-2">
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--ukip-muted-soft)]">Cluster</p>
+                  <p className="mt-1 text-sm font-bold text-[var(--ukip-text-strong)]">C{selectedNode.community + 1}</p>
+                </div>
+                <div className="rounded-lg border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-2 py-2">
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--ukip-muted-soft)]">Degree</p>
+                  <p className="mt-1 text-sm font-bold text-[var(--ukip-text-strong)]">{selectedNode.degree}</p>
+                </div>
+                <div className="rounded-lg border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-2 py-2">
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--ukip-muted-soft)]">PR</p>
+                  <p className="mt-1 text-sm font-bold text-[var(--ukip-text-strong)]">{selectedNode.pagerank.toFixed(2)}</p>
+                </div>
+              </div>
+              <a
+                href={`/entities/${selectedNode.id}`}
+                className="mt-3 flex items-center justify-center rounded-lg bg-[var(--ukip-primary)] px-3 py-2 text-xs font-bold text-white transition hover:opacity-90"
+              >
+                Abrir registro
+              </a>
+              {selectedNodeConnections.length > 0 && (
+                <div className="mt-4">
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--ukip-muted-soft)]">Conexiones cercanas</p>
+                  <div className="space-y-1.5">
+                    {selectedNodeConnections.map((item) => (
+                      <button
+                        key={`${item.id}-${item.type}`}
+                        onClick={() => setSelectedNodeId(item.id)}
+                        className="w-full rounded-lg border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-2 py-2 text-left transition hover:border-[var(--ukip-primary)]"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="min-w-0 truncate text-xs font-semibold text-[var(--ukip-text-strong)]">{item.node?.label}</span>
+                          <span className="text-[10px] font-bold text-[var(--ukip-muted)]">{Number(item.weight).toFixed(1)}</span>
+                        </div>
+                        <p className="mt-1 text-[10px] text-[var(--ukip-muted)]">{edgeTypeLabels[item.type] ?? item.type}</p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
