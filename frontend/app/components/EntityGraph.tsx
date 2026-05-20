@@ -65,39 +65,39 @@ interface GraphDiagnostics {
 interface Position { x: number; y: number; }
 
 const RELATION_COLORS: Record<string, string> = {
-    "cites":       "#6366f1",   // indigo
-    "authored-by": "#10b981",   // emerald
-    "belongs-to":  "#f59e0b",   // amber
-    "published-in": "#06b6d4",  // cyan
-    "has-concept": "#ec4899",   // pink
+    "cites":       "#3B4CC0",   // blue-violet
+    "authored-by": "#008B8B",   // teal
+    "belongs-to":  "#7A7A00",   // olive
+    "published-in": "#6A5ACD",  // slate blue
+    "has-concept": "#8E5A2A",   // umber
     "identified-by": "#64748b", // slate
-    "coauthor-with": "#14b8a6", // teal
-    "keyword-co-occurs-with": "#f97316", // orange
+    "coauthor-with": "#1B9E77", // green
+    "keyword-co-occurs-with": "#A6761D", // ochre
     "same-as": "#0f172a", // slate strong
-    "equivalent-to": "#a855f7", // purple
-    "external-signal-for": "#059669", // emerald
-    "semantic-neighbor": "#2563eb", // blue
-    "derived-keyword": "#c026d3", // fuchsia
-    "emerging-from": "#d97706", // amber
-    "related-to":  "#8b5cf6",   // violet
+    "equivalent-to": "#984EA3", // purple
+    "external-signal-for": "#009E73", // bluish green
+    "semantic-neighbor": "#0072B2", // blue
+    "derived-keyword": "#D55E00", // vermillion
+    "emerging-from": "#CC79A7", // reddish purple
+    "related-to":  "#7E57C2",   // violet
 };
 
 const RELATION_LABEL_COLORS: Record<string, string> = {
-    "cites":       "#818cf8",
-    "authored-by": "#34d399",
-    "belongs-to":  "#fbbf24",
-    "published-in": "#22d3ee",
-    "has-concept": "#f472b6",
+    "cites":       "#6C78D8",
+    "authored-by": "#20A6A6",
+    "belongs-to":  "#999933",
+    "published-in": "#8173D1",
+    "has-concept": "#A87345",
     "identified-by": "#94a3b8",
-    "coauthor-with": "#2dd4bf",
-    "keyword-co-occurs-with": "#fb923c",
+    "coauthor-with": "#35B18B",
+    "keyword-co-occurs-with": "#C08A36",
     "same-as": "#334155",
-    "equivalent-to": "#c084fc",
-    "external-signal-for": "#10b981",
-    "semantic-neighbor": "#60a5fa",
-    "derived-keyword": "#e879f9",
-    "emerging-from": "#f59e0b",
-    "related-to":  "#a78bfa",
+    "equivalent-to": "#B36DBA",
+    "external-signal-for": "#22B98D",
+    "semantic-neighbor": "#2490D0",
+    "derived-keyword": "#E47734",
+    "emerging-from": "#D995BD",
+    "related-to":  "#9B7AD8",
 };
 
 function usePositions(nodes: GraphNode[], width: number, height: number): Record<number, Position> {

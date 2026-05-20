@@ -30,22 +30,51 @@ interface KeywordSignal {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const COMMUNITY_COLORS = ["#8b5cf6","#06b6d4","#10b981","#f59e0b","#f43f5e","#3b82f6","#84cc16","#ec4899","#a78bfa","#22d3ee"];
+const COMMUNITY_COLORS = [
+  "#0072B2", // blue
+  "#D55E00", // vermillion
+  "#009E73", // bluish green
+  "#CC79A7", // reddish purple
+  "#E69F00", // orange
+  "#56B4E9", // sky blue
+  "#F0E442", // yellow
+  "#332288", // indigo
+  "#88CCEE", // cyan
+  "#117733", // green
+  "#882255", // wine
+  "#AA4499", // purple
+];
 const EDGE_TYPE_COLORS: Record<string, string> = {
-  cites: "#8b5cf6",
-  "authored-by": "#06b6d4",
-  "belongs-to": "#10b981",
-  "related-to": "#f59e0b",
-  "external-signal-for": "#059669",
-  "semantic-neighbor": "#2563eb",
-  "derived-keyword": "#c026d3",
-  "emerging-from": "#d97706",
+  cites: "#3B4CC0",
+  "authored-by": "#008B8B",
+  "belongs-to": "#7A7A00",
+  "published-in": "#6A5ACD",
+  "has-concept": "#8E5A2A",
+  "identified-by": "#64748B",
+  "coauthor-with": "#1B9E77",
+  "keyword-co-occurs-with": "#A6761D",
+  "same-as": "#111827",
+  "equivalent-to": "#984EA3",
+  "related-to": "#7E57C2",
+  "external-signal-for": "#009E73",
+  "semantic-neighbor": "#0072B2",
+  "derived-keyword": "#D55E00",
+  "emerging-from": "#CC79A7",
 };
 
 const SEMANTIC_EDGE_TYPES = new Set(["external-signal-for", "semantic-neighbor", "derived-keyword", "emerging-from"]);
 
 function edgeColor(type: string) {
   return EDGE_TYPE_COLORS[type] ?? "#94a3b8";
+}
+
+function withAlpha(hex: string, alpha: number) {
+  const clean = hex.replace("#", "");
+  const value = parseInt(clean.length === 3 ? clean.split("").map((char) => char + char).join("") : clean, 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  return `rgba(${r},${g},${b},${alpha})`;
 }
 
 function edgeVisualWeight(type: string, weight?: number) {
@@ -175,8 +204,8 @@ function ForceGraph({ nodes, links, highlightIds }: ForceGraphProps) {
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
         const edgeWidth = edgeVisualWeight(lk.type, lk.weight);
-        const edgeAlpha = SEMANTIC_EDGE_TYPES.has(lk.type) ? "88" : "55";
-        ctx.strokeStyle = edgeColor(lk.type) + edgeAlpha;
+        const edgeAlpha = SEMANTIC_EDGE_TYPES.has(lk.type) ? 0.72 : 0.42;
+        ctx.strokeStyle = withAlpha(edgeColor(lk.type), edgeAlpha);
         ctx.lineWidth = edgeWidth / state.transform.k;
         ctx.stroke();
       }
@@ -189,7 +218,7 @@ function ForceGraph({ nodes, links, highlightIds }: ForceGraphProps) {
         if (n.visualWeight >= 1.65 || isHighlighted) {
           ctx.beginPath();
           ctx.arc(n.x, n.y, r + (isHighlighted ? 8 : 5), 0, Math.PI * 2);
-          ctx.fillStyle = SEMANTIC_EDGE_TYPES.has(state.links.find((link) => link.s === n.id || link.t === n.id)?.type || "") ? "#8b5cf6" : color;
+          ctx.fillStyle = SEMANTIC_EDGE_TYPES.has(state.links.find((link) => link.s === n.id || link.t === n.id)?.type || "") ? "#0072B2" : color;
           ctx.globalAlpha = isHighlighted ? 0.12 : 0.08;
           ctx.fill();
           ctx.globalAlpha = 1;
@@ -204,11 +233,11 @@ function ForceGraph({ nodes, links, highlightIds }: ForceGraphProps) {
           ctx.strokeStyle = "#fff";
           ctx.lineWidth = 2.5 / state.transform.k;
           ctx.stroke();
-          ctx.strokeStyle = "#8b5cf6";
+          ctx.strokeStyle = "#111827";
           ctx.lineWidth = 1.5 / state.transform.k;
           ctx.stroke();
         } else if (n.semanticWeight > 0) {
-          ctx.strokeStyle = "#8b5cf6";
+          ctx.strokeStyle = "#111827";
           ctx.lineWidth = 1.5 / state.transform.k;
           ctx.stroke();
         }
