@@ -477,15 +477,101 @@ function enrichmentPhaseDescription(
 }
 
 const QUALITY_FALLBACK_DIMENSIONS = [
-    { key: "primary_label", label: "Primary Label", weight: 0.15, icon: "type" },
-    { key: "secondary_label", label: "Secondary Label", weight: 0.10, icon: "tag" },
-    { key: "canonical_id", label: "Canonical Id", weight: 0.10, icon: "link" },
-    { key: "entity_type", label: "Entity Type", weight: 0.05, icon: "cube" },
-    { key: "enrichment_status", label: "Enrichment Status", weight: 0.25, icon: "spark" },
-    { key: "enrichment_doi", label: "Enrichment DOI", weight: 0.05, icon: "file" },
-    { key: "authority_confirmed", label: "Authority Confirmed", weight: 0.20, icon: "shield" },
-    { key: "relationships", label: "Relationships", weight: 0.10, icon: "nodes" },
+    { key: "primary_label", label: "Etiqueta principal", weight: 0.15, icon: "type" },
+    { key: "secondary_label", label: "Etiqueta secundaria", weight: 0.10, icon: "tag" },
+    { key: "canonical_id", label: "ID canónico", weight: 0.10, icon: "link" },
+    { key: "entity_type", label: "Tipo de entidad", weight: 0.05, icon: "cube" },
+    { key: "enrichment_status", label: "Estado de enriquecimiento", weight: 0.25, icon: "spark" },
+    { key: "enrichment_doi", label: "DOI de enriquecimiento", weight: 0.05, icon: "file" },
+    { key: "authority_confirmed", label: "Autoridad confirmada", weight: 0.20, icon: "shield" },
+    { key: "relationships", label: "Relaciones", weight: 0.10, icon: "nodes" },
 ];
+
+const DETAIL_FIELD_LABELS: Record<string, string> = {
+    abstract: "Resumen",
+    abstract_text: "Resumen",
+    affiliation: "Afiliación",
+    affiliations: "Afiliaciones",
+    authors: "Autores",
+    canonical_affiliations: "Afiliaciones normalizadas",
+    canonical_authors: "Autores normalizados",
+    canonical_id: "ID canónico",
+    canonical_identifiers: "Identificadores normalizados",
+    citation_count: "Citas",
+    document_type: "Tipo de documento",
+    doi: "DOI",
+    entity_type: "Tipo de entidad",
+    eissn: "EISSN",
+    funding: "Financiamiento",
+    full_authors: "Autores completos",
+    institution: "Institución",
+    institutions: "Instituciones",
+    issue: "Número",
+    journal: "Revista",
+    language: "Idioma",
+    license: "Licencia",
+    mapping_version: "Versión de mapeo",
+    mesh_terms: "Términos MeSH",
+    month: "Mes de publicación",
+    open_access: "Acceso abierto",
+    organization: "Organización",
+    primary_label: "Etiqueta principal",
+    provider: "Proveedor",
+    provider_record_id: "ID del proveedor",
+    publication_type: "Tipo de publicación",
+    publisher: "Editorial",
+    raw_af: "Autores completos originales",
+    raw_au: "Autores originales",
+    raw_bp: "Página inicial original",
+    raw_c1: "Afiliaciones de autores originales",
+    raw_c3: "Instituciones originales",
+    raw_ct: "Citas originales",
+    raw_da: "Fecha de recuperación original",
+    raw_di: "DOI original",
+    raw_dt: "Tipo de documento original",
+    raw_ei: "EISSN original",
+    raw_ep: "Página final original",
+    raw_fn: "Encabezado de archivo original",
+    raw_fu: "Financiamiento original",
+    raw_is: "Número original",
+    raw_la: "Idioma original",
+    raw_nr: "Referencias originales",
+    raw_oa: "Acceso abierto original",
+    raw_oi: "ORCID originales",
+    raw_pd: "Mes de publicación original",
+    raw_pg: "Páginas originales",
+    raw_pm: "PubMed ID original",
+    raw_pu: "Editorial original",
+    raw_py: "Año de publicación original",
+    raw_record: "Registro original",
+    raw_ri: "Researcher IDs originales",
+    raw_rp: "Autor de correspondencia original",
+    raw_sn: "ISSN original",
+    raw_so: "Fuente original",
+    raw_ti: "Título original",
+    raw_vl: "Volumen original",
+    raw_vr: "Versión de formato original",
+    reference_count: "Referencias",
+    references_count: "Referencias",
+    researcher_ids: "Researcher IDs",
+    retrieved_at: "Fecha de recuperación",
+    secondary_label: "Etiqueta secundaria",
+    source_title: "Fuente",
+    start_page: "Página inicial",
+    subtype: "Subtipo",
+    subtypeDescription: "Descripción del subtipo",
+    summary: "Resumen",
+    title: "Título",
+    type: "Tipo",
+    venue: "Revista o conferencia",
+    volume: "Volumen",
+    year: "Año",
+    _entry_type: "Tipo de entrada",
+    _plaintext_type: "Tipo de texto plano",
+    _ris_type: "Tipo RIS",
+    _source_name: "Nombre de fuente",
+    _source_version: "Versión de fuente",
+};
 
 function normalizePercent(value: number | null | undefined): number {
     if (value === null || value === undefined || Number.isNaN(value)) return 0;
@@ -499,7 +585,7 @@ function labelize(value: string): string {
 }
 
 function fieldLabel(key: string, fallback?: string): string {
-    return fallback || labelize(key);
+    return fallback || DETAIL_FIELD_LABELS[key] || labelize(key);
 }
 
 function hasMeaningfulValue(value: unknown): boolean {
@@ -549,6 +635,7 @@ function fieldGroup(key: string): string {
     if (["authors", "author", "full_authors", "secondary_label"].includes(normalizedKey)) return "authors";
     if (["doi", "raw_di", "enrichment_doi", "canonical_id", "provider_record_id"].includes(normalizedKey)) return "identifier";
     if (["entity_type", "type", "document_type", "publication_type", "subtype", "subtypedescription", "raw_dt", "_entry_type", "_ris_type", "_plaintext_type"].includes(normalizedKey)) return "entity_type";
+    if (["affiliation", "affiliations", "institution", "institutions", "organization"].includes(normalizedKey)) return "affiliation";
     if (["citation_count", "citations", "enrichment_citation_count", "raw_ct"].includes(normalizedKey)) return "citations";
     if (["source", "source_name", "_source_name", "enrichment_source"].includes(normalizedKey)) return "source";
     return normalizedKey;
@@ -569,6 +656,27 @@ function getNestedString(source: Record<string, unknown>, path: string[]): strin
     }
     if (typeof current === "string" && current.trim()) return current.trim();
     if (typeof current === "number" && Number.isFinite(current)) return String(current);
+    if (Array.isArray(current)) {
+        const text = current
+            .map((item) => {
+                if (typeof item === "string") return item.trim();
+                if (typeof item === "number" && Number.isFinite(item)) return String(item);
+                if (item && typeof item === "object" && !Array.isArray(item)) {
+                    return getNestedString(item as Record<string, unknown>, ["name"]) ||
+                        getNestedString(item as Record<string, unknown>, ["display_name"]) ||
+                        getNestedString(item as Record<string, unknown>, ["value"]);
+                }
+                return "";
+            })
+            .filter(Boolean)
+            .join("; ");
+        return text || null;
+    }
+    if (current && typeof current === "object") {
+        return getNestedString(current as Record<string, unknown>, ["name"]) ||
+            getNestedString(current as Record<string, unknown>, ["display_name"]) ||
+            getNestedString(current as Record<string, unknown>, ["value"]);
+    }
     return null;
 }
 
@@ -1066,7 +1174,7 @@ export default function EntityDetailPage() {
         ...normalizedAttributes,
     };
     const abstractMapping = resolveAbstractMapping(normalizedAttributes, sourceAttributes);
-    const displayTitle = entity.primary_label || String(mergedAttributes.title || mergedAttributes.name || `Entity #${entityId}`);
+    const displayTitle = entity.primary_label || String(mergedAttributes.title || mergedAttributes.name || `Registro #${entityId}`);
     const description = [
         entity.secondary_label,
         mergedAttributes.journal || mergedAttributes.venue,
@@ -1195,6 +1303,14 @@ export default function EntityDetailPage() {
         authors: [entity.secondary_label],
         identifier: [entity.canonical_id, resolvedDoi],
         entity_type: [resolvedEntityType],
+        affiliation: [
+            mergedAttributes.journal,
+            mergedAttributes.venue,
+            mergedAttributes.source_title,
+            mergedAttributes.publisher,
+            mergedAttributes.raw_so,
+            mergedAttributes._source_name,
+        ],
         citations: [entity.enrichment_citation_count],
         source: [entity.source, entity.enrichment_source, shortSource],
     };
@@ -1390,7 +1506,7 @@ export default function EntityDetailPage() {
                                         </div>
                                         {qualityData?.stored_score != null ? (
                                             <p className="text-xs font-medium text-slate-400">
-                                                Score almacenado {Math.round(normalizePercent(qualityData.stored_score))}%
+                                                Puntuación almacenada {Math.round(normalizePercent(qualityData.stored_score))}%
                                             </p>
                                         ) : null}
                                     </div>
@@ -1959,7 +2075,7 @@ export default function EntityDetailPage() {
                                 </div>
                             </div>
                             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500 dark:bg-white/10 dark:text-slate-300">
-                                Entity #{entity.id}
+                                Registro #{entity.id}
                             </span>
                         </div>
                         <div className="rounded-[1.25rem] border border-slate-100 bg-slate-50/70 p-3 dark:border-white/10 dark:bg-white/5">

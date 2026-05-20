@@ -73,6 +73,7 @@ function parseJsonObject(raw: string | null): Record<string, unknown> {
 }
 
 function titleCaseKey(key: string): string {
+    if (SCIENCE_ATTRIBUTE_LABELS[key]) return SCIENCE_ATTRIBUTE_LABELS[key];
     return key
         .split("_")
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -232,7 +233,9 @@ function fieldGroup(key: string): string {
     const normalizedKey = key.toLocaleLowerCase();
     if (["title", "name", "primary_label"].includes(normalizedKey)) return "title";
     if (["authors", "author", "full_authors", "secondary_label"].includes(normalizedKey)) return "authors";
-    if (["doi", "raw_di", "enrichment_doi", "canonical_id"].includes(normalizedKey)) return "identifier";
+    if (["doi", "raw_di", "enrichment_doi", "canonical_id", "provider_record_id"].includes(normalizedKey)) return "identifier";
+    if (["entity_type", "type", "document_type", "publication_type", "subtype", "subtypedescription", "raw_dt", "_entry_type", "_ris_type", "_plaintext_type"].includes(normalizedKey)) return "entity_type";
+    if (["affiliation", "affiliations", "institution", "institutions", "organization"].includes(normalizedKey)) return "affiliation";
     if (["citation_count", "citations", "enrichment_citation_count", "raw_ct"].includes(normalizedKey)) return "citations";
     if (["source", "source_name", "_source_name", "enrichment_source"].includes(normalizedKey)) return "source";
     return normalizedKey;
@@ -243,6 +246,51 @@ function hasDisplayedEquivalent(key: string, value: unknown, displayedValuesByGr
     const comparable = comparableValue(value);
     if (!comparable) return false;
     return (displayedValuesByGroup[group] ?? []).some((displayedValue) => comparableValue(displayedValue) === comparable);
+}
+
+function getNestedString(source: Record<string, unknown>, path: string[]): string | null {
+    let current: unknown = source;
+    for (const key of path) {
+        if (!current || typeof current !== "object" || Array.isArray(current)) return null;
+        current = (current as Record<string, unknown>)[key];
+    }
+    if (typeof current === "string" && current.trim()) return current.trim();
+    if (typeof current === "number" && Number.isFinite(current)) return String(current);
+    if (Array.isArray(current)) {
+        const text = current
+            .map((item) => {
+                if (typeof item === "string") return item.trim();
+                if (typeof item === "number" && Number.isFinite(item)) return String(item);
+                if (item && typeof item === "object" && !Array.isArray(item)) {
+                    return getNestedString(item as Record<string, unknown>, ["name"]) ||
+                        getNestedString(item as Record<string, unknown>, ["display_name"]) ||
+                        getNestedString(item as Record<string, unknown>, ["value"]);
+                }
+                return "";
+            })
+            .filter(Boolean)
+            .join("; ");
+        return text || null;
+    }
+    if (current && typeof current === "object") {
+        return getNestedString(current as Record<string, unknown>, ["name"]) ||
+            getNestedString(current as Record<string, unknown>, ["display_name"]) ||
+            getNestedString(current as Record<string, unknown>, ["value"]);
+    }
+    return null;
+}
+
+function firstStringFromAttributes(
+    sources: Record<string, unknown>[],
+    paths: string[][],
+): string | null {
+    for (const source of sources) {
+        for (const path of paths) {
+            const value = getNestedString(source, path);
+            if (value) return value;
+        }
+    }
+    return null;
 }
 
 /**
@@ -316,49 +364,75 @@ function resolveDomainAttributeValue(
 }
 
 const SCIENCE_ATTRIBUTE_LABELS: Record<string, string> = {
-    full_authors: "Full Authors",
-    document_type: "Document Type",
-    corresponding_author: "Corresponding Author",
+    affiliation: "Afiliación",
+    affiliations: "Afiliaciones",
+    authors: "Autores",
+    canonical_affiliations: "Afiliaciones normalizadas",
+    canonical_authors: "Autores normalizados",
+    canonical_identifiers: "Identificadores normalizados",
+    citation_count: "Citas",
+    document_type: "Tipo de documento",
+    doi: "DOI",
+    full_authors: "Autores completos",
+    institution: "Institución",
+    journal: "Revista",
+    publication_type: "Tipo de publicación",
+    publisher: "Editorial",
+    source_title: "Fuente",
+    venue: "Revista o conferencia",
+    year: "Año",
+    corresponding_author: "Autor de correspondencia",
     researcher_ids: "Researcher IDs",
     orcids: "ORCIDs",
-    funding: "Funding",
-    reference_count: "Reference Count",
-    open_access: "Open Access",
-    retrieved_at: "Retrieved At",
+    funding: "Financiamiento",
+    reference_count: "Referencias",
+    references_count: "Referencias",
+    open_access: "Acceso abierto",
+    retrieved_at: "Fecha de recuperación",
     eissn: "EISSN",
     pubmed_id: "PubMed ID",
-    month: "Publication Month",
-    raw_fn: "Source File Header",
-    raw_vr: "Source Format Version",
-    raw_pt: "Raw Publication Type",
-    raw_au: "Raw Authors",
-    raw_af: "Raw Full Authors",
-    raw_ti: "Raw Title",
-    raw_so: "Raw Source Title",
-    raw_la: "Raw Language",
-    raw_dt: "Raw Document Type",
-    raw_c1: "Raw Author Affiliations",
-    raw_c3: "Raw Institutions",
-    raw_rp: "Raw Corresponding Author",
-    raw_ri: "Raw Researcher IDs",
-    raw_oi: "Raw ORCIDs",
-    raw_fu: "Raw Funding",
-    raw_ct: "Raw Citation Count",
-    raw_nr: "Raw Reference Count",
-    raw_pu: "Raw Publisher",
-    raw_sn: "Raw ISSN",
-    raw_ei: "Raw EISSN",
-    raw_pd: "Raw Publication Month",
-    raw_py: "Raw Publication Year",
-    raw_vl: "Raw Volume",
-    raw_is: "Raw Issue",
-    raw_bp: "Raw Begin Page",
-    raw_ep: "Raw End Page",
-    raw_di: "Raw DOI",
-    raw_pg: "Raw Page Count",
-    raw_pm: "Raw PubMed ID",
-    raw_oa: "Raw Open Access",
-    raw_da: "Raw Retrieved At",
+    month: "Mes de publicación",
+    provider: "Proveedor",
+    provider_record_id: "ID del proveedor",
+    mapping_version: "Versión de mapeo",
+    mesh_terms: "Términos MeSH",
+    license: "Licencia",
+    raw_fn: "Encabezado de archivo original",
+    raw_vr: "Versión de formato original",
+    raw_pt: "Tipo de publicación original",
+    raw_au: "Autores originales",
+    raw_af: "Autores completos originales",
+    raw_ti: "Título original",
+    raw_so: "Fuente original",
+    raw_la: "Idioma original",
+    raw_dt: "Tipo de documento original",
+    raw_c1: "Afiliaciones de autores originales",
+    raw_c3: "Instituciones originales",
+    raw_rp: "Autor de correspondencia original",
+    raw_ri: "Researcher IDs originales",
+    raw_oi: "ORCIDs originales",
+    raw_fu: "Financiamiento original",
+    raw_ct: "Citas originales",
+    raw_nr: "Referencias originales",
+    raw_pu: "Editorial original",
+    raw_sn: "ISSN original",
+    raw_ei: "EISSN original",
+    raw_pd: "Mes de publicación original",
+    raw_py: "Año de publicación original",
+    raw_vl: "Volumen original",
+    raw_is: "Número original",
+    raw_bp: "Página inicial original",
+    raw_ep: "Página final original",
+    raw_di: "DOI original",
+    raw_pg: "Páginas originales",
+    raw_pm: "PubMed ID original",
+    raw_oa: "Acceso abierto original",
+    raw_da: "Fecha de recuperación original",
+    _entry_type: "Tipo de entrada",
+    _plaintext_type: "Tipo de texto plano",
+    _ris_type: "Tipo RIS",
+    _source_name: "Nombre de fuente",
+    _source_version: "Versión de fuente",
 };
 
 const SCIENCE_FIELD_ORDER = [
@@ -416,17 +490,40 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
     const sourceAttributes = parseJsonObject(entity.attributes_json);
     const mergedExtendedAttributes = { ...sourceAttributes, ...normalizedAttributes };
     const abstractMapping = resolveAbstractMapping(normalizedAttributes, sourceAttributes);
+    const attributeSources = [mergedExtendedAttributes, sourceAttributes, normalizedAttributes];
+    const resolvedEntityType = entity.entity_type || firstStringFromAttributes(attributeSources, [
+        ["entity_type"],
+        ["publication_type"],
+        ["document_type"],
+        ["type"],
+        ["subtypeDescription"],
+        ["subtype"],
+        ["raw_dt"],
+        ["_entry_type"],
+        ["_ris_type"],
+        ["_plaintext_type"],
+        ["raw_record", "entity_type"],
+        ["raw_record", "publication_type"],
+        ["raw_record", "document_type"],
+        ["raw_record", "type"],
+        ["raw_record", "subtypeDescription"],
+        ["raw_record", "subtype"],
+        ["raw_record", "DT"],
+        ["raw_record", "raw_dt"],
+    ]);
 
     const coreFields = activeDomain
         ? activeDomain.attributes.filter((attribute) => attribute.is_core).map((attribute) => ({
             label: CORE_FIELD_LABEL_KEYS[attribute.name] ? t(CORE_FIELD_LABEL_KEYS[attribute.name]) : attribute.label,
-            value: resolveDomainAttributeValue(entity, mergedExtendedAttributes, attribute.name),
+            value: attribute.name === "entity_type"
+                ? resolvedEntityType
+                : resolveDomainAttributeValue(entity, mergedExtendedAttributes, attribute.name),
           }))
         : [
             { label: t("entities.primary_label"), value: entity.primary_label },
             { label: t("page.import.field.secondary_label"), value: entity.secondary_label },
             { label: t("page.import.field.canonical_id"), value: entity.canonical_id },
-            { label: t("page.import.field.entity_type"), value: entity.entity_type },
+            { label: t("page.import.field.entity_type"), value: resolvedEntityType },
             { label: t("page.import.field.domain"), value: entity.domain },
         ];
 
@@ -438,6 +535,15 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
         title: [entity.primary_label, mergedExtendedAttributes.title, mergedExtendedAttributes.name],
         authors: [entity.secondary_label],
         identifier: [entity.canonical_id, mergedExtendedAttributes.enrichment_doi],
+        entity_type: [resolvedEntityType],
+        affiliation: [
+            mergedExtendedAttributes.journal,
+            mergedExtendedAttributes.venue,
+            mergedExtendedAttributes.source_title,
+            mergedExtendedAttributes.publisher,
+            mergedExtendedAttributes.raw_so,
+            mergedExtendedAttributes._source_name,
+        ],
         citations: [entity.enrichment_citation_count],
         source: [entity.source, mergedExtendedAttributes.enrichment_source, mergedExtendedAttributes.source_name, mergedExtendedAttributes.source],
     };
