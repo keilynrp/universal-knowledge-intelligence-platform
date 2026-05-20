@@ -85,9 +85,16 @@ function edgeVisualWeight(type: string, weight?: number) {
 
 // ── Force Graph Canvas ────────────────────────────────────────────────────────
 
-interface ForceGraphProps { nodes: GNode[]; links: GLink[]; highlightIds?: Set<number>; }
+interface ForceGraphProps {
+  nodes: GNode[];
+  links: GLink[];
+  highlightIds?: Set<number>;
+  showCommunities: boolean;
+  showSemanticRelations: boolean;
+  showVisualWeight: boolean;
+}
 
-function ForceGraph({ nodes, links, highlightIds }: ForceGraphProps) {
+function ForceGraph({ nodes, links, highlightIds, showCommunities, showSemanticRelations, showVisualWeight }: ForceGraphProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<{ running: boolean; nodes: (GNode & { x: number; y: number; vx: number; vy: number; visualWeight: number; semanticWeight: number })[]; links: { s: number; t: number; type: string; weight: number }[]; transform: { x: number; y: number; k: number }; drag: { active: boolean; lastX: number; lastY: number } }>({ running: false, nodes: [], links: [], transform: { x: 0, y: 0, k: 1 }, drag: { active: false, lastX: 0, lastY: 0 } });
@@ -120,10 +127,10 @@ function ForceGraph({ nodes, links, highlightIds }: ForceGraphProps) {
 
     const nodeMap = new Map<number, typeof state.nodes[0]>();
     state.nodes = nodes.map(n => {
-      const degreeScore = Math.log1p(n.degree || 0) / Math.log1p(maxDegree);
-      const pagerankScore = Math.sqrt((n.pagerank || 0) / maxPagerank);
+      const degreeScore = showVisualWeight ? Math.log1p(n.degree || 0) / Math.log1p(maxDegree) : 0;
+      const pagerankScore = showVisualWeight ? Math.sqrt((n.pagerank || 0) / maxPagerank) : 0;
       const semanticWeight = semanticWeightByNode.get(n.id) || 0;
-      const visualWeight = 0.45 + degreeScore * 0.55 + pagerankScore * 0.75 + semanticWeight * 0.18;
+      const visualWeight = showVisualWeight ? 0.45 + degreeScore * 0.55 + pagerankScore * 0.75 + semanticWeight * 0.18 : 0.9;
       const sn = { ...n, x: w / 2 + (Math.random() - 0.5) * 200, y: h / 2 + (Math.random() - 0.5) * 200, vx: 0, vy: 0, visualWeight, semanticWeight };
       nodeMap.set(n.id, sn);
       return sn;
@@ -203,8 +210,10 @@ function ForceGraph({ nodes, links, highlightIds }: ForceGraphProps) {
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
-        const edgeWidth = edgeVisualWeight(lk.type, lk.weight);
-        const edgeAlpha = SEMANTIC_EDGE_TYPES.has(lk.type) ? 0.72 : 0.42;
+        const isSemanticEdge = SEMANTIC_EDGE_TYPES.has(lk.type);
+        if (isSemanticEdge && !showSemanticRelations) continue;
+        const edgeWidth = showVisualWeight ? edgeVisualWeight(lk.type, lk.weight) : 1.2;
+        const edgeAlpha = isSemanticEdge ? 0.72 : 0.42;
         ctx.strokeStyle = withAlpha(edgeColor(lk.type), edgeAlpha);
         ctx.lineWidth = edgeWidth / state.transform.k;
         ctx.stroke();
@@ -212,13 +221,14 @@ function ForceGraph({ nodes, links, highlightIds }: ForceGraphProps) {
 
       // Nodes
       for (const n of state.nodes) {
-        const color = COMMUNITY_COLORS[n.community % COMMUNITY_COLORS.length];
+        const color = showCommunities ? COMMUNITY_COLORS[n.community % COMMUNITY_COLORS.length] : "#64748B";
         const r = Math.max(5, Math.min(24, 4 + n.visualWeight * 7.5));
         const isHighlighted = highlightIds?.has(n.id);
-        if (n.visualWeight >= 1.65 || isHighlighted) {
+        const hasSemanticRelation = state.links.some((link) => (link.s === n.id || link.t === n.id) && SEMANTIC_EDGE_TYPES.has(link.type));
+        if ((showVisualWeight && n.visualWeight >= 1.65) || isHighlighted) {
           ctx.beginPath();
           ctx.arc(n.x, n.y, r + (isHighlighted ? 8 : 5), 0, Math.PI * 2);
-          ctx.fillStyle = SEMANTIC_EDGE_TYPES.has(state.links.find((link) => link.s === n.id || link.t === n.id)?.type || "") ? "#0072B2" : color;
+          ctx.fillStyle = hasSemanticRelation ? "#0072B2" : color;
           ctx.globalAlpha = isHighlighted ? 0.12 : 0.08;
           ctx.fill();
           ctx.globalAlpha = 1;
@@ -236,7 +246,7 @@ function ForceGraph({ nodes, links, highlightIds }: ForceGraphProps) {
           ctx.strokeStyle = "#111827";
           ctx.lineWidth = 1.5 / state.transform.k;
           ctx.stroke();
-        } else if (n.semanticWeight > 0) {
+        } else if (showSemanticRelations && n.semanticWeight > 0) {
           ctx.strokeStyle = "#111827";
           ctx.lineWidth = 1.5 / state.transform.k;
           ctx.stroke();
@@ -248,7 +258,7 @@ function ForceGraph({ nodes, links, highlightIds }: ForceGraphProps) {
 
     tick();
     return () => { state.running = false; };
-  }, [nodes, links, highlightIds]);
+  }, [nodes, links, highlightIds, showCommunities, showSemanticRelations, showVisualWeight]);
 
   // Zoom
   const onWheel = useCallback((e: React.WheelEvent) => {
@@ -330,6 +340,11 @@ export default function GraphExplorerPage() {
   const [materializeMessage, setMaterializeMessage] = useState<string | null>(null);
   const [keywordSignals, setKeywordSignals] = useState<KeywordSignal[]>([]);
   const [loadingSignals, setLoadingSignals] = useState(false);
+  const [showCommunities, setShowCommunities] = useState(true);
+  const [showSemanticRelations, setShowSemanticRelations] = useState(true);
+  const [showVisualWeight, setShowVisualWeight] = useState(true);
+  const [onlyNarrativeFocus, setOnlyNarrativeFocus] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const activeGraphDomain = activeDomainId && activeDomainId !== "all" ? activeDomainId : null;
   const activeGraphScopeLabel = activeGraphDomain ? (activeDomain?.name || activeGraphDomain) : "Todos los dominios";
@@ -467,6 +482,43 @@ export default function GraphExplorerPage() {
     if (highlightIds.size === 0) return semanticFocus.ids;
     return new Set([...highlightIds, ...semanticFocus.ids]);
   }, [highlightIds, semanticFocus.ids]);
+  const visibleGraph = useMemo(() => {
+    if (!data) return null;
+    if (!onlyNarrativeFocus || visibleHighlightIds.size === 0) {
+      return { nodes: data.nodes, links: data.links };
+    }
+    return {
+      nodes: data.nodes.filter((node) => visibleHighlightIds.has(node.id)),
+      links: data.links.filter((link) => visibleHighlightIds.has(link.source) && visibleHighlightIds.has(link.target)),
+    };
+  }, [data, onlyNarrativeFocus, visibleHighlightIds]);
+  const visualToggles = [
+    {
+      id: "communities",
+      label: "Comunidades",
+      active: showCommunities,
+      onChange: () => setShowCommunities((value) => !value),
+    },
+    {
+      id: "semantic",
+      label: "Relaciones semánticas",
+      active: showSemanticRelations,
+      onChange: () => setShowSemanticRelations((value) => !value),
+    },
+    {
+      id: "weight",
+      label: "Peso visual",
+      active: showVisualWeight,
+      onChange: () => setShowVisualWeight((value) => !value),
+    },
+    {
+      id: "focus",
+      label: "Solo foco narrativo",
+      active: onlyNarrativeFocus,
+      disabled: visibleHighlightIds.size === 0,
+      onChange: () => setOnlyNarrativeFocus((value) => !value),
+    },
+  ];
   const activeFilters = data?.filters ? Object.entries(data.filters).filter(([, value]) => value !== null && value !== undefined && value !== "") : [];
   const edgeTypeLabels: Record<string, string> = {
     cites: t("page.graph.edge_cites") || "Cita",
@@ -484,7 +536,7 @@ export default function GraphExplorerPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden bg-[var(--ukip-bg)]">
+    <div className={`flex flex-col overflow-hidden bg-[var(--ukip-bg)] ${isFullscreen ? "fixed inset-0 z-50 h-screen" : "h-[calc(100vh-4rem)]"}`}>
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-6 py-4">
         <div>
@@ -515,6 +567,17 @@ export default function GraphExplorerPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setIsFullscreen((value) => !value)}
+            className="flex items-center gap-2 rounded-xl border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-4 py-2 text-sm font-semibold text-[var(--ukip-text-strong)] transition hover:bg-[var(--ukip-panel-strong)]">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {isFullscreen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 9H4.5M9 9V4.5M15 9h4.5M15 9V4.5M9 15H4.5M9 15v4.5M15 15h4.5M15 15v4.5" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 9V3.75H9M20.25 9V3.75H15M3.75 15v5.25H9M20.25 15v5.25H15" />
+              )}
+            </svg>
+            {isFullscreen ? "Salir" : "Pantalla completa"}
+          </button>
           <button onClick={handleMaterialize} disabled={materializing}
             className="flex items-center gap-2 rounded-xl bg-[var(--ukip-primary)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.5 12a7.5 7.5 0 0112.728-5.364M19.5 12a7.5 7.5 0 01-12.728 5.364M16.5 6.75h1.5V5.25M7.5 17.25H6v1.5" /></svg>
@@ -618,12 +681,54 @@ export default function GraphExplorerPage() {
             </div>
           )}
           {!loading && !error && data && data.nodes.length > 0 && (
-            <ForceGraph nodes={data.nodes} links={data.links} highlightIds={visibleHighlightIds.size > 0 ? visibleHighlightIds : undefined} />
+            <ForceGraph
+              nodes={visibleGraph?.nodes ?? data.nodes}
+              links={visibleGraph?.links ?? data.links}
+              highlightIds={visibleHighlightIds.size > 0 ? visibleHighlightIds : undefined}
+              showCommunities={showCommunities}
+              showSemanticRelations={showSemanticRelations}
+              showVisualWeight={showVisualWeight}
+            />
           )}
         </div>
 
         {/* Right info panel */}
         <div className="flex w-64 shrink-0 flex-col gap-4 overflow-y-auto bg-[var(--ukip-panel)] p-4">
+          <div className="rounded-xl border border-[var(--ukip-border)] bg-[var(--ukip-panel-strong)] p-3">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--ukip-muted-soft)]">Vista del grafo</p>
+            <div className="mt-3 grid gap-2">
+              {visualToggles.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={item.onChange}
+                  disabled={item.disabled}
+                  className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${
+                    item.active
+                      ? "border-[var(--ukip-primary)] bg-[var(--ukip-primary-soft)] text-[var(--ukip-primary-strong)]"
+                      : "border-[var(--ukip-border)] bg-[var(--ukip-panel)] text-[var(--ukip-muted)] hover:text-[var(--ukip-text-strong)]"
+                  } disabled:cursor-not-allowed disabled:opacity-45`}
+                >
+                  <span>{item.label}</span>
+                  <span className={`h-2.5 w-2.5 rounded-full ${item.active ? "bg-[var(--ukip-primary)]" : "bg-slate-300"}`} />
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 space-y-2">
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--ukip-muted-soft)]">Leyenda</p>
+              <div className="flex items-center justify-between text-[11px] text-[var(--ukip-muted)]">
+                <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: COMMUNITY_COLORS[0] }} /> Comunidad</span>
+                <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full border-2 border-slate-950 bg-white" /> Señal</span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {["external-signal-for", "semantic-neighbor", "derived-keyword", "emerging-from"].map((type) => (
+                  <div key={type} className="flex items-center gap-1.5 text-[10px] text-[var(--ukip-muted)]">
+                    <span className="h-0.5 w-5 rounded-full" style={{ backgroundColor: edgeColor(type) }} />
+                    <span className="truncate">{edgeTypeLabels[type] ?? type}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
           {focusedSignal && (
             <div className="rounded-xl border border-violet-200 bg-violet-50/70 p-3 dark:border-violet-900/50 dark:bg-violet-950/20">
               <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-700 dark:text-violet-300">Foco narrativo</p>
