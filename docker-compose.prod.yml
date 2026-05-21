@@ -52,14 +52,16 @@ services:
       ENGINE_SYNC_THRESHOLD: ${ENGINE_SYNC_THRESHOLD:-500}
       ENGINE_SHADOW_MODE: ${ENGINE_SHADOW_MODE:-false}
       ENGINE_FALLBACK_PYTHON: ${ENGINE_FALLBACK_PYTHON:-true}
+      DB_CONNECT_RETRIES: ${DB_CONNECT_RETRIES:-45}
+      DB_CONNECT_SLEEP_SECONDS: ${DB_CONNECT_SLEEP_SECONDS:-2}
     volumes:
       - ukip_static_data:/app/static
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 60s
+      retries: 10
+      start_period: 120s
     expose:
       - "8000"
 
