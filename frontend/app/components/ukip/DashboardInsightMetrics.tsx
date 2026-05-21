@@ -10,9 +10,10 @@ export type PillarProgressItem = {
   icon: ReactNode;
 };
 
-export type DomainCoverageItem = {
+export type ReadinessDriverItem = {
   label: string;
   percent: number;
+  description?: string;
 };
 
 export type PipelineHealthMetric = {
@@ -23,15 +24,15 @@ export type PipelineHealthMetric = {
 export type DashboardInsightMetricsProps = {
   pillarTitle: string;
   pillarSubtitle: string;
-  domainTitle: string;
-  domainSubtitle: string;
-  domainAreaLabel: string;
+  readinessTitle: string;
+  readinessSubtitle: string;
+  readinessBadge: string;
   healthTitle: string;
   healthSubtitle: string;
   liveLabel: string;
   scoreSuffix: string;
   pillars: PillarProgressItem[];
-  domains: DomainCoverageItem[];
+  readinessDrivers: ReadinessDriverItem[];
   healthScore: number;
   healthMetrics: PipelineHealthMetric[];
 };
@@ -72,63 +73,6 @@ function IconPath({ path }: { path: string }) {
   );
 }
 
-function RadarChart({ domains }: { domains: DomainCoverageItem[] }) {
-  const points = domains.slice(0, 6);
-  const center = 92;
-  const radius = 70;
-  const angleStep = (Math.PI * 2) / Math.max(points.length, 1);
-  const toPoint = (index: number, percent: number) => {
-    const angle = -Math.PI / 2 + index * angleStep;
-    const scaledRadius = radius * (clampPercent(percent) / 100);
-    return {
-      x: center + Math.cos(angle) * scaledRadius,
-      y: center + Math.sin(angle) * scaledRadius,
-    };
-  };
-  const ring = (scale: number) =>
-    points
-      .map((_, index) => {
-        const point = toPoint(index, scale);
-        return `${point.x},${point.y}`;
-      })
-      .join(" ");
-  const area = points
-    .map((domain, index) => {
-      const point = toPoint(index, domain.percent);
-      return `${point.x},${point.y}`;
-    })
-    .join(" ");
-
-  if (points.length < 3) {
-    return (
-      <div className="flex h-52 items-center justify-center rounded-2xl bg-slate-50 text-sm text-slate-500 dark:bg-white/5 dark:text-[var(--ukip-muted)]">
-        {points.map((domain) => domain.label).join(" · ") || "—"}
-      </div>
-    );
-  }
-
-  return (
-    <svg viewBox="0 0 184 184" className="mx-auto h-56 w-full max-w-[17rem]" role="img" aria-label="Domain coverage radar">
-      {[25, 50, 75, 100].map((scale) => (
-        <polygon key={scale} points={ring(scale)} fill="none" stroke="currentColor" className="text-slate-200 dark:text-white/10" strokeWidth="1" />
-      ))}
-      {points.map((domain, index) => {
-        const outer = toPoint(index, 100);
-        const label = toPoint(index, 117);
-        return (
-          <g key={domain.label}>
-            <line x1={center} y1={center} x2={outer.x} y2={outer.y} stroke="currentColor" className="text-slate-200 dark:text-white/10" strokeWidth="1" />
-            <text x={label.x} y={label.y} textAnchor="middle" dominantBaseline="middle" className="fill-slate-600 text-[10px] dark:fill-[var(--ukip-muted)]">
-              {domain.label}
-            </text>
-          </g>
-        );
-      })}
-      <polygon points={area} fill="rgb(124 58 237 / 0.18)" stroke="rgb(124 58 237)" strokeWidth="2" />
-    </svg>
-  );
-}
-
 function HealthGauge({ value }: { value: number }) {
   const score = clampPercent(value);
   const circumference = Math.PI * 92;
@@ -156,15 +100,15 @@ function HealthGauge({ value }: { value: number }) {
 export default function DashboardInsightMetrics({
   pillarTitle,
   pillarSubtitle,
-  domainTitle,
-  domainSubtitle,
-  domainAreaLabel,
+  readinessTitle,
+  readinessSubtitle,
+  readinessBadge,
   healthTitle,
   healthSubtitle,
   liveLabel,
   scoreSuffix,
   pillars,
-  domains,
+  readinessDrivers,
   healthScore,
   healthMetrics,
 }: DashboardInsightMetricsProps) {
@@ -213,14 +157,34 @@ export default function DashboardInsightMetrics({
       <MetricPanel>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-base font-semibold tracking-[-0.02em] text-slate-950 dark:text-[var(--ukip-text-strong)]">{domainTitle}</h3>
-            <p className="mt-1 text-sm text-slate-500 dark:text-[var(--ukip-muted)]">{domainSubtitle}</p>
+            <h3 className="text-base font-semibold tracking-[-0.02em] text-slate-950 dark:text-[var(--ukip-text-strong)]">{readinessTitle}</h3>
+            <p className="mt-1 text-sm text-slate-500 dark:text-[var(--ukip-muted)]">{readinessSubtitle}</p>
           </div>
-          <span className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-[var(--ukip-muted)]">
-            {domains.length} {domainAreaLabel}
+          <span className="rounded-full border border-slate-200 px-3 py-1 text-xs uppercase tracking-[0.18em] text-slate-500 dark:border-white/10 dark:text-[var(--ukip-muted)]">
+            {readinessBadge}
           </span>
         </div>
-        <RadarChart domains={domains} />
+        <div className="mt-6 space-y-4">
+          {readinessDrivers.map((item) => {
+            const percent = clampPercent(item.percent);
+            return (
+              <article key={item.label}>
+                <div className="flex items-end justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">{item.label}</p>
+                    {item.description ? (
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-[var(--ukip-muted)]">{item.description}</p>
+                    ) : null}
+                  </div>
+                  <span className="font-mono text-lg font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">{percent}%</span>
+                </div>
+                <div className="mt-2 h-2 rounded-full bg-slate-100 dark:bg-white/10">
+                  <div className="h-2 rounded-full bg-violet-600" style={{ width: `${percent}%` }} />
+                </div>
+              </article>
+            );
+          })}
+        </div>
       </MetricPanel>
 
       <MetricPanel>
