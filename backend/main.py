@@ -174,40 +174,14 @@ async def lifespan(app: FastAPI):
                 migrated,
             )
 
-        # Enrichment scheduler tables (idempotent CREATE TABLE IF NOT EXISTS)
-        db.execute(text("""
-            CREATE TABLE IF NOT EXISTS domain_enrichment_policies (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                domain_id VARCHAR(80) NOT NULL UNIQUE,
-                enabled INTEGER NOT NULL DEFAULT 1,
-                min_enrichment_pct REAL NOT NULL DEFAULT 80.0,
-                max_budget_per_run INTEGER NOT NULL DEFAULT 100,
-                staleness_threshold_days INTEGER NOT NULL DEFAULT 30,
-                created_at DATETIME,
-                updated_at DATETIME
-            )
-        """))
-        db.execute(text("""
-            CREATE TABLE IF NOT EXISTS enrichment_scheduler_runs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                domain_id VARCHAR(80) NOT NULL,
-                triggered_by VARCHAR(20) NOT NULL DEFAULT 'scheduler',
-                queued_count INTEGER NOT NULL DEFAULT 0,
-                started_at DATETIME,
-                finished_at DATETIME,
-                notes TEXT
-            )
-        """))
-        db.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_dep_domain_id ON domain_enrichment_policies (domain_id)"
-        ))
-        db.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_esr_domain_id ON enrichment_scheduler_runs (domain_id)"
-        ))
-        db.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_esr_started_at ON enrichment_scheduler_runs (started_at)"
-        ))
-        db.commit()
+        models.Base.metadata.create_all(
+            bind=database.engine,
+            tables=[
+                models.DomainEnrichmentPolicy.__table__,
+                models.EnrichmentSchedulerRun.__table__,
+            ],
+            checkfirst=True,
+        )
         logger.info("Startup migration: enrichment scheduler tables ensured")
 
         # Seed built-in artifact templates (only on first run)
