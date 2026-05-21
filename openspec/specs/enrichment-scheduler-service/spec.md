@@ -1,5 +1,8 @@
-## ADDED Requirements
+# enrichment-scheduler-service Specification
 
+## Purpose
+TBD - created by archiving change enrichment-scheduler. Update Purpose after archive.
+## Requirements
 ### Requirement: Scheduler detects stale domains on a configurable interval
 The system SHALL run an async background loop that wakes every 60 seconds, iterates over all active `DomainEnrichmentPolicy` rows where `enabled = true`, and re-queues eligible entities in domains whose enrichment percentage falls below `min_enrichment_pct`.
 
@@ -69,3 +72,4 @@ The system SHALL start the enrichment scheduler as an `asyncio` task in the `mai
 #### Scenario: Scheduler honours UKIP_SKIP_STARTUP_SIDE_EFFECTS
 - **WHEN** `UKIP_SKIP_STARTUP_SIDE_EFFECTS=1` is set (test environment)
 - **THEN** the scheduler task is NOT started
+

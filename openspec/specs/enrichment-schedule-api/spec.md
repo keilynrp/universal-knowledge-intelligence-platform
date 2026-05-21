@@ -1,5 +1,8 @@
-## ADDED Requirements
+# enrichment-schedule-api Specification
 
+## Purpose
+TBD - created by archiving change enrichment-scheduler. Update Purpose after archive.
+## Requirements
 ### Requirement: GET /enrichment/schedule returns global scheduler state
 The system SHALL expose `GET /enrichment/schedule` (auth required, any role) returning the scheduler's current state: `enabled`, `interval_seconds`, `last_run_at` (ISO timestamp or null), `next_run_at` (estimated), `domains_monitored` (count of enabled policies), `total_queued_last_run` (sum of queued_count across all domains in the last scheduler cycle).
 
@@ -74,3 +77,4 @@ The system SHALL expose `GET /enrichment/schedule/{domain_id}/runs` (auth requir
 #### Scenario: Empty history returns empty list
 - **WHEN** the domain has no run records
 - **THEN** the response returns `{ runs: [] }` with HTTP 200
+

@@ -1,5 +1,8 @@
-## ADDED Requirements
+# enrichment-schedule-ui Specification
 
+## Purpose
+TBD - created by archiving change enrichment-scheduler. Update Purpose after archive.
+## Requirements
 ### Requirement: Derived-status dashboard shows scheduler health card
 The derived-status dashboard page (`/analytics/dashboard`) SHALL display a scheduler health card below the existing derived-status resource cards. The card SHALL show: scheduler enabled/disabled badge, interval, last run timestamp, next estimated run, and total entities queued in last cycle.
 
@@ -43,3 +46,4 @@ The scheduler card SHALL include an "Edit Policy" button per domain row (admin+ 
 #### Scenario: Validation prevents invalid input
 - **WHEN** the admin enters `min_enrichment_pct = 150`
 - **THEN** the form shows an inline error and does not submit
+
