@@ -28,8 +28,8 @@ interface ScientificIntelligenceCommandCenterProps {
 }
 
 const statusStyles: Record<WorkflowStatus, string> = {
-  ready: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-300",
-  active: "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-400/20 dark:bg-violet-500/10 dark:text-violet-300",
+  ready: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-300/30 dark:bg-emerald-300/10 dark:text-emerald-200",
+  active: "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-300/30 dark:bg-violet-300/10 dark:text-violet-100",
   locked: "border-slate-200 bg-slate-50 text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-muted)]",
 };
 
@@ -45,6 +45,34 @@ function statusLabel(status: WorkflowStatus, t: (key: string, fallback: string) 
   if (status === "ready") return t("page.home.command.status.ready", "Ready");
   if (status === "active") return t("page.home.command.status.active", "Active");
   return t("page.home.command.status.locked", "Needs data");
+}
+
+function NarrativeOrb({ readinessScore }: { readinessScore: number }) {
+  const safeScore = Math.max(0, Math.min(100, readinessScore));
+  return (
+    <div className="pointer-events-none absolute right-[-3.25rem] top-[-3rem] hidden h-64 w-64 opacity-95 sm:block">
+      <div className="absolute inset-0 rounded-full bg-white/12 blur-2xl" />
+      <svg viewBox="0 0 220 220" className="relative h-full w-full" aria-hidden="true">
+        <defs>
+          <linearGradient id="ukip-orb-gradient" x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.78" />
+            <stop offset="48%" stopColor="#a5b4fc" stopOpacity="0.58" />
+            <stop offset="100%" stopColor="#22d3ee" stopOpacity="0.52" />
+          </linearGradient>
+        </defs>
+        <circle cx="110" cy="110" r="78" fill="none" stroke="url(#ukip-orb-gradient)" strokeWidth="1.5" />
+        <circle cx="110" cy="110" r="52" fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.28)" strokeWidth="1.5" />
+        <path d="M42 122c36-26 76-33 138-20" fill="none" stroke="rgba(255,255,255,0.46)" strokeWidth="2" strokeLinecap="round" />
+        <path d="M62 150c32-20 67-27 116-16" fill="none" stroke="rgba(34,211,238,0.38)" strokeWidth="2" strokeLinecap="round" />
+        <circle cx="72" cy="96" r="7" fill="#ffffff" />
+        <circle cx="144" cy="76" r="5" fill="#c4b5fd" />
+        <circle cx="158" cy="145" r="6" fill="#67e8f9" />
+        <text x="110" y="116" textAnchor="middle" className="fill-white font-mono text-3xl font-semibold">
+          {safeScore}
+        </text>
+      </svg>
+    </div>
+  );
 }
 
 export default function ScientificIntelligenceCommandCenter({
@@ -99,89 +127,101 @@ export default function ScientificIntelligenceCommandCenter({
 
   return (
     <section>
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.35fr)]">
-        <div className="flex flex-col justify-between gap-5 rounded-xl border border-slate-200 bg-slate-50 p-5 dark:border-white/10 dark:bg-white/5">
-          <div>
-            <p className="ukip-kicker">{t("page.home.command.eyebrow", "Scientific intelligence command center")}</p>
-            <h2 className="mt-3 text-2xl font-semibold tracking-normal text-slate-950 dark:text-[var(--ukip-text-strong)]">
+      <div className="overflow-hidden rounded-[1.75rem] border border-violet-200/70 bg-white shadow-[0_24px_80px_rgb(88_28_135_/_0.13)] dark:border-white/10 dark:bg-[var(--ukip-panel)]">
+        <div className="grid lg:grid-cols-[minmax(0,0.98fr)_minmax(0,1.22fr)]">
+          <div className="relative flex min-h-[26rem] flex-col justify-between overflow-hidden bg-[radial-gradient(circle_at_12%_8%,rgba(255,255,255,0.22),transparent_28%),linear-gradient(135deg,#6d28d9_0%,#7c3aed_48%,#2f1b8f_100%)] p-6 text-white sm:p-8">
+            <NarrativeOrb readinessScore={readinessScore} />
+            <div className="relative z-10 max-w-xl">
+              <span className="inline-flex rounded-full border border-white/25 bg-white/12 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-violet-50 backdrop-blur">
+                {t("page.home.command.eyebrow", "Scientific intelligence command center")}
+              </span>
+              <h2 className="mt-8 max-w-lg text-4xl font-semibold leading-[1.05] tracking-[-0.025em] text-white sm:text-5xl">
               {t("page.home.command.title", "From corpus to decision in one guided path")}
-            </h2>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600 dark:text-[var(--ukip-muted)]">
-              {t("page.home.command.body", "Use UKIP as an operating flow: assemble the corpus, read domain-level intelligence, then package a brief that leadership can act on.")}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-[var(--ukip-panel)]">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-[var(--ukip-muted)]">
-                {t("page.home.command.kpi.records", "Records")}
-              </p>
-              <p className="mt-2 text-xl font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">
-                {entityCount.toLocaleString()}
+              </h2>
+              <p className="mt-5 max-w-md text-base leading-7 text-violet-50/86">
+                {t("page.home.command.body", "Use UKIP as an operating flow: assemble the corpus, read domain-level intelligence, then package a brief that leadership can act on.")}
               </p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-[var(--ukip-panel)]">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-[var(--ukip-muted)]">
-                {t("page.home.command.kpi.enrichment", "Enriched")}
-              </p>
-              <p className="mt-2 text-xl font-semibold text-violet-700 dark:text-violet-300">{roundedEnrichment}%</p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-[var(--ukip-panel)]">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-[var(--ukip-muted)]">
-                {t("page.home.command.kpi.ready", "Ready")}
-              </p>
-              <p className="mt-2 text-xl font-semibold text-emerald-700 dark:text-emerald-300">{readinessScore}%</p>
-            </div>
-          </div>
 
-          {!demoSeeded && (
-            <button
-              type="button"
-              onClick={onLaunchDemo}
-              disabled={demoLoading}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-white px-4 text-sm font-semibold text-violet-700 transition hover:border-violet-300 hover:bg-violet-50 disabled:opacity-50 dark:border-violet-400/20 dark:bg-white/5 dark:text-violet-200 dark:hover:bg-violet-500/10"
-            >
-              <Icon path="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653z" />
-              {demoLoading ? t("page.home.command.demo.loading", "Starting demo...") : t("page.home.command.demo.cta", "Launch realistic demo")}
-            </button>
-          )}
-        </div>
-
-        <div className="grid gap-3">
-          {workflows.map((workflow, index) => (
-            <Link
-              key={workflow.id}
-              href={workflow.href}
-              className="group grid gap-4 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-violet-300 hover:shadow-sm dark:border-white/10 dark:bg-white/5 dark:hover:border-violet-400/40 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
-            >
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700 group-hover:bg-violet-50 group-hover:text-violet-700 dark:bg-white/10 dark:text-[var(--ukip-text)] dark:group-hover:bg-violet-500/10 dark:group-hover:text-violet-200">
-                <Icon path={workflow.icon} />
-              </div>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-400">{String(index + 1).padStart(2, "0")}</span>
-                  <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${statusStyles[workflow.status]}`}>
-                    {statusLabel(workflow.status, t)}
-                  </span>
+            <div className="relative z-10 mt-10 space-y-4">
+              {!demoSeeded && (
+                <button
+                  type="button"
+                  onClick={onLaunchDemo}
+                  disabled={demoLoading}
+                  className="ukip-focus inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-white/25 bg-white px-5 text-sm font-bold text-violet-700 shadow-[0_18px_45px_rgb(15_23_42_/_0.18)] transition hover:bg-violet-50 disabled:opacity-60"
+                >
+                  <Icon path="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653z" />
+                  {demoLoading ? t("page.home.command.demo.loading", "Starting demo...") : t("page.home.command.demo.cta", "Launch realistic demo")}
+                </button>
+              )}
+              <div className="grid grid-cols-3 gap-2.5">
+                <div className="rounded-2xl border border-white/18 bg-white/14 p-3.5 shadow-sm backdrop-blur">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-50/75">
+                    {t("page.home.command.kpi.records", "Records")}
+                  </p>
+                  <p className="mt-2 font-mono text-2xl font-semibold tracking-[-0.03em] text-white">
+                    {entityCount.toLocaleString()}
+                  </p>
                 </div>
-                <h3 className="mt-2 text-base font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">
-                  {workflow.title}
-                </h3>
-                <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-[var(--ukip-muted)]">
-                  {workflow.body}
-                </p>
+                <div className="rounded-2xl border border-white/18 bg-white/14 p-3.5 shadow-sm backdrop-blur">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-50/75">
+                    {t("page.home.command.kpi.enrichment", "Enriched")}
+                  </p>
+                  <p className="mt-2 font-mono text-2xl font-semibold tracking-[-0.03em] text-white">{roundedEnrichment}%</p>
+                </div>
+                <div className="rounded-2xl border border-white/18 bg-white/14 p-3.5 shadow-sm backdrop-blur">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-50/75">
+                    {t("page.home.command.kpi.ready", "Ready")}
+                  </p>
+                  <p className="mt-2 font-mono text-2xl font-semibold tracking-[-0.03em] text-white">{readinessScore}%</p>
+                </div>
               </div>
-              <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end">
-                <span className="text-xl font-semibold tabular-nums text-slate-950 dark:text-[var(--ukip-text-strong)]">
-                  {workflow.metric}
-                </span>
-                <span className="inline-flex items-center gap-1 text-sm font-semibold text-violet-700 group-hover:text-violet-800 dark:text-violet-300">
-                  {workflow.cta}
-                  <Icon path="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-                </span>
-              </div>
-            </Link>
-          ))}
+            </div>
+          </div>
+
+          <div className="grid gap-4 bg-slate-50 p-4 dark:bg-white/[0.03] sm:p-5">
+            {workflows.map((workflow, index) => (
+              <Link
+                key={workflow.id}
+                href={workflow.href}
+                className="group relative overflow-hidden rounded-[1.35rem] border border-slate-200 bg-white p-5 transition hover:-translate-y-0.5 hover:border-violet-300 hover:shadow-[0_18px_45px_rgb(88_28_135_/_0.12)] dark:border-white/10 dark:bg-white/5 dark:hover:border-violet-300/50"
+              >
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+                  <div className="flex items-start gap-4 sm:flex-1">
+                    <span className="font-mono text-4xl font-semibold leading-none tracking-[-0.06em] text-violet-200 transition group-hover:text-violet-300 dark:text-violet-300/40">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyles[workflow.status]}`}>
+                          {statusLabel(workflow.status, t)}
+                        </span>
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-violet-50 text-violet-700 dark:bg-violet-300/10 dark:text-violet-200">
+                          <Icon path={workflow.icon} />
+                        </span>
+                      </div>
+                      <h3 className="mt-3 text-xl font-semibold tracking-[-0.02em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
+                        {workflow.title}
+                      </h3>
+                      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-[var(--ukip-muted)]">
+                        {workflow.body}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 sm:min-w-36 sm:flex-col sm:items-end">
+                    <span className="font-mono text-2xl font-semibold tabular-nums tracking-[-0.04em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
+                      {workflow.metric}
+                    </span>
+                    <span className="inline-flex min-h-10 items-center gap-2 rounded-full border border-violet-200 px-4 text-sm font-bold text-violet-700 transition group-hover:bg-violet-600 group-hover:text-white dark:border-violet-300/30 dark:text-violet-200 dark:group-hover:bg-violet-500">
+                      {workflow.cta}
+                      <Icon path="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                    </span>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
     </section>
