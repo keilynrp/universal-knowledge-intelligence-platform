@@ -17,6 +17,7 @@ import { ErrorBanner, SkeletonCard, useToast } from "../../components/ui";
 import ConceptCloud from "../../components/ConceptCloud";
 import DerivedStatusPanel from "../../components/DerivedStatusPanel";
 import EnrichmentSchedulerCard from "../../components/EnrichmentSchedulerCard";
+import EnrichmentSourceHealthCard from "../../components/EnrichmentSourceHealthCard";
 import { useDomain, isAllScope } from "../../contexts/DomainContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { apiFetch } from "@/lib/api";
@@ -1155,6 +1156,7 @@ export default function ExecutiveDashboardPage() {
 
       {/* ── Enrichment Scheduler health card ── */}
       <EnrichmentSchedulerCard />
+      <EnrichmentSourceHealthCard />
 
       {(data?.impact_projection || (data?.hidden_patterns && data.hidden_patterns.patterns.length > 0)) && (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">

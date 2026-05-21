@@ -12,6 +12,7 @@ export interface Entity {
     domain: string | null;
     validation_status: string | null;
     enrichment_status: string | null;
+    enrichment_failure_reason: string | null;
     enrichment_citation_count: number | null;
     source: string | null;
     attributes_json: string | null;

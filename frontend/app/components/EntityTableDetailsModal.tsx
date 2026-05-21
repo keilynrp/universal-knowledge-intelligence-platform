@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useLanguage } from "../contexts/LanguageContext";
 import type { EntityTableDomain } from "./EntityTable.types";
 import MonteCarloChart from "./MonteCarloChart";
-import { EnrichmentFailureDetails, parseEnrichmentFailure } from "./EnrichmentFailurePanel";
+import { EnrichmentFailureDetails, parseEnrichmentFailure, FailureReasonBadge } from "./EnrichmentFailurePanel";
 import { apiFetch } from "@/lib/api";
 import type { Entity } from "./EntityTable.types";
 
@@ -669,11 +669,13 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
                     </div>
                     {entity.enrichment_status === "failed" && (() => {
                         const failure = parseEnrichmentFailure(entity.attributes_json);
-                        if (!failure) return null;
                         return (
                             <div className="mt-6">
-                                <h3 className="mb-2 text-sm font-semibold text-red-700 dark:text-red-400">{t("page.entity_table.enrichment_failure_title")}</h3>
-                                <EnrichmentFailureDetails failure={failure} />
+                                <div className="flex items-center gap-2 mb-2">
+                                    <h3 className="text-sm font-semibold text-red-700 dark:text-red-400">{t("page.entity_table.enrichment_failure_title")}</h3>
+                                    <FailureReasonBadge reason={entity.enrichment_failure_reason} />
+                                </div>
+                                {failure && <EnrichmentFailureDetails failure={failure} />}
                                 <RetryEnrichmentButton entityId={entity.id} />
                             </div>
                         );

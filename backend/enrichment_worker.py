@@ -100,6 +100,31 @@ def get_provider_registry() -> dict[str, tuple]:
     """Returns the provider registry for introspection (used by /enrichment/providers)."""
     return {name: _PROVIDER_MAP[name] for name in _ACTIVE_CASCADE if name in _PROVIDER_MAP}
 
+
+# ── Circuit breaker registry — used by /enrichment/sources/health endpoint ───
+# Exposes all circuit breakers for real-time state introspection from the API.
+_CB_REGISTRY: dict[str, "CircuitBreaker"] = {
+    "scopus":            _cb_scopus,
+    "wos":               _cb_wos,
+    "openalex":          _cb_openalex,
+    "crossref":          _cb_crossref,
+    "pubmed":            _cb_pubmed,
+    "semantic_scholar":  _cb_s2,
+    "dblp":              _cb_dblp,
+    "scholar":           _cb_scholar,
+}
+
+
+# ── Failure reason constants ──────────────────────────────────────────────────
+class EnrichmentFailureReason:
+    """Machine-readable failure category stored on enrichment_failure_reason."""
+    NO_MATCH           = "no_match"           # All sources searched, no usable record
+    API_ERROR          = "api_error"          # Source returned non-rate-limit 4xx/5xx
+    RATE_LIMITED       = "rate_limited"       # Source returned 429
+    CIRCUIT_OPEN       = "circuit_open"       # Circuit breaker was OPEN, call skipped
+    TIMEOUT            = "timeout"            # Request exceeded configured timeout
+    ALL_SOURCES_FAILED = "all_sources_failed" # Every source attempted, all failed
+
 # Any record stuck in "processing" for longer than this after a server
 # crash will be reclaimed on the next startup.
 VALID_STATUSES = {s.value for s in EnrichmentStatus}
@@ -152,6 +177,7 @@ def _set_enrichment_failed(
     evidence: str,
     provider_attempts: list[str] | None = None,
     exception_type: str | None = None,
+    failure_reason: str | None = None,
 ) -> None:
     attrs = _attrs(entity)
     attrs["enrichment_failure"] = {
@@ -170,6 +196,8 @@ def _set_enrichment_failed(
     }
     entity.attributes_json = json.dumps(attrs, ensure_ascii=False)
     entity.enrichment_status = EnrichmentStatus.failed
+    if failure_reason is not None:
+        entity.enrichment_failure_reason = failure_reason
 
 
 def reset_stale_processing_records(db: Session) -> int:
@@ -361,6 +389,7 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
     enriched_data = None
     source = "Unknown"
     provider_attempts: list[str] = []
+    circuit_open_count = 0
 
     try:
         # Cascade through configured providers in order
@@ -383,6 +412,7 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
                     enriched_data = results[0]
                     source = provider_name
             except CircuitOpenError as e:
+                circuit_open_count += 1
                 logger.warning(str(e))
 
         if enriched_data:
@@ -433,11 +463,22 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
             scraped = enrich_with_web_scrapers(db, entity)
             if not scraped:
                 entity.enrichment_source = "None"
+                # Classify failure reason
+                active_providers = [
+                    n for n in _ACTIVE_CASCADE
+                    if _PROVIDER_MAP.get(n) and _PROVIDER_MAP[n][0] is not None
+                    and getattr(_PROVIDER_MAP[n][0], "is_active", False)
+                ]
+                if active_providers and circuit_open_count >= len(active_providers):
+                    _failure_reason = EnrichmentFailureReason.CIRCUIT_OPEN
+                else:
+                    _failure_reason = EnrichmentFailureReason.NO_MATCH
                 _set_enrichment_failed(
                     entity,
                     code="no_provider_match",
                     evidence=f"No se encontraron coincidencias para '{query}' en las fuentes de enriquecimiento disponibles.",
                     provider_attempts=provider_attempts,
+                    failure_reason=_failure_reason,
                 )
 
     except (ValueError, KeyError, AttributeError) as e:
@@ -449,6 +490,7 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
             evidence=f"Error de datos durante el enriquecimiento: {e}",
             provider_attempts=provider_attempts,
             exception_type=type(e).__name__,
+            failure_reason=EnrichmentFailureReason.API_ERROR,
         )
     except Exception as e:
         # Unexpected errors — mark failed but log at WARNING so they're visible
@@ -459,6 +501,7 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
             evidence=f"Error inesperado durante el enriquecimiento: {type(e).__name__}: {e}",
             provider_attempts=provider_attempts,
             exception_type=type(e).__name__,
+            failure_reason=EnrichmentFailureReason.ALL_SOURCES_FAILED,
         )
 
     db.commit()

@@ -3,6 +3,43 @@
 import { useState } from "react";
 import { useLanguage } from "../contexts/LanguageContext";
 
+// ---------------------------------------------------------------------------
+// Failure reason badge — colour-coded per reason type
+// ---------------------------------------------------------------------------
+
+const REASON_BADGE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+    no_match:           { bg: "bg-gray-100",   text: "text-gray-700",   label: "No Match" },
+    circuit_open:       { bg: "bg-red-100",    text: "text-red-700",    label: "Circuit Open" },
+    api_error:          { bg: "bg-orange-100", text: "text-orange-700", label: "API Error" },
+    rate_limited:       { bg: "bg-amber-100",  text: "text-amber-700",  label: "Rate Limited" },
+    timeout:            { bg: "bg-yellow-100", text: "text-yellow-700", label: "Timeout" },
+    all_sources_failed: { bg: "bg-red-100",    text: "text-red-800",    label: "All Sources Failed" },
+};
+
+const UNKNOWN_STYLE = { bg: "bg-gray-100", text: "text-gray-500", label: "Unknown" };
+
+export function FailureReasonBadge({ reason }: { reason: string | null | undefined }) {
+    if (!reason) {
+        const s = UNKNOWN_STYLE;
+        return (
+            <span
+                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${s.bg} ${s.text}`}
+            >
+                {s.label}
+            </span>
+        );
+    }
+    const s = REASON_BADGE_STYLES[reason] ?? { bg: "bg-gray-100", text: "text-gray-600", label: reason };
+    return (
+        <span
+            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${s.bg} ${s.text}`}
+            title={`Failure reason: ${reason}`}
+        >
+            {s.label}
+        </span>
+    );
+}
+
 interface EnrichmentFailure {
     code: string;
     evidence: string;

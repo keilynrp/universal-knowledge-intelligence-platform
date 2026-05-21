@@ -26,6 +26,10 @@ from backend.schemas import (
     DomainStalenessReport,
     EnrichmentSchedulerRunSchema,
     SchedulerStateResponse,
+    SourceHealthEntry,
+    SourceHealthResponse,
+    SourceStatsEntry,
+    SourceStatsResponse,
 )
 from backend.services.enrichment_scheduler import scheduler as _scheduler
 
@@ -290,3 +294,99 @@ def upsert_policy(
     db.commit()
     db.refresh(existing)
     return DomainEnrichmentPolicySchema.model_validate(existing)
+
+
+# ---------------------------------------------------------------------------
+# GET /enrichment/sources/health
+# ---------------------------------------------------------------------------
+
+@router.get("/enrichment/sources/health", response_model=SourceHealthResponse)
+def get_sources_health(
+    current_user: models.User = Depends(get_current_user),
+) -> SourceHealthResponse:
+    """Return circuit-breaker state for every registered enrichment source."""
+    from backend.enrichment_worker import _CB_REGISTRY
+
+    entries: List[SourceHealthEntry] = []
+    for source_name, cb in sorted(_CB_REGISTRY.items()):
+        last_failure = cb.last_failure_time if cb.last_failure_time > 0 else None
+        last_used = cb.last_used_time if cb.last_used_time > 0 else None
+        entries.append(
+            SourceHealthEntry(
+                source=source_name,
+                state=cb.state.value,
+                failure_count=cb.failure_count,
+                success_count=cb.success_count,
+                last_failure=last_failure,
+                last_used=last_used,
+            )
+        )
+    return SourceHealthResponse(sources=entries)
+
+
+# ---------------------------------------------------------------------------
+# GET /enrichment/sources/stats
+# ---------------------------------------------------------------------------
+
+@router.get("/enrichment/sources/stats", response_model=SourceStatsResponse)
+def get_sources_stats(
+    domain_id: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+) -> SourceStatsResponse:
+    """Return per-source enrichment outcome statistics.
+
+    Optionally filtered by ``?domain_id=`` to scope the aggregation to a
+    single domain.
+    """
+    from sqlalchemy import func as sqla_func, case
+
+    # Aggregate: group by enrichment_source, optionally scoped to a domain
+    agg_q = db.query(
+        models.UniversalEntity.enrichment_source,
+        sqla_func.count(models.UniversalEntity.id).label("total"),
+        sqla_func.sum(
+            case((models.UniversalEntity.enrichment_status == "completed", 1), else_=0)
+        ).label("enriched"),
+        sqla_func.sum(
+            case((models.UniversalEntity.enrichment_status == "failed", 1), else_=0)
+        ).label("failed"),
+    )
+    if domain_id:
+        agg_q = agg_q.filter(models.UniversalEntity.domain == domain_id)
+    agg_rows = agg_q.group_by(models.UniversalEntity.enrichment_source).all()
+
+    # For each source, fetch failure reason breakdown
+    entries: List[SourceStatsEntry] = []
+    for row in agg_rows:
+        source = row.enrichment_source  # may be None
+
+        reason_q = (
+            db.query(
+                models.UniversalEntity.enrichment_failure_reason,
+                sqla_func.count(models.UniversalEntity.id).label("cnt"),
+            )
+            .filter(models.UniversalEntity.enrichment_source == source)
+            .filter(models.UniversalEntity.enrichment_status == "failed")
+        )
+        if domain_id:
+            reason_q = reason_q.filter(models.UniversalEntity.domain == domain_id)
+
+        reason_rows = reason_q.group_by(models.UniversalEntity.enrichment_failure_reason).all()
+
+        failure_reasons: dict = {}
+        for rr in reason_rows:
+            key = rr.enrichment_failure_reason or "unknown"
+            failure_reasons[key] = rr.cnt
+
+        entries.append(
+            SourceStatsEntry(
+                enrichment_source=source,
+                total=row.total or 0,
+                enriched=row.enriched or 0,
+                failed=row.failed or 0,
+                failure_reasons=failure_reasons,
+            )
+        )
+
+    return SourceStatsResponse(domain_id=domain_id, entries=entries)

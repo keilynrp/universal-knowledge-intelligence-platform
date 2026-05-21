@@ -160,10 +160,13 @@ class CircuitBreaker:
 
     def _record_success(self) -> None:
         with self._lock:
-            self._success_count += 1
-            if self._state != CircuitState.CLOSED:
+            if self._state == CircuitState.HALF_OPEN:
+                # Successful probe — reset counters before transitioning to CLOSED
+                self._success_count = 0
+                self._failure_count = 0
                 logger.info(
                     f"Circuit '{self.name}' recovered — returning to CLOSED."
                 )
+            self._success_count += 1
             self._state = CircuitState.CLOSED
             self._failure_count = 0

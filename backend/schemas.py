@@ -837,3 +837,37 @@ class DomainStalenessReport(BaseModel):
     stale_entities:         int
     last_run:               Optional[EnrichmentSchedulerRunSchema] = None
     is_stale:               bool
+
+
+# ---------------------------------------------------------------------------
+# Enrichment Quality Signals schemas
+# ---------------------------------------------------------------------------
+
+class SourceHealthEntry(BaseModel):
+    """Circuit-breaker state for a single enrichment source."""
+    source:        str
+    state:         str          # CLOSED | OPEN | HALF_OPEN
+    failure_count: int
+    success_count: int
+    last_failure:  Optional[float] = None   # epoch timestamp, may be 0.0 → None
+    last_used:     Optional[float] = None
+
+
+class SourceHealthResponse(BaseModel):
+    """Response for GET /enrichment/sources/health."""
+    sources: List[SourceHealthEntry]
+
+
+class SourceStatsEntry(BaseModel):
+    """Per-source enrichment outcome stats."""
+    enrichment_source:  Optional[str]            # None == never enriched
+    total:              int
+    enriched:           int
+    failed:             int
+    failure_reasons:    dict                      # reason → count
+
+
+class SourceStatsResponse(BaseModel):
+    """Response for GET /enrichment/sources/stats."""
+    domain_id:  Optional[str]              # echo of ?domain_id= filter
+    entries:    List[SourceStatsEntry]
