@@ -7,6 +7,7 @@ import EntityTable from "./components/EntityTable";
 import ActivityFeed from "./components/ActivityFeed";
 import GuidedTour, { resetTour } from "./components/GuidedTour";
 import WelcomeModal from "./components/WelcomeModal";
+import ScientificIntelligenceCommandCenter from "./components/ScientificIntelligenceCommandCenter";
 import { AdaptiveNarrativeBlock, DashboardInsightMetrics } from "./components/ukip";
 import { KpiSummaryCard } from "./components/ui";
 import DerivedStatusPanel from "./components/DerivedStatusPanel";
@@ -510,6 +511,18 @@ export default function Home() {
             </Link>
           </div>
         </div>
+
+        <ScientificIntelligenceCommandCenter
+          entityCount={stats?.total_entities ?? 0}
+          enrichmentPct={hasEntities ? enrichPct : 0}
+          domainCount={domainCount}
+          graphReady={graphReady}
+          reportHref={`/reports?preset=pilot-brief&${stakeholderQuery}`}
+          demoSeeded={demoStatus?.demo_seeded === true}
+          demoLoading={demoLoading}
+          onLaunchDemo={handleLaunchDemo}
+          t={tr}
+        />
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {metricCards.map((metric) => (

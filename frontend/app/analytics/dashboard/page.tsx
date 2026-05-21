@@ -378,6 +378,140 @@ function ReferenceRing({ value, label }: { value: number; label: string }) {
   );
 }
 
+function NarrativeDecisionBrief({
+  data,
+  qualityPct,
+  leadingGap,
+  storyLine,
+  primaryAction,
+  nextHref,
+  nextCta,
+  translateBenchmarkStatus,
+  translateBenchmarkEvidence,
+  translateRuleLabel,
+  tr,
+}: {
+  data: DashboardData;
+  qualityPct: number | null;
+  leadingGap: BenchmarkGap | null;
+  storyLine: string;
+  primaryAction: { title: string; evidence: string } | null;
+  nextHref: string;
+  nextCta: string;
+  translateBenchmarkStatus: (status: string) => string;
+  translateBenchmarkEvidence: (profileId: string, gap: BenchmarkGap) => string;
+  translateRuleLabel: (ruleId: string, fallback: string) => string;
+  tr: (key: string, fallback: string) => string;
+}) {
+  const emergingSignal = data.emerging_topic_signals?.signals?.[0] ?? null;
+  const semanticSignal = data.semantic_keyword_signals?.top_opportunities?.[0] ?? null;
+  const missingText = leadingGap
+    ? translateBenchmarkEvidence(data.institutional_benchmark.profile_id, leadingGap)
+    : tr("page.exec_dashboard.narrative.no_gap", "No critical gap is blocking the current readout.");
+
+  const cards = [
+    {
+      label: tr("page.exec_dashboard.narrative.known.label", "What we know"),
+      title: tr("page.exec_dashboard.narrative.known.title", "The corpus is measurable"),
+      body: tr(
+        "page.exec_dashboard.narrative.known.body",
+        `${data.kpis.total_entities.toLocaleString()} records, ${data.kpis.enrichment_pct}% enrichment, and ${data.kpis.total_concepts.toLocaleString()} concepts are available for analysis.`,
+      ),
+      value: data.kpis.total_entities.toLocaleString(),
+      tone: "violet",
+    },
+    {
+      label: tr("page.exec_dashboard.narrative.emerging.label", "What is emerging"),
+      title: emergingSignal?.concept ?? semanticSignal?.keyword ?? tr("page.exec_dashboard.narrative.emerging.empty_title", "No dominant signal yet"),
+      body: emergingSignal?.evidence
+        ?? (semanticSignal
+          ? tr(
+              "page.exec_dashboard.narrative.emerging.semantic_body",
+              `${semanticSignal.keyword} has ${semanticSignal.support_count} internal signals and ${semanticSignal.external_support} external supports.`,
+            )
+          : null)
+        ?? tr("page.exec_dashboard.narrative.emerging.empty_body", "UKIP needs stronger concept coverage across the corpus before naming an emerging theme."),
+      value: emergingSignal ? `+${emergingSignal.acceleration_score}%` : semanticSignal ? `${Math.round(semanticSignal.opportunity_score)}` : "—",
+      tone: "cyan",
+    },
+    {
+      label: tr("page.exec_dashboard.narrative.confidence.label", "How confident"),
+      title: translateBenchmarkStatus(data.institutional_benchmark.status),
+      body: qualityPct == null
+        ? tr("page.exec_dashboard.narrative.confidence.no_quality", "Benchmark readiness is available; quality scoring is still sparse for this domain.")
+        : tr("page.exec_dashboard.narrative.confidence.body", `Quality is at ${qualityPct}% and benchmark readiness is ${Math.round(data.institutional_benchmark.readiness_pct)}%.`),
+      value: `${Math.round(data.institutional_benchmark.readiness_pct)}%`,
+      tone: data.institutional_benchmark.status === "ready" ? "emerald" : "amber",
+    },
+    {
+      label: tr("page.exec_dashboard.narrative.missing.label", "What is missing"),
+      title: leadingGap ? translateRuleLabel(leadingGap.id, leadingGap.label) : tr("page.exec_dashboard.narrative.missing.clear", "No blocking gap"),
+      body: missingText,
+      value: leadingGap ? tr(`page.exec_dashboard.priority.${leadingGap.priority}`, leadingGap.priority) : tr("page.exec_dashboard.narrative.clear", "Clear"),
+      tone: leadingGap ? "amber" : "emerald",
+    },
+  ];
+
+  const toneClasses: Record<string, string> = {
+    violet: "border-violet-200 bg-violet-50 text-violet-900",
+    cyan: "border-cyan-200 bg-cyan-50 text-cyan-900",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    amber: "border-amber-200 bg-amber-50 text-amber-900",
+  };
+
+  return (
+    <section className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+        <div className="rounded-xl border border-[var(--ukip-border)] bg-white p-6 shadow-[0_16px_50px_rgb(91_72_163/0.05)]">
+          <p className={showcaseLabelClass}>{tr("page.exec_dashboard.narrative.eyebrow", "Decision readout")}</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">
+            {tr("page.exec_dashboard.narrative.title", "What this scientific portfolio is telling us now")}
+          </h2>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">{storyLine}</p>
+          {primaryAction && (
+            <div className="mt-5 rounded-xl border border-violet-200 bg-violet-50 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-700">
+                {tr("page.exec_dashboard.narrative.action_label", "Recommended action")}
+              </p>
+              <p className="mt-2 text-sm font-semibold text-slate-950">{primaryAction.title}</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">{primaryAction.evidence}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-[var(--ukip-border)] bg-slate-950 p-6 text-white shadow-[0_18px_60px_rgb(15_23_42/0.18)]">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-200">
+            {tr("page.exec_dashboard.narrative.next_label", "Next move")}
+          </p>
+          <p className="mt-3 text-4xl font-semibold tracking-normal">{Math.round(data.institutional_benchmark.readiness_pct)}%</p>
+          <p className="mt-2 text-sm leading-6 text-slate-300">
+            {tr("page.exec_dashboard.narrative.next_body", "Readiness score for turning this analysis into a defensible stakeholder conversation.")}
+          </p>
+          <Link
+            href={nextHref}
+            className="mt-5 inline-flex h-10 items-center rounded-lg bg-white px-4 text-sm font-semibold text-slate-950 transition hover:bg-violet-50"
+          >
+            {nextCta}
+          </Link>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {cards.map((card) => (
+          <div key={card.label} className={`rounded-xl border p-4 ${toneClasses[card.tone]}`}>
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] opacity-70">{card.label}</p>
+              <span className="shrink-0 rounded-full bg-white/70 px-2 py-1 text-xs font-semibold">{card.value}</span>
+            </div>
+            <h3 className="mt-4 text-base font-semibold">{card.title}</h3>
+            <p className="mt-2 text-sm leading-6 opacity-80">{card.body}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ExecutiveDashboardPage() {
@@ -796,6 +930,22 @@ export default function ExecutiveDashboardPage() {
         </header>
 
       {error && <ErrorBanner message={error} onRetry={fetchDashboard} variant="card" />}
+
+      {data && (
+        <NarrativeDecisionBrief
+          data={data}
+          qualityPct={qualityPct}
+          leadingGap={leadingGap}
+          storyLine={executiveStoryLine}
+          primaryAction={executiveStoryAction}
+          nextHref={nextPilotStep.href}
+          nextCta={nextPilotStep.cta}
+          translateBenchmarkStatus={translateBenchmarkStatus}
+          translateBenchmarkEvidence={translateBenchmarkEvidence}
+          translateRuleLabel={translateRuleLabel}
+          tr={tr}
+        />
+      )}
 
       {data && (
         <div className={showcaseSectionClass}>
