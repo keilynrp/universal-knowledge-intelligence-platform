@@ -237,12 +237,9 @@ export default function EnrichmentSchedulerCard() {
   const fetchData = useCallback(async () => {
     try {
       setError(null);
-      const sched = await apiFetch<SchedulerState>("/enrichment/schedule");
+      const resp = await apiFetch("/enrichment/schedule");
+      const sched = (await resp.json()) as SchedulerState;
       setState(sched);
-
-      // Fetch per-domain reports from scheduler state — use the monitored policies
-      // We get the list of domains from the policy table via the state endpoint
-      // and then fetch individual reports. For now, we query them in bulk via domains.
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load scheduler data");
     } finally {
@@ -253,30 +250,28 @@ export default function EnrichmentSchedulerCard() {
   // Fetch domain reports independently
   const fetchDomainReports = useCallback(async () => {
     try {
-      // First get list of monitored domains from policy list
-      const policies = await apiFetch<{ items: { domain_id: string }[] }>("/enrichment/schedule")
-        .then(async () => {
-          // Get all domain IDs from the policy endpoint
-          // We use the /domains endpoint to get known domains
-          const domainsResp = await apiFetch<{ id: string; name: string }[]>("/domains");
-          return domainsResp;
-        });
+      const domainsResp = await apiFetch("/domains");
+      const domains = (await domainsResp.json()) as { id: string; name: string }[];
 
-      if (!Array.isArray(policies)) return;
+      if (!Array.isArray(domains)) return;
 
       const reports = await Promise.allSettled(
-        policies.map((d: { id: string }) =>
-          apiFetch<DomainStaleness>(`/enrichment/schedule/${d.id}`)
+        domains.map((d: { id: string }) =>
+          apiFetch(`/enrichment/schedule/${d.id}`).then(
+            (r) => r.json() as Promise<DomainStaleness>
+          )
         )
       );
 
       const resolved = reports
-        .filter((r): r is PromiseFulfilledResult<DomainStaleness> => r.status === "fulfilled")
+        .filter(
+          (r): r is PromiseFulfilledResult<DomainStaleness> => r.status === "fulfilled"
+        )
         .map((r) => r.value);
 
       setDomainReports(resolved);
     } catch {
-      // silently ignore if domains fetch fails — don't override the main error
+      // silently ignore — don't override the main error
     }
   }, []);
 
@@ -289,9 +284,10 @@ export default function EnrichmentSchedulerCard() {
     async (domain_id: string) => {
       setTriggering((prev) => ({ ...prev, [domain_id]: true }));
       try {
-        const result = await apiFetch<{ queued_count: number }>(`/enrichment/schedule/${domain_id}/trigger`, {
+        const resp = await apiFetch(`/enrichment/schedule/${domain_id}/trigger`, {
           method: "POST",
         });
+        const result = (await resp.json()) as { queued_count: number };
         showToast(`Queued ${result.queued_count} entities for enrichment in "${domain_id}"`);
         fetchDomainReports();
       } catch (err: unknown) {
