@@ -13,6 +13,7 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const THEME_EVENT = "ukip-theme-change";
+const DEFAULT_THEME: Theme = "light";
 
 function applyTheme(theme: Theme) {
     document.documentElement.classList.toggle("dark", theme === "dark");
@@ -33,20 +34,20 @@ function subscribeTheme(onStoreChange: () => void): () => void {
 
 function getThemeSnapshot(): Theme {
     if (typeof window === "undefined") {
-        return "light";
+        return DEFAULT_THEME;
     }
     const saved = localStorage.getItem("app_theme") as Theme | null;
     if (saved === "light" || saved === "dark") {
         return saved;
     }
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    return DEFAULT_THEME;
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
     const theme: Theme = useSyncExternalStore<Theme>(
         subscribeTheme,
         getThemeSnapshot,
-        () => "light",
+        () => DEFAULT_THEME,
     );
 
     useEffect(() => {

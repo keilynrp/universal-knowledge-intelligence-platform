@@ -33,13 +33,16 @@ export const metadata: Metadata = {
   },
 };
 
-// Inline script to set dark class before first paint to prevent flash
+// Inline script to set the saved app theme before first paint. UKIP defaults to
+// light mode for product/demo consistency instead of following browser theme.
 const themeScript = `
 (function() {
   try {
     var theme = localStorage.getItem('app_theme');
-    if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    if (theme === 'dark') {
       document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
     }
   } catch(e) {}
 })();
