@@ -138,14 +138,15 @@ export default function Sidebar() {
             <div className="space-y-3">
               <button
                 onClick={togglePilotMode}
-                className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
+                aria-pressed={pilotMode}
+                className={`ukip-focus group w-full rounded-xl border px-3.5 py-3.5 text-left transition-[background-color,border-color,box-shadow] ${
                   pilotMode
-                    ? "border-violet-400/30 bg-violet-500/15"
-                    : "border-[var(--ukip-border)] bg-[var(--ukip-panel-strong)]"
+                    ? "border-violet-400/40 bg-violet-500/15 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.12)]"
+                    : "border-[var(--ukip-border)] bg-[var(--ukip-panel-strong)] hover:border-[var(--ukip-border-strong)]"
                 }`}
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
+                <div className="flex min-h-14 items-center gap-4">
+                  <div className="min-w-0 flex-1">
                     <p className="text-xs font-semibold text-[var(--ukip-text-strong)]">
                       {pilotMode
                         ? tr("sidebar.pilot_mode.on", "Pilot mode on")
@@ -158,21 +159,21 @@ export default function Sidebar() {
                     </p>
                   </div>
                   <span
-                    className={`inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      pilotMode ? "bg-violet-500" : "bg-[var(--ukip-border-strong)]"
+                    aria-hidden="true"
+                    className={`inline-flex h-10 w-[4.25rem] shrink-0 items-center rounded-full p-1 transition-colors ${
+                      pilotMode
+                        ? "bg-violet-500 shadow-[0_0_0_4px_rgba(139,92,246,0.14)]"
+                        : "bg-[var(--ukip-border-strong)] group-hover:bg-[var(--ukip-muted-soft)]"
                     }`}
                   >
                     <span
-                      className={`h-5 w-5 rounded-full bg-white transition-transform ${
-                        pilotMode ? "translate-x-5" : "translate-x-0.5"
+                      className={`h-8 w-8 rounded-full bg-white shadow-sm transition-transform ${
+                        pilotMode ? "translate-x-7" : "translate-x-0"
                       }`}
                     />
                   </span>
                 </div>
               </button>
-              <div className="rounded-lg border border-[var(--ukip-border)] bg-[var(--ukip-panel-strong)] px-3 py-3">
-                <p className="text-xs font-semibold text-[var(--ukip-text-strong)]">UKIP</p>
-              </div>
             </div>
           ) : (
             <div className="flex justify-center">
