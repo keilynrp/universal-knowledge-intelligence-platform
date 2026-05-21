@@ -37,7 +37,90 @@ _DEMO_PORTAL_SLUG = "ukip-demo-catalog"
 _DEMO_PORTAL_TITLE = "Portal demo UKIP"
 _DEMO_PORTAL_DESCRIPTION = (
     "Portal de descubrimiento generado automáticamente desde la demo UKIP "
-    "para explorar 1,000 entidades pregeneradas."
+    "para explorar un corpus científico pregenerado."
+)
+
+_SHOWCASE_CLUSTERS = (
+    {
+        "slug": "ai-research-assessment",
+        "label": "AI-assisted research assessment",
+        "publisher": "Journal of Research Intelligence",
+        "concepts": [
+            "scientific intelligence",
+            "research assessment",
+            "responsible metrics",
+            "machine learning",
+            "decision support",
+        ],
+        "titles": [
+            "Human-in-the-loop evidence synthesis for research portfolio decisions",
+            "Responsible metric design for AI-assisted science policy",
+            "Benchmarking institutional research signals with explainable indicators",
+            "Decision support workflows for scientific intelligence platforms",
+            "Trust calibration in automated research assessment systems",
+            "Mapping uncertainty in machine-assisted evidence briefs",
+        ],
+    },
+    {
+        "slug": "open-science-quality",
+        "label": "Open science and reproducibility quality",
+        "publisher": "Open Science Analytics",
+        "concepts": [
+            "open science",
+            "reproducibility",
+            "data quality",
+            "research integrity",
+            "evidence governance",
+        ],
+        "titles": [
+            "Reproducibility signals as operational quality controls",
+            "Open science readiness across institutional research domains",
+            "Data availability patterns in high-impact scientific corpora",
+            "Governance models for reusable research evidence",
+            "Quality gaps in cross-domain research knowledge bases",
+            "Operational indicators for transparent scientific outputs",
+        ],
+    },
+    {
+        "slug": "bibliometric-networks",
+        "label": "Bibliometric and knowledge graph networks",
+        "publisher": "Scientometrics Systems Review",
+        "concepts": [
+            "bibliometrics",
+            "knowledge graphs",
+            "citation networks",
+            "topic modeling",
+            "research impact",
+        ],
+        "titles": [
+            "Knowledge graph methods for emerging topic detection",
+            "Citation network dynamics in interdisciplinary research portfolios",
+            "Topic drift indicators for scientific intelligence dashboards",
+            "Graph-based discovery of institutional research strengths",
+            "Impact projection from citation and concept trajectories",
+            "Signal fusion methods for bibliometric monitoring",
+        ],
+    },
+    {
+        "slug": "science-policy-translation",
+        "label": "Science policy translation",
+        "publisher": "Policy Evidence Quarterly",
+        "concepts": [
+            "science policy",
+            "technology transfer",
+            "research translation",
+            "innovation systems",
+            "stakeholder briefs",
+        ],
+        "titles": [
+            "From research signals to executive science briefs",
+            "Evidence packaging for policy and innovation stakeholders",
+            "Translational readiness metrics in university research portfolios",
+            "Institutional decision models for strategic scientific investments",
+            "Aligning research intelligence with stakeholder action cycles",
+            "Portfolio narratives for high-confidence science policy decisions",
+        ],
+    },
 )
 
 _CURRENT_FIELD_MAP = {
@@ -273,6 +356,46 @@ def _load_openalex_snapshot():
     return records, "openalex_snapshot"
 
 
+def _build_scientific_showcase_records():
+    """Create a deterministic scientific intelligence demo corpus."""
+    from backend.schemas_enrichment import EnrichedRecord
+
+    records: list[EnrichedRecord] = []
+    author_pool = (
+        ("Ana Morales", "Nora Patel", "Mateo Chen"),
+        ("Lucia Rivera", "Ethan Okafor", "Sofia Klein"),
+        ("Ines Vidal", "Maya Singh", "Theo Martin"),
+        ("Camila Torres", "Jonas Weber", "Priya Raman"),
+    )
+    for cluster_index, cluster in enumerate(_SHOWCASE_CLUSTERS):
+        for title_index, title in enumerate(cluster["titles"]):
+            sequence = cluster_index * 100 + title_index + 1
+            year = 2020 + ((title_index + cluster_index) % 6)
+            citation_count = 18 + (cluster_index * 17) + (title_index * 11)
+            authors = list(author_pool[(cluster_index + title_index) % len(author_pool)])
+            records.append(EnrichedRecord(
+                id=f"ukip-showcase-{cluster['slug']}-{title_index + 1}",
+                doi=f"10.5555/ukip.showcase.{sequence:04d}",
+                title=title,
+                authors=authors,
+                citation_count=citation_count,
+                publication_year=year,
+                concepts=list(cluster["concepts"]),
+                publisher=cluster["publisher"],
+                affiliations=[
+                    "UKIP Scientific Intelligence Lab",
+                    "Latin American Research Observatory",
+                ],
+                is_open_access=title_index % 2 == 0,
+                source_api="UKIP Showcase",
+                raw_response={
+                    "cluster": cluster["label"],
+                    "demo_use": "scientific intelligence product walkthrough",
+                },
+            ))
+    return records, "curated_scientific_showcase"
+
+
 def _seed_from_enriched_records(
     db: Session,
     records,
@@ -345,10 +468,15 @@ def demo_seed(
 
     # Strategy 3: Legacy Excel file (backwards compat)
     if not _DEMO_FILE.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="No demo data source available. Provide data/demo/openalex_snapshot.json or data/demo/demo_entities.xlsx.",
-        )
+        records, data_source = _build_scientific_showcase_records()
+        seeded, portal = _seed_from_enriched_records(db, records, current_user, org_id)
+        logger.info("Demo seed: %d entities from %s", seeded, data_source)
+        return {
+            "seeded": seeded,
+            "source": data_source,
+            "message": f"Demo dataset loaded: {seeded} curated scientific intelligence entities.",
+            "catalog_portal": {"title": portal.title, "slug": portal.slug, "url": f"/catalogs/{portal.slug}"},
+        }
 
     try:
         df = pd.read_excel(_DEMO_FILE)

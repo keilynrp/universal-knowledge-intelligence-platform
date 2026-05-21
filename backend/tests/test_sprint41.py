@@ -142,6 +142,26 @@ def test_demo_seed_uses_snapshot_fallback(client, auth_headers, db_session):
     assert payload["seeded"] == 3
 
 
+def test_demo_seed_uses_curated_showcase_when_files_missing(client, auth_headers, db_session):
+    """A production deploy without demo files should still have a coherent showcase dataset."""
+    with _patch("backend.routers.demo._DEMO_FILE") as demo_file, \
+         _patch("backend.routers.demo._try_openalex_live", side_effect=RuntimeError("offline")), \
+         _patch("backend.routers.demo._load_openalex_snapshot", side_effect=FileNotFoundError("no snapshot")):
+        demo_file.exists.return_value = False
+        demo_file.name = "missing-demo.xlsx"
+        resp = client.post("/demo/seed", headers=auth_headers)
+
+    assert resp.status_code == 201
+    payload = resp.json()
+    assert payload["source"] == "curated_scientific_showcase"
+    assert payload["seeded"] == 24
+
+    rows = db_session.query(models.RawEntity).filter(models.RawEntity.source == "demo").all()
+    assert len(rows) == 24
+    assert {row.domain for row in rows} == {"science"}
+    assert any("scientific intelligence" in (row.enrichment_concepts or "") for row in rows)
+
+
 def test_demo_seed_maps_legacy_demo_columns(client, auth_headers, db_session):
     df = _legacy_demo_df(3)
     with _fake_demo_file(df), \

@@ -41,6 +41,38 @@ interface BenchmarkProfile {
   is_default: boolean;
 }
 
+interface DashboardBriefSummary {
+  kpis: {
+    total_entities: number;
+    enrichment_pct: number;
+    total_concepts: number;
+  };
+  recommended_actions: {
+    id: string;
+    title: string;
+    evidence: string;
+    priority: "high" | "medium" | "low";
+  }[];
+  institutional_benchmark: {
+    status: "ready" | "watch" | "gap";
+    readiness_pct: number;
+    passed_rules: number;
+    total_rules: number;
+    top_gaps: {
+      id: string;
+      label: string;
+      priority: "high" | "medium" | "low";
+      evidence: string;
+      message: string;
+    }[];
+  };
+  impact_projection?: {
+    score: number;
+    confidence: "high" | "medium" | "low";
+    recommendation: string;
+  };
+}
+
 const SECTION_ICONS: Record<string, string> = {
   institutional_benchmark: "🏛️",
   impact_projection: "📈",
@@ -88,6 +120,8 @@ export default function ReportsPage() {
   const [selectedBenchmarkProfile, setSelectedBenchmarkProfile] = useState("research_portfolio_baseline");
   const [selectedStakeholderProfile, setSelectedStakeholderProfile] = useState<StakeholderProfile>("leadership");
   const [rememberedPersonaLabel, setRememberedPersonaLabel] = useState<string | null>(null);
+  const [dashboardBrief, setDashboardBrief] = useState<DashboardBriefSummary | null>(null);
+  const [loadingDashboardBrief, setLoadingDashboardBrief] = useState(false);
 
   const preset = searchParams.get("preset");
   const presetDomain = searchParams.get("domain");
@@ -199,6 +233,11 @@ export default function ReportsPage() {
     ];
   }, [format, preset, selected.size, t, title]);
   const briefReady = briefChecklist.filter((item) => item.done).length >= 3;
+  const leadingDashboardAction = dashboardBrief?.recommended_actions?.[0] ?? null;
+  const leadingDashboardGap = dashboardBrief?.institutional_benchmark?.top_gaps?.[0] ?? null;
+  const dashboardReadinessLabel = dashboardBrief
+    ? t(`page.exec_dashboard.benchmark_status.${dashboardBrief.institutional_benchmark.status}`)
+    : "";
   const pilotExitSummary = useMemo(() => {
     if (briefReady) {
       return {
@@ -330,6 +369,31 @@ export default function ReportsPage() {
     setSelectedStakeholderProfile(pilotPersonaToStakeholder(storedPersona));
     setRememberedPersonaLabel(t(`welcome.persona.${storedPersona}.label`));
   }, [presetStakeholderProfile, t]);
+
+  useEffect(() => {
+    if (preset !== "pilot-brief") {
+      setDashboardBrief(null);
+      return;
+    }
+
+    let cancelled = false;
+    const loadDashboardBrief = async () => {
+      setLoadingDashboardBrief(true);
+      try {
+        const params = new URLSearchParams({ domain_id: activeDomainId || "all" });
+        if (selectedBenchmarkProfile) params.set("profile_id", selectedBenchmarkProfile);
+        const res = await apiFetch(`/dashboard/summary?${params.toString()}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const payload = await res.json();
+        if (!cancelled) setDashboardBrief(payload);
+      } finally {
+        if (!cancelled) setLoadingDashboardBrief(false);
+      }
+    };
+
+    void loadDashboardBrief();
+    return () => { cancelled = true; };
+  }, [activeDomainId, preset, selectedBenchmarkProfile]);
 
   const loadTemplates = useCallback(async () => {
     if (templates.length > 0) return; // already loaded
@@ -509,6 +573,93 @@ export default function ReportsPage() {
           label: t("page.reports.guided.cta_explorer"),
         }}
       />
+
+      {preset === "pilot-brief" && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">
+                {t("page.reports.decision_summary.eyebrow")}
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-normal text-gray-950 dark:text-white">
+                {t("page.reports.decision_summary.title")}
+              </h2>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-600 dark:text-gray-300">
+                {leadingDashboardAction?.evidence
+                  || leadingDashboardAction?.title
+                  || t("page.reports.decision_summary.body")}
+              </p>
+            </div>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-100">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">
+                {t("page.reports.decision_summary.export_state")}
+              </p>
+              <p className="mt-3 text-3xl font-semibold">
+                {dashboardBrief ? `${Math.round(dashboardBrief.institutional_benchmark.readiness_pct)}%` : loadingDashboardBrief ? "..." : "—"}
+              </p>
+              <p className="mt-1 text-sm opacity-80">
+                {dashboardBrief
+                  ? t("page.reports.decision_summary.readiness_detail", {
+                      status: dashboardReadinessLabel,
+                      passed: dashboardBrief.institutional_benchmark.passed_rules,
+                      total: dashboardBrief.institutional_benchmark.total_rules,
+                    })
+                  : t("page.reports.decision_summary.loading")}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-gray-700 dark:bg-gray-800/70">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">
+                {t("page.reports.decision_summary.corpus")}
+              </p>
+              <p className="mt-3 text-xl font-semibold text-gray-950 dark:text-white">
+                {dashboardBrief?.kpis.total_entities.toLocaleString() ?? importedRows ?? "—"}
+              </p>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                {dashboardBrief
+                  ? t("page.reports.decision_summary.corpus_detail", {
+                      enrichment: dashboardBrief.kpis.enrichment_pct,
+                      concepts: dashboardBrief.kpis.total_concepts,
+                    })
+                  : t("page.reports.decision_summary.corpus_pending")}
+              </p>
+            </div>
+            <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-violet-950 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-100">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-700 dark:text-violet-300">
+                {t("page.reports.decision_summary.action")}
+              </p>
+              <p className="mt-3 text-sm font-semibold">
+                {leadingDashboardAction?.title ?? t("page.reports.decision_summary.action_pending")}
+              </p>
+              <p className="mt-2 text-sm leading-6 opacity-80">
+                {leadingDashboardAction?.evidence ?? t("page.reports.decision_summary.action_pending_detail")}
+              </p>
+            </div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-100">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300">
+                {t("page.reports.decision_summary.gap")}
+              </p>
+              <p className="mt-3 text-sm font-semibold">
+                {leadingDashboardGap?.label ?? t("page.reports.decision_summary.no_gap")}
+              </p>
+              <p className="mt-2 text-sm leading-6 opacity-80">
+                {leadingDashboardGap?.evidence || leadingDashboardGap?.message || t("page.reports.decision_summary.no_gap_detail")}
+              </p>
+            </div>
+            <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-cyan-950 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-100">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-700 dark:text-cyan-300">
+                {t("page.reports.decision_summary.output")}
+              </p>
+              <p className="mt-3 text-sm font-semibold">{format.toUpperCase()} · {selected.size} {tr("page.reports.exit_summary.sections", "sections selected")}</p>
+              <p className="mt-2 text-sm leading-6 opacity-80">
+                {activeStakeholder.label}: {stakeholderNarrativeGoal}
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
 
       <div className={`rounded-2xl border px-5 py-4 ${pilotExitSummary.tone}`}>
         <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
