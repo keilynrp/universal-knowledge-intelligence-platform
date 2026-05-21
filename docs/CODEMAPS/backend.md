@@ -1,6 +1,6 @@
 # Backend Architecture Codemap
 
-**Last Updated:** 2026-05-20  
+**Last Updated:** 2026-05-20 (enrichment-scheduler feature)
 **Entry Points:** `backend/main.py`, `backend/models.py`, `backend/schemas.py`
 
 ## High-Level Architecture
@@ -475,6 +475,46 @@ See [CODEMAPS: Derived Status](derived_status.md) for details.
 3. Write enrichment data to attributes_json
 4. Update enrichment_status=completed
 5. Call `invalidate_derived_status_cache(domain_id)`
+
+---
+
+### enrichment_scheduler — Scheduled Re-queuing Service
+
+**Location:** `backend/services/enrichment_scheduler.py`
+
+**Purpose:** Background service that detects stale domains and re-queues eligible entities.
+
+**Model:** `DomainEnrichmentPolicy` per domain stores:
+- `enabled` — whether scheduling is active
+- `min_enrichment_pct` — target enrichment threshold (default: 80%)
+- `max_budget_per_run` — max entities to requeue per cycle (default: 100)
+- `staleness_threshold_days` — days since last run to trigger (default: 30)
+
+**Audit log:** `EnrichmentSchedulerRun` records each scheduler invocation:
+- `domain_id`, `triggered_at`, `queued_count`, `status` (started/completed/failed)
+
+**Process (60-second loop):**
+1. For each enabled domain policy:
+   - Check if enrichment_pct < min_enrichment_pct AND age > staleness_threshold_days
+   - If stale: requeue up to `max_budget_per_run` entities (status='none' or 'failed' → 'pending')
+   - Record run attempt in EnrichmentSchedulerRun
+
+**Singleton pattern:** Module-level `scheduler` instance created in main.py lifespan
+
+---
+
+### enrichment_schedule Router
+
+**Location:** `backend/routers/enrichment_schedule.py`
+
+**Endpoints:**
+- `GET /enrichment/schedule` — Global scheduler state (last/next run, running status)
+- `GET /enrichment/schedule/{domain_id}` — Per-domain staleness report (viewer+)
+- `GET /enrichment/schedule/{domain_id}/runs` — Run history with pagination (viewer+)
+- `POST /enrichment/schedule/{domain_id}/trigger` — Manual trigger (admin+)
+- `PUT /enrichment/schedule/{domain_id}/policy` — Upsert/update policy (admin+, 201 on create)
+
+**Auth:** All endpoints require `get_current_user`; write ops require `admin+`
 
 ---
 

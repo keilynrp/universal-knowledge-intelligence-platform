@@ -1,6 +1,6 @@
 # UKIP Codemaps Index
 
-**Last Updated:** 2026-05-20
+**Last Updated:** 2026-05-20 (enrichment-scheduler feature)
 
 Navigation guide to architectural documentation for the Universal Knowledge Intelligence Platform.
 
@@ -16,6 +16,7 @@ Main services, routers, and data processing pipeline. Entry point: `backend/main
 Key subsystems:
 - **Authentication & Authorization** — RBAC with 4 roles (super_admin, admin, editor, viewer)
 - **Entity Management** — Ingestion, enrichment, harmonization, authority resolution
+- **Enrichment Scheduling** — Per-domain staleness detection and re-queuing (NEW)
 - **Analytics & Reporting** — Dashboards, OLAP cubes, topic modeling, correlation analysis
 - **Knowledge Synthesis** — RAG, semantic indexing, vector store integration
 

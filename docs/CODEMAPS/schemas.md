@@ -1,6 +1,6 @@
 # Data Schemas & Contracts Codemap
 
-**Last Updated:** 2026-05-20  
+**Last Updated:** 2026-05-20 (enrichment-scheduler schemas)
 **Entry Points:** `backend/schemas.py`, `backend/models.py`
 
 ## Overview
@@ -282,6 +282,84 @@ entity_base_q(db, domain_id, org_id).filter(...).all()
 | `ValidationStatus` | Validation result | 3 states | Yes |
 | `EntityAttributesDict` | enrichment outputs | 11 keys | N/A (documentation) |
 | `KNOWN_ATTRIBUTE_KEYS` | Validation set | Frozenset of 11 | N/A (constant) |
+
+## Enrichment Scheduler Schemas (NEW)
+
+**Location:** `backend/schemas.py` (new classes)
+
+### DomainEnrichmentPolicySchema
+
+```python
+class DomainEnrichmentPolicySchema(BaseModel):
+    """Per-domain enrichment scheduling configuration."""
+    domain_id: str
+    enabled: bool
+    min_enrichment_pct: float     # Default: 80.0
+    max_budget_per_run: int       # Default: 100
+    staleness_threshold_days: int  # Default: 30
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+class DomainEnrichmentPolicyUpdate(BaseModel):
+    """Update payload for policy endpoints."""
+    enabled: Optional[bool] = None
+    min_enrichment_pct: Optional[float] = Field(None, ge=0, le=100)
+    max_budget_per_run: Optional[int] = Field(None, ge=1, le=10000)
+    staleness_threshold_days: Optional[int] = Field(None, ge=1, le=365)
+```
+
+**Database model:** `backend/models.DomainEnrichmentPolicy` (table created via migration)
+
+---
+
+### EnrichmentSchedulerRunSchema
+
+```python
+class EnrichmentSchedulerRunSchema(BaseModel):
+    """Audit log entry for each scheduler invocation."""
+    id: int
+    domain_id: str
+    triggered_at: datetime
+    queued_count: int
+    status: str  # "started", "completed", "failed"
+    error_message: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+```
+
+**Database model:** `backend/models.EnrichmentSchedulerRun` (table created via migration)
+
+---
+
+### DomainStalenessReport
+
+```python
+class DomainStalenessReport(BaseModel):
+    """Staleness assessment for a single domain."""
+    domain_id: str
+    total_entities: int
+    enriched_entities: int
+    stale_entities: int
+    current_enrichment_pct: float
+    is_stale: bool
+    policy: DomainEnrichmentPolicySchema
+```
+
+---
+
+### SchedulerStateResponse
+
+```python
+class SchedulerStateResponse(BaseModel):
+    """Global enrichment scheduler state."""
+    running: bool
+    last_run_at: Optional[datetime] = None
+    next_run_at: Optional[datetime] = None
+    interval_seconds: int
+    enabled_domains: int
+```
+
+---
 
 ## Related Documentation
 
