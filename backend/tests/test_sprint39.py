@@ -323,6 +323,33 @@ def test_dashboard_includes_institutional_benchmark_summary(client, auth_headers
     assert isinstance(benchmark["rules"], list)
 
 
+def test_dashboard_summary_survives_optional_intelligence_failures(client, auth_headers, db_session, monkeypatch):
+    _seed_entities(db_session, n=3)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("optional analyzer unavailable")
+
+    monkeypatch.setattr(
+        "backend.services.analytics_service.ImpactProjectionService.build_from_snapshot",
+        boom,
+    )
+    monkeypatch.setattr(
+        "backend.services.analytics_service.PatternDiscoveryService.discover",
+        boom,
+    )
+    monkeypatch.setattr("backend.services.analytics_service.evaluate_benchmark", boom)
+
+    response = client.get("/dashboard/summary?domain_id=default&force_refresh=true", headers=auth_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["kpis"]["total_entities"] >= 3
+    assert data["impact_projection"]["score"] == 0
+    assert data["hidden_patterns"]["patterns"] == []
+    assert data["institutional_benchmark"]["status"] == "watch"
+    assert data["recommended_actions"]
+
+
 def test_dashboard_includes_emerging_topic_signals(client, auth_headers, db_session):
     records = [
         ("AI, Machine Learning", 2021),

@@ -1,5 +1,6 @@
 from collections import defaultdict
 import json
+import logging
 import re
 
 from sqlalchemy import func
@@ -17,6 +18,7 @@ from backend.schema_registry import registry
 
 
 ENRICHED_STATUSES = ("completed", "done", "enriched")
+logger = logging.getLogger(__name__)
 
 
 class AnalyticsService:
@@ -40,6 +42,49 @@ class AnalyticsService:
         "production",
         "work",
     }
+
+    @staticmethod
+    def _empty_impact_projection() -> dict:
+        return {
+            "score": 0,
+            "expected": 0,
+            "conservative": 0,
+            "optimistic": 0,
+            "confidence": "low",
+            "confidence_score": 0,
+            "range": {"p10": 0, "p50": 0, "p90": 0},
+            "drivers": {"coverage": 0, "quality": 0, "citation_signal": 0, "concentration": 0},
+            "recommendation": "Collect more portfolio evidence before projecting impact.",
+            "brief_angle": "Insufficient signal for an impact narrative.",
+            "explanation": "Impact projection is temporarily unavailable for this dashboard readout.",
+            "simulations": 0,
+        }
+
+    @staticmethod
+    def _empty_hidden_patterns() -> dict:
+        return {
+            "summary": {"records_analyzed": 0, "patterns_found": 0, "highest_impact_score": 0},
+            "patterns": [],
+        }
+
+    @staticmethod
+    def _empty_benchmark(snapshot: dict, profile_id: str | None = None) -> dict:
+        return {
+            "profile_id": profile_id or "research_portfolio_baseline",
+            "profile_name": "Research portfolio baseline",
+            "description": "Benchmark temporarily unavailable.",
+            "region": "global",
+            "status": "watch",
+            "readiness_pct": 0,
+            "passed_rules": 0,
+            "total_rules": 0,
+            "rules": [],
+            "top_gaps": [],
+            "summary": (
+                f"{snapshot.get('kpis', {}).get('total_entities', 0)} records are available, "
+                "but benchmark evaluation could not be completed."
+            ),
+        }
 
     @staticmethod
     def _domain_name(domain_id: str) -> str:
@@ -451,13 +496,22 @@ class AnalyticsService:
             "top_entities":       top_entities,
             "quality": {"average": avg_quality, "distribution": quality_dist},
         }
-        snapshot["impact_projection"] = ImpactProjectionService.build_from_snapshot(snapshot)
-        snapshot["hidden_patterns"] = PatternDiscoveryService.discover(
-            db,
-            domain_id=domain_id,
-            org_id=org_id,
-            limit=5,
-        )
+        try:
+            snapshot["impact_projection"] = ImpactProjectionService.build_from_snapshot(snapshot)
+        except Exception:
+            logger.exception("dashboard_impact_projection_failed domain=%s org_id=%s", domain_id, org_id)
+            snapshot["impact_projection"] = cls._empty_impact_projection()
+
+        try:
+            snapshot["hidden_patterns"] = PatternDiscoveryService.discover(
+                db,
+                domain_id=domain_id,
+                org_id=org_id,
+                limit=5,
+            )
+        except Exception:
+            logger.exception("dashboard_hidden_patterns_failed domain=%s org_id=%s", domain_id, org_id)
+            snapshot["hidden_patterns"] = cls._empty_hidden_patterns()
         try:
             snapshot["semantic_keyword_signals"] = cls._semantic_keyword_summary(
                 materialize_keyword_signals(
@@ -482,12 +536,21 @@ class AnalyticsService:
                 "top_opportunities": [],
                 "recommendations": [],
             }
-        snapshot["recommended_actions"] = cls.build_recommended_actions(snapshot)
-        snapshot["institutional_benchmark"] = evaluate_benchmark(
-            snapshot,
-            benchmark_profile_id,
-            org=benchmark_org,
-        )
+        try:
+            snapshot["recommended_actions"] = cls.build_recommended_actions(snapshot)
+        except Exception:
+            logger.exception("dashboard_recommended_actions_failed domain=%s org_id=%s", domain_id, org_id)
+            snapshot["recommended_actions"] = []
+
+        try:
+            snapshot["institutional_benchmark"] = evaluate_benchmark(
+                snapshot,
+                benchmark_profile_id,
+                org=benchmark_org,
+            )
+        except Exception:
+            logger.exception("dashboard_benchmark_failed domain=%s org_id=%s", domain_id, org_id)
+            snapshot["institutional_benchmark"] = cls._empty_benchmark(snapshot, benchmark_profile_id)
         return snapshot
 
     @staticmethod
