@@ -57,8 +57,13 @@ function formatTs(ts: string | null): string {
   }
 }
 
-function fmtPct(pct: number): string {
-  return pct.toFixed(1) + "%";
+function asFiniteNumber(value: unknown, fallback = 0): number {
+  const next = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(next) ? next : fallback;
+}
+
+function fmtPct(pct: unknown): string {
+  return asFiniteNumber(pct).toFixed(1) + "%";
 }
 
 const ADMIN_ROLES = new Set(["admin", "super_admin"]);
@@ -257,9 +262,10 @@ export default function EnrichmentSchedulerCard() {
 
       const reports = await Promise.allSettled(
         domains.map((d: { id: string }) =>
-          apiFetch(`/enrichment/schedule/${d.id}`).then(
-            (r) => r.json() as Promise<DomainStaleness>
-          )
+          apiFetch(`/enrichment/schedule/${d.id}`).then(async (r) => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.json() as Promise<DomainStaleness>;
+          })
         )
       );
 
@@ -267,7 +273,8 @@ export default function EnrichmentSchedulerCard() {
         .filter(
           (r): r is PromiseFulfilledResult<DomainStaleness> => r.status === "fulfilled"
         )
-        .map((r) => r.value);
+        .map((r) => r.value)
+        .filter((report) => typeof report?.domain_id === "string");
 
       setDomainReports(resolved);
     } catch {
@@ -431,7 +438,7 @@ export default function EnrichmentSchedulerCard() {
                         <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-200">
                           <div
                             className="h-full rounded-full bg-indigo-500"
-                            style={{ width: `${Math.min(report.current_enrichment_pct, 100)}%` }}
+                            style={{ width: `${Math.min(asFiniteNumber(report.current_enrichment_pct), 100)}%` }}
                           />
                         </div>
                         <span className="text-sm text-slate-700">
@@ -440,7 +447,7 @@ export default function EnrichmentSchedulerCard() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-700">
-                      {report.stale_entities.toLocaleString()}
+                      {asFiniteNumber(report.stale_entities).toLocaleString()}
                     </td>
                     <td className="px-4 py-3">
                       <span className={badgeClass(report.is_stale)}>

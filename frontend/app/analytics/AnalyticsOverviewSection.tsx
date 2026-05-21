@@ -7,6 +7,11 @@ import { StatCard } from "../components/ui";
 import { ProgressBar, SectionDivider } from "./AnalyticsPrimitives";
 import type { Stats } from "./analyticsTypes";
 
+function asFiniteNumber(value: unknown, fallback = 0): number {
+  const next = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(next) ? next : fallback;
+}
+
 export function AnalyticsOverviewSection({
   stats,
   totalCount,
@@ -221,7 +226,8 @@ export function AnalyticsOverviewSection({
                 </div>
                 <div className="divide-y divide-gray-100 dark:divide-gray-800">
                   {items.map((item, idx) => {
-                    const pct = totalCount > 0 ? ((item.value / totalCount) * 100).toFixed(1) : "0";
+                    const itemValue = asFiniteNumber(item.value);
+                    const pct = totalCount > 0 ? ((itemValue / totalCount) * 100).toFixed(1) : "0";
                     return (
                       <div
                         key={item.label || idx}
@@ -234,11 +240,11 @@ export function AnalyticsOverviewSection({
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-gray-400 dark:text-gray-500">{pct}%</span>
                             <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-500/10 dark:text-blue-400">
-                              {item.value.toLocaleString()}
+                              {itemValue.toLocaleString()}
                             </span>
                           </div>
                         </div>
-                        <ProgressBar value={item.value} max={totalCount} color="bg-blue-500" />
+                        <ProgressBar value={itemValue} max={totalCount} color="bg-blue-500" />
                       </div>
                     );
                   })}
