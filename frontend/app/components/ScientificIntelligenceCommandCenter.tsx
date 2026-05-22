@@ -143,18 +143,18 @@ export default function ScientificIntelligenceCommandCenter({
               </p>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[26rem]">
+            <dl className="grid gap-0 overflow-hidden rounded-2xl border border-white bg-white/78 shadow-sm ring-1 ring-slate-200/70 backdrop-blur dark:border-white/10 dark:bg-white/[0.06] dark:ring-white/10 sm:grid-cols-3 lg:min-w-[28rem]">
               {[
                 { label: t("page.home.command.kpi.records", "Records"), value: entityCount.toLocaleString() },
                 { label: t("page.home.command.kpi.enrichment", "Enriched"), value: `${roundedEnrichment}%` },
                 { label: t("page.home.command.kpi.ready", "Ready"), value: `${readinessScore}%` },
-              ].map((metric) => (
-                <div key={metric.label} className="rounded-2xl border border-white bg-white/78 p-3.5 shadow-sm ring-1 ring-slate-200/70 backdrop-blur dark:border-white/10 dark:bg-white/[0.06] dark:ring-white/10">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-[var(--ukip-muted)]">{metric.label}</p>
-                  <p className="mt-2 font-mono text-2xl font-semibold tracking-[-0.04em] text-slate-950 dark:text-[var(--ukip-text-strong)]">{metric.value}</p>
+              ].map((metric, metricIndex) => (
+                <div key={metric.label} className={`p-4 ${metricIndex > 0 ? "border-t border-slate-200/80 dark:border-white/10 sm:border-l sm:border-t-0" : ""}`}>
+                  <dt className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-[var(--ukip-muted)]">{metric.label}</dt>
+                  <dd className="mt-2 font-mono text-2xl font-semibold tracking-[-0.04em] text-slate-950 dark:text-[var(--ukip-text-strong)]">{metric.value}</dd>
                 </div>
               ))}
-            </div>
+            </dl>
           </div>
 
           <div className="mt-6 grid gap-3 lg:grid-cols-3">
@@ -188,19 +188,11 @@ export default function ScientificIntelligenceCommandCenter({
                     {workflow.body}
                   </p>
 
-                  <div className="mt-auto flex items-end justify-between gap-4 pt-6">
-                    <span>
-                      <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-[var(--ukip-muted)]">
-                        {t("page.home.command.metric_signal", "Signal")}
-                      </span>
-                      <span className="mt-1 block font-mono text-2xl font-semibold tabular-nums tracking-[-0.04em] text-slate-950 dark:text-[var(--ukip-text-strong)]">
-                        {workflow.metric}
-                      </span>
+                  <div className="mt-auto flex items-center justify-between gap-4 pt-6">
+                    <span className="text-sm font-bold text-violet-700 transition group-hover:text-violet-800 dark:text-violet-200">
+                      {workflow.cta}
                     </span>
                     <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-violet-200 text-violet-700 transition group-hover:bg-violet-600 group-hover:text-white dark:border-violet-300/30 dark:text-violet-200 dark:group-hover:bg-violet-500">
-                      <span className="sr-only">
-                      {workflow.cta}
-                      </span>
                       <Icon path="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
                     </span>
                   </div>
