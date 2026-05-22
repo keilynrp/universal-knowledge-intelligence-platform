@@ -593,7 +593,7 @@ export default function Home() {
         ) : null}
 
         <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
-          <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] lg:p-6">
+          <div className="grid gap-5 p-5 lg:grid-cols-[minmax(13rem,0.58fr)_minmax(0,1.42fr)] lg:p-6 xl:grid-cols-[minmax(14rem,0.5fr)_minmax(0,1.5fr)]">
             <div className="flex flex-col justify-between gap-4">
               <div>
                 <p className="ukip-kicker">{tr("page.home.pipeline_title", "Pipeline UKIP")}</p>
@@ -629,8 +629,8 @@ export default function Home() {
               <div className="mt-4 h-2 rounded-full bg-white ring-1 ring-slate-200 dark:bg-white/10 dark:ring-white/10">
                 <div className="h-2 rounded-full bg-gradient-to-r from-violet-500 via-sky-500 to-emerald-500 transition-all" style={{ width: `${pipelineProgress}%` }} />
               </div>
-              <div className="-mx-1 mt-4 overflow-x-auto pb-1">
-                <div className="grid min-w-[46rem] grid-cols-7 gap-2 px-1">
+              <div className="-mx-1 mt-4 overflow-x-auto pb-1 lg:overflow-visible">
+                <div className="grid min-w-[42rem] grid-cols-7 gap-2 px-1 lg:min-w-0 xl:gap-3">
                   {pipelineStages.map((stage, index) => {
                     const isDone = stage.status === "done";
                     const isCurrent = stage.status === "current";
@@ -638,7 +638,7 @@ export default function Home() {
                       <Link
                         key={stage.label}
                         href={stage.href}
-                        className={`relative rounded-2xl border p-3 transition hover:-translate-y-0.5 ${
+                        className={`relative rounded-2xl border p-2.5 transition hover:-translate-y-0.5 xl:p-3 ${
                           isDone
                             ? "border-emerald-200 bg-emerald-50/80 text-emerald-900 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-50"
                             : isCurrent
@@ -653,8 +653,8 @@ export default function Home() {
                           <span className="text-[11px] font-bold tabular-nums">{String(index + 1).padStart(2, "0")}</span>
                           <span className={`h-2 w-2 rounded-full ${isDone ? "bg-emerald-500" : isCurrent ? "bg-violet-500" : "bg-slate-300 dark:bg-white/30"}`} />
                         </div>
-                        <p className="mt-3 text-sm font-semibold leading-tight">{stage.label}</p>
-                        <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] opacity-70">{stage.group}</p>
+                        <p className="mt-3 text-xs font-semibold leading-tight xl:text-sm">{stage.label}</p>
+                        <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-[0.08em] opacity-70 xl:tracking-[0.12em]">{stage.group}</p>
                       </Link>
                     );
                   })}
