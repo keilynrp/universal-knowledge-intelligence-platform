@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader, Badge, useToast, EmptyState } from "../components/ui";
 import { apiFetch } from "@/lib/api";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -25,7 +25,8 @@ interface StepDefinition {
 
 interface PipelineStatus {
     steps: StepDefinition[];
-    total_products: number;
+    total_entities?: number;
+    total_products?: number;
 }
 
 interface PreviewResult {
@@ -243,6 +244,12 @@ export default function HarmonizationPage() {
 
     const completedCount = pipeline ? pipeline.steps.filter((s) => s.status === "completed" || applyResults[s.step_id]).length : 0;
     const totalModified = Object.values(applyResults).reduce((sum, r) => sum + r.records_updated, 0);
+    const totalEntities = pipeline?.total_entities ?? pipeline?.total_products ?? 0;
+
+    useEffect(() => {
+        fetchPipeline();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return (
         <div className="space-y-6">
@@ -273,7 +280,7 @@ export default function HarmonizationPage() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                         <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('page.harmonization.stat_total_products')}</p>
-                        <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{pipeline.total_products.toLocaleString()}</p>
+                        <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{totalEntities.toLocaleString()}</p>
                     </div>
                     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                         <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('page.harmonization.stat_steps_completed')}</p>

@@ -121,6 +121,22 @@ class TestMaterializationLogic:
         freq = _gather_corpus_concepts(db_session, "empty_domain")
         assert freq == {}
 
+    def test_gather_ingested_concepts_without_completed_enrichment(self, db_session):
+        entity = models.RawEntity(
+            primary_label="Imported Paper",
+            domain="science",
+            enrichment_status="none",
+            enrichment_concepts="Semantic Web; Knowledge Graph|Linked Data",
+        )
+        db_session.add(entity)
+        db_session.commit()
+
+        freq = _gather_corpus_concepts(db_session, "science")
+
+        assert freq["Semantic Web"] == 1
+        assert freq["Knowledge Graph"] == 1
+        assert freq["Linked Data"] == 1
+
     @pytest.mark.asyncio
     async def test_materialize_with_mocked_openalex(self, db_session):
         _make_entity(

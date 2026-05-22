@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -28,6 +29,7 @@ _INTER_BATCH_DELAY = 0.1  # 100ms polite pool
 _MAX_CONCEPTS_PER_RUN = 2000
 _OPENALEX_CONCEPTS_URL = "https://api.openalex.org/concepts"
 _POLITE_EMAIL = "research@ukip.dev"
+_CONCEPT_SPLIT_RE = re.compile(r"[;,|]")
 
 
 # ── File-based cache ─────────────────────────────────────────────────────────
@@ -142,8 +144,8 @@ def _gather_corpus_concepts(db: Session, domain_id: str) -> dict[str, int]:
         db.query(models.RawEntity.enrichment_concepts, models.RawEntity.attributes_json)
         .filter(
             models.RawEntity.domain == domain_id,
-            models.RawEntity.enrichment_status == "completed",
             models.RawEntity.enrichment_concepts.isnot(None),
+            models.RawEntity.enrichment_concepts != "",
         )
         .all()
     )
@@ -152,7 +154,7 @@ def _gather_corpus_concepts(db: Session, domain_id: str) -> dict[str, int]:
     for concepts_str, attrs_json in entities:
         if not concepts_str:
             continue
-        for c in concepts_str.split(","):
+        for c in _CONCEPT_SPLIT_RE.split(concepts_str):
             name = c.strip()
             if name:
                 concept_freq[name] = concept_freq.get(name, 0) + 1
@@ -169,7 +171,6 @@ def _gather_concept_ids_from_attrs(db: Session, domain_id: str) -> dict[str, str
         db.query(models.RawEntity.enrichment_concepts, models.RawEntity.attributes_json)
         .filter(
             models.RawEntity.domain == domain_id,
-            models.RawEntity.enrichment_status == "completed",
             models.RawEntity.attributes_json.like("%enrichment_concept_ids%"),
         )
         .all()
@@ -184,7 +185,7 @@ def _gather_concept_ids_from_attrs(db: Session, domain_id: str) -> dict[str, str
         except (json.JSONDecodeError, TypeError):
             continue
         concept_ids = attrs.get("enrichment_concept_ids", [])
-        names = [c.strip() for c in concepts_str.split(",") if c.strip()]
+        names = [c.strip() for c in _CONCEPT_SPLIT_RE.split(concepts_str) if c.strip()]
         for i, name in enumerate(names):
             if i < len(concept_ids) and concept_ids[i]:
                 name_to_id[name] = concept_ids[i]

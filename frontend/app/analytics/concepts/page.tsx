@@ -24,6 +24,12 @@ interface TreeResponse {
   materialized_at: string | null;
 }
 
+interface TopicSummary {
+  concept: string;
+  count: number;
+  pct?: number;
+}
+
 // ── Tree Node Component ─────────────────────────────────────────────────────
 
 function TreeNode({
@@ -261,6 +267,7 @@ export default function ConceptHierarchyPage() {
   const [loading, setLoading] = useState(true);
   const [materializing, setMaterializing] = useState(false);
   const [view, setView] = useState<"tree" | "sunburst">("tree");
+  const [topics, setTopics] = useState<TopicSummary[]>([]);
 
   const domainId = activeDomain?.id ?? "default";
   const isAdmin = user?.role === "super_admin" || user?.role === "admin";
@@ -268,12 +275,25 @@ export default function ConceptHierarchyPage() {
   const fetchTree = useCallback(async () => {
     setLoading(true);
     try {
-      const resp = await apiFetch(`/analytics/concepts/${domainId}/tree`);
-      if (resp.ok) {
-        setTree(await resp.json());
+      const [treeResp, topicsResp] = await Promise.all([
+        apiFetch(`/analytics/concepts/${domainId}/tree`),
+        apiFetch(`/analyzers/topics/${domainId}?top_n=30`),
+      ]);
+      if (treeResp.ok) {
+        setTree(await treeResp.json());
+      } else {
+        setTree({ nodes: [], materialized_at: null });
+      }
+      if (topicsResp.ok) {
+        const data = await topicsResp.json();
+        setTopics(Array.isArray(data.topics) ? data.topics : []);
+      } else {
+        setTopics([]);
       }
     } catch {
       /* network error */
+      setTree({ nodes: [], materialized_at: null });
+      setTopics([]);
     } finally {
       setLoading(false);
     }
@@ -307,6 +327,7 @@ export default function ConceptHierarchyPage() {
   };
 
   const isEmpty = !tree || tree.nodes.length === 0;
+  const hasTopicFallback = isEmpty && topics.length > 0;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
@@ -367,6 +388,42 @@ export default function ConceptHierarchyPage() {
           {[1, 2, 3, 4, 5].map((i) => (
             <div key={i} className="h-8 animate-pulse rounded-md bg-[var(--ukip-panel)]" />
           ))}
+        </div>
+      ) : hasTopicFallback ? (
+        <div className="rounded-xl border border-[var(--ukip-border)] bg-[var(--ukip-bg)] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-[var(--ukip-text-strong)]">
+                {t("concepts.detected_title")}
+              </h3>
+              <p className="mt-1 max-w-2xl text-sm text-[var(--ukip-muted)]">
+                {t("concepts.detected_description")}
+              </p>
+            </div>
+            {isAdmin && (
+              <button
+                onClick={handleMaterialize}
+                disabled={materializing}
+                className="rounded-lg bg-[var(--ukip-accent)] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {materializing ? t("concepts.refreshing") : t("concepts.refresh")}
+              </button>
+            )}
+          </div>
+          <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {topics.map((topic) => (
+              <button
+                key={topic.concept}
+                onClick={() => handleClickConcept(topic.concept)}
+                className="flex items-center justify-between gap-3 rounded-lg border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-3 py-2 text-left transition hover:border-[var(--ukip-accent)]"
+              >
+                <span className="truncate text-sm font-medium text-[var(--ukip-text)]">{topic.concept}</span>
+                <span className="shrink-0 rounded-full bg-[var(--ukip-panel-strong)] px-2 py-0.5 text-[11px] font-semibold text-[var(--ukip-muted)]">
+                  {topic.count}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       ) : isEmpty ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--ukip-border)] bg-[var(--ukip-panel)] py-16">
