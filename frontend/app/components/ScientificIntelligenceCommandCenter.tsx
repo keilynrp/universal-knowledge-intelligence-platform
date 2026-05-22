@@ -11,7 +11,6 @@ type Workflow = {
   href: string;
   cta: string;
   status: WorkflowStatus;
-  metric: string;
   icon: string;
 };
 
@@ -47,34 +46,6 @@ function statusLabel(status: WorkflowStatus, t: (key: string, fallback: string) 
   return t("page.home.command.status.locked", "Needs data");
 }
 
-function NarrativeOrb({ readinessScore }: { readinessScore: number }) {
-  const safeScore = Math.max(0, Math.min(100, readinessScore));
-  return (
-    <div className="pointer-events-none absolute right-[-3.25rem] top-[-3rem] hidden h-64 w-64 opacity-95 sm:block">
-      <div className="absolute inset-0 rounded-full bg-white/12 blur-2xl" />
-      <svg viewBox="0 0 220 220" className="relative h-full w-full" aria-hidden="true">
-        <defs>
-          <linearGradient id="ukip-orb-gradient" x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.78" />
-            <stop offset="48%" stopColor="#a5b4fc" stopOpacity="0.58" />
-            <stop offset="100%" stopColor="#22d3ee" stopOpacity="0.52" />
-          </linearGradient>
-        </defs>
-        <circle cx="110" cy="110" r="78" fill="none" stroke="url(#ukip-orb-gradient)" strokeWidth="1.5" />
-        <circle cx="110" cy="110" r="52" fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.28)" strokeWidth="1.5" />
-        <path d="M42 122c36-26 76-33 138-20" fill="none" stroke="rgba(255,255,255,0.46)" strokeWidth="2" strokeLinecap="round" />
-        <path d="M62 150c32-20 67-27 116-16" fill="none" stroke="rgba(34,211,238,0.38)" strokeWidth="2" strokeLinecap="round" />
-        <circle cx="72" cy="96" r="7" fill="#ffffff" />
-        <circle cx="144" cy="76" r="5" fill="#c4b5fd" />
-        <circle cx="158" cy="145" r="6" fill="#67e8f9" />
-        <text x="110" y="116" textAnchor="middle" className="fill-white font-mono text-3xl font-semibold">
-          {safeScore}
-        </text>
-      </svg>
-    </div>
-  );
-}
-
 export default function ScientificIntelligenceCommandCenter({
   entityCount,
   enrichmentPct,
@@ -100,7 +71,6 @@ export default function ScientificIntelligenceCommandCenter({
       href: "/import/scientific",
       cta: t("page.home.command.workflow.corpus.cta", "Open scientific import"),
       status: hasEntities ? "ready" : "active",
-      metric: hasEntities ? entityCount.toLocaleString() : t("page.home.command.metric.waiting", "Waiting"),
       icon: "M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5",
     },
     {
@@ -110,7 +80,6 @@ export default function ScientificIntelligenceCommandCenter({
       href: "/analytics/dashboard",
       cta: t("page.home.command.workflow.domain.cta", "Open executive dashboard"),
       status: hasEntities ? "active" : "locked",
-      metric: hasEntities ? `${roundedEnrichment}%` : "0%",
       icon: "M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z",
     },
     {
@@ -120,7 +89,6 @@ export default function ScientificIntelligenceCommandCenter({
       href: reportHref,
       cta: t("page.home.command.workflow.brief.cta", "Open reports"),
       status: roundedEnrichment >= 60 ? "active" : "locked",
-      metric: `${readinessScore}%`,
       icon: "M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5A3.375 3.375 0 0 0 10.125 2.25H6.75A2.25 2.25 0 0 0 4.5 4.5v15A2.25 2.25 0 0 0 6.75 21h10.5A2.25 2.25 0 0 0 19.5 18.75v-4.5ZM9 15.75h6M9 12h3",
     },
   ];
