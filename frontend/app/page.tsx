@@ -262,14 +262,25 @@ export default function Home() {
   };
 
   const pipelineStages = [
-    { label: tr("page.home.pipeline.ingest", "Ingesta"), group: "Knowledge", href: "/import-export", status: hasEntities ? "done" : "current", icon: "M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" },
-    { label: tr("page.home.pipeline.authority", "Autoridad"), group: "Knowledge", href: "/authority", status: enrichPct >= 30 ? "done" : hasEntities ? "current" : "upcoming", icon: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" },
-    { label: tr("page.home.pipeline.enrichment", "Enriquecimiento"), group: "Knowledge", href: "/analytics/dashboard", status: enrichPct >= 60 ? "done" : hasEntities ? "current" : "upcoming", icon: "M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.456-2.456L14.25 6l1.035-.259a3.375 3.375 0 002.456-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" },
-    { label: tr("page.home.pipeline.graph", "Grafo"), group: "Intelligence", href: "/analytics/graph", status: graphReady ? "done" : enrichPct >= 60 ? "current" : "upcoming", icon: "M7.5 7.5h.008v.008H7.5V7.5zm9 0h.008v.008H16.5V7.5zm-9 9h.008v.008H7.5V16.5zm9 0h.008v.008H16.5V16.5zM8 8l8 8m0-8l-8 8" },
-    { label: tr("page.home.pipeline.analysis", "Análisis"), group: "Intelligence", href: "/analytics/dashboard", status: graphReady ? "done" : enrichPct >= 30 ? "current" : "upcoming", icon: "M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" },
-    { label: tr("page.home.pipeline.answers", "Respuestas"), group: "Intelligence", href: "/rag", status: enrichPct >= 60 ? "current" : "upcoming", icon: "M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337L3 21l1.087-5.445A7.94 7.94 0 013 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" },
-    { label: tr("page.home.pipeline.delivery", "Entrega"), group: "Delivery", href: `/reports?preset=pilot-brief&${stakeholderQuery}`, status: enrichPct >= 60 ? "current" : "upcoming", icon: "M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5A3.375 3.375 0 0010.125 2.25H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-8.25 6.75h13.5A2.25 2.25 0 0021 15.75V9.75a2.25 2.25 0 00-.659-1.591l-5.25-5.25A2.25 2.25 0 0013.5 2.25H5.25A2.25 2.25 0 003 4.5v15a2.25 2.25 0 002.25 2.25z" },
+    { label: tr("page.home.pipeline.ingest", "Ingesta"), groupId: "knowledge", group: tr("page.home.pipeline.group.knowledge", "Knowledge"), description: tr("page.home.pipeline.ingest_desc", "Load a scoped corpus and preserve source context."), href: "/import-export", status: hasEntities ? "done" : "current", icon: "M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" },
+    { label: tr("page.home.pipeline.authority", "Autoridad"), groupId: "knowledge", group: tr("page.home.pipeline.group.knowledge", "Knowledge"), description: tr("page.home.pipeline.authority_desc", "Resolve identity and confidence before making claims."), href: "/authority", status: enrichPct >= 30 ? "done" : hasEntities ? "current" : "upcoming", icon: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" },
+    { label: tr("page.home.pipeline.enrichment", "Enriquecimiento"), groupId: "knowledge", group: tr("page.home.pipeline.group.knowledge", "Knowledge"), description: tr("page.home.pipeline.enrichment_desc", "Attach citations, concepts, affiliations, and external evidence."), href: "/analytics/dashboard", status: enrichPct >= 60 ? "done" : hasEntities ? "current" : "upcoming", icon: "M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.456-2.456L14.25 6l1.035-.259a3.375 3.375 0 002.456-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" },
+    { label: tr("page.home.pipeline.graph", "Grafo"), groupId: "intelligence", group: tr("page.home.pipeline.group.intelligence", "Intelligence"), description: tr("page.home.pipeline.graph_desc", "Materialize relationships between authors, organizations, concepts, and works."), href: "/analytics/graph", status: graphReady ? "done" : enrichPct >= 60 ? "current" : "upcoming", icon: "M7.5 7.5h.008v.008H7.5V7.5zm9 0h.008v.008H16.5V7.5zm-9 9h.008v.008H7.5V16.5zm9 0h.008v.008H16.5V16.5zM8 8l8 8m0-8l-8 8" },
+    { label: tr("page.home.pipeline.analysis", "Análisis"), groupId: "intelligence", group: tr("page.home.pipeline.group.intelligence", "Intelligence"), description: tr("page.home.pipeline.analysis_desc", "Read patterns, gaps, readiness, and recommended moves."), href: "/analytics/dashboard", status: graphReady ? "done" : enrichPct >= 30 ? "current" : "upcoming", icon: "M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" },
+    { label: tr("page.home.pipeline.answers", "Respuestas"), groupId: "intelligence", group: tr("page.home.pipeline.group.intelligence", "Intelligence"), description: tr("page.home.pipeline.answers_desc", "Ask grounded questions over indexed records and evidence."), href: "/rag", status: enrichPct >= 60 ? "current" : "upcoming", icon: "M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337L3 21l1.087-5.445A7.94 7.94 0 013 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" },
+    { label: tr("page.home.pipeline.delivery", "Entrega"), groupId: "delivery", group: tr("page.home.pipeline.group.delivery", "Delivery"), description: tr("page.home.pipeline.delivery_desc", "Package the story as an executive brief."), href: `/reports?preset=pilot-brief&${stakeholderQuery}`, status: enrichPct >= 60 ? "current" : "upcoming", icon: "M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5A3.375 3.375 0 0010.125 2.25H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-8.25 6.75h13.5A2.25 2.25 0 0021 15.75V9.75a2.25 2.25 0 00-.659-1.591l-5.25-5.25A2.25 2.25 0 0013.5 2.25H5.25A2.25 2.25 0 003 4.5v15a2.25 2.25 0 002.25 2.25z" },
   ];
+  const pipelineGroups = [
+    { id: "knowledge", label: tr("page.home.pipeline.group.knowledge", "Knowledge"), description: tr("page.home.pipeline.group.knowledge_desc", "Assemble and normalize the evidence base."), accent: "from-violet-500 to-fuchsia-500" },
+    { id: "intelligence", label: tr("page.home.pipeline.group.intelligence", "Intelligence"), description: tr("page.home.pipeline.group.intelligence_desc", "Turn enriched data into relationships and interpretation."), accent: "from-sky-500 to-cyan-500" },
+    { id: "delivery", label: tr("page.home.pipeline.group.delivery", "Delivery"), description: tr("page.home.pipeline.group.delivery_desc", "Convert findings into stakeholder-facing action."), accent: "from-emerald-500 to-teal-500" },
+  ].map((group) => ({
+    ...group,
+    stages: pipelineStages.filter((stage) => stage.groupId === group.id),
+  }));
+  const pipelineCurrentStage = pipelineStages.find((stage) => stage.status === "current") ?? pipelineStages[pipelineStages.length - 1];
+  const pipelineCompleted = pipelineStages.filter((stage) => stage.status === "done").length;
+  const pipelineProgress = clampPercent(((pipelineCompleted + (pipelineCurrentStage.status === "current" ? 0.5 : 0)) / pipelineStages.length) * 100);
   const metricCards = [
     {
       label: tr("page.home.metric_total_entities", "Entidades"),
@@ -581,27 +592,108 @@ export default function Home() {
           </div>
         ) : null}
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
-          <div className="flex items-center justify-between gap-3">
-            <p className="ukip-kicker">{tr("page.home.pipeline_title", "Pipeline UKIP")}</p>
-            <span className="text-xs text-slate-500 dark:text-[var(--ukip-muted)]">{tr("page.home.pipeline_subtitle", "raw → answer")}</span>
-          </div>
-          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-            {pipelineStages.map((stage, index) => (
-              <Link key={stage.label} href={stage.href} className="rounded-xl border border-slate-200 bg-white p-3 transition hover:border-violet-400/60 hover:bg-violet-50 dark:border-white/10 dark:bg-white/5 dark:hover:border-violet-400/40 dark:hover:bg-violet-500/10">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 dark:text-[var(--ukip-muted)]">
-                    <span className={`h-2 w-2 rounded-full ${stage.status === "done" ? "bg-emerald-500" : stage.status === "current" ? "bg-violet-500" : "bg-slate-400"}`} />
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <svg className="h-4 w-4 text-slate-500 dark:text-[var(--ukip-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={stage.icon} />
-                  </svg>
+        <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
+          <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] lg:p-6">
+            <div className="flex flex-col justify-between gap-4">
+              <div>
+                <p className="ukip-kicker">{tr("page.home.pipeline_title", "Pipeline UKIP")}</p>
+                <h2 className="mt-2 text-xl font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">
+                  {tr("page.home.pipeline_story_title", "Seven stages, three movements")}
+                </h2>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600 dark:text-[var(--ukip-muted)]">
+                  {tr("page.home.pipeline_story_body", "A narrative operating model that turns source records into grounded intelligence and stakeholder-ready outputs.")}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700 dark:border-violet-400/30 dark:bg-violet-500/10 dark:text-violet-100">
+                  {tr("page.home.pipeline_subtitle", "raw → answer")}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-muted)]">
+                  {pipelineStages.length} {tr("page.home.pipeline.stages_label", "stages")}
+                </span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-[var(--ukip-muted)]">
+                    {tr("page.home.pipeline.current_label", "Current stage")}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">{pipelineCurrentStage.label}</p>
                 </div>
-                <p className="mt-3 text-sm font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">{stage.label}</p>
-                <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-slate-500 dark:text-[var(--ukip-muted)]">{stage.group}</p>
-              </Link>
-            ))}
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-violet-700 shadow-sm ring-1 ring-slate-200 dark:bg-white/10 dark:text-violet-100 dark:ring-white/10">
+                  {Math.round(pipelineProgress)}%
+                </span>
+              </div>
+              <div className="mt-4 h-2 rounded-full bg-white ring-1 ring-slate-200 dark:bg-white/10 dark:ring-white/10">
+                <div className="h-2 rounded-full bg-gradient-to-r from-violet-500 via-sky-500 to-emerald-500 transition-all" style={{ width: `${pipelineProgress}%` }} />
+              </div>
+              <div className="-mx-1 mt-4 overflow-x-auto pb-1">
+                <div className="grid min-w-[46rem] grid-cols-7 gap-2 px-1">
+                  {pipelineStages.map((stage, index) => {
+                    const isDone = stage.status === "done";
+                    const isCurrent = stage.status === "current";
+                    return (
+                      <Link
+                        key={stage.label}
+                        href={stage.href}
+                        className={`relative rounded-2xl border p-3 transition hover:-translate-y-0.5 ${
+                          isDone
+                            ? "border-emerald-200 bg-emerald-50/80 text-emerald-900 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-50"
+                            : isCurrent
+                              ? "border-violet-300 bg-white text-violet-900 shadow-sm dark:border-violet-400/40 dark:bg-violet-500/10 dark:text-violet-50"
+                              : "border-slate-200 bg-white/80 text-slate-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-[var(--ukip-muted)]"
+                        }`}
+                      >
+                        {index < pipelineStages.length - 1 ? (
+                          <span className="absolute left-[calc(100%-0.1rem)] top-6 hidden h-px w-3 bg-slate-200 xl:block dark:bg-white/10" />
+                        ) : null}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-bold tabular-nums">{String(index + 1).padStart(2, "0")}</span>
+                          <span className={`h-2 w-2 rounded-full ${isDone ? "bg-emerald-500" : isCurrent ? "bg-violet-500" : "bg-slate-300 dark:bg-white/30"}`} />
+                        </div>
+                        <p className="mt-3 text-sm font-semibold leading-tight">{stage.label}</p>
+                        <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] opacity-70">{stage.group}</p>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="border-t border-slate-200 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-black/10 lg:p-5">
+            <div className="grid gap-3 lg:grid-cols-3">
+              {pipelineGroups.map((group, groupIndex) => (
+                <article key={group.id} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-white/[0.04]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-[var(--ukip-muted)]">
+                        {tr("page.home.pipeline.movement_label", "Movement")} {groupIndex + 1}
+                      </p>
+                      <h3 className="mt-1 text-base font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">{group.label}</h3>
+                    </div>
+                    <span className={`h-9 w-9 rounded-full bg-gradient-to-br ${group.accent} shadow-sm`} />
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-[var(--ukip-muted)]">{group.description}</p>
+                  <div className="mt-4 space-y-2">
+                    {group.stages.map((stage) => (
+                      <Link key={stage.label} href={stage.href} className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 transition hover:border-violet-300 hover:bg-violet-50 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-violet-400/40 dark:hover:bg-violet-500/10">
+                        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${stage.status === "done" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-100" : stage.status === "current" ? "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-100" : "bg-white text-slate-500 ring-1 ring-slate-200 dark:bg-white/10 dark:text-[var(--ukip-muted)] dark:ring-white/10"}`}>
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={stage.icon} />
+                          </svg>
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-slate-950 dark:text-[var(--ukip-text-strong)]">{stage.label}</span>
+                          <span className="mt-0.5 block text-xs leading-5 text-slate-500 dark:text-[var(--ukip-muted)]">{stage.description}</span>
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
           </div>
         </div>
 
