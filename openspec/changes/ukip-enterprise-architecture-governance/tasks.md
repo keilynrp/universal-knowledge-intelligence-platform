@@ -56,11 +56,11 @@
 
 ## 8. GenAI cross-cutting capability
 
-- [ ] 8.1 Define allowed GenAI roles across ingestion, mapping, reconciliation, enrichment, analytics, reporting, UX, and architecture governance.
-- [ ] 8.2 Define evidence-grounding rules for GenAI-generated suggestions and narratives.
-- [ ] 8.3 Define confidence, review, and non-overwrite rules for AI-assisted outputs.
-- [ ] 8.4 Define AI impact metadata for architecture decision records.
-- [ ] 8.5 Add GenAI governance checklist for future specs.
+- [x] 8.1 Define allowed GenAI roles across ingestion, mapping, reconciliation, enrichment, analytics, reporting, UX, and architecture governance.
+- [x] 8.2 Define evidence-grounding rules for GenAI-generated suggestions and narratives.
+- [x] 8.3 Define confidence, review, and non-overwrite rules for AI-assisted outputs.
+- [x] 8.4 Define AI impact metadata for architecture decision records.
+- [x] 8.5 Add GenAI governance checklist for future specs.
 
 ## 9. Validation
 

@@ -542,6 +542,76 @@ GenAI must be governed by:
 - auditability,
 - stakeholder impact measurement.
 
+#### Allowed GenAI roles
+
+| Area | Allowed role | Write authority |
+| --- | --- | --- |
+| Ingestion | Summarize source shape, identify likely fields, detect anomalies | Suggestion only |
+| Mapping | Propose mapping suggestions and transformations with evidence samples | Review-gated |
+| Reconciliation | Explain candidate matches, conflicts, and confidence signals | Review-gated |
+| Enrichment | Identify possible external evidence gaps or provider candidates | Suggestion only |
+| Analytics | Explain patterns, outliers, uncertainty, and next questions | Read-only |
+| Reporting | Draft stakeholder narratives from governed evidence | Review-gated before publication |
+| UX | Generate explanatory microcopy or evidence summaries | Review-gated when user-facing |
+| Architecture governance | Draft ADRs, checklists, and spec consistency notes | Human accepted before authoritative |
+
+GenAI must not silently:
+
+- create canonical identity,
+- accept or reject authority records,
+- overwrite source evidence,
+- publish stakeholder reports,
+- delete or reset data,
+- infer sensitive personal attributes,
+- turn low-confidence evidence into high-confidence claims.
+
+#### Evidence-grounding rules
+
+- GenAI outputs that affect decisions must cite canonical records, source evidence, authority links, enrichment observations, or explicit user-provided context.
+- If evidence is missing, stale, ambiguous, or low confidence, the output should say so.
+- Generated claims should preserve the difference between observed data, inferred interpretation, and recommendation.
+- AI-generated report text should include enough traceability for a reviewer to inspect the underlying records.
+- RAG answers should prefer governed canonical/evidence layers over raw provider payloads.
+- Architecture suggestions should name affected specs and architecture domains when possible.
+
+#### Confidence, review, and non-overwrite rules
+
+- GenAI confidence is advisory and never replaces authority scoring, review status, or source evidence confidence.
+- AI-assisted suggestions below a governed threshold require human review before promotion.
+- Any AI output that changes canonical data, review decisions, mappings, or published reports requires audit.
+- AI may propose transformations but cannot overwrite original source values.
+- AI may explain reconciliation candidates but cannot be the sole authority for identity resolution.
+- AI summaries used in executive intelligence must remain connected to evidence and caveats.
+
+#### AI impact metadata for ADRs
+
+Strategic ADRs involving AI should include:
+
+- AI role: suggestion, explanation, classification, narrative, orchestration, or governance assistant.
+- Input evidence classes: source, canonical, authority, enrichment, user prompt, external context.
+- Output destination: internal review, UI surface, report, export, canonical data, or audit record.
+- Automation level: read-only, suggestion, review-gated write, or autonomous operation.
+- Human review requirement and responsible role.
+- Confidence or uncertainty representation.
+- Security/privacy considerations, including person data, provider terms, and prompt exposure.
+- Failure mode and fallback when model output is unavailable or untrusted.
+- Validation evidence: tests, evaluation cases, manual review, or prompt contract.
+
+#### GenAI governance checklist
+
+Future specs using GenAI should answer:
+
+- What task is AI assisting, and which architecture domains are affected?
+- What evidence is provided to the model?
+- What evidence must the output cite?
+- Can the output affect canonical data, authority decisions, reports, exports, or user actions?
+- What review gate exists before any write or stakeholder-facing claim?
+- How are uncertainty, caveats, and low-confidence evidence represented?
+- What audit/provenance is recorded when AI output is accepted?
+- Are sensitive data, provider terms, prompt exposure, and retention considered?
+- What happens when the model fails, hallucinates, or returns unsupported claims?
+- Which tests or evaluations prove the AI contract is bounded?
+
 ## Decisions
 
 ### D1: Enterprise architecture sits above semantic data governance
