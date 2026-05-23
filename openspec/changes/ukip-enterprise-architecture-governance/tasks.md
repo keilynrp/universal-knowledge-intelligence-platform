@@ -48,11 +48,11 @@
 
 ## 7. Security, privacy, and compliance architecture
 
-- [ ] 7.1 Define authentication, authorization, and data access principles.
-- [ ] 7.2 Define audit and provenance requirements for sensitive decisions and AI-assisted outputs.
-- [ ] 7.3 Define source licensing and provider terms review requirements.
-- [ ] 7.4 Define privacy expectations for person, affiliation, institutional, and geographic data.
-- [ ] 7.5 Add security/privacy review checklist for future specs.
+- [x] 7.1 Define authentication, authorization, and data access principles.
+- [x] 7.2 Define audit and provenance requirements for sensitive decisions and AI-assisted outputs.
+- [x] 7.3 Define source licensing and provider terms review requirements.
+- [x] 7.4 Define privacy expectations for person, affiliation, institutional, and geographic data.
+- [x] 7.5 Add security/privacy review checklist for future specs.
 
 ## 8. GenAI cross-cutting capability
 

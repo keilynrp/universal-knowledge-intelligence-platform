@@ -435,6 +435,88 @@ Includes:
 - secure configuration,
 - secrets management.
 
+#### Authentication, authorization, and data access principles
+
+- All stakeholder-facing routes that expose entity, authority, enrichment, report, AI, or operational data require authenticated access unless explicitly documented as public.
+- Role-based authorization protects mutating operations, review decisions, administrative settings, imports, reconciliation apply actions, provider configuration, and workspace reset.
+- Tenant or organization scope is part of the security contract; cross-organization reads or writes require explicit super-admin/global behavior.
+- Read access does not imply review or mutation access. Review queues, authority decisions, mappings, and destructive operations require elevated roles.
+- API responses should avoid returning secrets, provider tokens, raw credentials, or unnecessary personally identifying details.
+- Specs that introduce new APIs must declare authentication, required roles, tenant scope, and sensitive fields.
+
+#### Audit and provenance requirements
+
+Audit and provenance are complementary:
+
+- Audit records who changed or reviewed something, when, and through which action.
+- Provenance records where evidence came from and how it became part of the canonical or presentation layer.
+
+Sensitive decisions requiring audit include:
+
+- accepting or rejecting authority candidates,
+- accepting or rejecting source mapping suggestions,
+- promoting enrichment observations into canonical identity,
+- creating, editing, or deleting provider integrations,
+- resetting workspaces or deleting records,
+- publishing stakeholder reports,
+- accepting AI-generated suggestions that affect canonical data or stakeholder claims.
+
+AI-assisted outputs require:
+
+- source evidence references,
+- generated/AI-assisted state,
+- review state before canonical promotion,
+- prompt/context metadata where operationally appropriate,
+- reviewer identity when an AI suggestion becomes a governed decision.
+
+#### Source licensing and provider terms review
+
+Specs that consume external data sources must document:
+
+- provider/source name and intended use,
+- data categories consumed,
+- license or terms constraints when known,
+- attribution requirements,
+- retention or redistribution limits,
+- rate-limit and fair-use constraints,
+- whether provider data may appear in dashboards, reports, exports, or AI prompts,
+- fallback behavior when terms or license status are unknown.
+
+Unknown license status should block external redistribution and stakeholder report export until reviewed, while still allowing internal profiling if permitted by product policy.
+
+#### Privacy expectations for sensitive entity classes
+
+| Data class | Privacy expectation |
+| --- | --- |
+| Person data | Treat author names, ORCID IDs, affiliations, contact-like fields, and AI-inferred identity as sensitive. Prefer authority evidence over guesswork and keep review decisions auditable. |
+| Affiliation data | Preserve source context and time when possible; avoid implying current employment or endorsement unless evidence supports it. |
+| Institutional data | Registry-backed public identifiers are generally lower risk, but relationship claims to people, projects, funding, or geography remain trust-bearing. |
+| Geographic data | Distinguish institution/place geography from person location. Avoid presenting precise personal location unless explicitly sourced and appropriate. |
+| AI-generated data | Treat AI suggestions as untrusted until reviewed; never convert them into canonical identity without a governed decision. |
+
+Privacy-by-design rules:
+
+- Minimize fields shown in list views; expose details through intentional drill-down.
+- Avoid inferring sensitive personal attributes from publications, affiliations, or geography.
+- Keep rejected or ambiguous identity matches out of executive summaries unless framed as data quality risk.
+- Provide deletion/reset paths through authorized operational surfaces.
+- Use provenance and confidence to prevent overstatement of sensitive relationships.
+
+#### Security/privacy architecture review checklist
+
+Future specs should answer:
+
+- Which data classes are exposed or modified?
+- Which routes require authentication, role checks, and tenant scoping?
+- Does the change create, accept, reject, publish, delete, or export sensitive decisions?
+- What audit events are required?
+- What provenance records are required?
+- Are any provider terms, licenses, attribution rules, or redistribution limits involved?
+- Could person, affiliation, institutional, or geographic data be misinterpreted as stronger evidence than it is?
+- Are AI-generated outputs clearly labeled and review-gated before promotion?
+- Are secrets, provider credentials, and tokens excluded from responses, logs, prompts, and exports?
+- What tests or review evidence prove security/privacy boundaries?
+
 ### 7. GenAI cross-cutting capability
 
 Defines how GenAI participates across the platform.
