@@ -90,8 +90,8 @@ def _startup_side_effects_enabled() -> bool:
 _BUILTIN_TEMPLATES = [
     {
         "name": "Executive Summary",
-        "sections": '["entity_stats","enrichment_coverage","top_brands"]',
-        "description": "KPIs + enrichment coverage + top brands for decision-makers",
+        "sections": '["entity_stats","enrichment_coverage","top_secondary_labels"]',
+        "description": "KPIs + enrichment coverage + top secondary labels for decision-makers",
         "default_title": "Executive Summary Report",
     },
     {
@@ -108,7 +108,7 @@ _BUILTIN_TEMPLATES = [
     },
     {
         "name": "Full Report",
-        "sections": '["entity_stats","enrichment_coverage","top_brands","topic_clusters","harmonization_log"]',
+        "sections": '["entity_stats","enrichment_coverage","top_secondary_labels","topic_clusters","harmonization_log"]',
         "description": "All sections combined — comprehensive view",
         "default_title": "Full Platform Report",
     },
@@ -272,12 +272,12 @@ _OPENAPI_TAGS = [
     {"name": "authority",      "description": "External authority linking (Wikidata, VIAF, ORCID, DBpedia, OpenAlex)."},
     {"name": "analytics",      "description": "KPI dashboard, domain comparison, topic modeling, and OLAP."},
     {"name": "ai-rag",         "description": "AI integrations (OpenAI / Anthropic) and RAG vector search."},
-    {"name": "stores",         "description": "Store connector configuration and sync queue."},
+    {"name": "stores",         "description": "Optional commerce source adapter configuration and sync queue."},
     {"name": "reports",        "description": "Report builder, PDF/Excel exports, and artifact templates."},
     {"name": "annotations",    "description": "Free-form entity annotations and notes."},
     {"name": "webhooks",       "description": "Outbound webhook subscriptions and delivery logs."},
     {"name": "notifications",  "description": "In-app notification centre and per-user settings."},
-    {"name": "scheduled-imports",  "description": "Cron-style import schedules for connected stores."},
+    {"name": "scheduled-imports",  "description": "Cron-style import schedules for connected source adapters."},
     {"name": "scheduled-reports",  "description": "Cron-style report schedules with email delivery."},
     {"name": "dashboards",         "description": "Per-user custom dashboards with drag-and-drop widget layout."},
     {"name": "alert-channels",     "description": "Slack/Teams/Discord/webhook push notifications for platform events."},

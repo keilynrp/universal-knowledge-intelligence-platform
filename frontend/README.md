@@ -15,7 +15,7 @@ npm run lint       # ESLint
 
 | Route              | Description                                |
 |--------------------|--------------------------------------------|
-| `/`                | Product Catalog -- browse, search, edit, delete |
+| `/`                | Entity workspace -- browse, search, edit, delete |
 | `/analytics`       | Analytics dashboard with key metrics       |
 | `/disambiguation`  | Fuzzy-match tool for finding inconsistencies |
 | `/authority`       | Authority control -- normalization rules   |
@@ -27,7 +27,7 @@ npm run lint       # ESLint
 |------------------------|------------------------------------------|
 | `Sidebar.tsx`          | Collapsible navigation sidebar           |
 | `Header.tsx`           | Sticky header with dynamic page title    |
-| `ProductTable.tsx`     | Product listing with inline CRUD         |
+| `EntityTableContent.tsx` | Entity listing and review workspace      |
 | `DisambiguationTool.tsx` | Fuzzy-match group viewer               |
 | `MetricCard.tsx`       | Reusable stat card for analytics         |
 

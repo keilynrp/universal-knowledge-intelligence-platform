@@ -172,14 +172,14 @@ export function TopEntitiesWidget({ config }: { config: WidgetConfig }) {
   );
 }
 
-// ── Top Brands ────────────────────────────────────────────────────────────────
+// ── Top Facets ────────────────────────────────────────────────────────────────
 
 export function TopBrandsWidget({ config }: { config: WidgetConfig }) {
   const [data, setData] = useState<{ name: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiFetch("/brands?limit=8")
+    apiFetch("/secondary-labels?limit=8")
       .then((r) => r.json())
       .then((d) => setData(Array.isArray(d) ? d.slice(0, 8) : []))
       .catch(() => setData([]))
@@ -187,7 +187,7 @@ export function TopBrandsWidget({ config }: { config: WidgetConfig }) {
   }, []);
 
   return (
-    <WidgetShell title={config.title || "Top Brands / Values"} loading={loading}>
+    <WidgetShell title={config.title || "Top Secondary Labels"} loading={loading}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} layout="vertical" margin={{ left: 0, right: 8, top: 0, bottom: 0 }}>
           <XAxis type="number" hide />
@@ -470,6 +470,7 @@ export const WIDGET_REGISTRY: Record<string, React.FC<{ config: WidgetConfig }>>
   enrichment_coverage:  EnrichmentCoverageWidget,
   top_entities:         TopEntitiesWidget,
   top_brands:           TopBrandsWidget,
+  top_secondary_labels: TopBrandsWidget,
   concept_cloud:        ConceptCloudWidget,
   recent_activity:      RecentActivityWidget,
   quality_histogram:    QualityHistogramWidget,

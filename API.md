@@ -39,9 +39,9 @@ username=admin&password=yourpassword
 
 | Role | Permissions |
 |---|---|
-| `viewer` | Read-only: entities, analytics, RAG query, brands, stats |
+| `viewer` | Read-only: entities, analytics, RAG query, secondary labels, stats |
 | `editor` | viewer + upload, edit/delete entities, rules, harmonization |
-| `admin` | editor + stores, AI integrations, RAG indexing, domains |
+| `admin` | editor + optional source adapters, AI integrations, RAG indexing, domains |
 | `super_admin` | admin + user management (full access) |
 
 ### API Keys (programmatic access)
@@ -327,8 +327,9 @@ Resolution statuses: `exact_match` (score ≥ 0.85), `probable_match` (≥ 0.65)
 |---|---|---|---|
 | `GET` | `/stats` | viewer | Platform-wide entity statistics |
 | `GET` | `/health` | public | Liveness + DB connectivity probe |
-| `GET` | `/brands` | viewer | Secondary labels (brands/authors) with counts |
-| `GET` | `/product-types` | viewer | Entity type distribution |
+| `GET` | `/secondary-labels` | viewer | Secondary labels/facets with counts |
+| `GET` | `/brands` | viewer | Legacy alias for `/secondary-labels` |
+| `GET` | `/product-types` | viewer | Entity type distribution (legacy path name) |
 | `GET` | `/classifications` | viewer | Classification distribution |
 | `GET` | `/dashboard/summary` | viewer | Executive KPI dashboard for a domain |
 | `GET` | `/dashboard/compare` | viewer | Side-by-side KPI comparison for 2–4 domains |
@@ -341,7 +342,7 @@ Resolution statuses: `exact_match` (score ≥ 0.85), `probable_match` (≥ 0.65)
 
 **GET /dashboard/summary** query: `domain_id` (default `"default"`).
 
-Response includes: `kpis` (total entities, enrichment %, avg citations, concept count), `type_distribution`, `brand_year_matrix`, `top_concepts`, `top_entities`, `quality`.
+Response includes: `kpis` (total entities, enrichment %, avg citations, concept count), `type_distribution`, `label_year_matrix` (plus legacy alias `brand_year_matrix`), `top_concepts`, `top_entities`, `quality`.
 
 **GET /dashboard/compare** query: `domains=default,science` (comma-separated, 2–4 domains).
 
@@ -404,33 +405,33 @@ API keys are encrypted at rest with Fernet symmetric encryption.
 
 ---
 
-### Stores
+### Commerce Source Adapters
 
-Store connectors sync entity data from external platforms (Shopify, WooCommerce, etc.). Credentials are encrypted at rest.
+Commerce source adapters sync external platform records through the canonical entity model. These endpoints keep the historical `/stores` path for compatibility, but Shopify/WooCommerce-style concepts are adapter-specific rather than UKIP core model fields. Credentials are encrypted at rest. The frontend can hide this surface with `NEXT_PUBLIC_ENABLE_COMMERCE_ADAPTERS=false`.
 
 | Method | Path | Min Role | Description |
 |---|---|---|---|
-| `GET` | `/stores` | admin | List all stores |
-| `POST` | `/stores` | admin | Create store connection |
-| `GET` | `/stores/stats/summary` | admin | Aggregated store stats |
-| `GET` | `/stores/{id}` | admin | Get store details |
-| `PUT` | `/stores/{id}` | admin | Update store config |
-| `DELETE` | `/stores/{id}` | admin | Delete store and associated data |
-| `POST` | `/stores/{id}/toggle` | admin | Toggle store active/inactive |
-| `POST` | `/stores/{id}/test` | admin | Test store connection |
-| `POST` | `/stores/{id}/pull` | admin | Pull entities from remote store into review queue |
-| `GET` | `/stores/{id}/mappings` | admin | List sync mappings for a store |
+| `GET` | `/stores` | admin | List all commerce source adapters |
+| `POST` | `/stores` | admin | Create source adapter connection |
+| `GET` | `/stores/stats/summary` | admin | Aggregated adapter stats |
+| `GET` | `/stores/{id}` | admin | Get adapter details |
+| `PUT` | `/stores/{id}` | admin | Update adapter config |
+| `DELETE` | `/stores/{id}` | admin | Delete adapter and associated data |
+| `POST` | `/stores/{id}/toggle` | admin | Toggle adapter active/inactive |
+| `POST` | `/stores/{id}/test` | admin | Test adapter connection |
+| `POST` | `/stores/{id}/pull` | admin | Pull records from remote source into review queue |
+| `GET` | `/stores/{id}/mappings` | admin | List sync mappings for an adapter |
 | `GET` | `/stores/{id}/queue` | admin | List sync queue items |
 | `GET` | `/stores/{id}/logs` | admin | Sync operation logs |
 | `POST` | `/stores/queue/{item_id}/approve` | admin | Approve a single queue item |
 | `POST` | `/stores/queue/{item_id}/reject` | admin | Reject a single queue item |
-| `POST` | `/stores/queue/bulk-approve` | admin | Approve all pending items for a store |
-| `POST` | `/stores/queue/bulk-reject` | admin | Reject all pending items for a store |
+| `POST` | `/stores/queue/bulk-approve` | admin | Approve all pending items for an adapter |
+| `POST` | `/stores/queue/bulk-reject` | admin | Reject all pending items for an adapter |
 
 **POST /stores** body:
 ```json
 {
-  "name": "My Shopify Store",
+  "name": "My Shopify Adapter",
   "platform": "shopify",
   "base_url": "https://mystore.myshopify.com",
   "api_key": "...",
@@ -459,10 +460,12 @@ Queue item statuses: `pending`, `approved`, `rejected`. Attempting to approve/re
 ```json
 {
   "domain_id": "science",
-  "sections": ["entity_stats", "enrichment_coverage", "top_brands"],
+  "sections": ["entity_stats", "enrichment_coverage", "top_secondary_labels"],
   "title": "My Report"
 }
 ```
+
+`top_brands` remains accepted as a backward-compatible report section alias, but `/reports/sections` exposes `top_secondary_labels` as the canonical section ID.
 
 **POST /exports/excel** body: `{ domain_id, title }`. Returns `.xlsx` stream with sheets: Summary, Entities (up to 5,000), Concepts, Harmonization.
 

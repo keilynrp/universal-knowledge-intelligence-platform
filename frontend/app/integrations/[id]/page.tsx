@@ -165,7 +165,7 @@ export default function StoreDetailPage() {
                             className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                         >
                             {pulling ? <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> : <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>}
-                            Pull Products
+                            Pull Records
                         </button>
                     </div>
                 }
@@ -200,7 +200,7 @@ export default function StoreDetailPage() {
             {/* Stat cards */}
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 {[
-                    { label: "Mapped Products", value: store.entity_count || mappingsTotal, icon: "📦" },
+                    { label: "Mapped Records", value: store.entity_count || mappingsTotal, icon: "📦" },
                     { label: "Pending Review", value: queueFilter === "pending" ? queueTotal : "...", icon: "⏳" },
                     { label: "Sync Direction", value: store.sync_direction === "bidirectional" ? "↔ Both" : store.sync_direction === "pull" ? "← Pull" : "Push →", icon: "🔄" },
                     { label: "Last Sync", value: store.last_sync_at ? formatDate(store.last_sync_at) : "Never", icon: "🕐" },
@@ -244,14 +244,14 @@ export default function StoreDetailPage() {
                     {queue.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-gray-300 py-12 text-center dark:border-gray-700">
                             <p className="text-gray-500 dark:text-gray-400">No {queueFilter !== "all" ? queueFilter : ""} items in queue</p>
-                            <p className="mt-1 text-xs text-gray-400">Pull products from the store to populate the review queue</p>
+                            <p className="mt-1 text-xs text-gray-400">Pull records from this adapter to populate the review queue</p>
                         </div>
                     ) : (
                         <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
                             <table className="w-full text-sm">
                                 <thead className="bg-gray-50 dark:bg-gray-800/50">
                                     <tr>
-                                        <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Product</th>
+                                        <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Record</th>
                                         <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Field</th>
                                         <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Local Value</th>
                                         <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Remote Value</th>
@@ -293,15 +293,15 @@ export default function StoreDetailPage() {
                 <div>
                     {mappings.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-gray-300 py-12 text-center dark:border-gray-700">
-                            <p className="text-gray-500 dark:text-gray-400">No product mappings yet</p>
-                            <p className="mt-1 text-xs text-gray-400">Pull products from the store to create canonical URL mappings</p>
+                            <p className="text-gray-500 dark:text-gray-400">No record mappings yet</p>
+                            <p className="mt-1 text-xs text-gray-400">Pull records from this adapter to create canonical URL mappings</p>
                         </div>
                     ) : (
                         <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
                             <table className="w-full text-sm">
                                 <thead className="bg-gray-50 dark:bg-gray-800/50">
                                     <tr>
-                                        <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Remote Product</th>
+                                        <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Remote Record</th>
                                         <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Canonical URL</th>
                                         <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">SKU</th>
                                         <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">Price</th>

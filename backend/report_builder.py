@@ -300,10 +300,10 @@ def _section_top_brands(db: Session, domain_id: str, org_id: int | None) -> str:
             </div></td></tr>""" for r in rows_q)
 
     return f"""<section>
-    <h2>Top Brands / Classifications</h2>
+    <h2>Top Secondary Labels / Classifications</h2>
     <table>
-        <thead><tr><th>Brand</th><th>Entities</th><th>Share</th></tr></thead>
-        <tbody>{rows if rows else '<tr><td colspan="3" style="color:#9ca3af;text-align:center;padding:20px">No brand data</td></tr>'}</tbody>
+        <thead><tr><th>Label</th><th>Entities</th><th>Share</th></tr></thead>
+        <tbody>{rows if rows else '<tr><td colspan="3" style="color:#9ca3af;text-align:center;padding:20px">No secondary-label data</td></tr>'}</tbody>
     </table>
 </section>"""
 
@@ -706,6 +706,7 @@ SECTION_BUILDERS = {
     "hidden_patterns": _section_hidden_patterns,
     "agentic_trace": _section_agentic_trace,
     "institutional_benchmark": _section_institutional_benchmark,
+    "top_secondary_labels": _section_top_brands,
     "top_brands": _section_top_brands,
     "topic_clusters": _section_topic_clusters,
     "harmonization_log": _section_harmonization_log,
@@ -719,7 +720,8 @@ SECTION_LABELS = {
     "hidden_patterns": "Hidden Patterns",
     "agentic_trace": "Agentic Research Trace",
     "institutional_benchmark": "Institutional Benchmark",
-    "top_brands": "Top Brands / Classifications",
+    "top_secondary_labels": "Top Secondary Labels / Classifications",
+    "top_brands": "Top Secondary Labels / Classifications",
     "topic_clusters": "Topic Clusters",
     "harmonization_log": "Harmonization Log",
 }

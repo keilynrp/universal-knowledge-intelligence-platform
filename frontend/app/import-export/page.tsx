@@ -120,7 +120,7 @@ export default function ImportExportPage() {
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            a.download = "products_export.xlsx";
+            a.download = "ukip_records_export.xlsx";
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -467,8 +467,8 @@ export default function ImportExportPage() {
                     {!purgeConfirm ? (
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-sm font-medium text-gray-900 dark:text-white">{tr("page.import_export.purge.title", "Delete all product records")}</p>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">{tr("page.import_export.purge.body", "Remove all products from the database to start a fresh import")}</p>
+                                <p className="text-sm font-medium text-gray-900 dark:text-white">{tr("page.import_export.purge.title", "Delete all records")}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">{tr("page.import_export.purge.body", "Remove all imported records from the workspace to start a fresh import")}</p>
                             </div>
                             <button
                                 onClick={() => setPurgeConfirm(true)}
@@ -484,7 +484,7 @@ export default function ImportExportPage() {
                     ) : (
                         <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-500/5">
                             <p className="mb-3 text-sm font-semibold text-red-800 dark:text-red-300">
-                                {tr("page.import_export.purge.confirm_body", "Are you sure? This will permanently delete all current product records.")} {totalProducts?.toLocaleString()}
+                                {tr("page.import_export.purge.confirm_body", "Are you sure? This will permanently delete all current records.")} {totalProducts?.toLocaleString()}
                             </p>
                             <label className="mb-4 flex items-center gap-2 text-sm text-red-700 dark:text-red-400">
                                 <input

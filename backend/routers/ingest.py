@@ -66,10 +66,10 @@ _SCIENCE_AUTO_MAPPING = {
 
 # Human-readable descriptions for the LLM prompt
 _FIELD_DESCRIPTIONS = {
-    "primary_label":             "main name/title of the entity (product name, paper title, person name)",
-    "secondary_label":           "secondary label (brand, author, publisher, organization)",
-    "canonical_id":              "unique identifier (SKU, DOI, ISBN, GTIN, barcode, record ID)",
-    "entity_type":               "type or category of the entity (product, paper, person, organization…)",
+    "primary_label":             "main name/title of the entity (publication title, dataset title, person name, organization name)",
+    "secondary_label":           "secondary label (author, institution, publisher, venue, organization, source label)",
+    "canonical_id":              "stable identifier (DOI, ORCID, ROR, ISBN, ISSN, accession number, local record ID)",
+    "entity_type":               "type or category of the entity (publication, dataset, person, organization, concept, place…)",
     "domain":                    "knowledge domain (science, healthcare, business, education…)",
     "enrichment_doi":            "Digital Object Identifier (DOI)",
     "enrichment_citation_count": "number of citations (integer)",

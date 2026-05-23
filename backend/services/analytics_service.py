@@ -456,6 +456,11 @@ class AnalyticsService:
         # Heatmap: secondary_label x year
         top_labels = sorted(label_totals, key=lambda b: label_totals[b], reverse=True)[:cls._TOP_BRANDS_N]
         heatmap_domains = sorted(all_years_set)[-cls._TOP_YEARS_N:]
+        label_year_matrix = {
+            "labels": top_labels, "years": heatmap_domains,
+            "matrix": [[label_year_raw[b].get(d, 0) for d in heatmap_domains] for b in top_labels],
+        }
+        # Backward-compatible alias for older clients/tests.
         brand_year_matrix = {
             "brands": top_labels, "years": heatmap_domains,
             "matrix": [[label_year_raw[b].get(d, 0) for d in heatmap_domains] for b in top_labels],
@@ -490,6 +495,7 @@ class AnalyticsService:
             },
             "type_distribution":  type_distribution,
             "entities_by_year":   entities_by_year,
+            "label_year_matrix":  label_year_matrix,
             "brand_year_matrix":  brand_year_matrix,
             "top_concepts":       top_concepts,
             "emerging_topic_signals": emerging_topic_signals,

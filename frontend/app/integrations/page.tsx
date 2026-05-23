@@ -44,10 +44,12 @@ const DIRECTION_LABELS: Record<string, string> = {
     bidirectional: "↔ Bidirectional",
 };
 
+const COMMERCE_ADAPTERS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_COMMERCE_ADAPTERS !== "false";
+
 export default function IntegrationsPage() {
     const { toast } = useToast();
     const { t } = useLanguage();
-    const [activeTab, setActiveTab] = useState<"stores" | "ai">("stores");
+    const [activeTab, setActiveTab] = useState<"stores" | "ai">(COMMERCE_ADAPTERS_ENABLED ? "stores" : "ai");
     const [stores, setStores] = useState<StoreConnection[]>([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
@@ -73,13 +75,16 @@ export default function IntegrationsPage() {
             const data = await res.json();
             setStores(data);
         } catch {
-            toast("Failed to load store connections", "error");
+            toast("Failed to load source adapters", "error");
         } finally {
             setLoading(false);
         }
     }, [toast]);
 
-    useEffect(() => { fetchStores(); }, [fetchStores]);
+    useEffect(() => {
+        if (COMMERCE_ADAPTERS_ENABLED) fetchStores();
+        else setLoading(false);
+    }, [fetchStores]);
 
     function resetForm() {
         setFormData({ name: "", platform: "woocommerce", base_url: "", api_key: "", api_secret: "", access_token: "", sync_direction: "bidirectional", notes: "" });
@@ -169,11 +174,11 @@ export default function IntegrationsPage() {
             <PageHeader
                 breadcrumbs={[{ label: "Home", href: "/" }, { label: t('page.integrations.breadcrumb') }]}
                 title={t('page.integrations.title')}
-                description="Connect external e-commerce stores or configure predictive Semantic Generative AI (RAG)."
+                description={t('page.integrations.description')}
             />
             <TabNav
                 tabs={[
-                    { id: "stores", label: t('page.integrations.tab_stores') },
+                    ...(COMMERCE_ADAPTERS_ENABLED ? [{ id: "stores", label: t('page.integrations.tab_stores') }] : []),
                     { id: "ai", label: t('page.integrations.tab_ai') },
                 ]}
                 activeTab={activeTab}
@@ -182,7 +187,7 @@ export default function IntegrationsPage() {
 
             {activeTab === "ai" && <AIIntegrations />}
 
-            {activeTab === "stores" && (
+            {COMMERCE_ADAPTERS_ENABLED && activeTab === "stores" && (
                 <div className="space-y-6">
                     <div className="flex justify-end">
                         <button
@@ -210,7 +215,7 @@ export default function IntegrationsPage() {
                                             type="text"
                                             required
                                             className={inputClass}
-                                            placeholder="e.g. Mi Tienda Principal"
+                                            placeholder="e.g. Research commerce adapter"
                                             value={formData.name}
                                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                         />
@@ -236,7 +241,7 @@ export default function IntegrationsPage() {
                                         type="url"
                                         required
                                         className={inputClass}
-                                        placeholder="https://mitienda.com"
+                                        placeholder="https://example.com"
                                         value={formData.base_url}
                                         onChange={(e) => setFormData({ ...formData, base_url: e.target.value })}
                                     />
@@ -349,7 +354,7 @@ export default function IntegrationsPage() {
                             </div>
                             <h3 className="mb-1 text-lg font-semibold text-gray-900 dark:text-white">{t('page.integrations.empty_title')}</h3>
                             <p className="mb-4 max-w-sm text-center text-sm text-gray-500 dark:text-gray-400">
-                                Connect your WooCommerce, Shopify, Bsale, or custom API stores to sync and manage your product catalog.
+                                {t('page.integrations.empty_description')}
                             </p>
                             <button
                                 onClick={() => { resetForm(); setShowForm(true); }}
@@ -407,7 +412,7 @@ export default function IntegrationsPage() {
                                                 <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                                                 </svg>
-                                                <span>{store.entity_count.toLocaleString()} mapped products</span>
+                                                <span>{store.entity_count.toLocaleString()} {t('page.integrations.mapped_products_label')}</span>
                                             </div>
                                             {store.notes && (
                                                 <div className="flex items-start gap-2 text-gray-400 dark:text-gray-500">

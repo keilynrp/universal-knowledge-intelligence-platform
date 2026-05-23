@@ -42,7 +42,7 @@ export function AnalyticsEnrichmentSection({
             </div>
             <h2 className="text-xl font-bold">Semantic Enrichment Engine</h2>
             <p className="mt-1 max-w-lg text-sm text-white/80">
-              Transforming raw product records into rich domain entities using cross-referenced
+              Transforming raw source records into rich domain entities using cross-referenced
               bibliometric data, NLP concepts, and global impact projections.
             </p>
           </div>

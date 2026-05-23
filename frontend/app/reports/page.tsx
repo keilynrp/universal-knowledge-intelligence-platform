@@ -81,6 +81,7 @@ const SECTION_ICONS: Record<string, string> = {
   entity_stats:         "📊",
   enrichment_coverage:  "🔬",
   decision_recommendations: "🧭",
+  top_secondary_labels: "🏷️",
   top_brands:           "🏷️",
   topic_clusters:       "🧩",
   harmonization_log:    "⚙️",
@@ -136,7 +137,7 @@ export default function ReportsPage() {
       return explicit.split(",").map((value) => value.trim()).filter(Boolean);
     }
     if (preset === "pilot-brief") {
-      return ["entity_stats", "enrichment_coverage", "impact_projection", "hidden_patterns", "agentic_trace", "decision_recommendations", "institutional_benchmark", "top_brands", "topic_clusters"];
+      return ["entity_stats", "enrichment_coverage", "impact_projection", "hidden_patterns", "agentic_trace", "decision_recommendations", "institutional_benchmark", "top_secondary_labels", "topic_clusters"];
     }
     return [];
   }, [preset, searchParams]);
@@ -148,6 +149,7 @@ export default function ReportsPage() {
     entity_stats: tr("page.reports.section.entity_stats", "Total entities, validation status breakdown, distribution chart"),
     enrichment_coverage: tr("page.reports.section.enrichment_coverage", "Coverage %, average citations, top enriched entities"),
     decision_recommendations: tr("page.reports.section.decision_recommendations", "Short, explainable next actions derived from current KPI signals"),
+    top_secondary_labels: tr("page.reports.section.top_secondary_labels", "Top secondary labels or classifications by entity count"),
     top_brands: tr("page.reports.section.top_brands", "Top 15 primary labels or classifications by entity count"),
     topic_clusters: tr("page.reports.section.topic_clusters", "Most frequent concepts from enrichment data"),
     harmonization_log: tr("page.reports.section.harmonization_log", "Last 10 harmonization steps with status"),

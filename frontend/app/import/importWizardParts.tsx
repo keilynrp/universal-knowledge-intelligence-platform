@@ -125,8 +125,8 @@ function getUkipFields(t: (key: string) => string): { value: string; label: stri
     return [
         { value: "", label: translateOrFallback(t, "page.import.skip_column", "-- skip column --") },
         { value: "primary_label", label: translateOrFallback(t, "page.import.field.primary_label", "Primary Label (title / name)") },
-        { value: "secondary_label", label: translateOrFallback(t, "page.import.field.secondary_label", "Secondary Label (brand / author)") },
-        { value: "canonical_id", label: translateOrFallback(t, "page.import.field.canonical_id", "Canonical ID (SKU / DOI / barcode)") },
+        { value: "secondary_label", label: translateOrFallback(t, "page.import.field.secondary_label", "Secondary Label (author / institution / source)") },
+        { value: "canonical_id", label: translateOrFallback(t, "page.import.field.canonical_id", "Canonical ID (DOI / ORCID / ROR / local ID)") },
         { value: "entity_type", label: translateOrFallback(t, "page.import.field.entity_type", "Entity Type") },
         { value: "domain", label: translateOrFallback(t, "page.import.field.domain", "Domain") },
         { value: "enrichment_doi", label: translateOrFallback(t, "page.import.field.enrichment_doi", "DOI") },
@@ -404,7 +404,7 @@ export function StepMapping({
                         {tr("page.import.mapping.recommended_title", "Before you continue, cover the minimum fields that make the dataset easier to understand.")}
                     </p>
                     <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-                        {tr("page.import.mapping.recommended_body", "Primary label gives each record a readable name, and canonical ID helps UKIP recognize stable identifiers like DOI, SKU, or barcode.")}
+                        {tr("page.import.mapping.recommended_body", "Primary label gives each record a readable name, and canonical ID helps UKIP recognize stable identifiers like DOI, ORCID, ROR, or a local record ID.")}
                     </p>
                 </div>
             )}
@@ -843,7 +843,7 @@ export function StepValidate({
                     <div>
                         <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{tr("page.import.validate.no_canonical_title", "No stable identifier mapped")}</p>
                         <p className="text-xs text-gray-600 dark:text-gray-400">
-                            {tr("page.import.validate.no_canonical_hint", "If your file has DOI, SKU, barcode, or another stable key, map it to Canonical ID to make dedupe and follow-up easier later.")}
+                            {tr("page.import.validate.no_canonical_hint", "If your file has DOI, ORCID, ROR, accession number, or another stable key, map it to Canonical ID to make dedupe and follow-up easier later.")}
                         </p>
                     </div>
                 </div>

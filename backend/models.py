@@ -127,7 +127,7 @@ class StoreConnection(Base):
     is_active = Column(Boolean, default=True)
     last_sync_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime)
-    entity_count = Column(Integer, default=0)            # Cached count of mapped products
+    entity_count = Column(Integer, default=0)            # Cached count of mapped records
     sync_direction = Column(String, default="bidirectional")  # pull | push | bidirectional
     notes = Column(Text, nullable=True)
 
@@ -145,7 +145,7 @@ class StoreSyncMapping(Base):
     remote_price = Column(String, nullable=True)
     remote_stock = Column(String, nullable=True)
     remote_status = Column(String, nullable=True)
-    remote_data_json = Column(Text, nullable=True)       # Full remote product data snapshot
+    remote_data_json = Column(Text, nullable=True)       # Full remote record data snapshot
     sync_status = Column(String, default="pending")      # pending | synced | conflict | error
     last_synced_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime)
@@ -501,7 +501,7 @@ class UserNotificationRead(Base):
 
 class ScheduledImport(Base):
     """
-    Cron-based automated ingestion from a configured store connection.
+    Cron-based automated ingestion from a configured source adapter.
     interval_minutes is a simple interval approach (no full cron parser needed).
     """
     __tablename__ = "scheduled_imports"

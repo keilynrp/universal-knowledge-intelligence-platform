@@ -56,8 +56,15 @@ WIDGET_CATALOGUE = [
     },
     {
         "type":        "top_brands",
-        "label":       "Top Brands / Values",
+        "label":       "Top Secondary Labels",
         "description": "Bar chart of most frequent field values",
+        "default_cols": 6,
+        "icon":        "tag",
+    },
+    {
+        "type":        "top_secondary_labels",
+        "label":       "Top Secondary Labels",
+        "description": "Bar chart of most frequent secondary labels",
         "default_cols": 6,
         "icon":        "tag",
     },

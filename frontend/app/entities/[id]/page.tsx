@@ -1249,8 +1249,8 @@ export default function EntityDetailPage() {
     const canonicalDisplayValue = canonicalDuplicatesDoi ? null : entity.canonical_id;
     const primaryFields = [
         { key: "primary_label", label: "Etiqueta principal", value: entity.primary_label, icon: "type" },
-        { key: "secondary_label", label: "Etiqueta secundaria (marca / autor)", value: entity.secondary_label, icon: "tag" },
-        { key: "canonical_id", label: tr("entities.detail.fields.canonical_id", "ID canónico (SKU / código)"), value: canonicalDisplayValue, icon: "link", copyable: true },
+        { key: "secondary_label", label: "Etiqueta secundaria (autor / institución / fuente)", value: entity.secondary_label, icon: "tag" },
+        { key: "canonical_id", label: tr("entities.detail.fields.canonical_id", "ID canónico (DOI / ORCID / ROR / ID local)"), value: canonicalDisplayValue, icon: "link", copyable: true },
         { key: "entity_type", label: "Tipo de entidad", value: resolvedEntityType, icon: "cube" },
         { key: "domain", label: "Dominio", value: entity.domain, icon: "globe" },
     ];

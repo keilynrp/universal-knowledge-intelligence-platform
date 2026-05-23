@@ -37,6 +37,11 @@ interface DashboardData {
     total_concepts: number;
   };
   entities_by_year: { year: number; count: number }[];
+  label_year_matrix?: {
+    labels: string[];
+    years: number[];
+    matrix: number[][];
+  };
   brand_year_matrix: {
     brands: string[];
     years: number[];
@@ -760,8 +765,17 @@ export default function ExecutiveDashboardPage() {
   }, [dashboardDomainId, fetchDashboard, t, toast, tr]);
 
   // Compute heatmap max for scaling
+  const labelYearMatrix = data?.label_year_matrix ?? (
+    data
+      ? {
+          labels: data.brand_year_matrix.brands,
+          years: data.brand_year_matrix.years,
+          matrix: data.brand_year_matrix.matrix,
+        }
+      : null
+  );
   const heatMax = data
-    ? Math.max(1, ...data.brand_year_matrix.matrix.flat())
+    ? Math.max(1, ...(labelYearMatrix?.matrix.flat() ?? []))
     : 1;
   const briefBuilderHref = `/reports?preset=pilot-brief&domain=${encodeURIComponent(dashboardDomainId)}&rows=${encodeURIComponent(importedRows ?? String(data?.kpis.total_entities ?? 0))}&format=pdf&benchmark_profile=${encodeURIComponent(selectedBenchmarkProfile)}&title=${encodeURIComponent(`UKIP Pilot Brief — ${dashboardDomainId}`)}`;
   const enrichedExplorerHref = "/?ft_enrichment_status=completed&min_quality=0.7";
@@ -1563,7 +1577,7 @@ export default function ExecutiveDashboardPage() {
         )}
       </div>
 
-      {/* ── Section 3: Brand × Year Heatmap ── */}
+      {/* ── Section 3: Label × Year Heatmap ── */}
       <div className={`${showcaseCardClass} p-6`}>
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
@@ -1645,7 +1659,7 @@ export default function ExecutiveDashboardPage() {
         <p className={`mb-5 ${showcaseBlueLabelClass}`}>{tr("page.exec_dashboard.density_map", "Density map")}</p>
         {loading ? (
           <SkeletonCard lines={3} />
-        ) : !data || data.brand_year_matrix.brands.length === 0 ? (
+        ) : !labelYearMatrix || labelYearMatrix.labels.length === 0 ? (
           <div className="flex h-40 items-center justify-center text-sm text-slate-400">
             {tr("common.no_data", "No data available")}
           </div>
@@ -1657,7 +1671,7 @@ export default function ExecutiveDashboardPage() {
                   <th className="border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
                     {tr("page.exec_dashboard.label", "Label")}
                   </th>
-                  {data.brand_year_matrix.years.map((yr) => (
+                  {labelYearMatrix.years.map((yr) => (
                     <th
                       key={yr}
                       className="border border-slate-100 bg-slate-50 px-3 py-2 text-center text-xs font-semibold text-slate-500"
@@ -1668,12 +1682,12 @@ export default function ExecutiveDashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.brand_year_matrix.brands.map((brand, bi) => (
-                  <tr key={brand}>
+                {labelYearMatrix.labels.map((label, bi) => (
+                  <tr key={label}>
                     <td className="border border-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">
-                      {brand}
+                      {label}
                     </td>
-                    {data.brand_year_matrix.matrix[bi].map((val, yi) => (
+                    {labelYearMatrix.matrix[bi].map((val, yi) => (
                       <HeatCell key={yi} value={val} max={heatMax} />
                     ))}
                   </tr>

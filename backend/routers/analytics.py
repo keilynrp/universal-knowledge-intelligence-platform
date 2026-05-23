@@ -892,14 +892,12 @@ def get_stats(
     return AnalyticsService.get_stats(db, org_id=org_id, domain_id=domain_id)
 
 
-@router.get("/brands")
-def get_all_brands(
-    limit: int = Query(default=200, ge=1, le=1000),
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    org_id = resolve_request_org_id(db, current_user)
-    brands = (
+def _get_secondary_label_counts(
+    db: Session,
+    org_id: int | None,
+    limit: int,
+) -> list[dict[str, int | str | None]]:
+    labels = (
         scope_query_to_org(
             db.query(models.RawEntity.secondary_label, func.count(models.RawEntity.id).label("count")),
             models.RawEntity,
@@ -911,7 +909,28 @@ def get_all_brands(
         .limit(limit)
         .all()
     )
-    return [{"name": b[0], "count": b[1]} for b in brands]
+    return [{"name": label[0], "count": label[1]} for label in labels]
+
+
+@router.get("/secondary-labels")
+def get_all_secondary_labels(
+    limit: int = Query(default=200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    org_id = resolve_request_org_id(db, current_user)
+    return _get_secondary_label_counts(db, org_id, limit)
+
+
+@router.get("/brands")
+def get_all_brands(
+    limit: int = Query(default=200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Backward-compatible alias for secondary-label counts."""
+    org_id = resolve_request_org_id(db, current_user)
+    return _get_secondary_label_counts(db, org_id, limit)
 
 
 @router.get("/product-types")

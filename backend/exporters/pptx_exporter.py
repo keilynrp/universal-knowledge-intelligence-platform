@@ -193,7 +193,7 @@ def generate_pptx(
             _add_text_box(slide, line, Inches(0.5), Inches(1.75 + idx * 0.45), Inches(12), Inches(0.4),
                           font_size=11, color=RGBColor(60, 60, 80))
 
-    # ── Slide 4: Top Brands ───────────────────────────────────────────────────
+    # ── Slide 4: Top Secondary Labels ─────────────────────────────────────────
     if "top_brands" in sections:
         rows_q = entities_query.with_entities(
             models.RawEntity.secondary_label,
@@ -205,7 +205,7 @@ def generate_pptx(
 
         slide = _add_slide(prs)
         _add_header_bar(slide, accent, W)
-        _add_text_box(slide, "Top Brands / Classifications", Inches(0.5), Inches(0.05), Inches(10), Inches(0.45),
+        _add_text_box(slide, "Top Secondary Labels / Classifications", Inches(0.5), Inches(0.05), Inches(10), Inches(0.45),
                       font_size=16, bold=True, color=RGBColor(255, 255, 255))
         total_b = sum(r[1] for r in rows_q)
         for idx, (brand, count) in enumerate(rows_q):

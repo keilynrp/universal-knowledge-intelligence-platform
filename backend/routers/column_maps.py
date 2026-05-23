@@ -1,14 +1,16 @@
 """
 Universal column mapping for import/export operations.
 Maps common column header variations → model field names.
+
+Commerce-era aliases remain supported as a domain-specific compatibility pack,
+but the core mapping table is intentionally domain-neutral.
 """
 
-COLUMN_MAPPING = {
+CORE_COLUMN_MAPPING = {
     # primary_label synonyms
     "Name":              "primary_label",
     "Title":             "primary_label",
     "Label":             "primary_label",
-    "Product Name":      "primary_label",
     "name":              "primary_label",
     "title":             "primary_label",
     "label":             "primary_label",
@@ -17,21 +19,26 @@ COLUMN_MAPPING = {
     # secondary_label synonyms
     "Author":            "secondary_label",
     "Authors":           "secondary_label",
-    "Brand":             "secondary_label",
-    "Manufacturer":      "secondary_label",
+    "Institution":       "secondary_label",
     "Organization":      "secondary_label",
+    "Publisher":         "secondary_label",
+    "Venue":             "secondary_label",
+    "Source":            "secondary_label",
     "secondary_label":   "secondary_label",
 
     # canonical_id synonyms
     "ID":                "canonical_id",
     "Id":                "canonical_id",
-    "SKU":               "canonical_id",
     "DOI":               "canonical_id",
     "doi":               "canonical_id",
     "Code":              "canonical_id",
-    "Barcode":           "canonical_id",
-    "GTIN":              "canonical_id",
     "Identifier":        "canonical_id",
+    "ORCID":             "canonical_id",
+    "ROR":               "canonical_id",
+    "ISBN":              "canonical_id",
+    "ISSN":              "canonical_id",
+    "Accession Number":  "canonical_id",
+    "Record ID":         "canonical_id",
     "canonical_id":      "canonical_id",
 
     # entity_type synonyms
@@ -58,6 +65,20 @@ COLUMN_MAPPING = {
     "enrichment_concepts":         "enrichment_concepts",
     "enrichment_source":           "enrichment_source",
     "enrichment_status":           "enrichment_status",
+}
+
+COMMERCE_COLUMN_MAPPING = {
+    "Product Name":      "primary_label",
+    "Brand":             "secondary_label",
+    "Manufacturer":      "secondary_label",
+    "SKU":               "canonical_id",
+    "Barcode":           "canonical_id",
+    "GTIN":              "canonical_id",
+}
+
+COLUMN_MAPPING = {
+    **CORE_COLUMN_MAPPING,
+    **COMMERCE_COLUMN_MAPPING,
 }
 
 # model_field → clean English export header

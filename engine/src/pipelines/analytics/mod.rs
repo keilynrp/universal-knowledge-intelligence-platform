@@ -223,7 +223,7 @@ async fn load_field_data(
     // we query the key categorical columns.
     let candidate_fields = if field_filters.is_empty() {
         vec![
-            "brand_capitalized", "enrichment_source", "domain",
+            "secondary_label", "entity_type", "enrichment_source", "domain",
             "enrichment_status", "validation_status",
         ]
     } else {
@@ -285,7 +285,7 @@ mod tests {
 
     #[test]
     fn test_default_candidate_fields_are_allowed() {
-        let defaults = ["brand_capitalized", "enrichment_source", "domain",
+        let defaults = ["secondary_label", "entity_type", "enrichment_source", "domain",
                         "enrichment_status", "validation_status"];
         for field in &defaults {
             assert!(

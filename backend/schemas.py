@@ -654,6 +654,7 @@ class GapReportResponse(BaseModel):
 VALID_SECTIONS = {
     "entity_stats",
     "enrichment_coverage",
+    "top_secondary_labels",
     "top_brands",
     "topic_clusters",
     "harmonization_log",

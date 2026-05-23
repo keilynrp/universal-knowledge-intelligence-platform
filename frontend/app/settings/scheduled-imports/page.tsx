@@ -63,6 +63,7 @@ const INTERVALS = [
 ];
 
 const inputClass = "h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-indigo-400";
+const COMMERCE_ADAPTERS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_COMMERCE_ADAPTERS !== "false";
 
 function Spinner({ className = "h-4 w-4" }: { className?: string }) {
     return (
@@ -89,6 +90,13 @@ export default function ScheduledImportsPage() {
     }, [t]);
 
     const load = useCallback(async () => {
+        if (!COMMERCE_ADAPTERS_ENABLED) {
+            setItems([]);
+            setStats({ total: 0, active: 0, inactive: 0, total_runs: 0, total_entities_imported: 0 });
+            setStores([]);
+            setLoading(false);
+            return;
+        }
         setLoading(true);
         try {
             const [iRes, sRes, stRes] = await Promise.all([
@@ -115,8 +123,14 @@ export default function ScheduledImportsPage() {
                     { label: "Scheduled Imports" },
                 ]}
                 title={tr("page.settings_scheduled_imports.title", "Scheduled Imports")}
-                description={tr("page.settings_scheduled_imports.subtitle", "Automate data ingestion from configured store connections")}
+                description={tr("page.settings_scheduled_imports.subtitle", "Automate data ingestion from configured source adapters")}
             />
+
+            {!COMMERCE_ADAPTERS_ENABLED && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                    {tr("page.settings_scheduled_imports.disabled", "Commerce source adapters are disabled in this deployment. Scheduled imports remain available when an adapter pack is enabled.")}
+                </div>
+            )}
 
             {/* Stats */}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -153,6 +167,7 @@ export default function ScheduledImportsPage() {
                 </p>
                 <button
                     onClick={() => setShowCreate(s => !s)}
+                    disabled={!COMMERCE_ADAPTERS_ENABLED}
                     className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-indigo-700 active:scale-[0.98]"
                 >
                     {showCreate ? tr("common.cancel", "Cancel") : tr("page.settings_scheduled_imports.new_schedule", "+ New Schedule")}

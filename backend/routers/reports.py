@@ -80,11 +80,12 @@ def _make_pdf(html: str) -> bytes:
 router = APIRouter(tags=["reports"])
 
 _ALL_REPORT_SECTIONS = list(_report_builder.SECTION_LABELS.keys())
+_PUBLIC_REPORT_SECTIONS = [section for section in _ALL_REPORT_SECTIONS if section != "top_brands"]
 
 
 class _ReportRequest(BaseModel):
     domain_id: str          = Field(default="default", min_length=1, max_length=64)
-    sections:  List[str]    = Field(default=_ALL_REPORT_SECTIONS, min_length=1, max_length=10)
+    sections:  List[str]    = Field(default=_PUBLIC_REPORT_SECTIONS, min_length=1, max_length=10)
     title:     Optional[str] = Field(default=None, max_length=200)
     benchmark_profile_id: Optional[str] = Field(default=None, max_length=80)
     stakeholder_profile: Optional[str] = Field(default="leadership", max_length=80)
@@ -103,7 +104,7 @@ def generate_report(
     if invalid:
         raise HTTPException(
             status_code=422,
-            detail=f"Unknown sections: {invalid}. Valid: {_ALL_REPORT_SECTIONS}",
+            detail=f"Unknown sections: {invalid}. Valid: {_PUBLIC_REPORT_SECTIONS}",
         )
     html = _report_builder.build(
         db,
@@ -129,7 +130,7 @@ def generate_report(
 @router.get("/reports/sections", tags=["reports"])
 def list_report_sections(_: models.User = Depends(get_current_user)):
     """Return available report sections."""
-    return [{"id": k, "label": v} for k, v in _report_builder.SECTION_LABELS.items()]
+    return [{"id": k, "label": _report_builder.SECTION_LABELS[k]} for k in _PUBLIC_REPORT_SECTIONS]
 
 
 # ── Enterprise Export Endpoints ────────────────────────────────────────────────
@@ -147,7 +148,7 @@ def export_pdf(
     if invalid:
         raise HTTPException(
             status_code=422,
-            detail=f"Unknown sections: {invalid}. Valid: {_ALL_REPORT_SECTIONS}",
+            detail=f"Unknown sections: {invalid}. Valid: {_PUBLIC_REPORT_SECTIONS}",
         )
     html = _report_builder.build(
         db,
@@ -208,7 +209,7 @@ def export_pptx(
     if invalid:
         raise HTTPException(
             status_code=422,
-            detail=f"Unknown sections: {invalid}. Valid: {_ALL_REPORT_SECTIONS}",
+            detail=f"Unknown sections: {invalid}. Valid: {_PUBLIC_REPORT_SECTIONS}",
         )
     # Fetch branding settings (use defaults if singleton not yet created)
     from backend.routers.branding import _get_or_create_settings as _branding_settings
