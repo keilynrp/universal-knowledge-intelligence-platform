@@ -28,7 +28,7 @@
 - [x] 4.1 Map accepted institution matches into existing authority records or add minimal institution metadata support.
 - [x] 4.2 Persist canonical institution authority source and IDs (`ror`, `openalex`, `wikidata` where available).
 - [x] 4.3 Persist accepted/rejected review decisions.
-- [ ] 4.4 Persist author/publication affiliation links where existing link model supports them.
+- [x] 4.4 Persist author/publication affiliation links where existing link model supports them.
 - [x] 4.5 Add tests proving accepted matches are reused for future imports.
 
 ## 5. API endpoints
@@ -41,14 +41,14 @@
 
 ## 6. UI
 
-- [ ] 6.1 Add compact institution reconciliation panel or queue under Authority.
-- [ ] 6.2 Show candidate evidence: name match, alias, country, ROR, OpenAlex ID, and score breakdown.
-- [ ] 6.3 Allow accept/reject with visible confidence and provenance.
-- [ ] 6.4 Link resolved institutions back to affected authors/publications where available.
+- [x] 6.1 Add compact institution reconciliation panel or queue under Authority.
+- [x] 6.2 Show candidate evidence: name match, alias, country, ROR, OpenAlex ID, and score breakdown.
+- [x] 6.3 Allow accept/reject with visible confidence and provenance.
+- [x] 6.4 Link resolved institutions back to affected authors/publications where available.
 
 ## 7. Validation
 
 - [x] 7.1 Add focused backend tests for ROR adapter, scoring, persistence, and API auth.
-- [ ] 7.2 Add frontend smoke test or component test for review queue rendering.
+- [x] 7.2 Add frontend smoke test or component test for review queue rendering.
 - [x] 7.3 Run `npx openspec validate institution-affiliation-reconciliation --strict`.
 - [x] 7.4 Run focused authority and scientific affiliation tests.

@@ -43,6 +43,7 @@ from backend.services.institution_reconciliation import (
     RORAdapter,
     RORRecord,
     extract_institution_candidates,
+    normalize_ror_id,
     score_institution_match,
 )
 from backend.tenant_access import (
@@ -189,6 +190,110 @@ def _persist_institution_match(
     )
     db.add(rec)
     return rec, True
+
+
+def _candidate_identity(candidate: dict) -> tuple[str, str]:
+    if candidate.get("ror"):
+        return ("ror", normalize_ror_id(candidate.get("ror")) or str(candidate["ror"]).strip().lower())
+    if candidate.get("openalex_id"):
+        return ("openalex", str(candidate["openalex_id"]).strip().lower())
+    return (
+        "name_country",
+        f"{str(candidate.get('name') or '').strip().casefold()}|{str(candidate.get('country_code') or '').strip().upper()}",
+    )
+
+
+def _author_names_for_institution(entity: models.RawEntity, candidate: dict) -> list[str]:
+    try:
+        attrs = json.loads(entity.attributes_json or "{}")
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(attrs, dict):
+        return []
+
+    target = _candidate_identity(candidate)
+    names: list[str] = []
+    for author_affiliation in attrs.get("author_affiliations") or []:
+        if not isinstance(author_affiliation, dict):
+            continue
+        author_name = str(author_affiliation.get("author_name") or "").strip()
+        if not author_name:
+            continue
+        for institution in author_affiliation.get("institutions") or []:
+            if not isinstance(institution, dict):
+                continue
+            current = _candidate_identity({
+                "name": institution.get("name") or institution.get("display_name"),
+                "ror": institution.get("ror"),
+                "openalex_id": institution.get("openalex_id") or institution.get("id"),
+                "country_code": institution.get("country_code"),
+            })
+            if current == target:
+                names.append(author_name)
+                break
+    return sorted(set(names))
+
+
+def _find_author_authority_record(
+    db: Session,
+    *,
+    org_id: int | None,
+    author_name: str,
+) -> models.AuthorityRecord | None:
+    return scope_query_to_org(db.query(models.AuthorityRecord), models.AuthorityRecord, org_id).filter(
+        models.AuthorityRecord.field_name.in_(("author_name", "author")),
+        models.AuthorityRecord.status != "rejected",
+        (
+            (models.AuthorityRecord.original_value == author_name)
+            | (models.AuthorityRecord.canonical_label == author_name)
+        ),
+    ).order_by(
+        models.AuthorityRecord.status.asc(),
+        models.AuthorityRecord.confidence.desc(),
+        models.AuthorityRecord.id.desc(),
+    ).first()
+
+
+def _ensure_author_institution_links(
+    db: Session,
+    *,
+    org_id: int | None,
+    entity: models.RawEntity,
+    institution_record: models.AuthorityRecord,
+    candidate: dict,
+) -> int:
+    created = 0
+    for author_name in _author_names_for_institution(entity, candidate):
+        author_record = _find_author_authority_record(db, org_id=org_id, author_name=author_name)
+        if author_record is None:
+            continue
+        existing = scope_query_to_org(db.query(models.AuthorityRecordLink), models.AuthorityRecordLink, org_id).filter(
+            models.AuthorityRecordLink.source_authority_record_id == author_record.id,
+            models.AuthorityRecordLink.target_authority_record_id == institution_record.id,
+            models.AuthorityRecordLink.link_type == _AFFILIATION_LINK_TYPE,
+        ).first()
+        if existing is not None:
+            continue
+        confidence = _link_confidence(author_record, institution_record)
+        db.add(models.AuthorityRecordLink(
+            org_id=persisted_org_id(org_id),
+            source_authority_record_id=author_record.id,
+            target_authority_record_id=institution_record.id,
+            link_type=_AFFILIATION_LINK_TYPE,
+            confidence=confidence,
+            status="confirmed" if confidence >= 0.88 and institution_record.status == "confirmed" else "pending",
+            confirmed_at=datetime.now(timezone.utc)
+            if confidence >= 0.88 and institution_record.status == "confirmed"
+            else None,
+            evidence=json.dumps([
+                f"raw_entity:{entity.id}",
+                f"author_name:{author_name}",
+                f"institution_record:ror:{institution_record.authority_id}",
+                f"institution_confidence:{float(institution_record.confidence or 0.0):.3f}",
+            ]),
+        ))
+        created += 1
+    return created
 
 
 # ── Authority resolution ──────────────────────────────────────────────────────
@@ -880,6 +985,7 @@ def institution_reconcile_apply(
     preview = _preview_institution_reconciliation(db, org_id=org_id, payload=payload)
     created = 0
     reused = 0
+    links_created = 0
     records: list[models.AuthorityRecord] = []
     for item in preview["items"]:
         best = item.get("best_match")
@@ -895,6 +1001,17 @@ def institution_reconcile_apply(
         records.append(rec)
         created += 1 if was_created else 0
         reused += 0 if was_created else 1
+        if rec.id is None:
+            db.flush()
+        entity = get_scoped_record(db, models.RawEntity, item["entity_id"], org_id)
+        if entity is not None:
+            links_created += _ensure_author_institution_links(
+                db,
+                org_id=org_id,
+                entity=entity,
+                institution_record=rec,
+                candidate=best["candidate"],
+            )
     db.commit()
     for rec in records:
         db.refresh(rec)
@@ -902,6 +1019,7 @@ def institution_reconcile_apply(
         "preview_count": preview["count"],
         "created": created,
         "reused": reused,
+        "links_created": links_created,
         "records": [_serialize_authority_record(r) for r in records],
     }
 

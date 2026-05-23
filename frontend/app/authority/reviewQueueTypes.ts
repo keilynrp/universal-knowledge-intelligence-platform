@@ -72,6 +72,19 @@ export interface AuthorQueueResponse {
     summary: AuthorQueueSummary;
 }
 
+export interface InstitutionQueueResponse {
+    total: number;
+    records: AuthorityRecord[];
+}
+
+export interface InstitutionApplyResponse {
+    preview_count: number;
+    created: number;
+    reused: number;
+    links_created: number;
+    records: AuthorityRecord[];
+}
+
 export interface AuthorMetrics {
     total_records: number;
     pending_review: number;
@@ -127,4 +140,5 @@ export const SOURCE_COLORS: Record<string, string> = {
     orcid: "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
     dbpedia: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
     openalex: "bg-violet-100 text-violet-700 dark:bg-violet-500/10 dark:text-violet-400",
+    ror: "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-400",
 };

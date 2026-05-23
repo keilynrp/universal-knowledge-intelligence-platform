@@ -132,6 +132,22 @@ def test_score_institution_match_uses_ror_openalex_alias_and_country_penalty():
 
 
 def test_preview_and_apply_institution_reconciliation(client, editor_headers, db_session):
+    author = models.AuthorityRecord(
+        field_name="author_name",
+        original_value="Ada Lovelace",
+        authority_source="orcid",
+        authority_id="0000-0001-0000-0001",
+        canonical_label="Ada Lovelace",
+        confidence=0.97,
+        status="confirmed",
+        resolution_status="exact_match",
+        score_breakdown=json.dumps({"affiliation": 0.9}),
+        evidence="[]",
+        merged_sources="[]",
+    )
+    db_session.add(author)
+    db_session.commit()
+
     entity = _entity(db_session, {
         "canonical_affiliations": [
             {
@@ -140,7 +156,20 @@ def test_preview_and_apply_institution_reconciliation(client, editor_headers, db
                 "openalex_id": "I123",
                 "country_code": "US",
             }
-        ]
+        ],
+        "author_affiliations": [
+            {
+                "author_name": "Ada Lovelace",
+                "institutions": [
+                    {
+                        "name": "Open Science Lab",
+                        "ror": "https://ror.org/03yrm5c26",
+                        "openalex_id": "I123",
+                        "country_code": "US",
+                    }
+                ],
+            }
+        ],
     })
 
     with patch("backend.routers.authority.RORAdapter.lookup", return_value=_ror_record()):
@@ -164,10 +193,16 @@ def test_preview_and_apply_institution_reconciliation(client, editor_headers, db
     assert preview.json()["items"][0]["best_match"]["status"] == "exact_match"
     assert applied.status_code == 200
     assert applied.json()["created"] == 1
+    assert applied.json()["links_created"] == 1
     assert applied.json()["records"][0]["status"] == "confirmed"
     assert applied.json()["records"][0]["authority_source"] == "ror"
     assert reused.json()["reused"] == 1
-    assert db_session.query(models.AuthorityRecord).count() == 1
+    assert reused.json()["links_created"] == 0
+    assert db_session.query(models.AuthorityRecord).count() == 2
+    link = db_session.query(models.AuthorityRecordLink).one()
+    assert link.source_authority_record_id == author.id
+    assert link.link_type == "affiliated-with"
+    assert link.status == "confirmed"
 
 
 def test_institution_review_queue_accept_and_reject(client, editor_headers, db_session):

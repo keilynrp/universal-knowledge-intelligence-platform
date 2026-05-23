@@ -7,6 +7,8 @@ import type { DomainAttribute, DomainSchema } from "../contexts/DomainContext";
 import type {
     AuthorAffiliationsResponse,
     AuthorCompareResponse,
+    InstitutionApplyResponse,
+    InstitutionQueueResponse,
     AuthorMetrics,
     AuthorQueueResponse,
     AuthorQueueSummary,
@@ -24,7 +26,7 @@ export default function useReviewQueueController(activeDomain: DomainSchema | nu
     const [selected, setSelected] = useState<Set<number>>(new Set());
     const [acting, setActing] = useState(false);
     const [rowActionId, setRowActionId] = useState<number | null>(null);
-    const [queueMode, setQueueMode] = useState<"generic" | "authors">("generic");
+    const [queueMode, setQueueMode] = useState<"generic" | "authors" | "institutions">("generic");
     const [statusFilter, setStatusFilter] = useState("pending");
     const [fieldFilter, setFieldFilter] = useState("");
     const [authorRouteFilter, setAuthorRouteFilter] = useState("");
@@ -63,6 +65,10 @@ export default function useReviewQueueController(activeDomain: DomainSchema | nu
                 if (metricsRes.ok) {
                     setAuthorMetrics(await metricsRes.json());
                 }
+            } else if (queueMode === "institutions") {
+                setSummary(null);
+                setAuthorSummary(null);
+                setAuthorMetrics(null);
             } else {
                 const res = await apiFetch("/authority/queue/summary");
                 if (res.ok) {
@@ -89,6 +95,14 @@ export default function useReviewQueueController(activeDomain: DomainSchema | nu
                     const data: AuthorQueueResponse = await res.json();
                     setRecords(data.records ?? []);
                     setAuthorSummary(data.summary);
+                    setSelected(new Set());
+                }
+            } else if (queueMode === "institutions") {
+                const params = new URLSearchParams({ status: statusFilter, limit: "100" });
+                const res = await apiFetch(`/authority/institutions/review-queue?${params.toString()}`);
+                if (res.ok) {
+                    const data: InstitutionQueueResponse = await res.json();
+                    setRecords(data.records ?? []);
                     setSelected(new Set());
                 }
             } else {
@@ -135,7 +149,12 @@ export default function useReviewQueueController(activeDomain: DomainSchema | nu
         if (selected.size === 0) return;
         setActing(true);
         try {
-            const res = await apiFetch(`/authority/records/${action}`, {
+            const path = queueMode === "institutions"
+                ? action === "bulk-confirm"
+                    ? "/authority/records/bulk-confirm"
+                    : "/authority/records/bulk-reject"
+                : `/authority/records/${action}`;
+            const res = await apiFetch(path, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ ids: Array.from(selected), also_create_rules: true }),
@@ -186,7 +205,10 @@ export default function useReviewQueueController(activeDomain: DomainSchema | nu
     async function reviewRecord(rec: AuthorityRecord, action: "confirm" | "reject") {
         setRowActionId(rec.id);
         try {
-            const res = await apiFetch(`/authority/records/${rec.id}/${action}`, {
+            const path = queueMode === "institutions"
+                ? `/authority/institutions/review-queue/${rec.id}/${action === "confirm" ? "accept" : "reject"}`
+                : `/authority/records/${rec.id}/${action}`;
+            const res = await apiFetch(path, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: action === "confirm"
@@ -199,8 +221,8 @@ export default function useReviewQueueController(activeDomain: DomainSchema | nu
             }
             toast(
                 action === "confirm"
-                    ? (rec.nil_reason ? "NIL case accepted" : "Author candidate confirmed")
-                    : "Author candidate rejected",
+                    ? (queueMode === "institutions" ? "Institution confirmed" : rec.nil_reason ? "NIL case accepted" : "Author candidate confirmed")
+                    : (queueMode === "institutions" ? "Institution rejected" : "Author candidate rejected"),
                 "success"
             );
             await fetchSummary();
@@ -273,6 +295,37 @@ export default function useReviewQueueController(activeDomain: DomainSchema | nu
         }
     }
 
+    async function applyInstitutionReconciliation() {
+        setResolving(true);
+        setResolveResult(null);
+        try {
+            const res = await apiFetch("/authority/institutions/reconcile/apply", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    domain_id: activeDomain?.id ?? undefined,
+                    limit: batchLimit,
+                    live_lookup: true,
+                }),
+            });
+            if (res.ok) {
+                const data: InstitutionApplyResponse = await res.json();
+                setResolveResult(
+                    `Reviewed ${data.preview_count} affiliations, created ${data.created}, reused ${data.reused}, linked ${data.links_created}`
+                );
+                await fetchSummary();
+                await fetchRecords();
+            } else {
+                const err = await res.json().catch(() => ({}));
+                setResolveResult(`Error: ${err.detail || res.statusText}`);
+            }
+        } catch {
+            setResolveResult("Network error");
+        } finally {
+            setResolving(false);
+        }
+    }
+
     return {
         summary,
         authorSummary,
@@ -311,6 +364,7 @@ export default function useReviewQueueController(activeDomain: DomainSchema | nu
         toggleSelectAll,
         bulkAction,
         batchResolve,
+        applyInstitutionReconciliation,
         reviewRecord,
         toggleExpanded,
         reviewAuthorityLink,

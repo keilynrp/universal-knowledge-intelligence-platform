@@ -7,7 +7,7 @@ import { getEntityTypeLabel, getRouteLabel } from "./reviewQueueI18n";
 
 interface ReviewQueueControlsProps {
     activeDomain: DomainSchema | null;
-    queueMode: "generic" | "authors";
+    queueMode: "generic" | "authors" | "institutions";
     statusFilter: string;
     fieldFilter: string;
     authorRouteFilter: string;
@@ -21,7 +21,7 @@ interface ReviewQueueControlsProps {
     acting: boolean;
     selectedCount: number;
     summary: QueueSummary | null;
-    onQueueModeChange: (mode: "generic" | "authors") => void;
+    onQueueModeChange: (mode: "generic" | "authors" | "institutions") => void;
     onStatusFilterChange: (value: string) => void;
     onFieldFilterChange: (value: string) => void;
     onAuthorRouteFilterChange: (value: string) => void;
@@ -31,6 +31,7 @@ interface ReviewQueueControlsProps {
     onBatchEntityTypeChange: (value: string) => void;
     onBatchLimitChange: (value: number) => void;
     onBatchResolve: () => void;
+    onApplyInstitutionReconciliation: () => void;
     onBulkAction: (action: "bulk-confirm" | "bulk-reject") => void;
 }
 
@@ -60,6 +61,7 @@ export default function ReviewQueueControls({
     onBatchEntityTypeChange,
     onBatchLimitChange,
     onBatchResolve,
+    onApplyInstitutionReconciliation,
     onBulkAction,
 }: ReviewQueueControlsProps) {
     const { t } = useLanguage();
@@ -86,6 +88,16 @@ export default function ReviewQueueControls({
                     }`}
                 >
                     {t("page.authority.queue_authors")}
+                </button>
+                <button
+                    onClick={() => onQueueModeChange("institutions")}
+                    className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                        queueMode === "institutions"
+                            ? "bg-blue-600 text-white"
+                            : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                    }`}
+                >
+                    {t("page.authority.queue_institutions")}
                 </button>
             </div>
 
@@ -158,6 +170,37 @@ export default function ReviewQueueControls({
                 </div>
             )}
 
+            {queueMode === "institutions" && (
+                <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+                    <h3 className="mb-3 text-sm font-medium text-gray-900 dark:text-white">{t("page.authority.institution_reconciliation")}</h3>
+                    <div className="flex flex-wrap items-end gap-4">
+                        <div className="w-24">
+                            <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">{t("page.authority.limit")}</label>
+                            <input
+                                type="number"
+                                min={1}
+                                max={100}
+                                value={batchLimit}
+                                onChange={e => onBatchLimitChange(Number(e.target.value))}
+                                className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                            />
+                        </div>
+                        <button
+                            onClick={onApplyInstitutionReconciliation}
+                            disabled={resolving}
+                            className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                        >
+                            {resolving ? t("page.authority.resolving") : t("page.authority.apply_institution_reconciliation")}
+                        </button>
+                    </div>
+                    {resolveResult && (
+                        <p className={`mt-3 text-sm ${resolveResult.startsWith("Error") ? "text-red-600" : "text-green-600 dark:text-green-400"}`}>
+                            {resolveResult}
+                        </p>
+                    )}
+                </div>
+            )}
+
             <div className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-5 py-3 dark:border-gray-800">
                     <div className="flex items-center gap-3">
@@ -181,7 +224,7 @@ export default function ReviewQueueControls({
                                     <option key={f.field_name} value={f.field_name}>{f.field_name}</option>
                                 ))}
                             </select>
-                        ) : (
+                        ) : queueMode === "authors" ? (
                             <>
                                 <select
                                     value={authorRouteFilter}
@@ -213,6 +256,8 @@ export default function ReviewQueueControls({
                                     {t("page.authority.nil_only")}
                                 </label>
                             </>
+                        ) : (
+                            <span className="text-xs text-gray-500 dark:text-gray-400">{t("page.authority.ror_review_queue")}</span>
                         )}
                     </div>
                     {statusFilter === "pending" && (

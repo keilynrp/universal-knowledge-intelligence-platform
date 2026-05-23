@@ -9,7 +9,7 @@ import type {
 import { getNilReasonLabel, getRouteLabel } from "./reviewQueueI18n";
 
 interface ReviewQueueSummaryPanelsProps {
-    queueMode: "generic" | "authors";
+    queueMode: "generic" | "authors" | "institutions";
     summary: QueueSummary | null;
     authorSummary: AuthorQueueSummary | null;
     authorMetrics: AuthorMetrics | null;

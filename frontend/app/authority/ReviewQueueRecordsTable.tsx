@@ -18,7 +18,7 @@ import {
 } from "./reviewQueueI18n";
 
 interface ReviewQueueRecordsTableProps {
-    queueMode: "generic" | "authors";
+    queueMode: "generic" | "authors" | "institutions";
     statusFilter: string;
     loadingRecords: boolean;
     records: AuthorityRecord[];
@@ -96,9 +96,9 @@ export default function ReviewQueueRecordsTable({
                         <th className="px-4 py-2">{queueMode === "authors" ? t("page.authority.candidate") : t("page.authority.canonical_label")}</th>
                         <th className="px-4 py-2">{t("page.authority.table_source")}</th>
                         <th className="px-4 py-2">{t("page.authority.table_confidence")}</th>
-                        <th className="px-4 py-2">{queueMode === "authors" ? t("page.authority.table_route") : t("page.authority.field")}</th>
+                        <th className="px-4 py-2">{queueMode === "authors" ? t("page.authority.table_route") : queueMode === "institutions" ? t("page.authority.resolution") : t("page.authority.field")}</th>
                         <th className="px-4 py-2">{t("common.status")}</th>
-                        <th className="px-4 py-2">{queueMode === "authors" ? t("common.actions") : ""}</th>
+                        <th className="px-4 py-2">{queueMode === "authors" || queueMode === "institutions" ? t("common.actions") : ""}</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
@@ -184,8 +184,17 @@ export default function ReviewQueueRecordsTable({
                                                 {t("page.authority.nil_short")} {typeof rec.nil_score === "number" ? `${(rec.nil_score * 100).toFixed(0)}%` : "--"}
                                             </div>
                                         </div>
+                                    ) : queueMode === "institutions" ? (
+                                        <div className="space-y-1">
+                                            <div>{rec.resolution_status}</div>
+                                            {rec.score_breakdown && Object.keys(rec.score_breakdown).length > 0 && (
+                                                <div className="text-[11px] text-gray-400">
+                                                    {Object.entries(rec.score_breakdown).slice(0, 2).map(([key, value]) => `${key}:${value.toFixed(2)}`).join(" ")}
+                                                </div>
+                                            )}
+                                        </div>
                                     ) : rec.field_name}
-                                    {queueMode !== "authors" && rec.resolution_status === "partial_ancestor_match" && typeof rec.hierarchy_distance === "number" && (
+                                    {queueMode === "generic" && rec.resolution_status === "partial_ancestor_match" && typeof rec.hierarchy_distance === "number" && (
                                         <div className="mt-1 text-[11px] text-indigo-500 dark:text-indigo-400">
                                             {t("page.authority.ancestor_short")} +{rec.hierarchy_distance}
                                         </div>
@@ -196,21 +205,21 @@ export default function ReviewQueueRecordsTable({
                                         <Badge variant={rec.status === "confirmed" ? "success" : rec.status === "rejected" ? "error" : "warning"}>
                                             {getStatusLabel(rec.status, t)}
                                         </Badge>
-                                        {queueMode === "authors" && rec.review_required && (
+                                        {(queueMode === "authors" || queueMode === "institutions") && rec.review_required && (
                                             <span className="text-[11px] text-amber-600 dark:text-amber-400">{t("page.authority.needs_review")}</span>
                                         )}
                                     </div>
                                 </td>
                                 <td className="px-4 py-2.5">
                                     <div className="flex items-center justify-end gap-2">
-                                        {queueMode === "authors" && statusFilter === "pending" && (
+                                        {(queueMode === "authors" || queueMode === "institutions") && statusFilter === "pending" && (
                                             <>
                                                 <button
                                                     onClick={() => onReviewRecord(rec, "confirm")}
                                                     disabled={rowActionId === rec.id}
                                                     className="inline-flex h-7 items-center rounded-md bg-green-600 px-2.5 text-[11px] font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50"
                                                 >
-                                                    {rowActionId === rec.id ? t("page.authority.saving") : rec.nil_reason ? t("page.authority.accept_nil") : t("page.authority.confirm_button")}
+                                                    {rowActionId === rec.id ? t("page.authority.saving") : queueMode === "institutions" ? t("page.authority.confirm_button") : rec.nil_reason ? t("page.authority.accept_nil") : t("page.authority.confirm_button")}
                                                 </button>
                                                 <button
                                                     onClick={() => onReviewRecord(rec, "reject")}

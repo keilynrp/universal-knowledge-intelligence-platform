@@ -37,6 +37,7 @@ export default function ReviewQueueTab({ activeDomain }: { activeDomain: DomainS
                 onBatchEntityTypeChange={controller.setBatchEntityType}
                 onBatchLimitChange={controller.setBatchLimit}
                 onBatchResolve={controller.batchResolve}
+                onApplyInstitutionReconciliation={controller.applyInstitutionReconciliation}
                 onBulkAction={controller.bulkAction}
             />
 
