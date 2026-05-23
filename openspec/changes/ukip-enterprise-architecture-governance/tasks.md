@@ -8,19 +8,19 @@
 
 ## 2. Business and stakeholder architecture
 
-- [ ] 2.1 Define stakeholder segments and decision contexts.
-- [ ] 2.2 Map UKIP business capabilities to stakeholder outcomes.
-- [ ] 2.3 Define executive intelligence value propositions.
-- [ ] 2.4 Define success metrics for research stakeholders.
-- [ ] 2.5 Map `research-stakeholder-executive-demo` to business/stakeholder capabilities.
+- [x] 2.1 Define stakeholder segments and decision contexts.
+- [x] 2.2 Map UKIP business capabilities to stakeholder outcomes.
+- [x] 2.3 Define executive intelligence value propositions.
+- [x] 2.4 Define success metrics for research stakeholders.
+- [x] 2.5 Map `research-stakeholder-executive-demo` to business/stakeholder capabilities.
 
 ## 3. Data and semantic architecture
 
-- [ ] 3.1 Position `canonical-semantic-data-governance` as the data architecture backbone.
-- [ ] 3.2 Map source profiling, mapping suggestions, canonical model, authority resolution, enrichment, and linked-data alignment into the enterprise architecture.
-- [ ] 3.3 Define data quality and provenance principles for strategic decisions.
-- [ ] 3.4 Define how new data-model specs declare enterprise architecture impact.
-- [ ] 3.5 Validate active data specs against enterprise architecture domains.
+- [x] 3.1 Position `canonical-semantic-data-governance` as the data architecture backbone.
+- [x] 3.2 Map source profiling, mapping suggestions, canonical model, authority resolution, enrichment, and linked-data alignment into the enterprise architecture.
+- [x] 3.3 Define data quality and provenance principles for strategic decisions.
+- [x] 3.4 Define how new data-model specs declare enterprise architecture impact.
+- [x] 3.5 Validate active data specs against enterprise architecture domains.
 
 ## 4. Application and service architecture
 

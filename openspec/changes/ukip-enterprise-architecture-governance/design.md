@@ -139,6 +139,48 @@ Representative stakeholders:
 - scientific intelligence analysts,
 - policy and impact teams.
 
+#### Stakeholder segments and decision contexts
+
+| Segment | Decision context | UKIP evidence need | Primary outcome |
+| --- | --- | --- | --- |
+| Research executives | Portfolio direction, institutional positioning, strategic investments | Canonical publications, affiliations, citations, concepts, institutions, geography | Faster evidence-backed strategic readouts |
+| Research office leaders | Funding, collaboration, reporting, compliance | Author/institution resolution, grants, outputs, provenance | Cleaner reporting and reduced manual reconciliation |
+| Librarians and knowledge managers | Metadata quality, authority control, discovery | Source evidence, canonical records, authority links, linked-data alignment | Trustworthy knowledge curation |
+| Scientific intelligence analysts | Trend, topic, partnership, and impact analysis | Enriched observations, provenance, confidence, semantic relationships | Repeatable analytical workflows |
+| Institutional strategy teams | Benchmarking, strengths, opportunity areas | Executive dashboards, canonical KPIs, narrative evidence | Decision-ready briefings |
+| Data stewards | Import quality, mapping review, data governance | Source profiles, mapping suggestions, validation states | Governed ingestion and fewer silent errors |
+
+#### Capability-to-outcome map
+
+| UKIP capability | Stakeholder outcome | Primary architecture domain |
+| --- | --- | --- |
+| Source profiling and mapping suggestions | Faster onboarding of unfamiliar datasets with reviewable evidence | Data/semantic |
+| Canonical semantic model | Stable cross-domain records and relationships | Data/semantic |
+| Authority resolution | Trusted identity for authors, institutions, places, publications, and datasets | Data/semantic + application/service |
+| Evidence-based enrichment | Stronger analytics without erasing source truth | Data/semantic |
+| Review queues | Human-governed trust decisions | UX/UI + security/privacy |
+| Executive dashboards and reports | Stakeholder-readable decisions with provenance | Business/stakeholder + UX/UI |
+| RAG and skill orchestration | Evidence-grounded assistance over governed data | GenAI + application/service |
+
+Executive intelligence value propositions:
+
+- Reduce manual reconciliation before portfolio or research-impact conversations.
+- Explain strategic claims with source, authority, enrichment, and review evidence.
+- Turn heterogeneous scientific data into reusable institutional intelligence.
+- Make quality gaps visible before dashboards and reports are used externally.
+- Support pilot demos with real canonical and authority-resolved data under the narrative.
+
+Research stakeholder success metrics:
+
+- Time from source import to first reviewed dashboard.
+- Percentage of key records with canonical identity and provenance.
+- Authority resolution coverage for authors, institutions, places, and publications.
+- Review queue throughput and rejection/confirmation rates.
+- Share of executive report claims with traceable evidence.
+- Reduction in duplicate or ambiguous institutional/author records.
+
+`research-stakeholder-executive-demo` maps to business/stakeholder architecture by packaging these capabilities into a decision readout. It depends on data/semantic architecture for canonical evidence, UX/UI architecture for trust presentation, and application/service architecture for stable report and dashboard APIs.
+
 ### 2. Data and semantic architecture
 
 Defines UKIP's knowledge backbone.
@@ -156,6 +198,50 @@ Includes:
 - data quality and review workflows.
 
 `canonical-semantic-data-governance` is the principal subordinate spec for this domain.
+
+#### Data architecture backbone
+
+`canonical-semantic-data-governance` is the backbone for this domain. Enterprise architecture treats it as the authoritative source for:
+
+- source profiling contracts,
+- mapping suggestion review states,
+- canonical entity and relationship envelopes,
+- authority link semantics,
+- enrichment observation boundaries,
+- linked-data alignment strategy,
+- provenance and confidence rules.
+
+The enterprise architecture view is:
+
+```mermaid
+flowchart LR
+  A["Source profiling"] --> B["Mapping suggestions"]
+  B --> C["Canonical model"]
+  C --> D["Authority resolution"]
+  C --> E["Evidence enrichment"]
+  D --> F["Governed intelligence"]
+  E --> F
+  F --> G["Dashboards / reports / RAG"]
+```
+
+Data quality and provenance principles:
+
+- Strategic decisions prefer canonical records over raw payload fields.
+- Raw source evidence remains accessible after mapping and enrichment.
+- Authority links and enrichment observations are separate evidence classes.
+- Confidence must be explainable through score breakdowns, source evidence, or review state.
+- Human review decisions are auditable and should be visible to downstream claims where material.
+- Linked-data exports are generated from canonical semantics, not raw provider records.
+
+Architecture impact declaration for data-model specs:
+
+- Identify affected canonical entities, relationships, observations, authority links, or field states.
+- Declare source payloads and providers consumed.
+- State whether the change is a source adapter, authority resolver, enrichment provider, presentation layer, or canonical specialization.
+- Describe downstream impacts on APIs, analytics, graph, reports, RAG, and UX review surfaces.
+- Document migration and backward-compatibility expectations.
+
+Active data specs validate against this architecture by preserving the boundaries among original source, mapped canonical candidate, authority decision, enrichment observation, and presentation summary.
 
 ### 3. Application and service architecture
 

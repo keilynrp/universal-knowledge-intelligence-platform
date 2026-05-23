@@ -7,33 +7,33 @@
 
 ## 2. Source profiling contract
 
-- [ ] 2.1 Define source profile artifact shape for tabular, API, connector, and demo imports.
-- [ ] 2.2 Capture field names, inferred types, sparsity, sample values, value distributions, and candidate identifiers.
-- [ ] 2.3 Detect candidate entity roles such as person, organization, publication, dataset, place, concept, project, event, and grant.
-- [ ] 2.4 Add confidence and ambiguity indicators to profiling output.
+- [x] 2.1 Define source profile artifact shape for tabular, API, connector, and demo imports.
+- [x] 2.2 Capture field names, inferred types, sparsity, sample values, value distributions, and candidate identifiers.
+- [x] 2.3 Detect candidate entity roles such as person, organization, publication, dataset, place, concept, project, event, and grant.
+- [x] 2.4 Add confidence and ambiguity indicators to profiling output.
 - [ ] 2.5 Add tests for representative CSV/API/OpenAlex/Crossref-style payload profiling.
 
 ## 3. Mapping suggestion contract
 
-- [ ] 3.1 Define mapping suggestion artifact with source field, target canonical field/entity role, confidence, evidence samples, transformation rule, and review state.
-- [ ] 3.2 Add governed review thresholds for low-confidence or conflicting mappings.
-- [ ] 3.3 Ensure mapping suggestions preserve original source field names and values.
-- [ ] 3.4 Add mapping conflict handling for duplicate identifiers, ambiguous entity types, and mixed source fields.
+- [x] 3.1 Define mapping suggestion artifact with source field, target canonical field/entity role, confidence, evidence samples, transformation rule, and review state.
+- [x] 3.2 Add governed review thresholds for low-confidence or conflicting mappings.
+- [x] 3.3 Ensure mapping suggestions preserve original source field names and values.
+- [x] 3.4 Add mapping conflict handling for duplicate identifiers, ambiguous entity types, and mixed source fields.
 - [ ] 3.5 Add tests for accepted, rejected, and review-required mapping suggestions.
 
 ## 4. Canonical model governance
 
-- [ ] 4.1 Define canonical entity envelope with identity, labels, type, domain, identifiers, provenance, confidence, and field states.
-- [ ] 4.2 Define canonical relationship envelope with subject, predicate, object, evidence, provenance, confidence, and temporal/spatial context.
-- [ ] 4.3 Define canonical observation/enrichment envelope for externally sourced facts.
-- [ ] 4.4 Define authority link envelope for registry-backed identity resolution.
-- [ ] 4.5 Add versioning strategy for canonical model changes.
+- [x] 4.1 Define canonical entity envelope with identity, labels, type, domain, identifiers, provenance, confidence, and field states.
+- [x] 4.2 Define canonical relationship envelope with subject, predicate, object, evidence, provenance, confidence, and temporal/spatial context.
+- [x] 4.3 Define canonical observation/enrichment envelope for externally sourced facts.
+- [x] 4.4 Define authority link envelope for registry-backed identity resolution.
+- [x] 4.5 Add versioning strategy for canonical model changes.
 
 ## 5. Authority and enrichment boundaries
 
-- [ ] 5.1 Document authority resolution rules separately from enrichment rules.
-- [ ] 5.2 Ensure enrichment provider data cannot overwrite canonical identity without a governed rule.
-- [ ] 5.3 Define confidence aggregation rules across source evidence, authority matches, and enrichment observations.
+- [x] 5.1 Document authority resolution rules separately from enrichment rules.
+- [x] 5.2 Ensure enrichment provider data cannot overwrite canonical identity without a governed rule.
+- [x] 5.3 Define confidence aggregation rules across source evidence, authority matches, and enrichment observations.
 - [ ] 5.4 Add tests proving original source, canonical identity, authority link, and enrichment observation remain distinguishable.
 
 ## 6. Linked-data governance

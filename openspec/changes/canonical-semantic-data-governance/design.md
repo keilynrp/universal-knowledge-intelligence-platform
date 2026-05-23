@@ -96,6 +96,41 @@ The source profiler inspects arbitrary ingested data before mapping. It identifi
 - Candidate temporal, geographic, institutional, person, publication, dataset, and concept fields
 - Field quality, sparsity, ambiguity, and sample evidence
 
+#### Source profile artifact
+
+Every import surface may emit a source profile artifact before canonical mapping. The profile is intentionally provider-neutral so tabular files, API payloads, connector responses, and demo datasets can use the same review surface.
+
+```json
+{
+  "source_kind": "tabular | api | connector | demo",
+  "source_name": "string",
+  "profile_version": "1.0",
+  "record_count": 0,
+  "fields": [
+    {
+      "source_field": "authors",
+      "observed_type": "string | number | boolean | date | object | array | mixed | unknown",
+      "sparsity": 0.0,
+      "sample_values": ["Ada Lovelace; Grace Hopper"],
+      "value_distribution": {"non_empty": 0, "unique": 0, "top_values": []},
+      "candidate_identifiers": [{"scheme": "orcid | doi | ror | openalex | isbn | uri | unknown", "confidence": 0.0}],
+      "candidate_roles": [{"role": "person | organization | publication | dataset | place | concept | project | event | grant", "confidence": 0.0}],
+      "ambiguity": {"level": "low | medium | high", "reasons": []}
+    }
+  ]
+}
+```
+
+Profile rules:
+
+- Field names are preserved exactly as supplied by the source.
+- `sample_values` are evidence snippets, not canonical normalized values.
+- `sparsity` is the share of empty or null values in the inspected sample.
+- Candidate identifiers are hints for mapping and reconciliation, not accepted authority links.
+- Candidate roles may contain multiple hypotheses when a field is mixed or ambiguous.
+- API and connector profiles should include the logical payload path when the physical field is nested.
+- Demo profiles should still emit artifacts so demos exercise the same governance path as real imports.
+
 ### 2. Mapping suggestions
 
 Mapping suggestions translate profiled source fields into UKIP canonical candidates. They are recommendations, not silent transformations.
@@ -110,6 +145,42 @@ Each suggestion should include:
 - Conflict or ambiguity notes
 - Whether human review is required
 
+#### Mapping suggestion artifact
+
+```json
+{
+  "source_field": "authorships[].institutions[].ror",
+  "target": {
+    "canonical_entity": "institution",
+    "canonical_field": "identifier",
+    "entity_role": "organization",
+    "relationship_role": "affiliated-with"
+  },
+  "confidence": 0.0,
+  "evidence_samples": [],
+  "transformation_rule": {"type": "normalize_ror_id", "parameters": {}},
+  "review_state": "accepted | rejected | review_required | superseded",
+  "review_reason": null,
+  "conflicts": [],
+  "preserved_source": {"field_name": "string", "sample_values": []}
+}
+```
+
+Review thresholds:
+
+- `confidence >= 0.90` may be auto-accepted only when there is no role conflict and the transformation is deterministic.
+- `0.70 <= confidence < 0.90` requires review unless a source-specific governed rule exists.
+- `confidence < 0.70`, mixed entity roles, duplicate identifier collisions, or conflicting transformations always require review.
+- Rejected suggestions remain auditable and must not delete original source evidence.
+- Accepted suggestions preserve original source field names and values alongside canonical output.
+
+Conflict handling:
+
+- Duplicate identifiers across different source records create a reconciliation candidate, not immediate merge.
+- Ambiguous entity types retain all candidate roles with confidence and require review.
+- Mixed fields may be split by a governed transformation only when source values remain traceable.
+- Multiple source fields mapped to one canonical field require evidence of complementarity or a review decision.
+
 ### 3. UKIP canonical data model
 
 The canonical model is UKIP's internal semantic contract. It should be:
@@ -118,6 +189,76 @@ The canonical model is UKIP's internal semantic contract. It should be:
 - Extensible by subordinate domain specs
 - Strict about provenance and field state
 - Able to represent entities, relationships, identifiers, measures, temporal coverage, geographic coverage, evidence, authority links, and enrichment observations
+
+#### Canonical entity envelope
+
+```json
+{
+  "canonical_id": "ukip:entity:...",
+  "entity_type": "person | organization | publication | dataset | place | concept | project | event | grant | unknown",
+  "domain": "science",
+  "labels": {"primary": "string", "alternate": []},
+  "identifiers": [{"scheme": "ror", "value": "03yrm5c26", "authority": "ror", "confidence": 0.98}],
+  "provenance": {"source_records": [], "mapping_decisions": [], "authority_records": [], "enrichment_observations": []},
+  "confidence": {"identity": 0.0, "metadata": 0.0, "authority": 0.0},
+  "field_states": {"field_name": "source | mapped | enriched | authority_resolved | reviewed | rejected | unknown"},
+  "version": "1.0"
+}
+```
+
+#### Canonical relationship envelope
+
+```json
+{
+  "subject": "ukip:entity:person:...",
+  "predicate": "affiliated-with | authored | cites | located-in | funded-by | related-to",
+  "object": "ukip:entity:organization:...",
+  "evidence": [],
+  "provenance": {"source_records": [], "authority_links": [], "review_decisions": []},
+  "confidence": 0.0,
+  "temporal_context": {"start": null, "end": null},
+  "spatial_context": {"place_id": null, "geometry": null},
+  "version": "1.0"
+}
+```
+
+#### Observation, enrichment, and authority envelopes
+
+Enrichment observations represent externally sourced facts:
+
+```json
+{
+  "observation_type": "citation_count | concept | affiliation | coordinate | venue | funding | metric",
+  "value": {},
+  "provider": "openalex | crossref | ror | geonames | internal | other",
+  "observed_at": "ISO-8601",
+  "evidence": [],
+  "confidence": 0.0,
+  "canonical_target": "ukip:entity:..."
+}
+```
+
+Authority links represent registry-backed identity decisions:
+
+```json
+{
+  "authority_source": "ror | orcid | doi | crossref | datacite | geonames | wikidata | openalex",
+  "authority_id": "string",
+  "canonical_target": "ukip:entity:...",
+  "match_status": "exact_match | probable_match | ambiguous | unresolved | rejected",
+  "score_breakdown": {},
+  "evidence": [],
+  "review_state": "auto_accepted | review_required | accepted | rejected"
+}
+```
+
+Versioning strategy:
+
+- Canonical envelope changes use a semantic `version` field.
+- Additive fields may be introduced as minor versions.
+- Renames, removals, or meaning changes require migration notes and backward-compatible serializers.
+- Specs that depend on a canonical version declare the minimum version they require.
+- Presentation layers should tolerate older versions by rendering unknown fields as provenance-preserving raw evidence.
 
 ### 4. Authority resolution
 
@@ -131,6 +272,13 @@ Authority resolution links canonical candidates to trusted registries. Examples 
 - BIBFRAME/LC-compatible authorities for bibliographic and cultural heritage contexts
 
 Authority resolution can strengthen canonical identity, but it must preserve provenance and confidence.
+
+Authority boundary rules:
+
+- Authority decisions resolve identity; enrichment observations add facts.
+- A registry-backed match may promote canonical identity only through an accepted authority link or governed auto-accept rule.
+- Authority records must include source, identifier, confidence, score breakdown, evidence, and review state.
+- Rejected authority candidates remain distinguishable from unresolved candidates.
 
 ### 5. Evidence-based enrichment
 
@@ -147,6 +295,14 @@ Examples:
 - Funding and project context
 
 Enrichment must remain distinguishable from original ingestion and authority resolution.
+
+Enrichment boundary rules:
+
+- Provider fields cannot overwrite canonical identity, labels, or identifiers unless a governed mapping or review decision permits promotion.
+- Provider metrics and descriptive facts are stored as observations with provider provenance and observation time.
+- Conflicting enrichment observations are aggregated as evidence, not silently collapsed.
+- Confidence aggregation combines source evidence, mapping confidence, authority confidence, enrichment reliability, and review state.
+- Human-reviewed decisions outrank provider-only enrichment when identity or strategic claims are affected.
 
 ### 6. Linked-data alignment
 
