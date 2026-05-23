@@ -260,6 +260,63 @@ Includes:
 - inter-service dependencies,
 - failure boundaries.
 
+#### Service inventory
+
+| Service area | Representative components | Architecture responsibility |
+| --- | --- | --- |
+| Ingestion and import | upload/API import routers, scientific import, connector adapters, import batches | Accept source data, preserve original payload evidence, trigger profiling/mapping/enrichment work. |
+| Entity and relationship services | entity routers, relationship manager, graph/relationship helpers | Expose canonical records, relationships, validation states, and downstream graph surfaces. |
+| Enrichment services | enrichment worker, enrichment adapters, scheduled imports, quality/source health | Add provider observations without overwriting canonical identity. |
+| Authority and reconciliation | authority router, author resolution, institution reconciliation, authority links | Resolve identity against registries and keep review decisions auditable. |
+| Analytics services | topic, coauthorship, author, geographic, trend, correlation analyzers | Consume canonical/enriched data and expose reusable analytical summaries. |
+| Reporting and exports | report routers, executive dashboards, sales/stakeholder exports | Produce stakeholder readouts with provenance and confidence context. |
+| AI assistance and RAG | RAG endpoints, agentic chat, skill orchestration, query reformulation | Generate suggestions and narratives only from governed evidence and reviewable outputs. |
+| Operations and orchestration | schedulers, background workers, health checks, reset/workspace operations | Keep long-running work observable, restartable, and operationally safe. |
+
+#### Service boundary principles
+
+- Ingestion services preserve source evidence and should not perform irreversible canonical promotion without a mapping decision.
+- Enrichment services create observations; they do not own canonical identity.
+- Reconciliation services own authority scoring, review state, accepted/rejected decisions, and authority links.
+- Analytics services are consumers of governed data and should not mutate canonical or authority records.
+- Reporting services may summarize evidence but must preserve claim traceability.
+- AI assistance may suggest mappings, explanations, or narratives; it must not silently write canonical identity or strategic claims.
+- Operations services may clean, reset, or migrate state only through explicit administrative contracts.
+
+#### API contract expectations
+
+Stakeholder-facing APIs should:
+
+- return stable identifiers for entities, authority records, relationships, observations, and review decisions,
+- include provenance or evidence references when returning strategic claims,
+- expose confidence and review state where trust affects interpretation,
+- distinguish raw source fields, canonical fields, enrichment observations, and authority decisions,
+- be idempotent for apply/reconcile operations where retry is plausible,
+- provide clear partial-failure responses for external provider calls,
+- avoid leaking provider payload shape as the durable product contract.
+
+#### Integration dependency and failure rules
+
+- External provider failures should degrade enrichment/reconciliation results without corrupting canonical records.
+- Provider-backed operations should record failure reason and retry eligibility when appropriate.
+- Long-running imports, enrichment, and reconciliation should be batchable and restartable.
+- Cross-service writes should happen through owned service boundaries or shared canonical contracts, not ad hoc field mutation.
+- UI surfaces should handle empty, pending, partial, and failed states as normal product states.
+- Specs that add provider dependencies must document timeout, retry, rate-limit, and fallback behavior.
+
+#### Service architecture review checklist
+
+Future implementation specs should answer:
+
+- Which service area owns the change?
+- Which APIs, workers, adapters, or schedulers are affected?
+- Does the change read, write, or merely present canonical data?
+- Does it preserve source/canonical/enrichment/authority boundaries?
+- Is the operation idempotent or retry-safe?
+- What happens when an external provider, worker, or downstream analyzer fails?
+- What audit, provenance, or confidence evidence is emitted?
+- Which tests prove service boundaries and failure behavior?
+
 ### 4. UX/UI experience architecture
 
 Defines how users perceive and operate UKIP.

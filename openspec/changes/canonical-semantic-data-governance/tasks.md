@@ -38,12 +38,12 @@
 
 ## 6. Linked-data governance
 
-- [ ] 6.1 Define JSON-LD context generation strategy for canonical entities and relationships.
-- [ ] 6.2 Map bibliographic/resource entities to BIBFRAME-compatible terms where applicable.
-- [ ] 6.3 Map cultural heritage/resource aggregation entities to Europeana EDM-compatible terms where applicable.
-- [ ] 6.4 Map general entities and places to schema.org-compatible terms where applicable.
-- [ ] 6.5 Map datasets and spatial coverage to DCAT-compatible terms where applicable.
-- [ ] 6.6 Define future GeoSPARQL alignment path for geospatial relationships.
+- [x] 6.1 Define JSON-LD context generation strategy for canonical entities and relationships.
+- [x] 6.2 Map bibliographic/resource entities to BIBFRAME-compatible terms where applicable.
+- [x] 6.3 Map cultural heritage/resource aggregation entities to Europeana EDM-compatible terms where applicable.
+- [x] 6.4 Map general entities and places to schema.org-compatible terms where applicable.
+- [x] 6.5 Map datasets and spatial coverage to DCAT-compatible terms where applicable.
+- [x] 6.6 Define future GeoSPARQL alignment path for geospatial relationships.
 
 ## 7. Executive intelligence integration
 

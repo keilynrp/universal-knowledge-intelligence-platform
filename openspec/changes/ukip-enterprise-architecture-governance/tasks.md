@@ -24,11 +24,11 @@
 
 ## 4. Application and service architecture
 
-- [ ] 4.1 Inventory backend services, routers, adapters, schedulers, workers, and analytics services.
-- [ ] 4.2 Define service boundary principles for ingestion, enrichment, reconciliation, analytics, reports, and AI assistance.
-- [ ] 4.3 Define API contract expectations for stakeholder-facing capabilities.
-- [ ] 4.4 Define integration dependency rules and failure boundaries.
-- [ ] 4.5 Add service architecture review checklist for future implementation specs.
+- [x] 4.1 Inventory backend services, routers, adapters, schedulers, workers, and analytics services.
+- [x] 4.2 Define service boundary principles for ingestion, enrichment, reconciliation, analytics, reports, and AI assistance.
+- [x] 4.3 Define API contract expectations for stakeholder-facing capabilities.
+- [x] 4.4 Define integration dependency rules and failure boundaries.
+- [x] 4.5 Add service architecture review checklist for future implementation specs.
 
 ## 5. UX/UI experience architecture
 

@@ -315,6 +315,55 @@ Linked-data alignment maps governed canonical semantics into interoperable exter
 - DCAT for datasets and spatial coverage
 - GeoSPARQL for advanced future geospatial relationships
 
+#### JSON-LD context generation strategy
+
+UKIP should generate JSON-LD from canonical envelopes after mapping, authority resolution, and enrichment boundaries are known. JSON-LD output is an interoperability projection, not the internal source of truth.
+
+Generation rules:
+
+- The generator reads canonical entity and relationship envelopes, not raw source payloads.
+- `@id` comes from stable UKIP canonical IDs unless an accepted authority link is explicitly selected as an external same-as reference.
+- `@type` is derived from canonical `entity_type` and domain specialization.
+- `sameAs` contains accepted authority URIs such as ROR, ORCID, DOI, Wikidata, GeoNames, OpenAlex, or DataCite.
+- Source evidence, mapping decisions, authority links, and enrichment observations remain traceable through provenance properties.
+- Unknown or low-confidence mappings are emitted as conservative schema.org or UKIP extension terms rather than forced into a precise external ontology.
+
+Base context shape:
+
+```json
+{
+  "@context": {
+    "ukip": "https://ukip.example/ns#",
+    "schema": "https://schema.org/",
+    "bf": "http://id.loc.gov/ontologies/bibframe/",
+    "edm": "http://www.europeana.eu/schemas/edm/",
+    "dcat": "http://www.w3.org/ns/dcat#",
+    "dcterms": "http://purl.org/dc/terms/",
+    "geo": "http://www.opengis.net/ont/geosparql#",
+    "sameAs": "schema:sameAs",
+    "provenance": "ukip:provenance",
+    "confidence": "ukip:confidence"
+  }
+}
+```
+
+#### External vocabulary alignment
+
+| Canonical area | Preferred alignment | Notes |
+| --- | --- | --- |
+| Bibliographic/resource entities | BIBFRAME `bf:Work`, `bf:Instance`, `bf:Agent`; schema.org `ScholarlyArticle`, `CreativeWork` | Use BIBFRAME-compatible terms where records represent works, instances, contributors, venues, or identifiers. |
+| Cultural heritage/resource aggregation | Europeana EDM `edm:ProvidedCHO`, `ore:Aggregation`, `edm:WebResource` | Use EDM when the record describes cultural heritage objects, aggregations, providers, or web resources. |
+| General entities | schema.org `Thing`, `Organization`, `Person`, `CreativeWork`, `Event`, `Project` | Default web-scale projection when no more specific vocabulary is governed. |
+| Places and geography | schema.org `Place`, `PostalAddress`, `GeoCoordinates`; future GeoSPARQL | Use schema.org for initial place publishing; reserve GeoSPARQL for geometry/topology semantics. |
+| Datasets and catalogs | DCAT `dcat:Dataset`, `dcat:Catalog`, `dcat:Distribution`; DCTERMS coverage/license | Use DCAT when records represent datasets, data catalogs, distributions, spatial/temporal coverage, or access URLs. |
+
+Future GeoSPARQL path:
+
+- Phase 1 emits schema.org `Place` and simple coordinate/address terms.
+- Phase 2 adds canonical spatial relationship predicates such as `located-in`, `contains`, and `near`.
+- Phase 3 introduces GeoSPARQL-compatible geometry serialization for records with governed geometry confidence.
+- Phase 4 supports spatial reasoning only after provenance, coordinate system, and geometry source are explicit.
+
 ### 7. Executive intelligence
 
 Executive intelligence and reports consume the governed semantic layer. They should not infer strategic claims directly from raw provider payloads when canonical, authority-resolved, or evidence-enriched data is available.
