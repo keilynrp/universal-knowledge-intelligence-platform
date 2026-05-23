@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import update
@@ -20,6 +21,22 @@ from backend.tenant_access import LEGACY_GLOBAL_ORG_ID, scope_query_to_org
 from backend.domain_scope import parse_scope, resolve_domain_filter
 
 logger = logging.getLogger(__name__)
+
+
+def _jsonable_model(value):
+    if value is None:
+        return None
+    if hasattr(value, "model_dump"):
+        return value.model_dump()
+    if hasattr(value, "dict"):
+        return value.dict()
+    if is_dataclass(value):
+        return asdict(value)
+    if isinstance(value, list):
+        return [_jsonable_model(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _jsonable_model(item) for key, item in value.items()}
+    return value
 
 
 def _scholar_enabled() -> bool:
@@ -437,6 +454,22 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
             if enriched_data.affiliations:
                 attrs["affiliation"] = "; ".join(enriched_data.affiliations)
                 attrs["affiliations"] = enriched_data.affiliations
+            canonical_affiliations_raw = getattr(enriched_data, "canonical_affiliations", None)
+            canonical_affiliations = (
+                _jsonable_model(canonical_affiliations_raw)
+                if isinstance(canonical_affiliations_raw, list)
+                else None
+            )
+            if canonical_affiliations:
+                attrs["canonical_affiliations"] = canonical_affiliations
+            author_affiliations_raw = getattr(enriched_data, "author_affiliations", None)
+            author_affiliations = (
+                _jsonable_model(author_affiliations_raw)
+                if isinstance(author_affiliations_raw, list)
+                else None
+            )
+            if author_affiliations:
+                attrs["author_affiliations"] = author_affiliations
             if enriched_data.funding:
                 attrs["funding"] = enriched_data.funding
             if enriched_data.tldr:

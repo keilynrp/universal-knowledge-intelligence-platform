@@ -12,6 +12,60 @@ Current active specs already point in this direction:
 
 This spec defines the governance layer above them.
 
+## Governance Baseline
+
+### Active data-model spec inventory
+
+| Spec | Governance role | Primary canonical concern | Required governance reference |
+| --- | --- | --- | --- |
+| `canonical-semantic-data-governance` | `governing` | Cross-cutting canonical lifecycle, boundaries, and linked-data alignment | Root data governance layer |
+| `domain-agnostic-core-cleanup` | `governing` / `presentation` | Domain-neutral core terminology and compatibility containment | Must preserve canonical vocabulary and adapter boundaries |
+| `entity-provenance-layering` | `presentation` / `canonical-specialization` | Source, normalized, enrichment, authority, and audit field grouping | Must use canonical layer names and field-state semantics |
+| `scientific-affiliation-normalization` | `source-adapter` / `canonical-specialization` | Structured author, affiliation, institution, and ROR-ready metadata | Must preserve original source affiliation evidence separately from canonical candidates |
+| `institution-affiliation-reconciliation` | `authority-resolver` | Institution candidates, ROR/OpenAlex/Wikidata identity, scoring, and review | Must not overwrite source affiliation text or enrichment observations |
+| `geographic-entity-semantic-layer` | `canonical-specialization` / `authority-resolver` | Places, geographic identifiers, confidence, relationships, and linked-data geography | Must align place semantics to canonical provenance and linked-data rules |
+| `authority-enrichment-bridge` | `authority-resolver` / `enrichment-provider` | Candidate extraction and promotion from source plus enrichment evidence | Must keep extraction, review, authority decision, and canonical promotion distinct |
+| `research-stakeholder-executive-demo` | `presentation` | Stakeholder-facing decision readouts and evidence traceability | Must explain whether claims come from source, canonical, enrichment, authority, or linked-data layers |
+| `rag-skill-orchestration` | `presentation` / `enrichment-provider` | Skill-assisted RAG outputs over governed evidence | Must keep AI outputs read-only unless a governed review/promotion path exists |
+
+### Acceptance criteria for future data-model specs
+
+Every future data-model spec SHALL declare:
+
+- Governance role: `governing`, `canonical-specialization`, `source-adapter`, `authority-resolver`, `enrichment-provider`, or `presentation`.
+- Affected canonical entities, relationships, identifiers, observations, or field states.
+- Source payloads, imported fields, or provider records consumed.
+- Provenance boundary: original source, normalized UKIP identity, enrichment, authority, audit, or presentation.
+- Confidence and review rules, including when human review is required.
+- Linked-data alignment, if outputs may be exported or used for interoperability.
+- Downstream consumers affected: analytics, graph, reports, RAG, dashboards, or APIs.
+- Backward-compatibility and migration expectations.
+
+### Canonical semantic lifecycle
+
+```mermaid
+flowchart LR
+  A["Source payload or file"] --> B["Source profile"]
+  B --> C["Mapping suggestion"]
+  C --> D["Reviewed mapping decision"]
+  D --> E["Canonical entity / relationship candidate"]
+  E --> F["Authority resolution"]
+  E --> G["Evidence-based enrichment"]
+  F --> H["Canonical promotion with provenance"]
+  G --> I["Enrichment observation"]
+  H --> J["Analytics / graph / reports / RAG"]
+  I --> J
+  J --> K["Stakeholder intelligence with evidence"]
+```
+
+Lifecycle rules:
+
+- Source profiling precedes mapping for arbitrary or unfamiliar sources.
+- Mapping suggestions are reviewable artifacts, not silent canonical truth.
+- Canonical identity is promoted only by governed source mapping, authority decision, or explicit review rule.
+- Enrichment observations can support confidence and narrative, but remain distinguishable from authority decisions.
+- Presentation layers may summarize canonical and enrichment evidence, but must not erase provenance.
+
 ## Goals / Non-Goals
 
 **Goals:**

@@ -14,6 +14,9 @@ Tests cover:
 """
 
 import pytest
+from unittest.mock import MagicMock, patch
+
+from backend.adapters.base import RemoteEntity
 from backend import models
 
 
@@ -157,6 +160,36 @@ class TestScheduledImportTrigger:
     def test_trigger_not_found(self, client, auth_headers, db_session):
         r = client.post("/scheduled-imports/99999/trigger", headers=auth_headers)
         assert r.status_code == 404
+
+    def test_trigger_profiles_remote_fields_and_canonical_mapping(self, client, auth_headers, db_session):
+        cr = _create_schedule(client, auth_headers)
+        sid = cr.json()["id"]
+        adapter = MagicMock()
+        adapter.fetch_entities.return_value = [
+            RemoteEntity(
+                remote_id="remote-1",
+                name="Commerce adapter entity",
+                canonical_url="https://test-store.example.com/entities/remote-1",
+                sku="SKU-1",
+                raw_data={
+                    "Title": "Imported publication-like record",
+                    "DOI": "10.1234/scheduled-import",
+                    "Institution": "Open Science Lab",
+                },
+            )
+        ]
+
+        with patch("backend.routers.scheduled_imports._get_store_adapter", return_value=adapter):
+            r = client.post(f"/scheduled-imports/{sid}/trigger", headers=auth_headers)
+
+        assert r.status_code == 200
+        data = r.json()
+        assert data["success"] is True
+        source_profile = data["source_profile"]
+        assert "DOI" in source_profile["fields"]
+        assert source_profile["canonical_mapping"]["DOI"] == "canonical_id"
+        assert source_profile["canonical_mapping"]["Title"] == "primary_label"
+        assert source_profile["canonical_mapping"]["Institution"] == "secondary_label"
 
 
 # ── RBAC ──────────────────────────────────────────────────────────────────────

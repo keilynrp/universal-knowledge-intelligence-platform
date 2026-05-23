@@ -19,8 +19,8 @@
 - [x] 3.1 Update backend field descriptions in `backend/routers/ingest.py` to domain-neutral/scientific examples.
 - [x] 3.2 Split `COLUMN_MAPPING` into core aliases and commerce adapter aliases.
 - [x] 3.3 Preserve commerce aliases through adapter/domain-pack mapping when commerce sources are active.
-- [ ] 3.4 Update LLM mapping tests to avoid commerce-first fixtures in core tests.
-- [ ] 3.5 Add tests for DOI, ORCID, ROR, title, author, institution, and local identifier mapping.
+- [x] 3.4 Update LLM mapping tests to avoid commerce-first fixtures in core tests.
+- [x] 3.5 Add tests for DOI, ORCID, ROR, title, author, institution, and local identifier mapping.
 
 ## 4. Analytics and report terminology
 
@@ -33,7 +33,7 @@
 
 - [x] 5.1 Reframe store integrations as optional commerce source adapters.
 - [x] 5.2 Add feature flag or deployment visibility policy for commerce integrations.
-- [ ] 5.3 Ensure scheduled imports from stores pass through source profiling and canonical mapping.
+- [x] 5.3 Ensure scheduled imports from stores pass through source profiling and canonical mapping.
 - [x] 5.4 Keep adapter tests commerce-specific and clearly scoped.
 
 ## 6. Engine and backend compatibility
@@ -41,7 +41,7 @@
 - [x] 6.1 Move commerce fields in analytics allowlists/defaults into explicit legacy/domain-specific compatibility groups.
 - [x] 6.2 Ensure scientific domains default to author, institution, concept, source, year, DOI, and authority fields.
 - [x] 6.3 Preserve reading of existing `sku`, `gtin`, `barcode`, and `brand_capitalized` attributes without foregrounding them.
-- [ ] 6.4 Add regression tests for scientific default analytics fields.
+- [x] 6.4 Add regression tests for scientific default analytics fields.
 
 ## 7. Documentation refresh
 

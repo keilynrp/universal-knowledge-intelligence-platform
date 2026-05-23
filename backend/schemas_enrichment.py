@@ -1,6 +1,27 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 
+
+class CanonicalAffiliation(BaseModel):
+    """Structured institution affiliation normalized from scientific providers."""
+    name: str = Field(description="Institution or organization display name")
+    ror: Optional[str] = Field(default=None, description="ROR identifier or URL")
+    openalex_id: Optional[str] = Field(default=None, description="OpenAlex institution ID")
+    country_code: Optional[str] = Field(default=None, description="ISO 3166-1 alpha-2 country code")
+    type: Optional[str] = Field(default=None, description="Provider institution type")
+    lineage: List[str] = Field(default_factory=list, description="Provider lineage IDs")
+
+
+class AuthorAffiliation(BaseModel):
+    """Author-to-institution affiliation relationship from a scientific provider."""
+    author_name: str = Field(description="Author display name")
+    author_orcid: Optional[str] = Field(default=None, description="Normalized ORCID when available")
+    author_openalex_id: Optional[str] = Field(default=None, description="OpenAlex author ID")
+    author_position: Optional[str] = Field(default=None, description="Provider author position")
+    author_order: Optional[int] = Field(default=None, description="Raw authorship order, 1-based")
+    institutions: List[CanonicalAffiliation] = Field(default_factory=list)
+
+
 class EnrichedRecord(BaseModel):
     """
     Normalized Data Object (NDO) for scientometric/bibliometric enrichment.
@@ -17,6 +38,8 @@ class EnrichedRecord(BaseModel):
     concept_ids: List[Optional[str]] = Field(default_factory=list, description="OpenAlex concept IDs (positional, None for topics/keywords)")
     publisher: Optional[str] = Field(default=None, description="Journal, Conference, or Publisher name")
     affiliations: List[str] = Field(default_factory=list, description="Institutional or geographic affiliations")
+    canonical_affiliations: List[CanonicalAffiliation] = Field(default_factory=list, description="Deduplicated structured institution affiliations")
+    author_affiliations: List[AuthorAffiliation] = Field(default_factory=list, description="Per-author structured affiliation relationships")
     is_open_access: bool = Field(default=False, description="Whether the artifact is OA (Open Access)")
     source_api: str = Field(description="Which API provided this data (e.g., 'OpenAlex', 'Scopus')", default="Unknown")
     raw_response: Optional[Dict[str, Any]] = Field(default=None, description="Snapshot of the original JSON for audit and fallback extraction")

@@ -13,6 +13,88 @@ UKIP is evolving into a scientific intelligence platform. That evolution require
 
 This spec acts as UKIP's enterprise architecture organizer. It does not replace detailed specs. It governs how they fit together.
 
+## Enterprise Architecture Baseline
+
+### Architecture domains and owners
+
+| Domain | Scope | Accountable owner |
+| --- | --- | --- |
+| Business and stakeholder architecture | Stakeholders, value propositions, capability map, success metrics, pilot outcomes | Product / strategy owner |
+| Data and semantic architecture | Canonical semantics, source profiling, mapping, provenance, authority, enrichment, linked-data alignment | Data architecture owner |
+| Application and service architecture | APIs, services, adapters, workers, schedulers, analytics, reporting, integration boundaries | Backend/platform owner |
+| UX/UI experience architecture | Navigation, dashboards, entity detail, evidence, review workflows, reports, accessibility | Product design owner |
+| Infrastructure and operations architecture | Deployment, migrations, jobs, observability, backup, reliability, recovery | Operations/platform owner |
+| Security, privacy, and compliance architecture | Auth, authorization, audit, PII, source licensing, provider terms, retention, secrets | Security/compliance owner |
+| GenAI cross-cutting capability | AI-assisted mapping, reconciliation, reporting, RAG, governance automation, review thresholds | AI governance owner |
+
+Owners are accountability roles, not necessarily separate people. A single maintainer may hold multiple owner roles in an early-stage delivery context, but specs still declare which role is accountable.
+
+### Active spec classification
+
+| Spec | Primary architecture domain | Secondary domains |
+| --- | --- | --- |
+| `canonical-semantic-data-governance` | Data and semantic architecture | Business/stakeholder, UX/UI, GenAI |
+| `domain-agnostic-core-cleanup` | Data and semantic architecture | UX/UI, application/service |
+| `scientific-affiliation-normalization` | Data and semantic architecture | Application/service, business/stakeholder |
+| `institution-affiliation-reconciliation` | Data and semantic architecture | Application/service, UX/UI, security/privacy |
+| `entity-provenance-layering` | UX/UI experience architecture | Data/semantic, business/stakeholder |
+| `geographic-entity-semantic-layer` | Data and semantic architecture | Application/service, linked-data interoperability, UX/UI |
+| `ukip-design-system-foundation` | UX/UI experience architecture | Business/stakeholder, accessibility, data/semantic |
+| `research-stakeholder-executive-demo` | Business and stakeholder architecture | UX/UI, data/semantic, reporting |
+| `authority-enrichment-bridge` | Application and service architecture | Data/semantic, UX/UI, GenAI |
+| `rag-skill-orchestration` | GenAI cross-cutting capability | Data/semantic, application/service, UX/UI, security/privacy |
+
+### Relationship to canonical semantic data governance
+
+`ukip-enterprise-architecture-governance` is the top-level organizer. It decides how business value, UX, service boundaries, operations, security, and AI fit together.
+
+`canonical-semantic-data-governance` is the data architecture backbone beneath it. It governs how UKIP represents source evidence, canonical identity, authority resolution, enrichment observations, linked-data alignment, and evidence-backed intelligence.
+
+The relationship is:
+
+- Enterprise architecture decides whether a change is strategic and which architecture domains it affects.
+- Canonical semantic governance decides whether a data-model change preserves source/canonical/enrichment/authority boundaries.
+- Strategic specs that affect data semantics reference both layers.
+
+### Strategic architecture decision criteria
+
+A change qualifies as a strategic architecture decision when it does one or more of the following:
+
+- Changes canonical identity, provenance, authority, enrichment, or linked-data semantics.
+- Introduces or removes a core service boundary, API contract, scheduler, worker, adapter class, or orchestration pattern.
+- Changes stakeholder-facing decision workflows, executive reporting, or pilot value propositions.
+- Changes UX architecture for trust, provenance, confidence, AI disclosure, or review workflows.
+- Changes production deployment, migration lifecycle, observability, backup/recovery, or reliability posture.
+- Changes authentication, authorization, tenant isolation, auditability, privacy, licensing, or provider-terms posture.
+- Introduces GenAI behavior that affects mapping, reconciliation, reporting, recommendations, or user-facing claims.
+
+Routine bug fixes, copy edits, and narrow tests do not need architecture decision records unless they alter one of those strategic concerns.
+
+### Architecture decision record template
+
+```markdown
+# ADR: <decision title>
+
+- Date:
+- Status: proposed | accepted | superseded | rejected
+- Related specs:
+- Affected architecture domains:
+- Business/stakeholder driver:
+- Context:
+- Options considered:
+- Decision:
+- Rationale:
+- Data/provenance impact:
+- Service/API impact:
+- UX/UI impact:
+- Infrastructure/operations impact:
+- Security/privacy impact:
+- GenAI impact:
+- Risks and mitigations:
+- Validation evidence:
+- Follow-up tasks:
+```
+
 ## Goals / Non-Goals
 
 **Goals:**

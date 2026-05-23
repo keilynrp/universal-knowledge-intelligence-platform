@@ -45,6 +45,14 @@ class TestCubeDimensions:
         # Science domain should expose these attributes (minus skipped ones like doi, title)
         assert any(n in names for n in ("journal", "year", "citations", "authors"))
 
+    def test_science_domain_defaults_stay_scientific(self, client, auth_headers):
+        resp = client.get("/cube/dimensions/science", headers=auth_headers)
+        assert resp.status_code == 200
+        names = {d["name"] for d in resp.json()}
+
+        assert {"authors", "journal", "year", "citations", "institution"} <= names
+        assert {"sku", "gtin", "barcode", "brand"}.isdisjoint(names)
+
 
 # ── 17F · POST /cube/query ────────────────────────────────────────────────────
 

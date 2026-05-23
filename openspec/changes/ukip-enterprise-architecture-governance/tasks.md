@@ -1,10 +1,10 @@
 ## 1. Enterprise architecture baseline
 
-- [ ] 1.1 Define UKIP enterprise architecture domains and owners.
-- [ ] 1.2 Classify active specs by primary and secondary architecture domains.
-- [ ] 1.3 Document relationship between enterprise architecture governance and canonical semantic data governance.
-- [ ] 1.4 Define what qualifies as a strategic architecture decision.
-- [ ] 1.5 Create architecture decision record template.
+- [x] 1.1 Define UKIP enterprise architecture domains and owners.
+- [x] 1.2 Classify active specs by primary and secondary architecture domains.
+- [x] 1.3 Document relationship between enterprise architecture governance and canonical semantic data governance.
+- [x] 1.4 Define what qualifies as a strategic architecture decision.
+- [x] 1.5 Create architecture decision record template.
 
 ## 2. Business and stakeholder architecture
 

@@ -1,9 +1,9 @@
 ## 1. Governance baseline
 
-- [ ] 1.1 Inventory active data-model specs and classify each as governing, canonical-specialization, source-adapter, authority-resolver, enrichment-provider, or presentation.
-- [ ] 1.2 Add governance references to subordinate specs where needed.
-- [ ] 1.3 Define acceptance criteria for future data-model specs.
-- [ ] 1.4 Document canonical semantic lifecycle from source profiling to executive intelligence.
+- [x] 1.1 Inventory active data-model specs and classify each as governing, canonical-specialization, source-adapter, authority-resolver, enrichment-provider, or presentation.
+- [x] 1.2 Add governance references to subordinate specs where needed.
+- [x] 1.3 Define acceptance criteria for future data-model specs.
+- [x] 1.4 Document canonical semantic lifecycle from source profiling to executive intelligence.
 
 ## 2. Source profiling contract
 

@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 import httpx
 import re
 
-from backend.schemas_enrichment import EnrichedRecord
+from backend.schemas_enrichment import AuthorAffiliation, CanonicalAffiliation, EnrichedRecord
 from backend.adapters.enrichment.base import BaseScientometricAdapter
 
 class OpenAlexAdapter(BaseScientometricAdapter):
@@ -48,15 +48,47 @@ class OpenAlexAdapter(BaseScientometricAdapter):
         # 3. Dig into authors list dynamically
         author_list = []
         orcid_list = []
-        for authorship in raw_openalex.get("authorships", []):
+        canonical_affiliations_by_key: dict[tuple[str, str], CanonicalAffiliation] = {}
+        author_affiliations: list[AuthorAffiliation] = []
+        for order, authorship in enumerate(raw_openalex.get("authorships", []), start=1):
             author_data = authorship.get("author", {})
             name = author_data.get("display_name")
+            author_institutions: list[CanonicalAffiliation] = []
+            for institution in authorship.get("institutions", []) or []:
+                institution_name = institution.get("display_name")
+                if not institution_name:
+                    continue
+                affiliation = CanonicalAffiliation(
+                    name=institution_name,
+                    ror=institution.get("ror"),
+                    openalex_id=institution.get("id"),
+                    country_code=institution.get("country_code"),
+                    type=institution.get("type"),
+                    lineage=[
+                        str(item)
+                        for item in (institution.get("lineage") or [])
+                        if item is not None
+                    ],
+                )
+                key = _affiliation_dedupe_key(affiliation)
+                canonical_affiliations_by_key.setdefault(key, affiliation)
+                author_institutions.append(affiliation)
             if name:
                 author_list.append(name)
                 raw_orcid = author_data.get("orcid")
                 # Strip URL prefix if present (e.g. "https://orcid.org/0000-...")
                 orcid = raw_orcid.replace("https://orcid.org/", "") if raw_orcid else None
                 orcid_list.append(orcid)
+                author_affiliations.append(
+                    AuthorAffiliation(
+                        author_name=name,
+                        author_orcid=orcid,
+                        author_openalex_id=author_data.get("id"),
+                        author_position=authorship.get("author_position"),
+                        author_order=order,
+                        institutions=author_institutions,
+                    )
+                )
         
         # 4. Extract concepts from concepts, topics, and keywords fields
         concept_list = []
@@ -107,6 +139,12 @@ class OpenAlexAdapter(BaseScientometricAdapter):
             is_open_access=oa_status,
             concepts=concept_list,
             concept_ids=concept_id_list,
+            affiliations=[
+                _affiliation_legacy_label(affiliation)
+                for affiliation in canonical_affiliations_by_key.values()
+            ],
+            canonical_affiliations=list(canonical_affiliations_by_key.values()),
+            author_affiliations=author_affiliations,
             source_api="OpenAlex",
             raw_response=raw_openalex # Attach whole tree for potential late parsing rules
         )
@@ -235,3 +273,18 @@ class OpenAlexAdapter(BaseScientometricAdapter):
             time.sleep(self._BULK_INTER_PAGE_DELAY)
 
         return collected[:limit]
+
+
+def _affiliation_dedupe_key(affiliation: CanonicalAffiliation) -> tuple[str, str]:
+    if affiliation.ror:
+        return ("ror", affiliation.ror.strip().lower().removeprefix("https://ror.org/"))
+    if affiliation.openalex_id:
+        return ("openalex", affiliation.openalex_id.strip().lower())
+    normalized_name = re.sub(r"\s+", " ", affiliation.name).strip().casefold()
+    return ("name_country", f"{normalized_name}|{affiliation.country_code or ''}")
+
+
+def _affiliation_legacy_label(affiliation: CanonicalAffiliation) -> str:
+    if affiliation.country_code:
+        return f"{affiliation.name}, {affiliation.country_code}"
+    return affiliation.name

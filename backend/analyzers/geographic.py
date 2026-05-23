@@ -145,6 +145,27 @@ def _get_affiliation_from_attrs(attributes_json: str | None) -> str | None:
     return None
 
 
+def _get_structured_countries(attributes_json: str | None) -> set[str]:
+    """Extract country codes from structured canonical affiliation metadata."""
+    if not attributes_json:
+        return set()
+    try:
+        attrs = json.loads(attributes_json)
+    except (ValueError, TypeError):
+        return set()
+    if not isinstance(attrs, dict):
+        return set()
+
+    countries: set[str] = set()
+    for affiliation in attrs.get("canonical_affiliations") or []:
+        if not isinstance(affiliation, dict):
+            continue
+        code = affiliation.get("country_code")
+        if isinstance(code, str) and re.fullmatch(r"[A-Za-z]{2}", code.strip()):
+            countries.add(code.strip().upper())
+    return countries
+
+
 def _get_extracted_country(attributes_json: str | None) -> str | None:
     """Check if country was already extracted and cached."""
     if not attributes_json:
@@ -193,9 +214,12 @@ def geographic_analysis(
 
     for row in rows:
         attrs_json = row.get("attributes_json")
+        structured_countries = _get_structured_countries(attrs_json)
         # Check cached extraction first
         country_code = _get_extracted_country(attrs_json)
-        if not country_code:
+        if structured_countries:
+            country_code = sorted(structured_countries)[0]
+        elif not country_code:
             affiliation = _get_affiliation_from_attrs(attrs_json)
             country_code = extract_country(affiliation)
 
@@ -205,9 +229,7 @@ def geographic_analysis(
             country_stats[country_code]["citation_sum"] += (row.get("enrichment_citation_count") or 0)
 
             if include_collaboration:
-                # For simplicity, one country per entity in basic mode
-                # Multi-country entities would need multi-author parsing
-                entity_countries.append({country_code})
+                entity_countries.append(structured_countries or {country_code})
 
     coverage = round(entities_with_country / total_entities, 4) if total_entities else 0.0
 

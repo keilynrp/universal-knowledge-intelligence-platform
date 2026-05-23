@@ -52,6 +52,10 @@ class EntityAttributesDict(TypedDict, total=False):
     enrichment_authors: "list[str]"
     enrichment_author_orcids: "list[str | None]"
     enrichment_affiliations: "list[str]"
+    affiliation: str
+    affiliations: "list[str]"
+    canonical_affiliations: "list[dict]"
+    author_affiliations: "list[dict]"
     enrichment_funding: "list[str]"
     enrichment_mesh_terms: "list[str]"
     enrichment_tldr: "str | None"

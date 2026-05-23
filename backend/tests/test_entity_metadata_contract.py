@@ -104,11 +104,15 @@ class TestKnownAttributeKeys:
             "enrichment_license",
             "enrichment_venue",
             "enrichment_failure",
+            "affiliation",
+            "affiliations",
+            "canonical_affiliations",
+            "author_affiliations",
         }
         assert expected == KNOWN_ATTRIBUTE_KEYS
 
-    def test_has_eleven_keys(self):
-        assert len(KNOWN_ATTRIBUTE_KEYS) == 11
+    def test_has_documented_key_count(self):
+        assert len(KNOWN_ATTRIBUTE_KEYS) == 15
 
     def test_all_keys_are_strings(self):
         assert all(isinstance(k, str) for k in KNOWN_ATTRIBUTE_KEYS)

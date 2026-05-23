@@ -1,6 +1,6 @@
 # Data Schemas & Contracts Codemap
 
-**Last Updated:** 2026-05-20 (enrichment-scheduler schemas)
+**Last Updated:** 2026-05-22 (scientific affiliation normalization)
 **Entry Points:** `backend/schemas.py`, `backend/models.py`
 
 ## Overview
@@ -8,6 +8,38 @@
 The schemas module defines canonical enums, TypedDicts, and Pydantic models that form the single source of truth for all data structures across UKIP. This ensures consistency in how enrichment status, validation states, and entity attributes are represented.
 
 ## Key Contracts
+
+### Scientific Enrichment Affiliation Contract
+
+**Location:** `backend/schemas_enrichment.py`
+
+`EnrichedRecord` now supports both legacy text affiliations and structured scientific affiliation metadata:
+
+```python
+class CanonicalAffiliation(BaseModel):
+    name: str
+    ror: str | None = None
+    openalex_id: str | None = None
+    country_code: str | None = None
+    type: str | None = None
+    lineage: list[str] = []
+
+class AuthorAffiliation(BaseModel):
+    author_name: str
+    author_orcid: str | None = None
+    author_openalex_id: str | None = None
+    author_position: str | None = None
+    author_order: int | None = None
+    institutions: list[CanonicalAffiliation]
+```
+
+**Persistence:** `backend/enrichment_worker.py` writes `canonical_affiliations` and `author_affiliations` into `RawEntity.attributes_json` when an enrichment provider supplies them. It also keeps `affiliation` and `affiliations` for backward compatibility and geographic fallback.
+
+**OpenAlex mapping:** `backend/adapters/enrichment/openalex.py` maps `authorships[].author` and `authorships[].institutions[]` into these structures, deduplicating canonical institutions by ROR, OpenAlex institution ID, then normalized name/country.
+
+**Authority handoff:** `backend/services/scientific_affiliations.py` exposes `normalize_ror_id()` and `extract_institution_authority_candidates()` so institution reconciliation can consume persisted structured metadata without reparsing raw OpenAlex JSON.
+
+**Analytics:** `backend/analyzers/geographic.py` prefers `canonical_affiliations[].country_code` before legacy affiliation text extraction.
 
 ### EnrichmentStatus Enum
 

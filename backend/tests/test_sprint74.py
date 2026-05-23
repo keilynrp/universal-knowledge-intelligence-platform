@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 
 # ── _parse_llm_mapping unit tests ─────────────────────────────────────────────
 
+from backend.routers.column_maps import COLUMN_MAPPING, COMMERCE_COLUMN_MAPPING, CORE_COLUMN_MAPPING
 from backend.routers.ingest import _parse_llm_mapping, _VALID_UKIP_FIELDS
 
 
@@ -31,9 +32,9 @@ class TestParseLlmMapping:
         assert result["DOI"] == "enrichment_doi"
 
     def test_json_with_preamble(self):
-        raw = 'Here is the mapping:\n{"SKU": "canonical_id", "Foo": null}'
+        raw = 'Here is the mapping:\n{"DOI": "canonical_id", "Foo": null}'
         result = _parse_llm_mapping(raw, _VALID_UKIP_FIELDS)
-        assert result["SKU"] == "canonical_id"
+        assert result["DOI"] == "canonical_id"
         assert result["Foo"] is None
 
     def test_null_value_preserved(self):
@@ -242,3 +243,25 @@ class TestSuggestMappingEndpoint:
             )
 
         assert resp.json()["mapping"]["Title"] is None
+
+
+class TestScientificCoreColumnMapping:
+    def test_scientific_identifiers_are_core_aliases(self):
+        expected = {
+            "DOI": "canonical_id",
+            "ORCID": "canonical_id",
+            "ROR": "canonical_id",
+            "Title": "primary_label",
+            "Author": "secondary_label",
+            "Institution": "secondary_label",
+            "Record ID": "canonical_id",
+        }
+
+        for column, target in expected.items():
+            assert CORE_COLUMN_MAPPING[column] == target
+            assert COLUMN_MAPPING[column] == target
+
+    def test_commerce_aliases_are_compatibility_pack_only(self):
+        assert "SKU" not in CORE_COLUMN_MAPPING
+        assert COMMERCE_COLUMN_MAPPING["SKU"] == "canonical_id"
+        assert COLUMN_MAPPING["SKU"] == "canonical_id"

@@ -11,6 +11,7 @@ import json
 import logging
 import threading
 import time
+from dataclasses import asdict, is_dataclass
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
@@ -21,6 +22,7 @@ from typing import Optional, List
 from backend import models, database
 from backend.auth import require_role
 from backend.database import get_db
+from backend.routers.column_maps import COLUMN_MAPPING
 from backend.routers.deps import _get_store_adapter
 from backend.tenant_quotas import assert_org_quota_available
 from backend.tenant_access import (
@@ -74,6 +76,39 @@ def _serialize(s: models.ScheduledImport) -> dict:
         "total_runs": s.total_runs,
         "total_entities_imported": s.total_entities_imported,
         "created_at": s.created_at.isoformat() if s.created_at else None,
+    }
+
+
+def _remote_entity_profile(remote_entities: list) -> dict:
+    """Profile remote store fields and show how they map to canonical fields."""
+    fields: set[str] = set()
+    canonical_mapping: dict[str, str] = {}
+
+    for entity in remote_entities:
+        if is_dataclass(entity):
+            raw = asdict(entity)
+        elif isinstance(entity, dict):
+            raw = entity
+        else:
+            raw = {
+                key: getattr(entity, key)
+                for key in dir(entity)
+                if not key.startswith("_") and not callable(getattr(entity, key))
+            }
+
+        if isinstance(raw.get("raw_data"), dict):
+            fields.update(str(key) for key in raw["raw_data"].keys())
+        fields.update(str(key) for key, value in raw.items() if value not in (None, "", [], {}))
+
+    for field in sorted(fields):
+        mapped = COLUMN_MAPPING.get(field) or COLUMN_MAPPING.get(field.strip())
+        if mapped:
+            canonical_mapping[field] = mapped
+
+    return {
+        "field_count": len(fields),
+        "fields": sorted(fields),
+        "canonical_mapping": canonical_mapping,
     }
 
 
@@ -281,6 +316,7 @@ def _execute_import(schedule: models.ScheduledImport, db: Session) -> dict:
     try:
         adapter = _get_store_adapter(store)
         remote_entities = adapter.fetch_entities(page=1, per_page=100)
+        source_profile = _remote_entity_profile(remote_entities)
     except Exception as e:
         schedule.last_status = "error"
         schedule.last_result = json.dumps({"error": str(e)})
@@ -352,6 +388,7 @@ def _execute_import(schedule: models.ScheduledImport, db: Session) -> dict:
         "new_mappings": new_mappings,
         "new_queue_items": new_queue_items,
         "skipped": skipped,
+        "source_profile": source_profile,
     }
 
     schedule.last_status = "success"
