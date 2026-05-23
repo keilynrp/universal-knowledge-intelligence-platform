@@ -32,11 +32,11 @@
 
 ## 5. UX/UI experience architecture
 
-- [ ] 5.1 Define navigation and product surface architecture for dashboards, entity detail, ingestion/mapping, review, and reports.
-- [ ] 5.2 Define UX principles for provenance, authority, enrichment, confidence, null states, and AI-generated content.
-- [ ] 5.3 Map stakeholder workflows to UX surfaces.
-- [ ] 5.4 Define executive report and dashboard experience requirements.
-- [ ] 5.5 Add UX/UI architecture review checklist for future frontend specs.
+- [x] 5.1 Define navigation and product surface architecture for dashboards, entity detail, ingestion/mapping, review, and reports.
+- [x] 5.2 Define UX principles for provenance, authority, enrichment, confidence, null states, and AI-generated content.
+- [x] 5.3 Map stakeholder workflows to UX surfaces.
+- [x] 5.4 Define executive report and dashboard experience requirements.
+- [x] 5.5 Add UX/UI architecture review checklist for future frontend specs.
 
 ## 6. Infrastructure and operations architecture
 

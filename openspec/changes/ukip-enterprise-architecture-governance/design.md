@@ -335,6 +335,71 @@ Includes:
 
 UX/UI must express architecture truth: source, canonical, enrichment, authority, confidence, and AI-generated content should be visually distinguishable where relevant.
 
+#### Product surface architecture
+
+| Surface | Primary purpose | Trust architecture requirements |
+| --- | --- | --- |
+| Dashboards | Monitor portfolio, domain, quality, trends, and stakeholder-ready KPIs | Prefer canonical and enriched metrics; expose gaps, confidence, and stale/partial states. |
+| Entity detail | Inspect one record across raw source, normalized identity, enrichment, authority, relationships, and audit | Separate source, canonical, enrichment, authority, and audit layers; preserve raw evidence. |
+| Ingestion and mapping | Bring new files/API/connector data into UKIP | Show source profile, mapping suggestions, confidence, conflicts, and review state before promotion. |
+| Review queues | Resolve ambiguous mappings, authority candidates, institutions, authors, and quality issues | Provide evidence, score breakdown, accept/reject actions, and audit-ready decisions. |
+| Reports and exports | Package stakeholder-facing readouts | Explain claims with provenance, confidence, data freshness, and unresolved caveats. |
+| RAG/AI assistance | Ask questions, draft narratives, and receive suggestions | Disclose AI-generated content and link answers to governed evidence. |
+| Settings/operations | Manage integrations, schedules, webhooks, workspace reset, auth, and governance | Use explicit confirmation for destructive or external-facing changes. |
+
+Navigation principles:
+
+- Put ingestion, review, analytics, and reports in a visible workflow order.
+- Avoid hiding trust work behind dashboards; review queues are a first-class surface.
+- Keep entity detail as the inspection hub for record-level provenance.
+- Keep reports and dashboards separate: dashboards support exploration, reports support communication.
+- AI assistance should be adjacent to evidence, not a replacement for review workflows.
+
+#### UX principles for trust-bearing data
+
+- Provenance: show where a claim or field came from when it affects trust or action.
+- Authority: display registry source, identifier, match status, evidence, confidence, and review state.
+- Enrichment: distinguish provider observations from canonical identity and authority decisions.
+- Confidence: use numeric confidence plus qualitative state where possible; never rely on color alone.
+- Null states: distinguish absent data, not-yet-run enrichment, provider failure, low-confidence mapping, and intentionally rejected evidence.
+- AI-generated content: label generated suggestions/narratives and provide links to evidence, prompt context, or review action where material.
+- Progressive disclosure: summarize for executives, but keep evidence drill-down available for stewards and analysts.
+- Accessibility: trust signals must be readable through text, structure, and state labels, not only icons or color.
+
+#### Stakeholder workflow mapping
+
+| Workflow | Primary users | UX surfaces |
+| --- | --- | --- |
+| Import and profile a dataset | Data stewards, analysts | Ingestion/mapping, source profile preview, mapping review |
+| Resolve authors and institutions | Research office, librarians, data stewards | Authority review queues, entity detail, audit trail |
+| Inspect a strategic entity | Analysts, executives, stewards | Entity detail, relationships, authority/enrichment panels |
+| Understand portfolio health | Research executives, strategy teams | Dashboard, quality panels, review backlog summaries |
+| Produce an executive readout | Executives, strategy teams, analysts | Reports, dashboard extracts, evidence explanations |
+| Ask evidence-grounded questions | Analysts, leadership support | RAG/AI assistant with citations and governed context |
+
+#### Executive dashboard and report requirements
+
+- Lead with decision-relevant KPIs, not raw operational tables.
+- Include data quality and authority coverage where conclusions depend on them.
+- Make confidence, coverage, and unresolved issues visible near claims.
+- Link strategic claims back to canonical records, authority links, enrichment observations, or source evidence.
+- Use stable report sections that distinguish source evidence, authority resolution, enrichment observations, and narrative interpretation.
+- Avoid presenting AI-generated summaries as final conclusions without evidence grounding and review state.
+
+#### UX/UI architecture review checklist
+
+Future frontend specs should answer:
+
+- Which product surface owns the workflow?
+- Which stakeholder segment and decision context is being served?
+- Which trust-bearing states are shown: provenance, authority, enrichment, confidence, null, review, AI-generated?
+- Can the user inspect evidence behind a claim or recommendation?
+- Are pending, partial, failed, empty, rejected, and confirmed states visually and textually distinct?
+- Does the UI preserve source/canonical/enrichment/authority boundaries?
+- Are destructive or irreversible actions confirmed and auditable?
+- Does the design work for repeated operational use, not only a demo path?
+- What component, smoke, or accessibility test proves the workflow renders correctly?
+
 ### 5. Infrastructure and operations architecture
 
 Defines how UKIP runs reliably.
