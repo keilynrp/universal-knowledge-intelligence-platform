@@ -40,11 +40,11 @@
 
 ## 6. Infrastructure and operations architecture
 
-- [ ] 6.1 Inventory deployment topology, containers, health checks, migrations, background jobs, and environment variables.
-- [ ] 6.2 Define production readiness principles for reliability, observability, rollback, backup, and recovery.
-- [ ] 6.3 Define operational health metrics and alerts.
-- [ ] 6.4 Define deployment safety requirements for specs that modify startup, database, jobs, or external integrations.
-- [ ] 6.5 Add infrastructure/operations review checklist for future specs.
+- [x] 6.1 Inventory deployment topology, containers, health checks, migrations, background jobs, and environment variables.
+- [x] 6.2 Define production readiness principles for reliability, observability, rollback, backup, and recovery.
+- [x] 6.3 Define operational health metrics and alerts.
+- [x] 6.4 Define deployment safety requirements for specs that modify startup, database, jobs, or external integrations.
+- [x] 6.5 Add infrastructure/operations review checklist for future specs.
 
 ## 7. Security, privacy, and compliance architecture
 
@@ -64,6 +64,6 @@
 
 ## 9. Validation
 
-- [ ] 9.1 Run `npx openspec validate ukip-enterprise-architecture-governance --strict`.
-- [ ] 9.2 Run `npx openspec list`.
-- [ ] 9.3 Review consistency with `canonical-semantic-data-governance` and active subordinate specs.
+- [x] 9.1 Run `npx openspec validate ukip-enterprise-architecture-governance --strict`.
+- [x] 9.2 Run `npx openspec list`.
+- [x] 9.3 Review consistency with `canonical-semantic-data-governance` and active subordinate specs.

@@ -11,7 +11,7 @@
 - [x] 2.2 Capture field names, inferred types, sparsity, sample values, value distributions, and candidate identifiers.
 - [x] 2.3 Detect candidate entity roles such as person, organization, publication, dataset, place, concept, project, event, and grant.
 - [x] 2.4 Add confidence and ambiguity indicators to profiling output.
-- [ ] 2.5 Add tests for representative CSV/API/OpenAlex/Crossref-style payload profiling.
+- [x] 2.5 Add tests for representative CSV/API/OpenAlex/Crossref-style payload profiling.
 
 ## 3. Mapping suggestion contract
 
@@ -19,7 +19,7 @@
 - [x] 3.2 Add governed review thresholds for low-confidence or conflicting mappings.
 - [x] 3.3 Ensure mapping suggestions preserve original source field names and values.
 - [x] 3.4 Add mapping conflict handling for duplicate identifiers, ambiguous entity types, and mixed source fields.
-- [ ] 3.5 Add tests for accepted, rejected, and review-required mapping suggestions.
+- [x] 3.5 Add tests for accepted, rejected, and review-required mapping suggestions.
 
 ## 4. Canonical model governance
 
@@ -34,7 +34,7 @@
 - [x] 5.1 Document authority resolution rules separately from enrichment rules.
 - [x] 5.2 Ensure enrichment provider data cannot overwrite canonical identity without a governed rule.
 - [x] 5.3 Define confidence aggregation rules across source evidence, authority matches, and enrichment observations.
-- [ ] 5.4 Add tests proving original source, canonical identity, authority link, and enrichment observation remain distinguishable.
+- [x] 5.4 Add tests proving original source, canonical identity, authority link, and enrichment observation remain distinguishable.
 
 ## 6. Linked-data governance
 
@@ -47,13 +47,13 @@
 
 ## 7. Executive intelligence integration
 
-- [ ] 7.1 Ensure dashboards and reports prefer canonical, authority-resolved, and evidence-enriched data over raw provider payloads.
-- [ ] 7.2 Add provenance explanations for strategic claims in executive intelligence outputs.
-- [ ] 7.3 Add report sections that distinguish source evidence, authority resolution, enrichment observations, and linked-data alignment.
-- [ ] 7.4 Add tests for report claims generated from governed canonical data.
+- [x] 7.1 Ensure dashboards and reports prefer canonical, authority-resolved, and evidence-enriched data over raw provider payloads.
+- [x] 7.2 Add provenance explanations for strategic claims in executive intelligence outputs.
+- [x] 7.3 Add report sections that distinguish source evidence, authority resolution, enrichment observations, and linked-data alignment.
+- [x] 7.4 Add tests for report claims generated from governed canonical data.
 
 ## 8. Validation
 
-- [ ] 8.1 Run `npx openspec validate canonical-semantic-data-governance --strict`.
-- [ ] 8.2 Run `npx openspec list` and confirm subordinate active specs remain visible.
-- [ ] 8.3 Review spec consistency against `entity-provenance-layering`, `scientific-affiliation-normalization`, `institution-affiliation-reconciliation`, and `geographic-entity-semantic-layer`.
+- [x] 8.1 Run `npx openspec validate canonical-semantic-data-governance --strict`.
+- [x] 8.2 Run `npx openspec list` and confirm subordinate active specs remain visible.
+- [x] 8.3 Review spec consistency against `entity-provenance-layering`, `scientific-affiliation-normalization`, `institution-affiliation-reconciliation`, and `geographic-entity-semantic-layer`.
