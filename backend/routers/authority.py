@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from pydantic import BaseModel, Field
 from sqlalchemy import func, inspect, text
 from sqlalchemy.orm import Session
 
@@ -38,6 +39,12 @@ from backend.routers.deps import (
     _serialize_authority_record_link,
 )
 from backend.routers.limiter import limiter
+from backend.services.institution_reconciliation import (
+    RORAdapter,
+    RORRecord,
+    extract_institution_candidates,
+    score_institution_match,
+)
 from backend.tenant_access import (
     add_org_sql_filter,
     get_scoped_record,
@@ -52,6 +59,136 @@ router = APIRouter(tags=["authority"])
 
 _FIELD_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _AFFILIATION_LINK_TYPE = "affiliated-with"
+
+
+class InstitutionReconcilePreviewRequest(BaseModel):
+    entity_ids: list[int] | None = Field(default=None, max_length=100)
+    domain_id: str | None = None
+    limit: int = Field(default=25, ge=1, le=100)
+    live_lookup: bool = False
+
+
+class InstitutionReconcileApplyRequest(InstitutionReconcilePreviewRequest):
+    auto_accept_threshold: float = Field(default=0.9, ge=0.0, le=1.0)
+
+
+def _institution_candidate_rows(
+    db: Session,
+    *,
+    org_id: int | None,
+    payload: InstitutionReconcilePreviewRequest,
+) -> list[models.RawEntity]:
+    q = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
+    if payload.entity_ids:
+        q = q.filter(models.RawEntity.id.in_(payload.entity_ids))
+    if payload.domain_id and payload.domain_id != "all":
+        q = q.filter(models.RawEntity.domain == payload.domain_id)
+    return q.order_by(models.RawEntity.id.asc()).limit(payload.limit).all()
+
+
+def _preview_institution_reconciliation(
+    db: Session,
+    *,
+    org_id: int | None,
+    payload: InstitutionReconcilePreviewRequest,
+) -> dict:
+    adapter = RORAdapter()
+    items: list[dict] = []
+    for entity in _institution_candidate_rows(db, org_id=org_id, payload=payload):
+        candidates = extract_institution_candidates(entity.attributes_json)
+        for candidate in candidates:
+            matches = []
+            if candidate.ror:
+                record = adapter.lookup(candidate.ror)
+                if record is not None:
+                    matches = [score_institution_match(candidate, record)]
+            elif payload.live_lookup:
+                matches = [
+                    score_institution_match(candidate, record)
+                    for record in adapter.search(candidate.name, candidate.country_code)
+                ]
+            matches.sort(key=lambda match: match.score, reverse=True)
+            items.append({
+                "entity_id": entity.id,
+                "entity_label": entity.primary_label,
+                "candidate": candidate.to_dict(),
+                "matches": [match.to_dict() for match in matches],
+                "best_match": matches[0].to_dict() if matches else None,
+            })
+    return {"count": len(items), "items": items}
+
+
+def _find_existing_institution_record(
+    db: Session,
+    *,
+    org_id: int | None,
+    original_value: str,
+    authority_source: str,
+    authority_id: str,
+) -> models.AuthorityRecord | None:
+    return scope_query_to_org(db.query(models.AuthorityRecord), models.AuthorityRecord, org_id).filter(
+        models.AuthorityRecord.field_name == "affiliation",
+        models.AuthorityRecord.original_value == original_value,
+        models.AuthorityRecord.authority_source == authority_source,
+        models.AuthorityRecord.authority_id == authority_id,
+    ).first()
+
+
+def _persist_institution_match(
+    db: Session,
+    *,
+    org_id: int | None,
+    entity_id: int,
+    match: dict,
+    threshold: float,
+) -> tuple[models.AuthorityRecord, bool]:
+    candidate = match["candidate"]
+    record = match["record"]
+    existing = _find_existing_institution_record(
+        db,
+        org_id=org_id,
+        original_value=candidate["name"],
+        authority_source="ror",
+        authority_id=record["ror_id"],
+    )
+    if existing is not None:
+        return existing, False
+
+    score = float(match["score"])
+    auto_accept = bool(match.get("auto_accept")) and score >= threshold
+    merged_sources = [f"ror:{record['ror_id']}"]
+    if candidate.get("openalex_id"):
+        merged_sources.append(f"openalex:{candidate['openalex_id']}")
+
+    rec = models.AuthorityRecord(
+        org_id=persisted_org_id(org_id),
+        field_name="affiliation",
+        original_value=candidate["name"],
+        authority_source="ror",
+        authority_id=record["ror_id"],
+        canonical_label=record["name"],
+        aliases=json.dumps([*record.get("aliases", []), *record.get("acronyms", [])]),
+        description="; ".join(
+            part
+            for part in [
+                "ROR organization",
+                f"country={record.get('country_code')}" if record.get("country_code") else None,
+                f"types={','.join(record.get('types') or [])}" if record.get("types") else None,
+            ]
+            if part
+        ),
+        confidence=score,
+        uri=record.get("uri") or RORRecord(record["ror_id"], record["name"]).uri,
+        status="confirmed" if auto_accept else "pending",
+        confirmed_at=datetime.now(timezone.utc) if auto_accept else None,
+        resolution_status=match.get("status") or "unresolved",
+        score_breakdown=json.dumps(match.get("breakdown") or {}),
+        evidence=json.dumps([*(match.get("evidence") or []), f"raw_entity:{entity_id}"]),
+        merged_sources=json.dumps(merged_sources),
+        review_required=not auto_accept,
+    )
+    db.add(rec)
+    return rec, True
 
 
 # ── Authority resolution ──────────────────────────────────────────────────────
@@ -721,6 +858,111 @@ def author_review_queue(
         "records": [_serialize_authority_record(r) for r in records],
         "summary": summary,
     }
+
+
+@router.post("/authority/institutions/reconcile/preview", tags=["authority"])
+def institution_reconcile_preview(
+    payload: InstitutionReconcilePreviewRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
+):
+    org_id = resolve_request_org_id(db, current_user)
+    return _preview_institution_reconciliation(db, org_id=org_id, payload=payload)
+
+
+@router.post("/authority/institutions/reconcile/apply", tags=["authority"])
+def institution_reconcile_apply(
+    payload: InstitutionReconcileApplyRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
+):
+    org_id = resolve_request_org_id(db, current_user)
+    preview = _preview_institution_reconciliation(db, org_id=org_id, payload=payload)
+    created = 0
+    reused = 0
+    records: list[models.AuthorityRecord] = []
+    for item in preview["items"]:
+        best = item.get("best_match")
+        if not best:
+            continue
+        rec, was_created = _persist_institution_match(
+            db,
+            org_id=org_id,
+            entity_id=item["entity_id"],
+            match=best,
+            threshold=payload.auto_accept_threshold,
+        )
+        records.append(rec)
+        created += 1 if was_created else 0
+        reused += 0 if was_created else 1
+    db.commit()
+    for rec in records:
+        db.refresh(rec)
+    return {
+        "preview_count": preview["count"],
+        "created": created,
+        "reused": reused,
+        "records": [_serialize_authority_record(r) for r in records],
+    }
+
+
+@router.get("/authority/institutions/review-queue", tags=["authority"])
+def institution_review_queue(
+    status: Optional[str] = Query("pending", pattern="^(pending|confirmed|rejected)$"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    org_id = resolve_request_org_id(db, current_user)
+    q = scope_query_to_org(db.query(models.AuthorityRecord), models.AuthorityRecord, org_id).filter(
+        models.AuthorityRecord.field_name == "affiliation",
+        models.AuthorityRecord.authority_source == "ror",
+        models.AuthorityRecord.review_required == True,  # noqa: E712
+    )
+    if status:
+        q = q.filter(models.AuthorityRecord.status == status)
+    total = q.count()
+    records = q.order_by(
+        models.AuthorityRecord.confidence.desc(),
+        models.AuthorityRecord.id.desc(),
+    ).offset(skip).limit(limit).all()
+    return {"total": total, "records": [_serialize_authority_record(r) for r in records]}
+
+
+@router.post("/authority/institutions/review-queue/{record_id}/accept", tags=["authority"])
+def institution_review_accept(
+    record_id: int = Path(ge=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
+):
+    org_id = resolve_request_org_id(db, current_user)
+    rec = get_scoped_record(db, models.AuthorityRecord, record_id, org_id)
+    if rec is None or rec.field_name != "affiliation" or rec.authority_source != "ror":
+        raise HTTPException(status_code=404, detail="Institution authority record not found")
+    rec.status = "confirmed"
+    rec.review_required = False
+    rec.confirmed_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(rec)
+    return _serialize_authority_record(rec)
+
+
+@router.post("/authority/institutions/review-queue/{record_id}/reject", tags=["authority"])
+def institution_review_reject(
+    record_id: int = Path(ge=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
+):
+    org_id = resolve_request_org_id(db, current_user)
+    rec = get_scoped_record(db, models.AuthorityRecord, record_id, org_id)
+    if rec is None or rec.field_name != "affiliation" or rec.authority_source != "ror":
+        raise HTTPException(status_code=404, detail="Institution authority record not found")
+    rec.status = "rejected"
+    rec.review_required = False
+    db.commit()
+    db.refresh(rec)
+    return _serialize_authority_record(rec)
 
 
 @router.get("/authority/authors/metrics", tags=["authority"])
