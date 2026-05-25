@@ -1,0 +1,118 @@
+name: Fix legacy affiliations (manual)
+
+# Manual data-repair job. Removes journal/publisher values that the
+# cbe3255 → 19e97ff bug wrote into attributes_json.affiliation for
+# entities imported via /import/openalex or /import/pubmed between
+# 2026-05-13 and 2026-05-20.
+#
+# Run order: dry-run -> review counters -> apply -> apply-and-requeue.
+# Gated by the production environment so it requires reviewer approval.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Execution mode (start with dry-run)"
+        required: true
+        type: choice
+        default: dry-run
+        options:
+          - dry-run
+          - apply
+          - apply-and-requeue
+      org_id:
+        description: "Restrict to a single org id (leave empty for all orgs)"
+        required: false
+        type: string
+        default: ""
+      limit:
+        description: "Cap number of rows scanned (leave empty for no cap)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    environment: production  # Requires reviewer approval before running.
+
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      UKIP_SKIP_STARTUP_SIDE_EFFECTS: "1"
+      SENTRY_ENABLED: "0"
+      JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+      ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+      ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -c requirements.lock
+
+      - name: Build script arguments
+        id: args
+        run: |
+          ARGS=""
+          case "${{ inputs.mode }}" in
+            dry-run)            ARGS="--dry-run" ;;
+            apply)              ARGS="" ;;
+            apply-and-requeue)  ARGS="--requeue-enrichment" ;;
+            *)                  echo "::error::Unknown mode" && exit 1 ;;
+          esac
+          if [ -n "${{ inputs.org_id }}" ]; then
+            ARGS="$ARGS --org-id ${{ inputs.org_id }}"
+          fi
+          if [ -n "${{ inputs.limit }}" ]; then
+            ARGS="$ARGS --limit ${{ inputs.limit }}"
+          fi
+          echo "value=$ARGS" >> "$GITHUB_OUTPUT"
+          echo "Running with: $ARGS"
+
+      - name: Run legacy affiliation fix
+        id: run
+        run: |
+          set -o pipefail
+          OUTPUT=$(python -m backend.scripts.fix_legacy_affiliations ${{ steps.args.outputs.value }} 2>&1 | tee /tmp/fix.log)
+          echo "result<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$OUTPUT" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Write job summary
+        if: always()
+        run: |
+          {
+            echo "## Legacy affiliation fix — ${{ inputs.mode }}"
+            echo ""
+            echo "**Org filter:** \`${{ inputs.org_id || 'all orgs' }}\`"
+            echo "**Row limit:** \`${{ inputs.limit || 'no limit' }}\`"
+            echo "**Arguments:** \`${{ steps.args.outputs.value }}\`"
+            echo ""
+            echo '```'
+            cat /tmp/fix.log || echo "(no log captured)"
+            echo '```'
+            if [ "${{ inputs.mode }}" = "dry-run" ]; then
+              echo ""
+              echo "> Dry run only — no rows were modified. Re-run with mode=\`apply\` or \`apply-and-requeue\` after reviewing the counters above."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fix-legacy-affiliations-${{ inputs.mode }}-${{ github.run_id }}
+          path: /tmp/fix.log
+          retention-days: 30

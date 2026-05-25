@@ -29,6 +29,7 @@ from backend.routers.limiter import limiter
 
 # ── Domain routers ────────────────────────────────────────────────────────────
 from backend.routers import (
+    admin_data_fixes,
     ai_rag,
     agentic_chat,
     alert_channels,
@@ -376,6 +377,7 @@ app.include_router(agentic_chat.router)
 app.include_router(reports.router)
 app.include_router(webhooks.router)
 app.include_router(demo.router)
+app.include_router(admin_data_fixes.router)
 app.include_router(annotations.router)
 app.include_router(notifications.router)
 app.include_router(branding.router)
