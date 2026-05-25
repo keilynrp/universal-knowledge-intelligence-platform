@@ -834,6 +834,56 @@ class DomainEnrichmentPolicy(Base):
                                     onupdate=lambda: datetime.now(timezone.utc))
 
 
+# ── Source Profiling (Task 1.4) ───────────────────────────────────────────────
+
+class SourceProfile(Base):
+    """
+    Persisted source-profile snapshot from the SourceProfiler.
+    Created during upload/import to capture field semantics before mapping.
+    """
+    __tablename__ = "source_profiles"
+
+    id                   = Column(Integer, primary_key=True, index=True)
+    org_id               = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
+    source_id            = Column(String(200), nullable=False, index=True)  # upload filename or adapter label
+    source_format        = Column(String(30), default="csv")                # csv | rest | openalex | crossref
+    total_rows           = Column(Integer, default=0)
+    field_profiles       = Column(Text, default="[]")    # JSON array of FieldProfile dicts
+    semantic_candidates  = Column(Text, default="{}")    # JSON: role → field names
+    candidate_identifiers = Column(Text, default="{}")   # JSON: id_type → field names
+    inferred_types       = Column(Text, default="{}")    # JSON: field → type
+    sparsity_map         = Column(Text, default="{}")    # JSON: field → sparsity float
+    import_batch_id      = Column(Integer, ForeignKey("import_batches.id"), nullable=True, index=True)
+    created_by           = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at           = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+# ── Geographic Entity Semantic Layer ──────────────────────────────────────────
+
+class GeographicEntity(Base):
+    """
+    Task 1.2 — Normalized geographic entity with external IDs and hierarchy.
+    Supports country, region, city, campus, address, spatial_area types.
+    """
+    __tablename__ = "geographic_entities"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    org_id       = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
+    type         = Column(String(30), nullable=False, default="unknown", index=True)  # country|region|city|campus|address|spatial_area|unknown
+    name         = Column(String(300), nullable=False, index=True)
+    parent_id    = Column(Integer, ForeignKey("geographic_entities.id"), nullable=True, index=True)
+    country_code = Column(String(2), nullable=True, index=True)   # ISO 3166-1 alpha-2
+    geonames_id  = Column(Integer, nullable=True, index=True)
+    wikidata_id  = Column(String(20), nullable=True, index=True)  # e.g. Q30
+    osm_id       = Column(Integer, nullable=True, index=True)
+    latitude     = Column(Float, nullable=True)
+    longitude    = Column(Float, nullable=True)
+    aliases      = Column(Text, default="[]")       # JSON array of variant/multilingual names
+    geometry     = Column(Text, nullable=True)       # GeoJSON string
+    provenance   = Column(String(50), default="unknown")  # manual|ror|geonames|wikidata|openalex
+    created_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class EnrichmentSchedulerRun(Base):
     """
     Audit log of each enrichment scheduler run (automatic or manual).

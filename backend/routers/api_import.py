@@ -86,6 +86,20 @@ def _ingest_records(
         if rec.venue:
             attrs["venue"] = rec.venue
 
+        # Task 2.2 — persist structured affiliation metadata
+        canonical_affs = getattr(rec, "canonical_affiliations", None)
+        if canonical_affs:
+            attrs["canonical_affiliations"] = [
+                a.model_dump() if hasattr(a, "model_dump") else (a if isinstance(a, dict) else {})
+                for a in canonical_affs
+            ]
+        author_affs = getattr(rec, "author_affiliations", None)
+        if author_affs:
+            attrs["author_affiliations"] = [
+                a.model_dump() if hasattr(a, "model_dump") else (a if isinstance(a, dict) else {})
+                for a in author_affs
+            ]
+
         entity = models.RawEntity(
             primary_label=rec.title,
             secondary_label=", ".join(rec.authors[:3]) if rec.authors else None,

@@ -1,0 +1,117 @@
+# RAG Skill Registry — default skill definitions
+# Governance levels: advisory | review_required | governed_write_candidate
+
+skills:
+  - skill_id: summarize_entities
+    version: "1.0"
+    description: Summarize entity attributes and enrichment data into a concise narrative
+    governance_level: advisory
+    timeout_ms: 15000
+    audit_category: summarization
+    input_schema:
+      type: object
+      required: [entity_ids]
+      properties:
+        entity_ids:
+          type: array
+          items: { type: integer }
+        max_tokens:
+          type: integer
+          default: 500
+    output_schema:
+      type: object
+      properties:
+        summary: { type: string }
+        entity_count: { type: integer }
+    allowed_evidence_types: [entity, enrichment, authority]
+
+  - skill_id: grade_data_quality
+    version: "1.0"
+    description: Score entity completeness and enrichment coverage
+    governance_level: advisory
+    timeout_ms: 10000
+    audit_category: quality
+    input_schema:
+      type: object
+      required: [domain_id]
+      properties:
+        domain_id: { type: string }
+        sample_size: { type: integer, default: 100 }
+    output_schema:
+      type: object
+      properties:
+        overall_score: { type: number }
+        field_scores: { type: object }
+        recommendations: { type: array, items: { type: string } }
+    allowed_evidence_types: [entity, enrichment]
+
+  - skill_id: suggest_authority_candidates
+    version: "1.0"
+    description: Produce authority resolution candidates from enrichment evidence
+    governance_level: governed_write_candidate
+    timeout_ms: 30000
+    audit_category: authority
+    input_schema:
+      type: object
+      required: [entity_id, field_name]
+      properties:
+        entity_id: { type: integer }
+        field_name: { type: string }
+    output_schema:
+      type: object
+      properties:
+        candidates:
+          type: array
+          items:
+            type: object
+            properties:
+              authority_source: { type: string }
+              authority_id: { type: string }
+              canonical_label: { type: string }
+              confidence: { type: number }
+    allowed_evidence_types: [entity, enrichment, authority]
+
+  - skill_id: explain_enrichment
+    version: "1.0"
+    description: Explain how enrichment data was obtained and its reliability
+    governance_level: advisory
+    timeout_ms: 10000
+    audit_category: explainability
+    input_schema:
+      type: object
+      required: [entity_id]
+      properties:
+        entity_id: { type: integer }
+    output_schema:
+      type: object
+      properties:
+        explanation: { type: string }
+        sources_used: { type: array, items: { type: string } }
+        confidence_assessment: { type: string }
+    allowed_evidence_types: [entity, enrichment]
+
+  - skill_id: detect_duplicates
+    version: "1.0"
+    description: Identify potential duplicate entities within a domain
+    governance_level: review_required
+    timeout_ms: 30000
+    audit_category: deduplication
+    input_schema:
+      type: object
+      required: [domain_id]
+      properties:
+        domain_id: { type: string }
+        threshold: { type: number, default: 0.8 }
+        limit: { type: integer, default: 50 }
+    output_schema:
+      type: object
+      properties:
+        clusters:
+          type: array
+          items:
+            type: object
+            properties:
+              entity_ids: { type: array, items: { type: integer } }
+              similarity: { type: number }
+              suggested_canonical: { type: string }
+    allowed_evidence_types: [entity, enrichment, authority]

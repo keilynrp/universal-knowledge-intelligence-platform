@@ -1033,6 +1033,76 @@ export const translations = {
         'authority.source.dbpedia': 'DBpedia',
         'authority.source.openalex': 'OpenAlex',
 
+        // Provenance layering (Task 1.5 — Source Terminology Contract)
+        'provenance.source_type.ingestion_source': 'Ingestion Source',
+        'provenance.source_type.enrichment_provider': 'Enrichment Provider',
+        'provenance.source_type.authority_source': 'Authority Source',
+        'provenance.section.original_ingestion': 'Original Ingestion',
+        'provenance.section.normalized_identity': 'UKIP Normalized Identity',
+        'provenance.section.external_enrichment': 'External Enrichment',
+        'provenance.section.authority_audit': 'Authority & Audit',
+
+        // Null reason semantics (Task 2.7)
+        'null_reason.not_provided': 'Not provided at ingestion',
+        'null_reason.pending_normalization': 'Pending normalization',
+        'null_reason.unresolved_enrichment': 'Awaiting enrichment',
+        'null_reason.not_applicable': 'Not applicable for this entity type',
+        'null_reason.unknown': 'Unknown',
+
+        // Authority Review UX (Task 4.1)
+        'authority.readiness.not_started': 'Not Started',
+        'authority.readiness.source_candidates_ready': 'Source Candidates Ready',
+        'authority.readiness.enrichment_candidates_ready': 'Enrichment Candidates Ready',
+        'authority.readiness.review_required': 'Review Required',
+        'authority.readiness.partially_resolved': 'Partially Resolved',
+        'authority.readiness.resolved': 'Resolved',
+        'authority.readiness.stale': 'Stale',
+        'authority.readiness.failed': 'Failed',
+        'authority.family.person': 'Person',
+        'authority.family.institution': 'Institution',
+        'authority.family.identifier': 'Identifier',
+        'authority.family.place': 'Place',
+        'authority.family.venue': 'Venue',
+        'authority.family.concept': 'Concept',
+        'authority.origin.source': 'Source',
+        'authority.origin.enrichment': 'Enrichment',
+        'authority.origin.prior_authority': 'Prior Authority',
+        'authority.origin.manual': 'Manual',
+        'authority.action.extract': 'Extract Candidates',
+        'authority.action.resolve': 'Resolve',
+        'authority.action.review': 'Review',
+        'authority.action.promote': 'Promote to Canonical',
+        'authority.action.reject': 'Reject',
+
+        // RAG Skill UX (Task 4.2)
+        'rag.skill.status.completed': 'Completed',
+        'rag.skill.status.failed': 'Failed',
+        'rag.skill.status.timed_out': 'Timed Out',
+        'rag.skill.status.policy_blocked': 'Policy Blocked',
+        'rag.skill.governance.advisory': 'Advisory',
+        'rag.skill.governance.review_required': 'Review Required',
+        'rag.skill.governance.governed_write_candidate': 'Governed Write',
+        'rag.skill.review_cta': 'Review skill output before applying',
+        'rag.skill.policy_explanation': 'This skill requires elevated permissions',
+
+        // Audience Presets (Task 4.5)
+        'audience.leadership': 'Executive Leadership',
+        'audience.research_office': 'Research Office',
+        'audience.investigator': 'Principal Investigator',
+        'audience.innovation_transfer': 'Innovation & Transfer',
+        'audience.evaluator': 'External Evaluator',
+        'audience.select': 'Select audience',
+
+        // Evidence Traceability (Task 4.6)
+        'evidence.panel_title': 'Supporting Evidence',
+        'evidence.no_evidence': 'Evidence details are not yet available.',
+        'evidence.type.benchmark': 'Benchmark',
+        'evidence.type.concept': 'Concept',
+        'evidence.type.entity': 'Entity',
+        'evidence.type.quality': 'Quality',
+        'evidence.type.enrichment': 'Enrichment',
+        'evidence.appendix_title': 'Evidence Appendix',
+
         // Search page
         'search.title': 'Search',
         'search.subtitle': 'Full-text search across your knowledge base',
@@ -4329,6 +4399,76 @@ export const translations = {
         'authority.source.orcid': 'ORCID',
         'authority.source.dbpedia': 'DBpedia',
         'authority.source.openalex': 'OpenAlex',
+
+        // Provenance layering (Task 1.5 — Source Terminology Contract)
+        'provenance.source_type.ingestion_source': 'Fuente de Ingesta',
+        'provenance.source_type.enrichment_provider': 'Proveedor de Enriquecimiento',
+        'provenance.source_type.authority_source': 'Fuente de Autoridad',
+        'provenance.section.original_ingestion': 'Ingesta Original',
+        'provenance.section.normalized_identity': 'Identidad Normalizada UKIP',
+        'provenance.section.external_enrichment': 'Enriquecimiento Externo',
+        'provenance.section.authority_audit': 'Autoridad y Auditoría',
+
+        // Null reason semantics (Task 2.7)
+        'null_reason.not_provided': 'No proporcionado en la ingesta',
+        'null_reason.pending_normalization': 'Pendiente de normalización',
+        'null_reason.unresolved_enrichment': 'En espera de enriquecimiento',
+        'null_reason.not_applicable': 'No aplica para este tipo de entidad',
+        'null_reason.unknown': 'Desconocido',
+
+        // Authority Review UX (Task 4.1)
+        'authority.readiness.not_started': 'No Iniciado',
+        'authority.readiness.source_candidates_ready': 'Candidatos Fuente Listos',
+        'authority.readiness.enrichment_candidates_ready': 'Candidatos Enriquecimiento Listos',
+        'authority.readiness.review_required': 'Revisión Requerida',
+        'authority.readiness.partially_resolved': 'Parcialmente Resuelto',
+        'authority.readiness.resolved': 'Resuelto',
+        'authority.readiness.stale': 'Obsoleto',
+        'authority.readiness.failed': 'Fallido',
+        'authority.family.person': 'Persona',
+        'authority.family.institution': 'Institución',
+        'authority.family.identifier': 'Identificador',
+        'authority.family.place': 'Lugar',
+        'authority.family.venue': 'Revista/Evento',
+        'authority.family.concept': 'Concepto',
+        'authority.origin.source': 'Fuente',
+        'authority.origin.enrichment': 'Enriquecimiento',
+        'authority.origin.prior_authority': 'Autoridad Previa',
+        'authority.origin.manual': 'Manual',
+        'authority.action.extract': 'Extraer Candidatos',
+        'authority.action.resolve': 'Resolver',
+        'authority.action.review': 'Revisar',
+        'authority.action.promote': 'Promover a Canónico',
+        'authority.action.reject': 'Rechazar',
+
+        // RAG Skill UX (Task 4.2)
+        'rag.skill.status.completed': 'Completado',
+        'rag.skill.status.failed': 'Fallido',
+        'rag.skill.status.timed_out': 'Tiempo Agotado',
+        'rag.skill.status.policy_blocked': 'Bloqueado por Política',
+        'rag.skill.governance.advisory': 'Asesoramiento',
+        'rag.skill.governance.review_required': 'Revisión Requerida',
+        'rag.skill.governance.governed_write_candidate': 'Escritura Gobernada',
+        'rag.skill.review_cta': 'Revisar salida del skill antes de aplicar',
+        'rag.skill.policy_explanation': 'Este skill requiere permisos elevados',
+
+        // Audience Presets (Task 4.5)
+        'audience.leadership': 'Liderazgo Ejecutivo',
+        'audience.research_office': 'Oficina de Investigación',
+        'audience.investigator': 'Investigador Principal',
+        'audience.innovation_transfer': 'Innovación y Transferencia',
+        'audience.evaluator': 'Evaluador Externo',
+        'audience.select': 'Seleccionar audiencia',
+
+        // Evidence Traceability (Task 4.6)
+        'evidence.panel_title': 'Evidencia de Soporte',
+        'evidence.no_evidence': 'Los detalles de evidencia aún no están disponibles.',
+        'evidence.type.benchmark': 'Benchmark',
+        'evidence.type.concept': 'Concepto',
+        'evidence.type.entity': 'Entidad',
+        'evidence.type.quality': 'Calidad',
+        'evidence.type.enrichment': 'Enriquecimiento',
+        'evidence.appendix_title': 'Apéndice de Evidencia',
 
         // Search page
         'search.title': 'Búsqueda',
