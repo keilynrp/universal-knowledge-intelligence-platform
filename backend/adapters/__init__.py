@@ -1,19 +1,15 @@
 from .base import BaseStoreAdapter
-from .woocommerce import WooCommerceAdapter
-from .shopify import ShopifyAdapter
-from .bsale import BsaleAdapter
-from .custom import CustomAPIAdapter
+from .commerce import (
+    WooCommerceAdapter,
+    ShopifyAdapter,
+    BsaleAdapter,
+    CustomAPIAdapter,
+    get_commerce_adapter,
+)
+# Re-export commerce submodules for backward-compatible `from backend.adapters import shopify`
+from .commerce import shopify, woocommerce, bsale, custom  # noqa: F401
 
 
 def get_adapter(platform: str, config: dict) -> BaseStoreAdapter:
     """Factory function to get the right adapter for a platform."""
-    adapters = {
-        "woocommerce": WooCommerceAdapter,
-        "shopify": ShopifyAdapter,
-        "bsale": BsaleAdapter,
-        "custom": CustomAPIAdapter,
-    }
-    adapter_class = adapters.get(platform)
-    if not adapter_class:
-        raise ValueError(f"Unsupported platform: {platform}")
-    return adapter_class(config)
+    return get_commerce_adapter(platform, config)

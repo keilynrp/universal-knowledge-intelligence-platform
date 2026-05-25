@@ -52,6 +52,7 @@ from backend.routers import (
     entities,
     entity_linker,
     external_attention,
+    governance,
     graph_export,
     harmonization,
     ingest,
@@ -368,6 +369,7 @@ app.include_router(entities.router)
 app.include_router(disambiguation.router)
 app.include_router(harmonization.router)
 app.include_router(authority.router)
+app.include_router(governance.router)
 app.include_router(stores.router)
 app.include_router(ai_rag.router)
 app.include_router(agentic_chat.router)

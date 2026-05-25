@@ -493,3 +493,37 @@ class SourceProfiler:
             flat_records.append(flat)
 
         return self.profile_records(flat_records, source_id=source_id, source_format="crossref")
+
+    # ── API facade methods ────────────────────────────────────────────────────
+
+    # In-memory profile store (production would persist to DB)
+    _profile_store: dict[str, "SourceProfile"] = {}
+
+    def analyze(
+        self,
+        source_id: str,
+        field_names: list[str],
+        sample_values: dict[str, list],
+        payload_type: str = "csv",
+    ) -> SourceProfile:
+        """API-level analyze: build records from field_names + sample_values, profile, and store."""
+        if not field_names and sample_values:
+            field_names = list(sample_values.keys())
+
+        # Build synthetic records from sample_values
+        max_rows = max((len(v) for v in sample_values.values()), default=0)
+        records: list[dict[str, Any]] = []
+        for i in range(max_rows):
+            row = {}
+            for fname in field_names:
+                vals = sample_values.get(fname, [])
+                row[fname] = vals[i] if i < len(vals) else None
+            records.append(row)
+
+        profile = self.profile_records(records, source_id=source_id, source_format=payload_type)
+        SourceProfiler._profile_store[source_id] = profile
+        return profile
+
+    def get_profile(self, source_id: str) -> SourceProfile | None:
+        """Retrieve a previously stored profile."""
+        return SourceProfiler._profile_store.get(source_id)
