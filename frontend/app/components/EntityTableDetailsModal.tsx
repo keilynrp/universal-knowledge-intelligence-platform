@@ -531,19 +531,25 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
         label: t(field.labelKey),
         value: entity[field.key],
     }));
+    // `displayedValuesByGroup` represents values already rendered at primary
+    // positions in the modal (header card, core fields, system fields). It is
+    // consumed by `hasDisplayedEquivalent` to suppress duplicate rows when an
+    // extended attribute happens to mirror a value already shown.
+    //
+    // The `affiliation` group has NO dedicated primary slot in this modal —
+    // affiliation always renders as an extended attribute. Previously this
+    // entry pointed at [journal, venue, source_title, publisher, raw_so,
+    // _source_name] which are publication-source fields, not affiliations,
+    // and caused false positives: a real affiliation value that coincidentally
+    // matched a journal name (notably for legacy entities affected by the
+    // cbe3255 → 19e97ff backend bug) would be hidden. Leave this group empty
+    // so genuine affiliations always render.
     const displayedValuesByGroup: Record<string, unknown[]> = {
         title: [entity.primary_label, mergedExtendedAttributes.title, mergedExtendedAttributes.name],
         authors: [entity.secondary_label],
         identifier: [entity.canonical_id, mergedExtendedAttributes.enrichment_doi],
         entity_type: [resolvedEntityType],
-        affiliation: [
-            mergedExtendedAttributes.journal,
-            mergedExtendedAttributes.venue,
-            mergedExtendedAttributes.source_title,
-            mergedExtendedAttributes.publisher,
-            mergedExtendedAttributes.raw_so,
-            mergedExtendedAttributes._source_name,
-        ],
+        affiliation: [],
         citations: [entity.enrichment_citation_count],
         source: [entity.source, mergedExtendedAttributes.enrichment_source, mergedExtendedAttributes.source_name, mergedExtendedAttributes.source],
     };
