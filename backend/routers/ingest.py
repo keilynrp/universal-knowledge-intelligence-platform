@@ -46,6 +46,59 @@ _MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
 _MAX_ROWS = 100_000
 _CHUNK_SIZE = 10_000
 
+
+def _dedup_before_insert(
+    db: Session,
+    objects: list[models.RawEntity],
+    *,
+    org_id: int | None,
+) -> tuple[list[models.RawEntity], int]:
+    """Remove entities whose ``(domain, entity_type, canonical_id)`` already
+    exists in the DB or appears earlier in the same batch.
+
+    Returns ``(deduplicated_list, skipped_count)``."""
+    if not objects:
+        return objects, 0
+
+    existing_keys: set[tuple[str, str, str]] = set()
+    candidate_cids = [
+        obj.canonical_id for obj in objects
+        if obj.canonical_id and obj.entity_type
+    ]
+    if candidate_cids:
+        q = db.query(
+            models.RawEntity.domain,
+            models.RawEntity.entity_type,
+            models.RawEntity.canonical_id,
+        ).filter(
+            models.RawEntity.canonical_id.in_(candidate_cids),
+            models.RawEntity.entity_type.isnot(None),
+        )
+        if org_id is not None:
+            q = q.filter(models.RawEntity.org_id == org_id)
+        for row in q:
+            existing_keys.add((row[0] or "", row[1], row[2]))
+
+    seen_in_batch: set[tuple[str, str, str]] = set()
+    kept: list[models.RawEntity] = []
+    skipped = 0
+
+    for obj in objects:
+        cid = obj.canonical_id
+        etype = obj.entity_type
+        if cid and etype:
+            key = (obj.domain or "", etype, cid)
+            if key in existing_keys or key in seen_in_batch:
+                skipped += 1
+                continue
+            seen_in_batch.add(key)
+        kept.append(obj)
+
+    if skipped:
+        logger.info("Import dedup: skipped %d duplicate(s) out of %d", skipped, len(objects))
+
+    return kept, skipped
+
 # Fields exposed for wizard field-mapping
 MAPPABLE_MODEL_FIELDS = [
     "primary_label", "secondary_label", "canonical_id", "entity_type", "domain",
@@ -640,11 +693,14 @@ async def upload_file(
             entity_data["import_batch_id"] = import_batch.id
             objects.append(models.RawEntity(**entity_data))
 
+        objects, dedup_skipped = _dedup_before_insert(db, objects, org_id=stored_org_id)
+
         for i in range(0, len(objects), _CHUNK_SIZE):
             db.bulk_save_objects(objects[i : i + _CHUNK_SIZE])
         audit_details = {
             "filename": file.filename,
             "rows": len(objects),
+            "duplicates_skipped": dedup_skipped,
             "format": science_import.format,
             "provider": science_import.provider,
             "import_batch_id": import_batch.id,
@@ -663,8 +719,10 @@ async def upload_file(
         _dispatch_webhook("upload", {"filename": file.filename, "rows": len(objects), "import_batch_id": import_batch.id},
                           database.SessionLocal)
         return {
-            "message": f"Successfully imported {len(objects)} publications from {science_import.provider.upper()}",
+            "message": f"Successfully imported {len(objects)} publications from {science_import.provider.upper()}"
+                       + (f" ({dedup_skipped} duplicates skipped)" if dedup_skipped else ""),
             "total_rows": len(objects),
+            "duplicates_skipped": dedup_skipped,
             "format": science_import.format,
             "provider": science_import.provider,
             "domain": effective_domain,
@@ -793,12 +851,14 @@ async def upload_file(
 
         objects.append(models.RawEntity(**row_data))
 
+    objects, dedup_skipped = _dedup_before_insert(db, objects, org_id=stored_org_id)
+
     for i in range(0, len(objects), _CHUNK_SIZE):
         db.bulk_save_objects(objects[i : i + _CHUNK_SIZE])
     _audit(
         db, "upload",
         user_id=current_user.id,
-        details={"filename": file.filename, "rows": len(objects), "import_batch_id": import_batch.id},
+        details={"filename": file.filename, "rows": len(objects), "duplicates_skipped": dedup_skipped, "import_batch_id": import_batch.id},
     )
     db.commit()
     _dispatch_webhook(
@@ -808,8 +868,10 @@ async def upload_file(
     )
 
     return {
-        "message": f"Successfully imported {len(objects)} entities",
+        "message": f"Successfully imported {len(objects)} entities"
+                   + (f" ({dedup_skipped} duplicates skipped)" if dedup_skipped else ""),
         "total_rows": len(objects),
+        "duplicates_skipped": dedup_skipped,
         "domain": domain,
         "format": _fmt,
         "import_batch_id": import_batch.id,
