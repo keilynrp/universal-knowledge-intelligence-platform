@@ -35,6 +35,7 @@ from backend.routers.column_maps import COLUMN_MAPPING, EXPORT_COLUMN_MAPPING
 from backend.routers.deps import _audit, _dispatch_webhook, _get_active_integration
 from backend.services.graph_materializer import materialize_scientific_import_graph
 from backend.services import engine_bridge
+from backend.services.field_correspondence import resolve_field_mapping
 from backend.services.text_normalization import normalize_import_value
 from backend.tenant_access import persisted_org_id, resolve_request_org_id, scope_query_to_org
 
@@ -462,14 +463,14 @@ async def preview_upload(
         if isinstance(row, dict):
             all_cols.update(str(k) for k in row.keys())
 
-    stripped_mapping = {k.strip(): v for k, v in COLUMN_MAPPING.items()}
     valid_model_keys = set(COLUMN_MAPPING.values())
 
     auto_mapping = {}
     for col in all_cols:
         sk = col.strip()
-        if sk in stripped_mapping:
-            auto_mapping[col] = stripped_mapping[sk]
+        resolved = resolve_field_mapping(sk, domain="science" if filename.endswith((".bib", ".ris", ".txt")) else None)
+        if resolved:
+            auto_mapping[col] = resolved
         elif sk in valid_model_keys:
             auto_mapping[col] = sk
         else:
@@ -757,10 +758,12 @@ async def upload_file(
         )
 
     # Build effective mapping: custom_mapping takes priority over COLUMN_MAPPING
-    stripped_mapping = {k.strip(): v for k, v in COLUMN_MAPPING.items()}
     valid_model_keys = set(COLUMN_MAPPING.values()) | set(MAPPABLE_MODEL_FIELDS)
 
-    effective_mapping = {**stripped_mapping, **{k.strip(): v for k, v in custom_mapping.items()}}
+    effective_mapping = {
+        str(k).strip(): v
+        for k, v in custom_mapping.items()
+    }
 
     all_keys: set = set()
     for row in records[:100]:
@@ -772,6 +775,8 @@ async def upload_file(
     for col in all_keys:
         col_str = str(col).strip()
         mapped = effective_mapping.get(col_str)
+        if mapped is None:
+            mapped = resolve_field_mapping(col_str, domain=domain)
         if mapped and mapped in valid_model_keys:
             matched_columns.add(col_str)
         elif col_str in valid_model_keys:
@@ -818,6 +823,8 @@ async def upload_file(
             sk = str(k).strip()
             # "" means skip this column (wizard user chose "ignore")
             mapped_field = effective_mapping.get(sk)
+            if mapped_field is None:
+                mapped_field = resolve_field_mapping(sk, domain=domain)
             if mapped_field == "" or mapped_field is None and sk not in valid_model_keys:
                 if mapped_field != "":  # only store if not explicitly skipped
                     unmatched_data[sk] = val

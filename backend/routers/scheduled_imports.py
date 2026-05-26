@@ -22,8 +22,8 @@ from typing import Optional, List
 from backend import models, database
 from backend.auth import require_role
 from backend.database import get_db
-from backend.routers.column_maps import COLUMN_MAPPING
 from backend.routers.deps import _get_store_adapter
+from backend.services.field_correspondence import resolve_field_mapping
 from backend.tenant_quotas import assert_org_quota_available
 from backend.tenant_access import (
     get_scoped_record,
@@ -101,7 +101,7 @@ def _remote_entity_profile(remote_entities: list) -> dict:
         fields.update(str(key) for key, value in raw.items() if value not in (None, "", [], {}))
 
     for field in sorted(fields):
-        mapped = COLUMN_MAPPING.get(field) or COLUMN_MAPPING.get(field.strip())
+        mapped = resolve_field_mapping(field)
         if mapped:
             canonical_mapping[field] = mapped
 

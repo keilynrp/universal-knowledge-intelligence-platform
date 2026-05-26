@@ -55,7 +55,7 @@ from sqlalchemy import or_
 
 from backend import models
 from backend.database import SessionLocal
-from backend.routers.column_maps import COLUMN_MAPPING
+from backend.services.field_correspondence import resolve_field_mapping
 
 logger = logging.getLogger(__name__)
 
@@ -94,10 +94,22 @@ _ENTITY_TYPE_ATTR_KEYS: tuple[str, ...] = (
 
 def _synonym_set(target_field: str) -> set[str]:
     """Return the loose-matched header synonyms that map to ``target_field``."""
+    candidates = {
+        "ID", "UID", "DOI", "DOI Number", "Código", "Codigo", "Code",
+        "Identifier", "Identificador", "Identificador único",
+        "Identificador unico", "ID único", "ID unico", "ORCID", "ORCID ID",
+        "ROR", "ROR ID", "ISBN", "ISSN", "PMID", "PubMed ID", "PubMed",
+        "WOS ID", "WoS ID", "Scopus ID", "EID", "OpenAlex ID",
+        "Accession Number", "Record ID", "Local ID", "canonical_id",
+        "Type", "Tipo", "Tipo de entidad", "Tipo de Entidad", "Category",
+        "Categoría", "Categoria", "Clase", "Class", "Kind", "Document Type",
+        "Tipo de documento", "Tipo de Documento", "Publication Type",
+        "Tipo de publicación", "Tipo de publicacion", "Subtype", "entity_type",
+    }
     return {
         " ".join(header.lower().split())
-        for header, field in COLUMN_MAPPING.items()
-        if field == target_field
+        for header in candidates
+        if resolve_field_mapping(header) == target_field
     }
 
 

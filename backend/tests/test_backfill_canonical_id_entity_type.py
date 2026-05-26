@@ -19,7 +19,6 @@ from backend.scripts import backfill_canonical_id_entity_type as backfill
 @pytest.mark.parametrize(
     "header",
     [
-        "Tipo de Identificador",
         "Identificador",
         "Identificador único",
         "Identificador unico",
@@ -42,6 +41,10 @@ from backend.scripts import backfill_canonical_id_entity_type as backfill
 )
 def test_canonical_id_header_synonyms_are_recognised(header):
     assert COLUMN_MAPPING.get(header) == "canonical_id"
+
+
+def test_identifier_scheme_header_is_not_canonical_id_value():
+    assert COLUMN_MAPPING.get("Tipo de Identificador") is None
 
 
 @pytest.mark.parametrize(
