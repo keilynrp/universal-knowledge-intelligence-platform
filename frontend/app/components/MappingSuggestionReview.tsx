@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useLanguage } from "../contexts/LanguageContext";
 import { apiFetch } from "@/lib/api";
 import ConfidenceIndicator from "./ConfidenceIndicator";
 import AIDisclosureBadge from "./AIDisclosureBadge";
@@ -14,6 +13,10 @@ interface MappingSuggestion {
   status: string;
   evidence_samples: string[];
   rationale: string;
+  semantic_concept?: string | null;
+  identifier_scheme?: string | null;
+  evidence?: string[];
+  requires_review?: boolean;
 }
 
 interface MappingSuggestionReviewProps {
@@ -25,7 +28,6 @@ export default function MappingSuggestionReview({
   statusFilter,
   onUpdate,
 }: MappingSuggestionReviewProps) {
-  const { t } = useLanguage();
   const [suggestions, setSuggestions] = useState<MappingSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [rejectingId, setRejectingId] = useState<number | null>(null);
@@ -127,7 +129,35 @@ export default function MappingSuggestionReview({
                 <span className="text-[10px] uppercase tracking-wider font-medium text-gray-400">
                   {s.status.replace("_", " ")}
                 </span>
+                {s.requires_review && (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                    Review
+                  </span>
+                )}
               </div>
+
+              {(s.semantic_concept || s.identifier_scheme || (s.evidence?.length ?? 0) > 0) && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {s.semantic_concept && (
+                    <span className="rounded bg-sky-50 px-1.5 py-0.5 text-xs text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">
+                      {s.semantic_concept}
+                    </span>
+                  )}
+                  {s.identifier_scheme && (
+                    <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-xs text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">
+                      {s.identifier_scheme}
+                    </span>
+                  )}
+                  {s.evidence?.map((item) => (
+                    <span
+                      key={item}
+                      className="rounded bg-gray-50 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-gray-700/50 dark:text-gray-300"
+                    >
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              )}
 
               {s.evidence_samples.length > 0 && (
                 <div className="mt-2">

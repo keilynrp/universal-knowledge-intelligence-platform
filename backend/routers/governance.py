@@ -96,6 +96,10 @@ class MappingSuggestionResponse(BaseModel):
     status: str
     evidence_samples: list[str]
     rationale: str
+    semantic_concept: str | None = None
+    identifier_scheme: str | None = None
+    evidence: list[str] = Field(default_factory=list)
+    requires_review: bool = False
 
 
 class RejectPayload(BaseModel):
@@ -138,6 +142,10 @@ def list_mapping_suggestions(
             status=s.status.value if hasattr(s.status, 'value') else s.status,
             evidence_samples=s.evidence_samples,
             rationale=s.rationale or "",
+            semantic_concept=s.semantic_concept,
+            identifier_scheme=s.identifier_scheme,
+            evidence=s.evidence,
+            requires_review=s.requires_review,
         )
         for s in suggestions
     ]

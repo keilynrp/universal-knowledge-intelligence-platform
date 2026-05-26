@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import React from "react";
 
 // Mock apiFetch before importing components
@@ -34,6 +34,10 @@ describe("MappingSuggestionReview", () => {
       status: "review_required",
       evidence_samples: ["John Doe", "Jane Smith"],
       rationale: "High string similarity",
+      semantic_concept: "person_name",
+      identifier_scheme: null,
+      evidence: ["semantic_role"],
+      requires_review: true,
     },
     {
       id: 2,
@@ -43,6 +47,10 @@ describe("MappingSuggestionReview", () => {
       status: "auto_acceptable",
       evidence_samples: ["2024"],
       rationale: "",
+      semantic_concept: null,
+      identifier_scheme: null,
+      evidence: [],
+      requires_review: false,
     },
   ];
 
@@ -87,6 +95,19 @@ describe("MappingSuggestionReview", () => {
     });
     expect(screen.getByText("John Doe")).toBeInTheDocument();
     expect(screen.getByText("Jane Smith")).toBeInTheDocument();
+  });
+
+  it("shows field correspondence governance metadata", async () => {
+    mockApiFetch.mockResolvedValue({
+      ok: true,
+      json: async () => suggestions,
+    });
+    await act(async () => {
+      render(<MappingSuggestionReview />);
+    });
+    expect(screen.getByText("person_name")).toBeInTheDocument();
+    expect(screen.getByText("semantic_role")).toBeInTheDocument();
+    expect(screen.getByText("Review")).toBeInTheDocument();
   });
 
   it("shows accept and reject buttons for review_required", async () => {

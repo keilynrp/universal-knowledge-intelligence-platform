@@ -185,6 +185,32 @@ class TestMappingSuggestionsAPI:
         resp = client.post("/mapping-suggestions/1/accept", headers=viewer_headers)
         assert resp.status_code == 403
 
+    def test_list_includes_field_correspondence_metadata(self, client, auth_headers, monkeypatch):
+        from backend.routers import governance
+        from backend.services.mapping_suggestions import MappingSuggestionService
+        from backend.services.source_profiler import FieldProfile, SourceProfile
+
+        service = MappingSuggestionService()
+        service.generate_suggestions(SourceProfile(
+            source_id="wos-src",
+            source_format="wos",
+            total_rows=10,
+            field_profiles=[
+                FieldProfile(field_name="DI", sample_values=["10.1000/example"]),
+            ],
+        ))
+        monkeypatch.setattr(governance, "_mapping_service", service)
+
+        resp = client.get("/mapping-suggestions", headers=auth_headers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data[0]["canonical_target"] == "canonical_id"
+        assert data[0]["semantic_concept"] == "persistent_identifier"
+        assert data[0]["identifier_scheme"] == "doi"
+        assert "wos_schema_rule" in data[0]["evidence"]
+        assert data[0]["requires_review"] is False
+
 
 class TestAuthorityReadinessAPI:
     def test_get_readiness(self, client, auth_headers):
