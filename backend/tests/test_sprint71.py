@@ -386,6 +386,34 @@ class TestUploadWithFieldMapping:
         assert attrs["creation_date"] == "2024"
         assert attrs["year"] == 2024
 
+    def test_source_schema_mapping_persists_field_correspondence(self, client, editor_headers, db_session):
+        from backend import models
+
+        buf = _csv_file([{
+            "FN": "Web of Science",
+            "VR": "1.0",
+            "TI": "Schema mapped paper",
+            "DI": "10.1000/schema",
+            "DT": "Article",
+        }])
+        resp = client.post(
+            "/upload",
+            data={"domain": "science", "field_mapping": "{}"},
+            files={"file": ("wos_export.csv", buf, "text/csv")},
+            headers=editor_headers,
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["source_schema"] == "wos"
+
+        stored = db_session.query(models.RawEntity).filter_by(primary_label="Schema mapped paper").one()
+        assert stored.canonical_id == "10.1000/schema"
+        assert stored.entity_type == "Article"
+        attrs = json.loads(stored.attributes_json)
+        correspondence = attrs["_field_correspondence"]
+        assert correspondence["DI"]["target"] == "canonical_id"
+        assert correspondence["DI"]["scheme"] == "doi"
+        assert "wos_schema_rule" in correspondence["DI"]["evidence"]
+
     def test_viewer_cannot_upload(self, client, viewer_headers):
         buf = _csv_file()
         resp = client.post(

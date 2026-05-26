@@ -1,6 +1,7 @@
 """Tests for the source-agnostic field correspondence layer."""
 
 from backend.services.field_correspondence import (
+    infer_source_schema,
     resolve_field_correspondence,
     resolve_field_mapping,
 )
@@ -36,3 +37,26 @@ def test_generic_id_maps_with_review_required_metadata():
     assert correspondence.canonical_target == "canonical_id"
     assert correspondence.identifier_scheme is None
     assert correspondence.requires_review is True
+
+
+def test_wos_short_code_requires_source_schema():
+    assert resolve_field_mapping("DI") is None
+
+    correspondence = resolve_field_correspondence("DI", source_schema="wos")
+    assert correspondence is not None
+    assert correspondence.canonical_target == "canonical_id"
+    assert correspondence.identifier_scheme == "doi"
+    assert "wos_schema_rule" in correspondence.evidence
+
+
+def test_openalex_id_is_not_canonical_id_under_openalex_schema():
+    correspondence = resolve_field_correspondence("id", source_schema="openalex")
+
+    assert correspondence is not None
+    assert correspondence.semantic_concept == "external_authority_id"
+    assert correspondence.canonical_target is None
+    assert correspondence.identifier_scheme == "openalex"
+
+
+def test_infer_source_schema_from_wos_fields():
+    assert infer_source_schema(fields={"FN", "VR", "TI", "DI", "DT"}) == "wos"

@@ -35,7 +35,11 @@ from backend.routers.column_maps import COLUMN_MAPPING, EXPORT_COLUMN_MAPPING
 from backend.routers.deps import _audit, _dispatch_webhook, _get_active_integration
 from backend.services.graph_materializer import materialize_scientific_import_graph
 from backend.services import engine_bridge
-from backend.services.field_correspondence import resolve_field_mapping
+from backend.services.field_correspondence import (
+    infer_source_schema,
+    resolve_field_correspondence,
+    resolve_field_mapping,
+)
 from backend.services.text_normalization import normalize_import_value
 from backend.tenant_access import persisted_org_id, resolve_request_org_id, scope_query_to_org
 
@@ -465,10 +469,15 @@ async def preview_upload(
 
     valid_model_keys = set(COLUMN_MAPPING.values())
 
+    source_schema = infer_source_schema(filename, all_cols)
     auto_mapping = {}
     for col in all_cols:
         sk = col.strip()
-        resolved = resolve_field_mapping(sk, domain="science" if filename.endswith((".bib", ".ris", ".txt")) else None)
+        resolved = resolve_field_mapping(
+            sk,
+            domain="science" if filename.endswith((".bib", ".ris", ".txt")) else None,
+            source_schema=source_schema,
+        )
         if resolved:
             auto_mapping[col] = resolved
         elif sk in valid_model_keys:
@@ -494,6 +503,7 @@ async def preview_upload(
 
     return {
         "format": _fmt,
+        "source_schema": source_schema,
         "row_count": len(tabular_records),
         "columns": sorted(all_cols),
         "sample_rows": sample,
@@ -769,6 +779,7 @@ async def upload_file(
     for row in records[:100]:
         if isinstance(row, dict):
             all_keys.update(row.keys())
+    source_schema = infer_source_schema(file.filename, {str(key) for key in all_keys})
 
     matched_columns: set = set()
     unmatched_columns: set = set()
@@ -776,7 +787,7 @@ async def upload_file(
         col_str = str(col).strip()
         mapped = effective_mapping.get(col_str)
         if mapped is None:
-            mapped = resolve_field_mapping(col_str, domain=domain)
+            mapped = resolve_field_mapping(col_str, domain=domain, source_schema=source_schema)
         if mapped and mapped in valid_model_keys:
             matched_columns.add(col_str)
         elif col_str in valid_model_keys:
@@ -805,6 +816,7 @@ async def upload_file(
         row_data: dict = {"domain": domain, "org_id": stored_org_id, "import_batch_id": import_batch.id}
         unmatched_data: dict = {}
         virtual_field_data: dict = {}
+        field_correspondence_data: dict = {}
 
         for k, val in row.items():
             val = normalize_import_value(val)
@@ -824,7 +836,14 @@ async def upload_file(
             # "" means skip this column (wizard user chose "ignore")
             mapped_field = effective_mapping.get(sk)
             if mapped_field is None:
-                mapped_field = resolve_field_mapping(sk, domain=domain)
+                correspondence = resolve_field_correspondence(sk, domain=domain, source_schema=source_schema)
+                mapped_field = correspondence.canonical_target if correspondence else None
+            else:
+                correspondence = resolve_field_correspondence(sk, domain=domain, source_schema=source_schema)
+                if correspondence and correspondence.canonical_target != mapped_field:
+                    correspondence = None
+            if correspondence:
+                field_correspondence_data[sk] = correspondence.to_provenance()
             if mapped_field == "" or mapped_field is None and sk not in valid_model_keys:
                 if mapped_field != "":  # only store if not explicitly skipped
                     unmatched_data[sk] = val
@@ -843,6 +862,9 @@ async def upload_file(
                 row_data[sk] = str(normalize_import_value(val)) if val is not None else None
             else:
                 unmatched_data[sk] = val
+
+        if field_correspondence_data:
+            virtual_field_data["_field_correspondence"] = field_correspondence_data
 
         if virtual_field_data:
             row_data["attributes_json"] = json.dumps(
@@ -881,6 +903,7 @@ async def upload_file(
         "duplicates_skipped": dedup_skipped,
         "domain": domain,
         "format": _fmt,
+        "source_schema": source_schema,
         "import_batch_id": import_batch.id,
         "source_label": import_batch.source_label,
         "matched_columns": list(matched_columns),

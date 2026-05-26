@@ -23,7 +23,7 @@ from backend import models, database
 from backend.auth import require_role
 from backend.database import get_db
 from backend.routers.deps import _get_store_adapter
-from backend.services.field_correspondence import resolve_field_mapping
+from backend.services.field_correspondence import infer_source_schema, resolve_field_mapping
 from backend.tenant_quotas import assert_org_quota_available
 from backend.tenant_access import (
     get_scoped_record,
@@ -100,14 +100,16 @@ def _remote_entity_profile(remote_entities: list) -> dict:
             fields.update(str(key) for key in raw["raw_data"].keys())
         fields.update(str(key) for key, value in raw.items() if value not in (None, "", [], {}))
 
+    source_schema = infer_source_schema(fields=fields)
     for field in sorted(fields):
-        mapped = resolve_field_mapping(field)
+        mapped = resolve_field_mapping(field, source_schema=source_schema)
         if mapped:
             canonical_mapping[field] = mapped
 
     return {
         "field_count": len(fields),
         "fields": sorted(fields),
+        "source_schema": source_schema,
         "canonical_mapping": canonical_mapping,
     }
 
