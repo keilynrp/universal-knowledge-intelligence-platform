@@ -14,6 +14,7 @@ type Rule = {
   confidence: number;
   evidence: string[];
   is_active: boolean;
+  review_status: "pending" | "approved" | "rejected" | "needs_adjustment";
   created_from_suggestion_id: number | null;
 };
 
@@ -44,6 +45,10 @@ type ImpactPreview = {
 type GovernanceMetrics = {
   active_rules: number;
   inactive_rules: number;
+  approved_rules: number;
+  pending_rules: number;
+  rejected_rules: number;
+  needs_adjustment_rules: number;
   pending_suggestions: number;
   rejected_false_positives: number;
   ambiguous_sources: Array<{
@@ -92,9 +97,18 @@ type RuleJob = {
 type EvidenceScore = {
   rule_id: number;
   score: "high" | "medium" | "low" | "none";
+  validation_status: "valid" | "mixed" | "invalid" | "unknown" | "not_applicable";
+  collision_count: number;
   affected_records: number;
   matching_suggestions: number;
   sample_values: string[];
+};
+
+const scoreRank: Record<EvidenceScore["score"], number> = {
+  high: 0,
+  medium: 1,
+  low: 2,
+  none: 3,
 };
 
 const emptyForm: FormState = {
@@ -156,6 +170,8 @@ export default function FieldCorrespondenceRulesTab({
 }) {
   const [rules, setRules] = useState<Rule[]>([]);
   const [sourceSchema, setSourceSchema] = useState("");
+  const [targetFilter, setTargetFilter] = useState("");
+  const [scoreFilter, setScoreFilter] = useState<"all" | EvidenceScore["score"]>("all");
   const [activeOnly, setActiveOnly] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -170,8 +186,21 @@ export default function FieldCorrespondenceRulesTab({
   const [applyingRuleId, setApplyingRuleId] = useState<number | null>(null);
   const [rollingBackJobId, setRollingBackJobId] = useState<number | null>(null);
   const [scoringEvidence, setScoringEvidence] = useState(false);
+  const [batchApplying, setBatchApplying] = useState(false);
   const [seedingPreventiveRules, setSeedingPreventiveRules] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
+
+  const filteredRules = rules
+    .filter((rule) => !targetFilter || rule.canonical_target === targetFilter)
+    .filter((rule) => scoreFilter === "all" || evidenceScores[rule.id]?.score === scoreFilter)
+    .sort((a, b) => {
+      const aScore = evidenceScores[a.id];
+      const bScore = evidenceScores[b.id];
+      const aRank = aScore ? scoreRank[aScore.score] : 4;
+      const bRank = bScore ? scoreRank[bScore.score] : 4;
+      if (aRank !== bRank) return aRank - bRank;
+      return (bScore?.affected_records ?? 0) - (aScore?.affected_records ?? 0);
+    });
 
   const fetchMetrics = useCallback(async () => {
     try {
@@ -292,6 +321,23 @@ export default function FieldCorrespondenceRulesTab({
     }
   }
 
+  async function setReviewStatus(rule: Rule, reviewStatus: Rule["review_status"]) {
+    try {
+      const response = await apiFetch(`/field-correspondence-rules/${rule.id}/review-status`, {
+        method: "POST",
+        body: JSON.stringify({ review_status: reviewStatus }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.detail ?? "No se pudo actualizar la decision.");
+      }
+      toast("Decision de revision actualizada.", "success");
+      await fetchRules();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "No se pudo actualizar la decision.", "error");
+    }
+  }
+
   function editRule(rule: Rule) {
     setForm({
       id: rule.id,
@@ -328,9 +374,28 @@ export default function FieldCorrespondenceRulesTab({
     await fetchAudit(rule);
   }
 
-  async function applyRule(rule: Rule, dryRun: boolean) {
+  async function applyRule(rule: Rule, dryRun: boolean, skipConfirm = false) {
     setApplyingRuleId(rule.id);
     try {
+      if (!dryRun && !skipConfirm) {
+        const preview = await apiFetch(`/field-correspondence-rules/${rule.id}/apply`, {
+          method: "POST",
+          body: JSON.stringify({ dry_run: true, overwrite_existing: false }),
+        });
+        const previewData = await preview.json().catch(() => ({}));
+        if (!preview.ok) {
+          throw new Error(previewData.detail ?? "No se pudo confirmar el impacto.");
+        }
+        const impact = previewData as ApplyResult;
+        const confirmed = window.confirm(
+          `Vas a actualizar ${impact.updated_records} registros con la regla ${rule.source_schema ?? "*"}:${rule.source_field} -> ${rule.canonical_target ?? "ignore"}. ` +
+            `${impact.skipped_existing} registros se omitiran porque ya tienen valor. Confirmar aplicacion?`,
+        );
+        if (!confirmed) {
+          setApplyResult(impact);
+          return;
+        }
+      }
       const response = await apiFetch(`/field-correspondence-rules/${rule.id}/apply`, {
         method: "POST",
         body: JSON.stringify({ dry_run: dryRun, overwrite_existing: false }),
@@ -417,6 +482,54 @@ export default function FieldCorrespondenceRulesTab({
     }
   }
 
+  async function exportReviewCsv() {
+    const params = new URLSearchParams();
+    if (sourceSchema.trim()) params.set("source_schema", sourceSchema.trim());
+    if (activeOnly) params.set("active", "true");
+    const response = await apiFetch(`/field-correspondence-rules/review-export.csv?${params.toString()}`);
+    if (!response.ok) {
+      toast("No se pudo exportar la revision.", "error");
+      return;
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "field-correspondence-review.csv";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function batchApplyHighEvidence() {
+    const targets = filteredRules.filter((rule) => rule.is_active && evidenceScores[rule.id]?.score === "high");
+    if (targets.length === 0) {
+      toast("No hay reglas activas con evidencia alta en esta vista.", "error");
+      return;
+    }
+    setBatchApplying(true);
+    try {
+      let totalUpdates = 0;
+      for (const rule of targets) {
+        const preview = await apiFetch(`/field-correspondence-rules/${rule.id}/apply`, {
+          method: "POST",
+          body: JSON.stringify({ dry_run: true, overwrite_existing: false }),
+        });
+        const previewData = await preview.json().catch(() => ({}));
+        if (!preview.ok) {
+          throw new Error(previewData.detail ?? "No se pudo previsualizar el lote.");
+        }
+        totalUpdates += (previewData as ApplyResult).updated_records;
+      }
+      const confirmed = window.confirm(`Se aplicaran ${targets.length} reglas activas con evidencia alta y ${totalUpdates} actualizaciones potenciales. Confirmar?`);
+      if (!confirmed) return;
+      for (const rule of targets) {
+        await applyRule(rule, false, true);
+      }
+    } finally {
+      setBatchApplying(false);
+    }
+  }
+
   function evidenceBadge(score?: EvidenceScore) {
     if (!score) return <span className="text-xs text-gray-400">-</span>;
     const styles = {
@@ -436,6 +549,10 @@ export default function FieldCorrespondenceRulesTab({
         <span className={`w-fit rounded-full px-2 py-1 text-xs font-semibold ${styles}`}>{label}</span>
         <span className="text-[11px] text-gray-500 dark:text-gray-400">
           {score.affected_records} rec · {score.matching_suggestions} sug
+        </span>
+        <span className="text-[11px] text-gray-500 dark:text-gray-400">
+          {score.validation_status}
+          {score.collision_count > 0 ? ` · ${score.collision_count} colisiones` : ""}
         </span>
       </div>
     );
@@ -465,6 +582,24 @@ export default function FieldCorrespondenceRulesTab({
                   ? metrics.ambiguous_sources.map((source) => `${source.source_schema} (${source.pending_suggestions})`).join(", ")
                   : "-"}
               </p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-4">
+            <div className="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-950/40">
+              <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Aprobadas</p>
+              <p className="text-lg font-semibold text-emerald-700 dark:text-emerald-300">{metrics.approved_rules}</p>
+            </div>
+            <div className="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-950/40">
+              <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Pendientes</p>
+              <p className="text-lg font-semibold text-amber-700 dark:text-amber-300">{metrics.pending_rules}</p>
+            </div>
+            <div className="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-950/40">
+              <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Rechazadas</p>
+              <p className="text-lg font-semibold text-red-700 dark:text-red-300">{metrics.rejected_rules}</p>
+            </div>
+            <div className="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-950/40">
+              <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Por ajustar</p>
+              <p className="text-lg font-semibold text-sky-700 dark:text-sky-300">{metrics.needs_adjustment_rules}</p>
             </div>
           </div>
         </section>
@@ -605,6 +740,8 @@ export default function FieldCorrespondenceRulesTab({
                   <div key={example.entity_id} className="rounded-lg bg-white/70 px-3 py-2 text-xs text-amber-950 dark:bg-gray-950/50 dark:text-amber-100">
                     <span className="font-semibold">#{example.entity_id}</span>
                     {example.primary_label ? ` · ${example.primary_label}` : ""}
+                    {example.import_batch_id ? ` · batch ${example.import_batch_id}` : ""}
+                    <span className="font-mono"> · {example.source_field}</span>
                     {example.current_value ? ` · ${example.current_value}` : ""}
                     <span className="text-amber-700 dark:text-amber-300"> · {example.location}</span>
                   </div>
@@ -695,6 +832,19 @@ export default function FieldCorrespondenceRulesTab({
           <h3 className="text-base font-semibold text-gray-900 dark:text-white">Reglas existentes</h3>
           <div className="flex items-center gap-2">
             <button
+              onClick={() => void exportReviewCsv()}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              Export CSV
+            </button>
+            <button
+              onClick={() => void batchApplyHighEvidence()}
+              disabled={batchApplying}
+              className="rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
+            >
+              {batchApplying ? "Aplicando..." : "Aplicar altas"}
+            </button>
+            <button
               onClick={() => void scoreEvidence()}
               disabled={scoringEvidence}
               className="rounded-lg border border-sky-200 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-50 disabled:opacity-50 dark:border-sky-900/40 dark:text-sky-300 dark:hover:bg-sky-950/30"
@@ -704,9 +854,42 @@ export default function FieldCorrespondenceRulesTab({
             <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">{rules.length} reglas</span>
           </div>
         </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <label className="block">
+            <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">Score</span>
+            <select
+              value={scoreFilter}
+              onChange={(event) => setScoreFilter(event.target.value as typeof scoreFilter)}
+              className="mt-2 h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none dark:border-gray-800 dark:bg-gray-950 dark:text-white"
+            >
+              <option value="all">Todos</option>
+              <option value="high">Alta</option>
+              <option value="medium">Media</option>
+              <option value="low">Baja</option>
+              <option value="none">Sin evidencia</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">Destino</span>
+            <select
+              value={targetFilter}
+              onChange={(event) => setTargetFilter(event.target.value)}
+              className="mt-2 h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none dark:border-gray-800 dark:bg-gray-950 dark:text-white"
+            >
+              <option value="">Todos</option>
+              <option value="canonical_id">canonical_id</option>
+              <option value="entity_type">entity_type</option>
+            </select>
+          </label>
+          <div className="flex items-end">
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Orden automatico: Alta {">"} Media {">"} Baja {">"} Sin evidencia, luego mas registros afectados.
+            </span>
+          </div>
+        </div>
         {loading ? (
           <p className="mt-5 text-sm text-gray-500 dark:text-gray-400">Cargando reglas...</p>
-        ) : rules.length === 0 ? (
+        ) : filteredRules.length === 0 ? (
           <p className="mt-5 text-sm text-gray-500 dark:text-gray-400">No hay reglas con estos filtros.</p>
         ) : (
           <div className="mt-5 overflow-x-auto">
@@ -720,11 +903,12 @@ export default function FieldCorrespondenceRulesTab({
                   <th className="py-3 pr-4">Evidencia</th>
                   <th className="py-3 pr-4">Score</th>
                   <th className="py-3 pr-4">Estado</th>
+                  <th className="py-3 pr-4">Revision</th>
                   <th className="py-3 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {rules.map((rule) => (
+                {filteredRules.map((rule) => (
                   <Fragment key={rule.id}>
                     <tr>
                       <td className="py-3 pr-4 font-mono text-xs text-gray-700 dark:text-gray-300">{rule.source_schema ?? "*"}</td>
@@ -740,6 +924,18 @@ export default function FieldCorrespondenceRulesTab({
                         <span className={`rounded-full px-2 py-1 text-xs font-semibold ${rule.is_active ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}>
                           {rule.is_active ? "Activa" : "Inactiva"}
                         </span>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <select
+                          value={rule.review_status}
+                          onChange={(event) => void setReviewStatus(rule, event.target.value as Rule["review_status"])}
+                          className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300"
+                        >
+                          <option value="pending">Pendiente</option>
+                          <option value="approved">Aprobada</option>
+                          <option value="rejected">Rechazada</option>
+                          <option value="needs_adjustment">Ajustar</option>
+                        </select>
                       </td>
                       <td className="py-3 text-right">
                         <div className="flex flex-wrap justify-end gap-2">
@@ -763,7 +959,7 @@ export default function FieldCorrespondenceRulesTab({
                     </tr>
                     {expandedAuditRuleId === rule.id && (
                       <tr>
-                        <td colSpan={8} className="bg-gray-50 px-4 py-3 dark:bg-gray-950/40">
+                        <td colSpan={9} className="bg-gray-50 px-4 py-3 dark:bg-gray-950/40">
                           <div className="space-y-2">
                             {(auditByRule[rule.id] ?? []).length === 0 ? (
                               <p className="text-xs text-gray-500 dark:text-gray-400">Sin cambios registrados.</p>

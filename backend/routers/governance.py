@@ -11,9 +11,10 @@ Governance API endpoints — Priority 1.
 """
 import logging
 import json
+import re
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -129,6 +130,7 @@ class FieldCorrespondenceRuleResponse(BaseModel):
     confidence: float
     evidence: list[str] = Field(default_factory=list)
     is_active: bool
+    review_status: str = "pending"
     created_from_suggestion_id: int | None = None
     created_by_id: int | None = None
     created_at: str | None = None
@@ -179,6 +181,10 @@ class AmbiguousSourceMetric(BaseModel):
 class GovernanceMetricsResponse(BaseModel):
     active_rules: int
     inactive_rules: int
+    approved_rules: int = 0
+    pending_rules: int = 0
+    rejected_rules: int = 0
+    needs_adjustment_rules: int = 0
     pending_suggestions: int
     rejected_false_positives: int
     ambiguous_sources: list[AmbiguousSourceMetric] = Field(default_factory=list)
@@ -187,6 +193,8 @@ class GovernanceMetricsResponse(BaseModel):
 class FieldCorrespondenceEvidenceScore(BaseModel):
     rule_id: int
     score: str
+    validation_status: str
+    collision_count: int = 0
     affected_records: int
     matching_suggestions: int
     sample_values: list[str] = Field(default_factory=list)
@@ -205,6 +213,10 @@ class FieldCorrespondenceApplyPayload(BaseModel):
     dry_run: bool = True
     overwrite_existing: bool = False
     limit: int = Field(default=5000, ge=1, le=50000)
+
+
+class FieldCorrespondenceReviewPayload(BaseModel):
+    review_status: str = Field(..., pattern=r"^(pending|approved|rejected|needs_adjustment)$")
 
 
 class FieldCorrespondenceApplyResponse(FieldCorrespondenceImpactResponse):
@@ -257,6 +269,12 @@ def _json_object(value: str | None) -> dict:
 
 
 def _serialize_rule(rule: models.FieldCorrespondenceRule) -> FieldCorrespondenceRuleResponse:
+    evidence = _json_list(rule.evidence)
+    review_status = "approved" if rule.is_active else "pending"
+    if "rejected_admin_review" in evidence:
+        review_status = "rejected"
+    elif "needs_adjustment" in evidence:
+        review_status = "needs_adjustment"
     return FieldCorrespondenceRuleResponse(
         id=rule.id,
         source_schema=rule.source_schema,
@@ -265,8 +283,9 @@ def _serialize_rule(rule: models.FieldCorrespondenceRule) -> FieldCorrespondence
         semantic_concept=rule.semantic_concept,
         identifier_scheme=rule.identifier_scheme,
         confidence=rule.confidence or 0.0,
-        evidence=_json_list(rule.evidence),
+        evidence=evidence,
         is_active=bool(rule.is_active),
+        review_status=review_status,
         created_from_suggestion_id=rule.created_from_suggestion_id,
         created_by_id=rule.created_by_id,
         created_at=rule.created_at.isoformat() if rule.created_at else None,
@@ -412,6 +431,46 @@ def _evidence_level(affected_records: int, matching_suggestions: int) -> str:
     if affected_records >= 1:
         return "low"
     return "none"
+
+
+def _validate_identifier_value(identifier_scheme: str | None, value: object) -> bool:
+    if value is None:
+        return False
+    text = str(value).strip()
+    if not identifier_scheme:
+        return bool(text)
+    if identifier_scheme == "doi":
+        return bool(re.match(r"^10\.\d{4,9}/\S+$", text, flags=re.IGNORECASE))
+    if identifier_scheme == "orcid":
+        return bool(re.match(r"^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$", text, flags=re.IGNORECASE))
+    if identifier_scheme == "ror":
+        return bool(re.match(r"^(https://ror\.org/)?0[a-z0-9]{6}\d{2}$", text, flags=re.IGNORECASE))
+    return bool(text)
+
+
+def _collision_count_for_rule(
+    db: Session,
+    *,
+    org_id: int | None,
+    rule: models.FieldCorrespondenceRule,
+) -> int:
+    if not rule.canonical_target or not hasattr(models.RawEntity, rule.canonical_target):
+        return 0
+    collisions = 0
+    candidates = _rule_candidate_query(db, org_id=org_id, source_field=rule.source_field)
+    for entity in candidates.limit(500).all():
+        location, current_value = _extract_rule_value(
+            entity,
+            source_field=rule.source_field,
+            source_schema=rule.source_schema,
+            canonical_target=rule.canonical_target,
+        )
+        if not location or current_value is None:
+            continue
+        existing_value = getattr(entity, rule.canonical_target)
+        if existing_value not in (None, "") and str(existing_value) != str(current_value):
+            collisions += 1
+    return collisions
 
 
 # Module-level singleton for legacy tests that use the service without DB.
@@ -606,6 +665,12 @@ def get_field_correspondence_governance_metrics(
 
     active_rules = rule_query.filter(models.FieldCorrespondenceRule.is_active.is_(True)).count()
     inactive_rules = rule_query.filter(models.FieldCorrespondenceRule.is_active.is_(False)).count()
+    all_rules = rule_query.all()
+    serialized_rules = [_serialize_rule(rule) for rule in all_rules]
+    approved_rules = sum(1 for rule in serialized_rules if rule.review_status == "approved")
+    pending_rules = sum(1 for rule in serialized_rules if rule.review_status == "pending")
+    rejected_rules = sum(1 for rule in serialized_rules if rule.review_status == "rejected")
+    needs_adjustment_rules = sum(1 for rule in serialized_rules if rule.review_status == "needs_adjustment")
     pending_records = suggestion_query.filter(
         models.MappingSuggestionRecord.status.in_(["auto_acceptable", "review_required"]),
     ).all()
@@ -626,6 +691,10 @@ def get_field_correspondence_governance_metrics(
     return GovernanceMetricsResponse(
         active_rules=active_rules,
         inactive_rules=inactive_rules,
+        approved_rules=approved_rules,
+        pending_rules=pending_rules,
+        rejected_rules=rejected_rules,
+        needs_adjustment_rules=needs_adjustment_rules,
         pending_suggestions=len(pending_records),
         rejected_false_positives=rejected_false_positives,
         ambiguous_sources=ambiguous_sources,
@@ -769,6 +838,7 @@ def score_field_correspondence_rule_evidence(
 
         affected_records = 0
         sample_values: list[str] = []
+        valid_samples = 0
         candidates = _rule_candidate_query(db, org_id=org_id, source_field=rule.source_field)
         for entity in candidates.limit(500).all():
             location, current_value = _extract_rule_value(
@@ -784,15 +854,76 @@ def score_field_correspondence_rule_evidence(
                 value = str(current_value)
                 if value not in sample_values:
                     sample_values.append(value)
+            if _validate_identifier_value(rule.identifier_scheme, current_value):
+                valid_samples += 1
+
+        validation_status = "not_applicable"
+        if rule.canonical_target == "canonical_id":
+            if affected_records == 0:
+                validation_status = "unknown"
+            elif valid_samples == affected_records:
+                validation_status = "valid"
+            elif valid_samples > 0:
+                validation_status = "mixed"
+            else:
+                validation_status = "invalid"
+        collision_count = _collision_count_for_rule(db, org_id=org_id, rule=rule)
 
         scores.append(FieldCorrespondenceEvidenceScore(
             rule_id=rule.id,
             score=_evidence_level(affected_records, matching_suggestions),
+            validation_status=validation_status,
+            collision_count=collision_count,
             affected_records=affected_records,
             matching_suggestions=matching_suggestions,
             sample_values=sample_values,
         ))
     return scores
+
+
+@router.get(
+    "/field-correspondence-rules/review-export.csv",
+    dependencies=[Depends(get_current_user)],
+)
+def export_field_correspondence_review_csv(
+    active: bool | None = Query(default=None),
+    source_schema: str | None = Query(default=None, max_length=100),
+    limit: int = Query(default=300, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Export rule review data as CSV for offline governance review."""
+    from backend.tenant_access import resolve_request_org_id
+
+    org_id = resolve_request_org_id(db, current_user)
+    query = db.query(models.FieldCorrespondenceRule)
+    if org_id is None:
+        query = query.filter(models.FieldCorrespondenceRule.org_id.is_(None))
+    else:
+        query = query.filter(models.FieldCorrespondenceRule.org_id == org_id)
+    if active is not None:
+        query = query.filter(models.FieldCorrespondenceRule.is_active.is_(active))
+    if source_schema:
+        query = query.filter(models.FieldCorrespondenceRule.source_schema == source_schema)
+    rules = query.order_by(models.FieldCorrespondenceRule.id.desc()).limit(limit).all()
+
+    rows = ["rule_id,source_schema,source_field,canonical_target,identifier_scheme,is_active,review_status"]
+    for rule in rules:
+        serialized = _serialize_rule(rule)
+        rows.append(",".join([
+            str(rule.id),
+            (rule.source_schema or "").replace(",", " "),
+            rule.source_field.replace(",", " "),
+            (rule.canonical_target or "").replace(",", " "),
+            (rule.identifier_scheme or "").replace(",", " "),
+            str(bool(rule.is_active)).lower(),
+            serialized.review_status,
+        ]))
+    return Response(
+        content="\n".join(rows) + "\n",
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=field-correspondence-review.csv"},
+    )
 
 
 @router.post(
@@ -1101,6 +1232,47 @@ def apply_field_correspondence_rule(
         skipped_existing=skipped_existing,
         skipped_missing_value=skipped_missing_value,
     )
+
+
+@router.post(
+    "/field-correspondence-rules/{rule_id}/review-status",
+    response_model=FieldCorrespondenceRuleResponse,
+    dependencies=[Depends(require_role("super_admin", "admin"))],
+)
+def set_field_correspondence_review_status(
+    payload: FieldCorrespondenceReviewPayload,
+    rule_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Mark an admin review decision without losing rule history."""
+    from backend.tenant_access import resolve_request_org_id
+    from datetime import datetime, timezone
+
+    org_id = resolve_request_org_id(db, current_user)
+    rule = db.get(models.FieldCorrespondenceRule, rule_id)
+    if not rule or rule.org_id != org_id:
+        raise HTTPException(status_code=404, detail=f"Rule '{rule_id}' not found")
+
+    before = _dump_rule(rule)
+    evidence = [item for item in _json_list(rule.evidence) if item not in {"rejected_admin_review", "needs_adjustment"}]
+    if payload.review_status == "approved":
+        rule.is_active = True
+    elif payload.review_status == "pending":
+        rule.is_active = False
+    elif payload.review_status == "rejected":
+        rule.is_active = False
+        evidence.append("rejected_admin_review")
+    elif payload.review_status == "needs_adjustment":
+        rule.is_active = False
+        evidence.append("needs_adjustment")
+    rule.evidence = json.dumps(evidence or ["manual_admin_rule"], ensure_ascii=False)
+    rule.updated_at = datetime.now(timezone.utc)
+    db.flush()
+    _audit_rule_change(db, action="REVIEW_STATUS", rule=rule, current_user=current_user, before=before)
+    db.commit()
+    db.refresh(rule)
+    return _serialize_rule(rule)
 
 
 @router.post(

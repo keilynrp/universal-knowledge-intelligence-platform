@@ -450,9 +450,34 @@ class TestFieldCorrespondenceRulesAPI:
         data = resp.json()
         scored = next(item for item in data if item["rule_id"] == rule.id)
         assert scored["score"] == "medium"
+        assert scored["validation_status"] == "valid"
+        assert scored["collision_count"] == 0
         assert scored["affected_records"] == 1
         assert scored["matching_suggestions"] == 1
         assert scored["sample_values"] == ["LOCAL-42"]
+
+    def test_review_status_and_csv_export(self, client, auth_headers):
+        create = client.post("/field-correspondence-rules", json={
+            "source_schema": "wos",
+            "source_field": "ID",
+            "canonical_target": "canonical_id",
+            "identifier_scheme": "local",
+        }, headers=auth_headers)
+        assert create.status_code == 201
+        rule_id = create.json()["id"]
+
+        rejected = client.post(f"/field-correspondence-rules/{rule_id}/review-status", json={
+            "review_status": "rejected",
+        }, headers=auth_headers)
+        assert rejected.status_code == 200
+        assert rejected.json()["review_status"] == "rejected"
+        assert rejected.json()["is_active"] is False
+
+        exported = client.get("/field-correspondence-rules/review-export.csv", headers=auth_headers)
+        assert exported.status_code == 200
+        assert "text/csv" in exported.headers["content-type"]
+        assert "rule_id,source_schema,source_field" in exported.text
+        assert "rejected" in exported.text
 
     def test_preview_rule_impact_counts_records_and_suggestions(self, client, auth_headers, db_session):
         from backend import models
