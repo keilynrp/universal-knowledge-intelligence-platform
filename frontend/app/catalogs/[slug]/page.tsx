@@ -8,6 +8,7 @@ import FacetPanel from "../../components/FacetPanel";
 import EntityTableToolbar from "../../components/EntityTableToolbar";
 import RecordResultCard from "../../components/RecordResultCard";
 import RecordListRow from "../../components/RecordListRow";
+import { useAssistantContextRegistration } from "../../contexts/AssistantContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { useAuth } from "../../contexts/AuthContext";
 
@@ -224,6 +225,22 @@ export default function CatalogPortalPage() {
     if (!results) return 1;
     return Math.max(1, Math.ceil(results.total / results.limit));
   }, [results]);
+  useAssistantContextRegistration({
+    route: `/catalogs/${slug}`,
+    domainId: portal?.domain_id || "all",
+    moduleLabel: "Catalogo publico",
+    totalEntities: portal?.summary?.total_records ?? results?.total ?? null,
+    enrichedCount: portal?.summary?.enriched_records ?? null,
+    enrichmentPct: portal?.summary?.enriched_pct ?? null,
+    qualityPct: portal?.summary?.avg_quality != null ? Math.round(portal.summary.avg_quality * 100) : null,
+    activeSources: Object.values(activeFacets).filter(Boolean).length,
+    leadingGap: error || null,
+    recommendedActions: [
+      portal?.title ? `Portal: ${portal.title}` : `Portal ${slug}`,
+      search ? `Busqueda activa: ${search}` : "Sin busqueda textual activa",
+      minQuality ? `Calidad minima: ${minQuality}` : "Sin umbral de calidad",
+    ],
+  });
 
   const applyFilters = () => {
     const next = new URLSearchParams();

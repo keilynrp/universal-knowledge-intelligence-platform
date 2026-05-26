@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
+import { useAssistantContextRegistration } from "@/app/contexts/AssistantContext";
 import { useLanguage } from "@/app/contexts/LanguageContext";
 
 /* ── Shared types ────────────────────────────────────────────────────── */
@@ -772,6 +773,17 @@ export default function ScientificImportPage() {
   const { t } = useLanguage();
   const tr = (key: string, fb: string) => { const v = t(key); return v === key ? fb : v; };
   const [activeTab, setActiveTab] = useState<TabId>("connector");
+  useAssistantContextRegistration({
+    route: "/import/scientific",
+    domainId: "science",
+    moduleLabel: "Importacion cientifica",
+    activeSources: TABS.length,
+    recommendedActions: [
+      `Conector activo: ${tr(TABS.find((tab) => tab.id === activeTab)?.labelKey ?? "", TABS.find((tab) => tab.id === activeTab)?.fallback ?? activeTab)}`,
+      "Previsualizar antes de importar",
+      "Validar DOI, autores y fuente antes de enriquecer",
+    ],
+  });
 
   return (
     <div className="max-w-3xl mx-auto py-8 px-4 space-y-6">

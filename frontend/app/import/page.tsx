@@ -1,6 +1,7 @@
 "use client";
 
 import { useLanguage } from "../contexts/LanguageContext";
+import { useAssistantContextRegistration } from "../contexts/AssistantContext";
 import { PageHeader } from "../components/ui";
 import {
     getSteps,
@@ -39,6 +40,19 @@ export default function ImportWizardPage() {
         handleBack,
     } = useImportWizardController();
     const steps = getSteps(t);
+    useAssistantContextRegistration({
+        route: "/import",
+        domainId: domain || "default",
+        moduleLabel: "Ingesta y mapeo",
+        totalEntities: preview?.row_count ?? importResult?.total_rows ?? null,
+        activeSources: file ? 1 : 0,
+        leadingGap: previewError || importError || null,
+        recommendedActions: [
+            `Paso actual: ${steps[step - 1]?.label ?? step}`,
+            preview ? `${Object.values(mapping).filter(Boolean).length}/${preview.columns.length} columnas mapeadas` : "Cargar preview para detectar columnas",
+            domain ? `Dominio destino: ${domain}` : "Confirmar dominio destino",
+        ],
+    });
     const stepGuidance: Record<number, { title: string; body: string }> = {
         1: {
             title: t("page.import.guided.upload.title"),

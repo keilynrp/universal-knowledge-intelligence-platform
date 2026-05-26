@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
@@ -11,6 +11,7 @@ import EntityGraph from "../../components/EntityGraph";
 import RelationshipManager from "../../components/RelationshipManager";
 import PresenceAvatars from "../../components/PresenceAvatars";
 import { useWebSocket } from "@/lib/useWebSocket";
+import { useAssistantContextRegistration } from "../../contexts/AssistantContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 
 type EntityValue =
@@ -1041,6 +1042,34 @@ export default function EntityDetailPage() {
                 .catch(() => {});
         }
     }, [tab, entity, qualityData, attentionData]);
+    const entityAssistantContext = useMemo(() => ({
+        route: `/entities/${entityId}`,
+        domainId: entity?.domain || "all",
+        moduleLabel: "Detalle de entidad",
+        totalEntities: entity ? 1 : null,
+        enrichedCount: entity?.enrichment_status === "completed" ? 1 : 0,
+        enrichmentPct: entity?.enrichment_status === "completed" ? 100 : entity?.enrichment_status === "processing" ? 65 : entity?.enrichment_status === "pending" ? 45 : entity?.enrichment_status === "failed" ? 12 : 0,
+        qualityPct: qualityData?.score != null
+            ? normalizePercent(qualityData.score)
+            : entity?.quality_score != null
+                ? normalizePercent(entity.quality_score)
+                : null,
+        activeSources: attentionData?.summary.active_sources ?? (entity?.source || entity?.enrichment_source ? 1 : 0),
+        leadingGap: entity?.enrichment_status === "failed"
+            ? "El enriquecimiento fallo para este registro"
+            : !entity?.canonical_id
+                ? "Falta ID canonico estable"
+                : !entity?.entity_type
+                    ? "Falta tipo de entidad normalizado"
+                    : null,
+        recommendedActions: [
+            entity?.primary_label ? `Registro: ${entity.primary_label}` : `Registro #${entityId}`,
+            entity?.canonical_id ? `ID canonico: ${entity.canonical_id}` : "Validar ID canonico",
+            entity?.entity_type ? `Tipo: ${entity.entity_type}` : "Mapear tipo de entidad",
+            entity?.enrichment_status ? `Enrichment: ${entity.enrichment_status}` : "Ejecutar enriquecimiento",
+        ],
+    }), [attentionData, entity, entityId, qualityData]);
+    useAssistantContextRegistration(entityAssistantContext);
 
     async function refreshAnalysisData(targetEntityId: number) {
         const [qualityResult, attentionResult] = await Promise.allSettled([

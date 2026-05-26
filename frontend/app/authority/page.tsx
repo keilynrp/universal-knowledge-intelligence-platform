@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { PageHeader, TabNav } from "../components/ui";
 import PilotFlowCard from "../components/PilotFlowCard";
+import { useAssistantContextRegistration } from "../contexts/AssistantContext";
 import { useDomain } from "../contexts/DomainContext";
 import { useLanguage } from "../contexts/LanguageContext";
 import DisambiguationTab from "./DisambiguationTab";
@@ -12,6 +13,16 @@ export default function AuthorityPage() {
     const { activeDomain } = useDomain();
     const { t } = useLanguage();
     const [tab, setTab] = useState<"disambiguation" | "review">("disambiguation");
+    useAssistantContextRegistration({
+        route: "/authority",
+        domainId: activeDomain?.id || "all",
+        moduleLabel: tab === "disambiguation" ? "Control de autoridad" : "Cola de revision",
+        recommendedActions: [
+            tab === "disambiguation" ? "Explicar posibles colisiones de valores" : "Priorizar sugerencias pendientes",
+            "Crear reglas solo con evidencia suficiente",
+            "Revisar falsos positivos antes de confirmar en lote",
+        ],
+    });
 
     const tabs = [
         { id: "disambiguation" as const, label: t("page.authority.tab_groups") },

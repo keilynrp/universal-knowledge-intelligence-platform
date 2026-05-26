@@ -13,6 +13,7 @@ import { KpiSummaryCard } from "./components/ui";
 import DerivedStatusPanel from "./components/DerivedStatusPanel";
 import { apiFetch } from "../lib/api";
 import { useAuth } from "./contexts/AuthContext";
+import { useAssistantContextRegistration } from "./contexts/AssistantContext";
 import { useLanguage } from "./contexts/LanguageContext";
 import { useDomain, isAllScope } from "./contexts/DomainContext";
 import { Analytics } from "../lib/analytics";
@@ -464,6 +465,28 @@ export default function Home() {
       percent: graphScore,
     },
   ];
+  useAssistantContextRegistration({
+    route: "/",
+    domainId: activeDomainId || "all",
+    moduleLabel: "Catalogo interno",
+    totalEntities: stats?.total_entities ?? null,
+    enrichmentPct: enrichmentScore,
+    qualityPct: stats?.quality?.average != null ? clampPercent(stats.quality.average * 100) : null,
+    readinessPct: pipelineHealthScore,
+    activeSources: domainCount,
+    leadingGap: hasEntities
+      ? identifierCoverageScore < 60
+        ? "Cobertura baja de identificadores canonicos"
+        : enrichmentScore < 60
+          ? "Cobertura de enriquecimiento por debajo del umbral de briefing"
+          : null
+      : "No hay registros cargados todavia",
+    recommendedActions: [
+      nextGuidedAction.title,
+      `${identifierCoverageScore}% identificadores canonicos`,
+      `${graphScore}% evidencia de grafo`,
+    ],
+  });
 
   return (
     <div className="space-y-6">

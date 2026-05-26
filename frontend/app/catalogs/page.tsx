@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { PageHeader, EmptyState, ErrorBanner, useToast } from "../components/ui";
+import { useAssistantContextRegistration } from "../contexts/AssistantContext";
 import { useDomain } from "../contexts/DomainContext";
 import { useLanguage } from "../contexts/LanguageContext";
 
@@ -217,6 +218,19 @@ export default function CatalogPortalsPage() {
     () => domains.map((domain) => ({ id: domain.id, name: domain.name })),
     [domains],
   );
+  useAssistantContextRegistration({
+    route: "/catalogs",
+    domainId: form.domain_id || activeDomainId || "all",
+    moduleLabel: "Catalogos publicables",
+    totalEntities: candidates.reduce((sum, candidate) => sum + candidate.total_records, 0) || null,
+    activeSources: portals.length,
+    leadingGap: error,
+    recommendedActions: [
+      portals.length ? `${portals.length} portales disponibles` : "Crear el primer portal de catalogo",
+      candidates.length ? `${candidates.length} importaciones candidatas` : "Importar datos para sembrar portales",
+      form.visibility ? `Visibilidad propuesta: ${form.visibility}` : "Definir visibilidad del portal",
+    ],
+  });
 
   const handleCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
