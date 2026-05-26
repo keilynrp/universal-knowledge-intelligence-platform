@@ -334,6 +334,49 @@ def auth_headers(client):
 
 
 class TestImportEndpoints:
+    def test_ingest_records_populates_canonical_fields(self):
+        from backend.routers.api_import import _ingest_records
+        from backend.schemas_enrichment import EnrichedRecord
+
+        class FakeQuery:
+            def filter(self, *args, **kwargs):
+                return self
+
+            def all(self):
+                return []
+
+        class FakeSession:
+            def __init__(self):
+                self.added = []
+                self.commits = 0
+
+            def query(self, *args, **kwargs):
+                return FakeQuery()
+
+            def add_all(self, rows):
+                self.added.extend(rows)
+
+            def commit(self):
+                self.commits += 1
+
+        db = FakeSession()
+        record = EnrichedRecord(
+            doi="10.1234/canonical",
+            title="Canonical API Import",
+            authors=["Jane Doe"],
+            source_api="OpenAlex",
+        )
+
+        inserted = _ingest_records(db, [record], "science", "openalex", org_id=None)
+
+        assert inserted == 1
+        assert db.commits == 1
+        assert len(db.added) == 1
+        entity = db.added[0]
+        assert entity.canonical_id == "10.1234/canonical"
+        assert entity.enrichment_doi == "10.1234/canonical"
+        assert entity.entity_type == "publication"
+
     def test_openalex_import_returns_202(self, client, auth_headers):
         with patch("backend.routers.api_import.OpenAlexAdapter") as MockAdapter:
             mock_instance = MagicMock()

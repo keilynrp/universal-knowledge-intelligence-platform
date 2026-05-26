@@ -103,6 +103,8 @@ def _ingest_records(
         entity = models.RawEntity(
             primary_label=rec.title,
             secondary_label=", ".join(rec.authors[:3]) if rec.authors else None,
+            canonical_id=rec.doi,
+            entity_type="publication",
             domain=domain,
             source=source,
             enrichment_doi=rec.doi,
