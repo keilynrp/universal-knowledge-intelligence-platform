@@ -106,11 +106,14 @@ class RejectPayload(BaseModel):
     rationale: str = Field(..., min_length=1, max_length=2000)
 
 
-# Module-level singleton so state persists across requests (production would use DB)
+# Module-level singleton for legacy tests that use the service without DB.
 _mapping_service = None
 
 
-def _get_mapping_service():
+def _get_mapping_service(db: Session | None = None, org_id: int | None = None):
+    if db is not None:
+        from backend.services.mapping_suggestions import MappingSuggestionService
+        return MappingSuggestionService(db=db, org_id=org_id)
     global _mapping_service
     if _mapping_service is None:
         from backend.services.mapping_suggestions import MappingSuggestionService
@@ -121,16 +124,18 @@ def _get_mapping_service():
 @router.get(
     "/mapping-suggestions",
     response_model=list[MappingSuggestionResponse],
-    dependencies=[Depends(get_current_user)],
 )
 def list_mapping_suggestions(
     status: Optional[str] = Query(default=None, pattern=r"^(auto_acceptable|review_required|accepted|rejected|superseded)$"),
     limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     """List mapping suggestions, optionally filtered by status."""
     from backend.services.mapping_suggestions import SuggestionStatus
+    from backend.tenant_access import resolve_request_org_id
 
-    service = _get_mapping_service()
+    service = _get_mapping_service(db, org_id=resolve_request_org_id(db, current_user))
     status_enum = SuggestionStatus(status) if status else None
     suggestions = service.list_suggestions(status=status_enum)[:limit]
     return [
@@ -157,10 +162,13 @@ def list_mapping_suggestions(
 )
 def accept_mapping_suggestion(
     suggestion_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
     """Accept a mapping suggestion (editor+)."""
-    service = _get_mapping_service()
+    from backend.tenant_access import resolve_request_org_id
+
+    service = _get_mapping_service(db, org_id=resolve_request_org_id(db, user))
     reviewer_id = user.id if hasattr(user, 'id') else 0
     suggestion = service.accept_suggestion(suggestion_id, reviewer_id=reviewer_id)
     if suggestion is None:
@@ -175,10 +183,13 @@ def accept_mapping_suggestion(
 def reject_mapping_suggestion(
     payload: RejectPayload,
     suggestion_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
     """Reject a mapping suggestion with rationale (editor+)."""
-    service = _get_mapping_service()
+    from backend.tenant_access import resolve_request_org_id
+
+    service = _get_mapping_service(db, org_id=resolve_request_org_id(db, user))
     reviewer_id = user.id if hasattr(user, 'id') else 0
     suggestion = service.reject_suggestion(
         suggestion_id,

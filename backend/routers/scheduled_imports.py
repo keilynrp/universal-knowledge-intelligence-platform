@@ -24,6 +24,8 @@ from backend.auth import require_role
 from backend.database import get_db
 from backend.routers.deps import _get_store_adapter
 from backend.services.field_correspondence import infer_source_schema, resolve_field_mapping
+from backend.services.mapping_suggestions import MappingSuggestionService
+from backend.services.source_profiler import FieldProfile, SourceProfile
 from backend.tenant_quotas import assert_org_quota_available
 from backend.tenant_access import (
     get_scoped_record,
@@ -79,9 +81,17 @@ def _serialize(s: models.ScheduledImport) -> dict:
     }
 
 
-def _remote_entity_profile(remote_entities: list) -> dict:
+def _remote_entity_profile(
+    remote_entities: list,
+    *,
+    db: Session | None = None,
+    org_id: int | None = None,
+    source_id: str | None = None,
+    source_format: str | None = None,
+) -> dict:
     """Profile remote store fields and show how they map to canonical fields."""
     fields: set[str] = set()
+    samples: dict[str, list[str]] = {}
     canonical_mapping: dict[str, str] = {}
 
     for entity in remote_entities:
@@ -98,13 +108,43 @@ def _remote_entity_profile(remote_entities: list) -> dict:
 
         if isinstance(raw.get("raw_data"), dict):
             fields.update(str(key) for key in raw["raw_data"].keys())
+            for key, value in raw["raw_data"].items():
+                field = str(key)
+                if value not in (None, "", [], {}) and len(samples.setdefault(field, [])) < 3:
+                    samples[field].append(str(value))
         fields.update(str(key) for key, value in raw.items() if value not in (None, "", [], {}))
+        for key, value in raw.items():
+            field = str(key)
+            if value not in (None, "", [], {}) and len(samples.setdefault(field, [])) < 3:
+                samples[field].append(str(value))
 
-    source_schema = infer_source_schema(fields=fields)
+    source_schema = infer_source_schema(source_format, fields=fields)
+    mapping_service = MappingSuggestionService(db=db, org_id=org_id) if db is not None else None
     for field in sorted(fields):
-        mapped = resolve_field_mapping(field, source_schema=source_schema)
+        if mapping_service:
+            mapped, _metadata = mapping_service.resolve_field_target(
+                field,
+                sample_values=samples.get(field, []),
+                source_schema=source_schema,
+                org_id=org_id,
+            )
+        else:
+            mapped = resolve_field_mapping(field, source_schema=source_schema)
         if mapped:
             canonical_mapping[field] = mapped
+    if db is not None and source_id:
+        (mapping_service or MappingSuggestionService(db=db, org_id=org_id)).generate_suggestions(
+            SourceProfile(
+                source_id=source_id,
+                source_format=source_format or "scheduled_import",
+                total_rows=len(remote_entities),
+                field_profiles=[
+                    FieldProfile(field_name=field, sample_values=samples.get(field, []))
+                    for field in sorted(fields)
+                ],
+            ),
+            org_id=org_id,
+        )
 
     return {
         "field_count": len(fields),
@@ -318,7 +358,13 @@ def _execute_import(schedule: models.ScheduledImport, db: Session) -> dict:
     try:
         adapter = _get_store_adapter(store)
         remote_entities = adapter.fetch_entities(page=1, per_page=100)
-        source_profile = _remote_entity_profile(remote_entities)
+        source_profile = _remote_entity_profile(
+            remote_entities,
+            db=db,
+            org_id=schedule.org_id,
+            source_id=f"scheduled_import:{schedule.id}",
+            source_format=store.platform,
+        )
     except Exception as e:
         schedule.last_status = "error"
         schedule.last_result = json.dumps({"error": str(e)})

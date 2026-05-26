@@ -414,6 +414,49 @@ class TestUploadWithFieldMapping:
         assert correspondence["DI"]["scheme"] == "doi"
         assert "wos_schema_rule" in correspondence["DI"]["evidence"]
 
+        suggestion = db_session.query(models.MappingSuggestionRecord).filter_by(source_field="DI").one()
+        assert suggestion.import_batch_id is not None
+        assert suggestion.canonical_target == "canonical_id"
+        assert suggestion.identifier_scheme == "doi"
+        assert suggestion.source_schema == "wos"
+
+    def test_upload_uses_approved_field_correspondence_rule(self, client, editor_headers, db_session):
+        from backend import models
+
+        db_session.add(models.FieldCorrespondenceRule(
+            source_schema="wos",
+            source_field="ID",
+            canonical_target="canonical_id",
+            semantic_concept="persistent_identifier",
+            identifier_scheme="local",
+            confidence=1.0,
+            evidence=json.dumps(["manual_admin_rule"]),
+            is_active=True,
+        ))
+        db_session.commit()
+
+        buf = _csv_file([{
+            "FN": "Web of Science",
+            "VR": "1.0",
+            "TI": "Rule mapped paper",
+            "ID": "LOCAL-42",
+            "DT": "Article",
+        }])
+        resp = client.post(
+            "/upload",
+            data={"domain": "science", "field_mapping": "{}"},
+            files={"file": ("wos_export.csv", buf, "text/csv")},
+            headers=editor_headers,
+        )
+
+        assert resp.status_code == 201, resp.text
+        stored = db_session.query(models.RawEntity).filter_by(primary_label="Rule mapped paper").one()
+        assert stored.canonical_id == "LOCAL-42"
+        attrs = json.loads(stored.attributes_json)
+        correspondence = attrs["_field_correspondence"]
+        assert correspondence["ID"]["scheme"] == "local"
+        assert "manual_admin_rule" in correspondence["ID"]["evidence"]
+
     def test_viewer_cannot_upload(self, client, viewer_headers):
         buf = _csv_file()
         resp = client.post(

@@ -40,6 +40,8 @@ from backend.services.field_correspondence import (
     resolve_field_correspondence,
     resolve_field_mapping,
 )
+from backend.services.mapping_suggestions import MappingSuggestionService
+from backend.services.source_profiler import FieldProfile, SourceProfile
 from backend.services.text_normalization import normalize_import_value
 from backend.tenant_access import persisted_org_id, resolve_request_org_id, scope_query_to_org
 
@@ -780,6 +782,7 @@ async def upload_file(
         if isinstance(row, dict):
             all_keys.update(row.keys())
     source_schema = infer_source_schema(file.filename, {str(key) for key in all_keys})
+    mapping_service = MappingSuggestionService(db=db, org_id=stored_org_id)
 
     matched_columns: set = set()
     unmatched_columns: set = set()
@@ -787,7 +790,11 @@ async def upload_file(
         col_str = str(col).strip()
         mapped = effective_mapping.get(col_str)
         if mapped is None:
-            mapped = resolve_field_mapping(col_str, domain=domain, source_schema=source_schema)
+            mapped, _metadata = mapping_service.resolve_field_target(
+                col_str,
+                source_schema=source_schema,
+                org_id=stored_org_id,
+            )
         if mapped and mapped in valid_model_keys:
             matched_columns.add(col_str)
         elif col_str in valid_model_keys:
@@ -806,6 +813,29 @@ async def upload_file(
         entity_type_hint=_infer_entity_type_hint(records),
         created_by=current_user.id,
         source_label=f"{file.filename} · {_fmt.upper()}",
+    )
+    field_samples: dict[str, list[str]] = {str(key): [] for key in all_keys}
+    for sample_row in records[:20]:
+        if not isinstance(sample_row, dict):
+            continue
+        for key, value in sample_row.items():
+            sample_key = str(key).strip()
+            if sample_key in field_samples and len(field_samples[sample_key]) < 3:
+                normalized_sample = normalize_import_value(value)
+                if normalized_sample not in (None, ""):
+                    field_samples[sample_key].append(str(normalized_sample))
+    mapping_service.generate_suggestions(
+        SourceProfile(
+            source_id=f"import_batch:{import_batch.id}",
+            source_format=file.filename,
+            total_rows=len(records),
+            field_profiles=[
+                FieldProfile(field_name=field, sample_values=samples)
+                for field, samples in sorted(field_samples.items())
+            ],
+        ),
+        org_id=stored_org_id,
+        import_batch_id=import_batch.id,
     )
 
     objects = []
@@ -835,15 +865,38 @@ async def upload_file(
             sk = str(k).strip()
             # "" means skip this column (wizard user chose "ignore")
             mapped_field = effective_mapping.get(sk)
+            metadata: dict = {}
             if mapped_field is None:
+                mapped_field, metadata = mapping_service.resolve_field_target(
+                    sk,
+                    source_schema=source_schema,
+                    org_id=stored_org_id,
+                )
                 correspondence = resolve_field_correspondence(sk, domain=domain, source_schema=source_schema)
-                mapped_field = correspondence.canonical_target if correspondence else None
             else:
                 correspondence = resolve_field_correspondence(sk, domain=domain, source_schema=source_schema)
                 if correspondence and correspondence.canonical_target != mapped_field:
                     correspondence = None
-            if correspondence:
+            if mapped_field and metadata and "approved_field_correspondence_rule" in metadata.get("evidence", []):
+                field_correspondence_data[sk] = {
+                    "target": mapped_field,
+                    "concept": metadata.get("semantic_concept"),
+                    "scheme": metadata.get("identifier_scheme"),
+                    "confidence": metadata.get("confidence"),
+                    "evidence": metadata.get("evidence", []),
+                    "requires_review": metadata.get("requires_review", False),
+                }
+            elif correspondence:
                 field_correspondence_data[sk] = correspondence.to_provenance()
+            elif mapped_field and metadata:
+                field_correspondence_data[sk] = {
+                    "target": mapped_field,
+                    "concept": metadata.get("semantic_concept"),
+                    "scheme": metadata.get("identifier_scheme"),
+                    "confidence": metadata.get("confidence"),
+                    "evidence": metadata.get("evidence", []),
+                    "requires_review": metadata.get("requires_review", False),
+                }
             if mapped_field == "" or mapped_field is None and sk not in valid_model_keys:
                 if mapped_field != "":  # only store if not explicitly skipped
                     unmatched_data[sk] = val

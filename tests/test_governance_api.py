@@ -62,13 +62,32 @@ def _reset_mapping_service():
     """Reset mapping service singleton between tests."""
     import backend.routers.governance as gov_mod
     gov_mod._mapping_service = None
+    db = _TestSession()
+    db.query(models.FieldCorrespondenceRule).delete()
+    db.query(models.MappingSuggestionRecord).delete()
+    db.commit()
+    db.close()
     yield
     gov_mod._mapping_service = None
+    db = _TestSession()
+    db.query(models.FieldCorrespondenceRule).delete()
+    db.query(models.MappingSuggestionRecord).delete()
+    db.commit()
+    db.close()
 
 
 @pytest.fixture
 def client():
     return TestClient(app)
+
+
+@pytest.fixture
+def db_session():
+    db = _TestSession()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 @pytest.fixture
@@ -185,12 +204,11 @@ class TestMappingSuggestionsAPI:
         resp = client.post("/mapping-suggestions/1/accept", headers=viewer_headers)
         assert resp.status_code == 403
 
-    def test_list_includes_field_correspondence_metadata(self, client, auth_headers, monkeypatch):
-        from backend.routers import governance
+    def test_list_includes_field_correspondence_metadata(self, client, auth_headers, db_session):
         from backend.services.mapping_suggestions import MappingSuggestionService
         from backend.services.source_profiler import FieldProfile, SourceProfile
 
-        service = MappingSuggestionService()
+        service = MappingSuggestionService(db=db_session)
         service.generate_suggestions(SourceProfile(
             source_id="wos-src",
             source_format="wos",
@@ -199,7 +217,7 @@ class TestMappingSuggestionsAPI:
                 FieldProfile(field_name="DI", sample_values=["10.1000/example"]),
             ],
         ))
-        monkeypatch.setattr(governance, "_mapping_service", service)
+        db_session.commit()
 
         resp = client.get("/mapping-suggestions", headers=auth_headers)
 
@@ -210,6 +228,30 @@ class TestMappingSuggestionsAPI:
         assert data[0]["identifier_scheme"] == "doi"
         assert "wos_schema_rule" in data[0]["evidence"]
         assert data[0]["requires_review"] is False
+
+    def test_accept_persists_field_correspondence_rule(self, client, auth_headers, db_session):
+        from backend import models
+        from backend.services.mapping_suggestions import MappingSuggestionService
+        from backend.services.source_profiler import FieldProfile, SourceProfile
+
+        service = MappingSuggestionService(db=db_session)
+        suggestion = service.generate_suggestions(SourceProfile(
+            source_id="wos-src",
+            source_format="wos",
+            total_rows=10,
+            field_profiles=[
+                FieldProfile(field_name="DI", sample_values=["10.1000/example"]),
+            ],
+        ))[0]
+        db_session.commit()
+
+        resp = client.post(f"/mapping-suggestions/{suggestion.id}/accept", headers=auth_headers)
+
+        assert resp.status_code == 200
+        rule = db_session.query(models.FieldCorrespondenceRule).filter_by(source_field="DI").one()
+        assert rule.canonical_target == "canonical_id"
+        assert rule.identifier_scheme == "doi"
+        assert rule.is_active is True
 
 
 class TestAuthorityReadinessAPI:

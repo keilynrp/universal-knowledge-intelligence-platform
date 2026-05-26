@@ -112,6 +112,60 @@ class HarmonizationChangeRecord(Base):
     new_value = Column(Text, nullable=True)
 
 
+class MappingSuggestionRecord(Base):
+    __tablename__ = "mapping_suggestions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
+    import_batch_id = Column(Integer, ForeignKey("import_batches.id"), nullable=True, index=True)
+    source_id = Column(String, nullable=True, index=True)
+    source_format = Column(String, nullable=True, index=True)
+    source_schema = Column(String, nullable=True, index=True)
+    source_field = Column(String, nullable=False, index=True)
+    canonical_target = Column(String, nullable=False, index=True)
+    confidence = Column(Float, default=0.0)
+    status = Column(String, default="review_required", index=True)
+    evidence_samples = Column(Text, nullable=True)
+    semantic_concept = Column(String, nullable=True, index=True)
+    identifier_scheme = Column(String, nullable=True, index=True)
+    evidence = Column(Text, nullable=True)
+    requires_review = Column(Boolean, default=False, index=True)
+    rationale = Column(Text, nullable=True)
+    reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    superseded_by = Column(Integer, nullable=True, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, nullable=True)
+
+
+class FieldCorrespondenceRule(Base):
+    __tablename__ = "field_correspondence_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
+    source_schema = Column(String, nullable=True, index=True)
+    source_field = Column(String, nullable=False, index=True)
+    canonical_target = Column(String, nullable=True, index=True)
+    semantic_concept = Column(String, nullable=True, index=True)
+    identifier_scheme = Column(String, nullable=True, index=True)
+    confidence = Column(Float, default=1.0)
+    evidence = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True, index=True)
+    created_from_suggestion_id = Column(Integer, ForeignKey("mapping_suggestions.id"), nullable=True, index=True)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "org_id",
+            "source_schema",
+            "source_field",
+            name="uq_field_correspondence_rule_scope",
+        ),
+    )
+
+
 class StoreConnection(Base):
     __tablename__ = "store_connections"
 
