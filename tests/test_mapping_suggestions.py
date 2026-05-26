@@ -47,7 +47,9 @@ class TestSuggestionGeneration:
     def test_name_exact_match_doi(self):
         svc = MappingSuggestionService()
         result = svc.generate_suggestions(_profile(_fp("doi")))
-        assert result[0].canonical_target == "enrichment_doi"
+        assert result[0].canonical_target == "canonical_id"
+        assert result[0].semantic_concept == "persistent_identifier"
+        assert result[0].identifier_scheme == "doi"
 
     def test_name_exact_match_authors(self):
         svc = MappingSuggestionService()
@@ -70,7 +72,7 @@ class TestSuggestionGeneration:
             _fp("some_id_field", identifiers=["DOI"])
         ))
         assert len(result) == 1
-        assert result[0].canonical_target == "enrichment_doi"
+        assert result[0].canonical_target == "canonical_id"
         assert result[0].confidence == 0.85
 
     def test_no_match_yields_nothing(self):
@@ -87,7 +89,7 @@ class TestSuggestionGeneration:
         ))
         assert len(result) == 3
         targets = {s.canonical_target for s in result}
-        assert targets == {"primary_label", "enrichment_doi", "enrichment_concepts"}
+        assert targets == {"primary_label", "canonical_id", "enrichment_concepts"}
 
     def test_evidence_samples_capped(self):
         svc = MappingSuggestionService()
@@ -103,6 +105,23 @@ class TestSuggestionGeneration:
         ))
         assert result[0].id == 1
         assert result[1].id == 2
+
+    def test_identifier_scheme_header_yields_no_suggestion(self):
+        svc = MappingSuggestionService()
+        result = svc.generate_suggestions(_profile(_fp("Tipo de Identificador")))
+        assert result == []
+
+    def test_source_schema_short_code_uses_field_correspondence(self):
+        svc = MappingSuggestionService()
+        result = svc.generate_suggestions(SourceProfile(
+            source_id="wos-src",
+            source_format="wos",
+            total_rows=10,
+            field_profiles=[_fp("DI"), _fp("DT")],
+        ))
+        assert [item.canonical_target for item in result] == ["canonical_id", "entity_type"]
+        assert result[0].identifier_scheme == "doi"
+        assert "wos_schema_rule" in result[0].evidence
 
 
 class TestAcceptReject:

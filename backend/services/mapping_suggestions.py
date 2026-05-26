@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
+from backend.services.field_correspondence import infer_source_schema, resolve_field_correspondence
 from backend.services.source_profiler import FieldProfile, SemanticRole, SourceProfile
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,10 @@ class MappingSuggestion:
     reviewed_at: str | None = None
     rationale: str = ""
     superseded_by: int | None = None
+    semantic_concept: str | None = None
+    identifier_scheme: str | None = None
+    evidence: list[str] = field(default_factory=list)
+    requires_review: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -90,9 +95,10 @@ class MappingSuggestionService:
     def generate_suggestions(self, profile: SourceProfile) -> list[MappingSuggestion]:
         """Generate mapping suggestions from a source profile."""
         suggestions: list[MappingSuggestion] = []
+        source_schema = infer_source_schema(profile.source_format, {f.field_name for f in profile.field_profiles})
 
         for fp in profile.field_profiles:
-            target, confidence = self._infer_target(fp)
+            target, confidence, metadata = self._infer_target(fp, source_schema=source_schema)
             if not target:
                 continue
 
@@ -109,6 +115,10 @@ class MappingSuggestionService:
                 confidence=round(confidence, 3),
                 evidence_samples=fp.sample_values[:3],
                 status=status,
+                semantic_concept=metadata.get("semantic_concept"),
+                identifier_scheme=metadata.get("identifier_scheme"),
+                evidence=metadata.get("evidence", []),
+                requires_review=bool(metadata.get("requires_review", False)),
             )
             self._suggestions[self._next_id] = suggestion
             self._next_id += 1
@@ -174,21 +184,45 @@ class MappingSuggestionService:
             result = [s for s in result if s.status == status]
         return result
 
-    def _infer_target(self, fp: FieldProfile) -> tuple[str | None, float]:
+    def _infer_target(self, fp: FieldProfile, *, source_schema: str | None = None) -> tuple[str | None, float, dict[str, Any]]:
         """Infer the best canonical target for a field profile."""
+        correspondence = resolve_field_correspondence(
+            fp.field_name,
+            sample_values=fp.sample_values,
+            source_schema=source_schema,
+        )
+        if correspondence:
+            if correspondence.canonical_target is None:
+                return None, 0.0, {
+                    "semantic_concept": correspondence.semantic_concept,
+                    "identifier_scheme": correspondence.identifier_scheme,
+                    "evidence": list(correspondence.evidence),
+                    "requires_review": correspondence.requires_review,
+                }
+            return correspondence.canonical_target, correspondence.confidence, {
+                "semantic_concept": correspondence.semantic_concept,
+                "identifier_scheme": correspondence.identifier_scheme,
+                "evidence": list(correspondence.evidence),
+                "requires_review": correspondence.requires_review,
+            }
+
         fn_lower = fp.field_name.lower().replace("-", "_").replace(" ", "_")
 
         # Exact name match
         if fn_lower in _NAME_TARGET_MAP:
-            return _NAME_TARGET_MAP[fn_lower], 0.95
+            return _NAME_TARGET_MAP[fn_lower], 0.95, {"evidence": ["legacy_exact_name"]}
 
         # Semantic role match
         for role in fp.semantic_candidates:
             if role in _ROLE_TARGET_MAP:
-                return _ROLE_TARGET_MAP[role], 0.75
+                return _ROLE_TARGET_MAP[role], 0.75, {"evidence": ["semantic_role"]}
 
         # Identifier with DOI content
         if "DOI" in fp.candidate_identifiers:
-            return "enrichment_doi", 0.85
+            return "canonical_id", 0.85, {
+                "semantic_concept": "persistent_identifier",
+                "identifier_scheme": "doi",
+                "evidence": ["candidate_identifier"],
+            }
 
-        return None, 0.0
+        return None, 0.0, {}
