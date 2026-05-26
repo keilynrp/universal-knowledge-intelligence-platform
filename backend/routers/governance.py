@@ -202,9 +202,30 @@ class FieldCorrespondenceApplyPayload(BaseModel):
 class FieldCorrespondenceApplyResponse(FieldCorrespondenceImpactResponse):
     dry_run: bool
     overwrite_existing: bool
+    job_id: int | None = None
     updated_records: int = 0
     skipped_existing: int = 0
     skipped_missing_value: int = 0
+
+
+class FieldCorrespondenceJobResponse(BaseModel):
+    id: int
+    rule_id: int | None = None
+    rule_label: str | None = None
+    username: str | None = None
+    records_updated: int
+    affected_records: int = 0
+    skipped_existing: int = 0
+    skipped_missing_value: int = 0
+    fields_modified: list[str] = Field(default_factory=list)
+    executed_at: str | None = None
+    reverted: bool = False
+
+
+class FieldCorrespondenceRollbackResponse(BaseModel):
+    job_id: int
+    records_restored: int
+    reverted: bool
 
 
 def _json_list(value: str | None) -> list[str]:
@@ -355,6 +376,24 @@ def _extract_rule_value(
             return "attributes_json._field_correspondence", getattr(entity, canonical_target)
         return "attributes_json._field_correspondence", None
     return None, None
+
+
+def _serialize_field_correspondence_job(log: models.HarmonizationLog) -> FieldCorrespondenceJobResponse:
+    details = _json_object(log.details)
+    fields_modified = _json_list(log.fields_modified)
+    return FieldCorrespondenceJobResponse(
+        id=log.id,
+        rule_id=details.get("rule_id") if isinstance(details.get("rule_id"), int) else None,
+        rule_label=details.get("rule_label") if isinstance(details.get("rule_label"), str) else None,
+        username=details.get("username") if isinstance(details.get("username"), str) else None,
+        records_updated=log.records_updated or 0,
+        affected_records=int(details.get("affected_records") or 0),
+        skipped_existing=int(details.get("skipped_existing") or 0),
+        skipped_missing_value=int(details.get("skipped_missing_value") or 0),
+        fields_modified=fields_modified,
+        executed_at=log.executed_at.isoformat() if log.executed_at else None,
+        reverted=bool(log.reverted),
+    )
 
 
 # Module-level singleton for legacy tests that use the service without DB.
@@ -646,6 +685,87 @@ def seed_preventive_field_correspondence_rules(
 
 
 @router.get(
+    "/field-correspondence-rules/jobs",
+    response_model=list[FieldCorrespondenceJobResponse],
+    dependencies=[Depends(get_current_user)],
+)
+def list_field_correspondence_jobs(
+    limit: int = Query(default=25, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """List production executions of field correspondence rules."""
+    from backend.tenant_access import resolve_request_org_id
+
+    org_id = resolve_request_org_id(db, current_user)
+    query = db.query(models.HarmonizationLog).filter(
+        models.HarmonizationLog.step_id.like("field_correspondence_rule:%"),
+    )
+    if org_id is None:
+        query = query.filter(models.HarmonizationLog.org_id.is_(None))
+    else:
+        query = query.filter(models.HarmonizationLog.org_id == org_id)
+    logs = query.order_by(models.HarmonizationLog.id.desc()).limit(limit).all()
+    return [_serialize_field_correspondence_job(log) for log in logs]
+
+
+@router.post(
+    "/field-correspondence-rules/jobs/{job_id}/rollback",
+    response_model=FieldCorrespondenceRollbackResponse,
+    dependencies=[Depends(require_role("super_admin", "admin"))],
+)
+def rollback_field_correspondence_job(
+    job_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Rollback a production field correspondence execution."""
+    from backend.tenant_access import resolve_request_org_id
+    from datetime import datetime, timezone
+
+    org_id = resolve_request_org_id(db, current_user)
+    log = db.get(models.HarmonizationLog, job_id)
+    if not log or not (log.step_id or "").startswith("field_correspondence_rule:"):
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+    if log.org_id != org_id:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+    if log.reverted:
+        raise HTTPException(status_code=400, detail="This job has already been rolled back")
+
+    changes = db.query(models.HarmonizationChangeRecord).filter(
+        models.HarmonizationChangeRecord.log_id == job_id,
+    ).all()
+    if not changes and (log.records_updated or 0) > 0:
+        raise HTTPException(status_code=400, detail="No change records found for rollback")
+
+    restored = 0
+    for change in changes:
+        entity = db.get(models.RawEntity, change.record_id)
+        if not entity or entity.org_id != org_id:
+            continue
+        setattr(entity, change.field, change.old_value)
+        entity.updated_at = datetime.now(timezone.utc)
+        restored += 1
+
+    log.reverted = True
+    db.add(models.AuditLog(
+        action="ROLLBACK",
+        entity_type="field_correspondence_job",
+        entity_id=log.id,
+        user_id=getattr(current_user, "id", None),
+        username=getattr(current_user, "username", None),
+        details=json.dumps({
+            "job_id": log.id,
+            "step_id": log.step_id,
+            "records_restored": restored,
+        }, ensure_ascii=False, default=str),
+    ))
+    db.commit()
+
+    return FieldCorrespondenceRollbackResponse(job_id=job_id, records_restored=restored, reverted=True)
+
+
+@router.get(
     "/field-correspondence-rules/{rule_id}/audit",
     response_model=list[FieldCorrespondenceAuditEntry],
     dependencies=[Depends(get_current_user)],
@@ -782,6 +902,7 @@ def apply_field_correspondence_rule(
     updated_records = 0
     skipped_existing = 0
     skipped_missing_value = 0
+    changes: list[dict] = []
 
     for entity in candidates.limit(payload.limit).all():
         location, current_value = _extract_rule_value(
@@ -803,6 +924,12 @@ def apply_field_correspondence_rule(
             skipped_existing += 1
         else:
             if not payload.dry_run:
+                changes.append({
+                    "record_id": entity.id,
+                    "field": rule.canonical_target,
+                    "old_value": existing_value,
+                    "new_value": str(current_value),
+                })
                 setattr(entity, rule.canonical_target, str(current_value))
                 entity.updated_at = datetime.now(timezone.utc)
             updated_records += 1
@@ -817,7 +944,39 @@ def apply_field_correspondence_rule(
                 location=location,
             ))
 
+    job_id: int | None = None
     if not payload.dry_run:
+        rule_label = f"{rule.source_schema or '*'}:{rule.source_field}->{rule.canonical_target}"
+        log = models.HarmonizationLog(
+            org_id=org_id,
+            step_id=f"field_correspondence_rule:{rule.id}",
+            step_name="Field correspondence apply",
+            records_updated=len(changes),
+            fields_modified=json.dumps([rule.canonical_target], ensure_ascii=False),
+            executed_at=datetime.now(timezone.utc),
+            details=json.dumps({
+                "rule_id": rule.id,
+                "rule_label": rule_label,
+                "username": getattr(current_user, "username", None),
+                "affected_records": affected_records,
+                "updated_records": updated_records,
+                "skipped_existing": skipped_existing,
+                "skipped_missing_value": skipped_missing_value,
+                "overwrite_existing": payload.overwrite_existing,
+            }, ensure_ascii=False, default=str),
+            reverted=False,
+        )
+        db.add(log)
+        db.flush()
+        job_id = log.id
+        for change in changes:
+            db.add(models.HarmonizationChangeRecord(
+                log_id=log.id,
+                record_id=change["record_id"],
+                field=change["field"],
+                old_value=change["old_value"],
+                new_value=change["new_value"],
+            ))
         db.add(models.AuditLog(
             action="APPLY",
             entity_type="field_correspondence_rule",
@@ -832,6 +991,7 @@ def apply_field_correspondence_rule(
                 "updated_records": updated_records,
                 "skipped_existing": skipped_existing,
                 "skipped_missing_value": skipped_missing_value,
+                "job_id": job_id,
             }, ensure_ascii=False, default=str),
         ))
         db.commit()
@@ -850,6 +1010,7 @@ def apply_field_correspondence_rule(
         examples=examples,
         dry_run=payload.dry_run,
         overwrite_existing=payload.overwrite_existing,
+        job_id=job_id,
         updated_records=updated_records,
         skipped_existing=skipped_existing,
         skipped_missing_value=skipped_missing_value,

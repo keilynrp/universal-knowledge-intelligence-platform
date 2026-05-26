@@ -64,6 +64,8 @@ def _reset_mapping_service():
     gov_mod._mapping_service = None
     db = _TestSession()
     db.query(models.AuditLog).filter(models.AuditLog.entity_type == "field_correspondence_rule").delete()
+    db.query(models.HarmonizationChangeRecord).delete()
+    db.query(models.HarmonizationLog).filter(models.HarmonizationLog.step_id.like("field_correspondence_rule:%")).delete()
     db.query(models.RawEntity).delete()
     db.query(models.FieldCorrespondenceRule).delete()
     db.query(models.MappingSuggestionRecord).delete()
@@ -73,6 +75,8 @@ def _reset_mapping_service():
     gov_mod._mapping_service = None
     db = _TestSession()
     db.query(models.AuditLog).filter(models.AuditLog.entity_type == "field_correspondence_rule").delete()
+    db.query(models.HarmonizationChangeRecord).delete()
+    db.query(models.HarmonizationLog).filter(models.HarmonizationLog.step_id.like("field_correspondence_rule:%")).delete()
     db.query(models.RawEntity).delete()
     db.query(models.FieldCorrespondenceRule).delete()
     db.query(models.MappingSuggestionRecord).delete()
@@ -605,6 +609,55 @@ class TestFieldCorrespondenceRulesAPI:
             action="APPLY",
         ).one()
         assert audit.entity_id == rule_id
+        job = db_session.query(models.HarmonizationLog).filter_by(
+            step_id=f"field_correspondence_rule:{rule_id}",
+        ).one()
+        assert job.records_updated == 1
+        assert job.reverted is False
+
+    def test_field_correspondence_jobs_and_rollback(self, client, auth_headers, db_session):
+        entity = models.RawEntity(
+            primary_label="Imported candidate",
+            canonical_id=None,
+            normalized_json='{"ID": "LOCAL-42"}',
+            attributes_json="{}",
+            import_batch_id=7,
+        )
+        db_session.add(entity)
+        db_session.commit()
+
+        create = client.post("/field-correspondence-rules", json={
+            "source_schema": "wos",
+            "source_field": "ID",
+            "canonical_target": "canonical_id",
+            "identifier_scheme": "local",
+        }, headers=auth_headers)
+        assert create.status_code == 201
+        rule_id = create.json()["id"]
+
+        apply = client.post(f"/field-correspondence-rules/{rule_id}/apply", json={
+            "dry_run": False,
+        }, headers=auth_headers)
+        assert apply.status_code == 200
+        job_id = apply.json()["job_id"]
+
+        jobs = client.get("/field-correspondence-rules/jobs", headers=auth_headers)
+        assert jobs.status_code == 200
+        data = jobs.json()
+        assert data[0]["id"] == job_id
+        assert data[0]["rule_id"] == rule_id
+        assert data[0]["records_updated"] == 1
+        assert data[0]["username"] == "testadmin"
+        assert data[0]["reverted"] is False
+
+        rollback = client.post(f"/field-correspondence-rules/jobs/{job_id}/rollback", headers=auth_headers)
+        assert rollback.status_code == 200
+        assert rollback.json()["records_restored"] == 1
+        db_session.expire_all()
+        assert db_session.get(models.RawEntity, entity.id).canonical_id is None
+
+        jobs_after = client.get("/field-correspondence-rules/jobs", headers=auth_headers)
+        assert jobs_after.json()[0]["reverted"] is True
 
     def test_create_requires_admin(self, client, viewer_headers):
         resp = client.post("/field-correspondence-rules", json={

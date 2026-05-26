@@ -75,6 +75,20 @@ type PreventiveSeedResult = {
   total_candidates: number;
 };
 
+type RuleJob = {
+  id: number;
+  rule_id: number | null;
+  rule_label: string | null;
+  username: string | null;
+  records_updated: number;
+  affected_records: number;
+  skipped_existing: number;
+  skipped_missing_value: number;
+  fields_modified: string[];
+  executed_at: string | null;
+  reverted: boolean;
+};
+
 const emptyForm: FormState = {
   source_schema: "",
   source_field: "",
@@ -143,7 +157,9 @@ export default function FieldCorrespondenceRulesTab({
   const [auditByRule, setAuditByRule] = useState<Record<number, AuditEntry[]>>({});
   const [expandedAuditRuleId, setExpandedAuditRuleId] = useState<number | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
+  const [jobs, setJobs] = useState<RuleJob[]>([]);
   const [applyingRuleId, setApplyingRuleId] = useState<number | null>(null);
+  const [rollingBackJobId, setRollingBackJobId] = useState<number | null>(null);
   const [seedingPreventiveRules, setSeedingPreventiveRules] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
 
@@ -156,6 +172,18 @@ export default function FieldCorrespondenceRulesTab({
       }
     } catch {
       setMetrics(null);
+    }
+  }, []);
+
+  const fetchJobs = useCallback(async () => {
+    try {
+      const response = await apiFetch("/field-correspondence-rules/jobs");
+      const data = await response.json().catch(() => []);
+      if (response.ok) {
+        setJobs(data as RuleJob[]);
+      }
+    } catch {
+      setJobs([]);
     }
   }, []);
 
@@ -173,12 +201,13 @@ export default function FieldCorrespondenceRulesTab({
       }
       setRules(data as Rule[]);
       await fetchMetrics();
+      await fetchJobs();
     } catch (error) {
       toast(error instanceof Error ? error.message : "No se pudieron cargar las reglas.", "error");
     } finally {
       setLoading(false);
     }
-  }, [activeOnly, fetchMetrics, sourceSchema, toast]);
+  }, [activeOnly, fetchJobs, fetchMetrics, sourceSchema, toast]);
 
   useEffect(() => {
     void fetchRules();
@@ -306,6 +335,7 @@ export default function FieldCorrespondenceRulesTab({
       if (!dryRun) {
         setExpandedAuditRuleId(rule.id);
         await fetchAudit(rule);
+        await fetchJobs();
       }
     } catch (error) {
       toast(error instanceof Error ? error.message : "No se pudo procesar la regla.", "error");
@@ -332,6 +362,26 @@ export default function FieldCorrespondenceRulesTab({
       toast(error instanceof Error ? error.message : "No se pudieron cargar las reglas preventivas.", "error");
     } finally {
       setSeedingPreventiveRules(false);
+    }
+  }
+
+  async function rollbackJob(job: RuleJob) {
+    setRollingBackJobId(job.id);
+    try {
+      const response = await apiFetch(`/field-correspondence-rules/jobs/${job.id}/rollback`, {
+        method: "POST",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.detail ?? "No se pudo revertir la ejecucion.");
+      }
+      toast(`Rollback completado: ${data.records_restored ?? 0} registros restaurados.`, "success");
+      await fetchJobs();
+      await fetchRules();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "No se pudo revertir la ejecucion.", "error");
+    } finally {
+      setRollingBackJobId(null);
     }
   }
 
@@ -527,6 +577,59 @@ export default function FieldCorrespondenceRulesTab({
                 <p className="mt-1 text-lg font-semibold text-emerald-950 dark:text-emerald-100">{applyResult.skipped_missing_value}</p>
               </div>
             </div>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white">Ejecuciones de produccion</h3>
+          <button onClick={() => void fetchJobs()} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">
+            Actualizar jobs
+          </button>
+        </div>
+        {jobs.length === 0 ? (
+          <p className="mt-5 text-sm text-gray-500 dark:text-gray-400">No hay ejecuciones productivas registradas.</p>
+        ) : (
+          <div className="mt-5 overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="border-b border-gray-200 text-xs uppercase tracking-[0.14em] text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                <tr>
+                  <th className="py-3 pr-4">Fecha</th>
+                  <th className="py-3 pr-4">Regla</th>
+                  <th className="py-3 pr-4">Usuario</th>
+                  <th className="py-3 pr-4">Actualizados</th>
+                  <th className="py-3 pr-4">Omitidos</th>
+                  <th className="py-3 pr-4">Estado</th>
+                  <th className="py-3 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                {jobs.map((job) => (
+                  <tr key={job.id}>
+                    <td className="py-3 pr-4 text-xs text-gray-600 dark:text-gray-300">{job.executed_at ? new Date(job.executed_at).toLocaleString() : "-"}</td>
+                    <td className="py-3 pr-4 font-mono text-xs text-gray-900 dark:text-white">{job.rule_label ?? `#${job.rule_id ?? job.id}`}</td>
+                    <td className="py-3 pr-4 text-xs text-gray-600 dark:text-gray-300">{job.username ?? "-"}</td>
+                    <td className="py-3 pr-4 text-xs font-semibold text-emerald-700 dark:text-emerald-300">{job.records_updated}</td>
+                    <td className="py-3 pr-4 text-xs text-gray-500 dark:text-gray-400">{job.skipped_existing + job.skipped_missing_value}</td>
+                    <td className="py-3 pr-4">
+                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${job.reverted ? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"}`}>
+                        {job.reverted ? "Revertida" : "Aplicada"}
+                      </span>
+                    </td>
+                    <td className="py-3 text-right">
+                      <button
+                        onClick={() => void rollbackJob(job)}
+                        disabled={job.reverted || rollingBackJobId === job.id}
+                        className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/40 dark:text-red-300 dark:hover:bg-red-950/30"
+                      >
+                        {rollingBackJobId === job.id ? "Revirtiendo..." : "Rollback"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </section>
