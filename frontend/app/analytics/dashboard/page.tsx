@@ -18,6 +18,7 @@ import ConceptCloud from "../../components/ConceptCloud";
 import DerivedStatusPanel from "../../components/DerivedStatusPanel";
 import EnrichmentSchedulerCard from "../../components/EnrichmentSchedulerCard";
 import EnrichmentSourceHealthCard from "../../components/EnrichmentSourceHealthCard";
+import { UKIPAssistantPanel } from "../../components/ukip";
 import { useDomain, isAllScope } from "../../contexts/DomainContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { apiFetch } from "@/lib/api";
@@ -560,9 +561,9 @@ export default function ExecutiveDashboardPage() {
   const translatePriority = (priority: string) => (
     tr(`page.exec_dashboard.priority.${priority}`, priority)
   );
-  const translateRuleLabel = (ruleId: string, fallback: string) => (
+  const translateRuleLabel = useCallback((ruleId: string, fallback: string) => (
     tr(`page.exec_dashboard.benchmark_rule_label.${ruleId}`, fallback)
-  );
+  ), [tr]);
   const translateBenchmarkEvidence = (profileId: string, gap: BenchmarkGap) => (
     t("page.exec_dashboard.benchmark_evidence", {
       label: translateRuleLabel(gap.id, gap.label),
@@ -852,6 +853,27 @@ export default function ExecutiveDashboardPage() {
         { year: 5, count: 9 },
         { year: 6, count: 14 },
       ];
+  const assistantContext = useMemo(() => ({
+    route: "analytics/dashboard",
+    domainId: dashboardDomainId,
+    totalEntities: data?.kpis.total_entities ?? null,
+    enrichedCount: data?.kpis.enriched_count ?? null,
+    enrichmentPct: data?.kpis.enrichment_pct ?? null,
+    qualityPct,
+    readinessPct: data?.institutional_benchmark.readiness_pct ?? null,
+    activeSources: data?.external_attention?.summary.active_entities
+      ?? data?.top_entities.filter((entity) => entity.source).length
+      ?? null,
+    leadingGap: leadingGap ? translateRuleLabel(leadingGap.id, leadingGap.label) : null,
+    recommendedActions: decisionHighlights.slice(0, 3).map((action) => action.title),
+  }), [
+    dashboardDomainId,
+    data,
+    decisionHighlights,
+    leadingGap,
+    qualityPct,
+    translateRuleLabel,
+  ]);
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_22%_0%,rgba(124,58,237,0.08),transparent_28%),linear-gradient(180deg,#fbfbff_0%,#ffffff_52%,#fbfbff_100%)] px-5 py-7 text-[var(--ukip-text)] sm:px-8 lg:px-10">
@@ -1788,6 +1810,7 @@ export default function ExecutiveDashboardPage() {
         )}
       </div>
       </div>
+      <UKIPAssistantPanel context={assistantContext} />
     </main>
   );
 }

@@ -11,3 +11,5 @@ export { default as KnowledgeCard } from "./KnowledgeCard";
 export { default as PortalRecordCard } from "./PortalRecordCard";
 export { default as SemanticPanel } from "./SemanticPanel";
 export { default as SignalBadge } from "./SignalBadge";
+export { default as UKIPAssistantPanel } from "./UKIPAssistantPanel";
+export type { AssistantContext, UKIPAssistantPanelProps } from "./UKIPAssistantPanel";
