@@ -254,6 +254,83 @@ class TestMappingSuggestionsAPI:
         assert rule.is_active is True
 
 
+class TestFieldCorrespondenceRulesAPI:
+    def test_create_and_list_rule(self, client, auth_headers):
+        payload = {
+            "source_schema": "wos",
+            "source_field": "ID",
+            "canonical_target": "canonical_id",
+            "semantic_concept": "persistent_identifier",
+            "identifier_scheme": "local",
+            "confidence": 1.0,
+            "evidence": ["manual_admin_rule"],
+        }
+        create = client.post("/field-correspondence-rules", json=payload, headers=auth_headers)
+        assert create.status_code == 201
+        created = create.json()
+        assert created["source_field"] == "ID"
+        assert created["identifier_scheme"] == "local"
+        assert created["is_active"] is True
+
+        listed = client.get("/field-correspondence-rules?source_schema=wos&active=true", headers=auth_headers)
+        assert listed.status_code == 200
+        data = listed.json()
+        assert len(data) == 1
+        assert data[0]["canonical_target"] == "canonical_id"
+        assert "manual_admin_rule" in data[0]["evidence"]
+
+    def test_deactivate_and_reactivate_rule(self, client, auth_headers):
+        create = client.post("/field-correspondence-rules", json={
+            "source_schema": "ris",
+            "source_field": "DO",
+            "canonical_target": "canonical_id",
+            "identifier_scheme": "doi",
+        }, headers=auth_headers)
+        assert create.status_code == 201
+        rule_id = create.json()["id"]
+
+        off = client.post(f"/field-correspondence-rules/{rule_id}/deactivate", headers=auth_headers)
+        assert off.status_code == 200
+        assert off.json()["is_active"] is False
+
+        on = client.post(f"/field-correspondence-rules/{rule_id}/reactivate", headers=auth_headers)
+        assert on.status_code == 200
+        assert on.json()["is_active"] is True
+
+    def test_update_rule(self, client, auth_headers):
+        create = client.post("/field-correspondence-rules", json={
+            "source_schema": "csv",
+            "source_field": "Identifier",
+            "canonical_target": "canonical_id",
+            "identifier_scheme": "local",
+        }, headers=auth_headers)
+        assert create.status_code == 201
+        rule_id = create.json()["id"]
+
+        update = client.patch(f"/field-correspondence-rules/{rule_id}", json={
+            "source_schema": "csv",
+            "source_field": "Identifier",
+            "canonical_target": "canonical_id",
+            "semantic_concept": "persistent_identifier",
+            "identifier_scheme": "doi",
+            "confidence": 0.99,
+            "evidence": ["corrected_admin_rule"],
+        }, headers=auth_headers)
+
+        assert update.status_code == 200
+        data = update.json()
+        assert data["identifier_scheme"] == "doi"
+        assert data["confidence"] == 0.99
+        assert "corrected_admin_rule" in data["evidence"]
+
+    def test_create_requires_admin(self, client, viewer_headers):
+        resp = client.post("/field-correspondence-rules", json={
+            "source_field": "ID",
+            "canonical_target": "canonical_id",
+        }, headers=viewer_headers)
+        assert resp.status_code == 403
+
+
 class TestAuthorityReadinessAPI:
     def test_get_readiness(self, client, auth_headers):
         resp = client.get("/governance/authority-readiness/dataset_1", headers=auth_headers)

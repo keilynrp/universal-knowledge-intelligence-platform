@@ -14,10 +14,11 @@ import UsersTab from "./UsersTab";
 import WebhooksTab from "./WebhooksTab";
 import WorkspaceResetTab from "./WorkspaceResetTab";
 import DataFixesTab from "./DataFixesTab";
+import FieldCorrespondenceRulesTab from "./FieldCorrespondenceRulesTab";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-type Tab = "preferences" | "account" | "users" | "auth" | "webhooks" | "notifications" | "branding" | "workspace_reset" | "data_fixes";
+type Tab = "preferences" | "account" | "users" | "auth" | "webhooks" | "notifications" | "branding" | "workspace_reset" | "field_rules" | "data_fixes";
 
 
 // ── Main Page ────────────────────────────────────────────────────────────────
@@ -41,6 +42,7 @@ export default function SettingsPage() {
         ...(isAdmin ? [{ id: "notifications", label: t("settings.tab.notifications") }] : []),
         ...(isAdmin ? [{ id: "branding", label: t("settings.tab.branding") }] : []),
         ...(isAdmin ? [{ id: "workspace_reset", label: t("settings.tab.workspace_reset") }] : []),
+        ...(isAdmin ? [{ id: "field_rules", label: "Field rules" }] : []),
         ...(isSuperAdmin ? [{ id: "data_fixes", label: "Data fixes" }] : []),
     ];
 
@@ -76,6 +78,7 @@ export default function SettingsPage() {
             {tab === "notifications"  && isAdmin && <NotificationsTab toast={toast} />}
             {tab === "branding"       && isAdmin && <BrandingTab toast={toast} />}
             {tab === "workspace_reset" && isAdmin && <WorkspaceResetTab toast={toast} />}
+            {tab === "field_rules"     && isAdmin && <FieldCorrespondenceRulesTab toast={toast} />}
             {tab === "data_fixes"      && isSuperAdmin && <DataFixesTab toast={toast} />}
         </div>
     );
