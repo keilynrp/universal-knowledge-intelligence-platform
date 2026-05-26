@@ -134,6 +134,17 @@ def _fix_entity(entity: models.RawEntity, *, requeue_enrichment: bool) -> bool:
     if "affiliation" not in attrs and "affiliations" not in attrs:
         return False
 
+    # Guard against clobbering legitimate data: the bug-era code path
+    # (cbe3255) only ever wrote the scalar ``affiliation`` field. It never
+    # populated ``canonical_affiliations`` or ``author_affiliations`` —
+    # those layers were introduced together with the fix in 19e97ff.
+    # If either structured layer has any entries, the data came from the
+    # modern code path and must not be treated as legacy residue, even
+    # when its joined display string ("Name, Country; ...") does not match
+    # the bare canonical names verbatim.
+    if attrs.get("canonical_affiliations") or attrs.get("author_affiliations"):
+        return False
+
     real_names = _collect_real_institution_names(attrs)
     legacy_aff = attrs.get("affiliation")
     legacy_affs = attrs.get("affiliations")

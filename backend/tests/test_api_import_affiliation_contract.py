@@ -301,3 +301,71 @@ class TestLegacyAffiliationBackfill:
             assert second["fixed"] == 0
         finally:
             self._cleanup(session_factory, [eid])
+
+    def test_does_not_clobber_when_canonical_affiliations_present(self, session_factory):
+        """Race condition guard: once the worker re-enriches an entity via
+        OpenAlex it writes ``attrs.affiliation`` as a joined display string
+        ("Name, Country; ...") AND populates ``canonical_affiliations`` with
+        bare names. The script must not treat the format mismatch as legacy
+        residue, because the bug-era code never wrote canonical_affiliations.
+        """
+        from backend.scripts.fix_legacy_affiliations import run
+
+        eid = self._seed(
+            session_factory,
+            doi="10.0001/canonical-guard",
+            enrichment_source="openalex",
+            attrs={
+                # Joined display string written by the modern OpenAlex adapter.
+                "affiliation": "Stockholm University, SE; Columbia University, US",
+                "affiliations": ["Stockholm University, SE", "Columbia University, US"],
+                # Structured layer that proves the data came from the modern path.
+                "canonical_affiliations": [
+                    {"name": "Stockholm University", "country_code": "SE"},
+                    {"name": "Columbia University", "country_code": "US"},
+                ],
+            },
+        )
+        try:
+            result = run(dry_run=False)
+            with session_factory() as db:
+                entity = db.query(models.RawEntity).filter_by(id=eid).one()
+                attrs = json.loads(entity.attributes_json)
+                # Affiliation must survive intact; no backup created.
+                assert attrs["affiliation"] == "Stockholm University, SE; Columbia University, US"
+                assert attrs["affiliations"] == ["Stockholm University, SE", "Columbia University, US"]
+                assert "_legacy_affiliation_backup" not in attrs
+            # The script may report matched>0 but fixed must be 0 for this row.
+            assert result["fixed"] == 0
+        finally:
+            self._cleanup(session_factory, [eid])
+
+    def test_does_not_clobber_when_author_affiliations_present(self, session_factory):
+        """Symmetric to the canonical_affiliations guard: ``author_affiliations``
+        is the other layer that the bug-era code never wrote. Its presence
+        is equally proof that the data is modern."""
+        from backend.scripts.fix_legacy_affiliations import run
+
+        eid = self._seed(
+            session_factory,
+            doi="10.0001/author-affs-guard",
+            enrichment_source="openalex",
+            attrs={
+                "affiliation": "MIT, US",
+                "author_affiliations": [
+                    {
+                        "author_name": "Doe, Jane",
+                        "institutions": [{"name": "MIT", "country_code": "US"}],
+                    }
+                ],
+            },
+        )
+        try:
+            run(dry_run=False)
+            with session_factory() as db:
+                entity = db.query(models.RawEntity).filter_by(id=eid).one()
+                attrs = json.loads(entity.attributes_json)
+                assert attrs["affiliation"] == "MIT, US"
+                assert "_legacy_affiliation_backup" not in attrs
+        finally:
+            self._cleanup(session_factory, [eid])
