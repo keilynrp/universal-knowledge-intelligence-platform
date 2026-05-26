@@ -1069,6 +1069,17 @@ export default function EntityDetailPage() {
             entity?.enrichment_status ? `Enrichment: ${entity.enrichment_status}` : "Ejecutar enriquecimiento",
         ],
         actionLinks: [
+            {
+                id: "entity-run-enrichment",
+                label: "Enriquecer registro actual",
+                href: `/entities/${entityId}#enrichment`,
+                kind: "mutation",
+                apiPath: `/enrich/row/${entityId}`,
+                method: "POST",
+                requiresConfirmation: true,
+                confirmationLabel: "Se ejecutara el enriquecimiento para este registro y se actualizaran metadatos, DOI, citas, conceptos y fuente si hay coincidencias confiables. Requiere permisos editor/admin.",
+                successLabel: "Enriquecimiento del registro completado.",
+            },
             { id: "entity-enrichment", label: "Ver enriquecimiento", href: `/entities/${entityId}#enrichment`, kind: "preview" },
             { id: "entity-authority", label: "Revisar autoridad", href: `/entities/${entityId}#authority`, kind: "preview" },
             { id: "entity-graph", label: "Abrir relaciones", href: `/entities/${entityId}#graph`, kind: "navigate" },
