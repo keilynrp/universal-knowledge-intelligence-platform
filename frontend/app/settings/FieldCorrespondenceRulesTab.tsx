@@ -37,6 +37,7 @@ type ImpactPreview = {
     entity_id: number;
     primary_label: string | null;
     import_batch_id: number | null;
+    source_field: string;
     current_value: string | null;
     location: string;
   }>;
