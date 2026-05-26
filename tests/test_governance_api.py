@@ -64,6 +64,7 @@ def _reset_mapping_service():
     gov_mod._mapping_service = None
     db = _TestSession()
     db.query(models.AuditLog).filter(models.AuditLog.entity_type == "field_correspondence_rule").delete()
+    db.query(models.RawEntity).delete()
     db.query(models.FieldCorrespondenceRule).delete()
     db.query(models.MappingSuggestionRecord).delete()
     db.commit()
@@ -72,6 +73,7 @@ def _reset_mapping_service():
     gov_mod._mapping_service = None
     db = _TestSession()
     db.query(models.AuditLog).filter(models.AuditLog.entity_type == "field_correspondence_rule").delete()
+    db.query(models.RawEntity).delete()
     db.query(models.FieldCorrespondenceRule).delete()
     db.query(models.MappingSuggestionRecord).delete()
     db.commit()
@@ -512,6 +514,77 @@ class TestFieldCorrespondenceRulesAPI:
         deactivate_details = json.loads(audits[2].details)
         assert deactivate_details["before"]["is_active"] is True
         assert deactivate_details["after"]["is_active"] is False
+
+    def test_rule_audit_endpoint_returns_history(self, client, auth_headers):
+        create = client.post("/field-correspondence-rules", json={
+            "source_schema": "csv",
+            "source_field": "Identifier",
+            "canonical_target": "canonical_id",
+            "identifier_scheme": "local",
+        }, headers=auth_headers)
+        assert create.status_code == 201
+        rule_id = create.json()["id"]
+
+        update = client.patch(f"/field-correspondence-rules/{rule_id}", json={
+            "source_schema": "csv",
+            "source_field": "Identifier",
+            "canonical_target": "canonical_id",
+            "identifier_scheme": "doi",
+        }, headers=auth_headers)
+        assert update.status_code == 200
+
+        resp = client.get(f"/field-correspondence-rules/{rule_id}/audit", headers=auth_headers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert [entry["action"] for entry in data[:2]] == ["UPDATE", "CREATE"]
+        assert data[0]["before"]["identifier_scheme"] == "local"
+        assert data[0]["after"]["identifier_scheme"] == "doi"
+
+    def test_apply_rule_defaults_to_dry_run_then_updates_existing_records(self, client, auth_headers, db_session):
+        entity = models.RawEntity(
+            primary_label="Imported candidate",
+            canonical_id=None,
+            normalized_json='{"ID": "LOCAL-42"}',
+            attributes_json="{}",
+            import_batch_id=7,
+        )
+        db_session.add(entity)
+        db_session.commit()
+
+        create = client.post("/field-correspondence-rules", json={
+            "source_schema": "wos",
+            "source_field": "ID",
+            "canonical_target": "canonical_id",
+            "identifier_scheme": "local",
+        }, headers=auth_headers)
+        assert create.status_code == 201
+        rule_id = create.json()["id"]
+
+        preview = client.post(f"/field-correspondence-rules/{rule_id}/apply", json={
+            "dry_run": True,
+        }, headers=auth_headers)
+        assert preview.status_code == 200
+        assert preview.json()["updated_records"] == 1
+        db_session.expire_all()
+        assert db_session.get(models.RawEntity, entity.id).canonical_id is None
+
+        apply = client.post(f"/field-correspondence-rules/{rule_id}/apply", json={
+            "dry_run": False,
+        }, headers=auth_headers)
+
+        assert apply.status_code == 200
+        data = apply.json()
+        assert data["affected_records"] == 1
+        assert data["updated_records"] == 1
+        db_session.expire_all()
+        assert db_session.get(models.RawEntity, entity.id).canonical_id == "LOCAL-42"
+
+        audit = db_session.query(models.AuditLog).filter_by(
+            entity_type="field_correspondence_rule",
+            action="APPLY",
+        ).one()
+        assert audit.entity_id == rule_id
 
     def test_create_requires_admin(self, client, viewer_headers):
         resp = client.post("/field-correspondence-rules", json={

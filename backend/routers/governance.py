@@ -177,6 +177,29 @@ class GovernanceMetricsResponse(BaseModel):
     ambiguous_sources: list[AmbiguousSourceMetric] = Field(default_factory=list)
 
 
+class FieldCorrespondenceAuditEntry(BaseModel):
+    id: int
+    action: str
+    username: str | None = None
+    created_at: str | None = None
+    before: dict | None = None
+    after: dict | None = None
+
+
+class FieldCorrespondenceApplyPayload(BaseModel):
+    dry_run: bool = True
+    overwrite_existing: bool = False
+    limit: int = Field(default=5000, ge=1, le=50000)
+
+
+class FieldCorrespondenceApplyResponse(FieldCorrespondenceImpactResponse):
+    dry_run: bool
+    overwrite_existing: bool
+    updated_records: int = 0
+    skipped_existing: int = 0
+    skipped_missing_value: int = 0
+
+
 def _json_list(value: str | None) -> list[str]:
     if not value:
         return []
@@ -259,6 +282,41 @@ def _field_correspondence_matches(
         return False
     evidence = metadata.get("evidence") or []
     return any(str(item).startswith(f"{source_schema}_") for item in evidence)
+
+
+def _rule_candidate_query(
+    db: Session,
+    *,
+    org_id: int | None,
+    source_field: str,
+):
+    candidates = db.query(models.RawEntity).filter(
+        (
+            models.RawEntity.normalized_json.like(f'%"{source_field}"%')
+            | models.RawEntity.attributes_json.like(f'%"{source_field}"%')
+        )
+    )
+    if org_id is None:
+        return candidates.filter(models.RawEntity.org_id.is_(None))
+    return candidates.filter(models.RawEntity.org_id == org_id)
+
+
+def _extract_rule_value(
+    entity: models.RawEntity,
+    *,
+    source_field: str,
+    source_schema: str | None,
+    canonical_target: str | None,
+) -> tuple[str | None, object | None]:
+    normalized = _json_object(entity.normalized_json)
+    attrs = _json_object(entity.attributes_json)
+    if source_field in normalized:
+        return "normalized_json", normalized.get(source_field)
+    if _field_correspondence_matches(attrs, source_field=source_field, source_schema=source_schema):
+        if canonical_target and hasattr(entity, canonical_target):
+            return "attributes_json._field_correspondence", getattr(entity, canonical_target)
+        return "attributes_json._field_correspondence", None
+    return None, None
 
 
 # Module-level singleton for legacy tests that use the service without DB.
@@ -479,6 +537,44 @@ def get_field_correspondence_governance_metrics(
     )
 
 
+@router.get(
+    "/field-correspondence-rules/{rule_id}/audit",
+    response_model=list[FieldCorrespondenceAuditEntry],
+    dependencies=[Depends(get_current_user)],
+)
+def list_field_correspondence_rule_audit(
+    rule_id: int = Path(..., ge=1),
+    limit: int = Query(default=25, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return audit history for a governed correspondence rule."""
+    from backend.tenant_access import resolve_request_org_id
+
+    org_id = resolve_request_org_id(db, current_user)
+    rule = db.get(models.FieldCorrespondenceRule, rule_id)
+    if not rule or rule.org_id != org_id:
+        raise HTTPException(status_code=404, detail=f"Rule '{rule_id}' not found")
+
+    entries = db.query(models.AuditLog).filter(
+        models.AuditLog.entity_type == "field_correspondence_rule",
+        models.AuditLog.entity_id == rule_id,
+    ).order_by(models.AuditLog.id.desc()).limit(limit).all()
+
+    response: list[FieldCorrespondenceAuditEntry] = []
+    for entry in entries:
+        details = _json_object(entry.details)
+        response.append(FieldCorrespondenceAuditEntry(
+            id=entry.id,
+            action=entry.action or "",
+            username=entry.username,
+            created_at=entry.created_at.isoformat() if entry.created_at else None,
+            before=details.get("before") if isinstance(details.get("before"), dict) else None,
+            after=details.get("after") if isinstance(details.get("after"), dict) else None,
+        ))
+    return response
+
+
 @router.post(
     "/field-correspondence-rules/impact",
     response_model=FieldCorrespondenceImpactResponse,
@@ -508,33 +604,18 @@ def preview_field_correspondence_rule_impact(
         suggestion_query = suggestion_query.filter(models.MappingSuggestionRecord.source_schema == source_schema)
     matching_suggestions = suggestion_query.count()
 
-    candidates = db.query(models.RawEntity).filter(
-        (
-            models.RawEntity.normalized_json.like(f'%"{source_field}"%')
-            | models.RawEntity.attributes_json.like(f'%"{source_field}"%')
-        )
-    )
-    if org_id is None:
-        candidates = candidates.filter(models.RawEntity.org_id.is_(None))
-    else:
-        candidates = candidates.filter(models.RawEntity.org_id == org_id)
+    candidates = _rule_candidate_query(db, org_id=org_id, source_field=source_field)
 
     affected_records = 0
     affected_import_batches: set[int] = set()
     examples: list[FieldCorrespondenceImpactExample] = []
     for entity in candidates.limit(5000).all():
-        normalized = _json_object(entity.normalized_json)
-        attrs = _json_object(entity.attributes_json)
-        location: str | None = None
-        current_value = None
-        if source_field in normalized:
-            location = "normalized_json"
-            current_value = normalized.get(source_field)
-        elif _field_correspondence_matches(attrs, source_field=source_field, source_schema=source_schema):
-            location = "attributes_json._field_correspondence"
-            if canonical_target and hasattr(entity, canonical_target):
-                current_value = getattr(entity, canonical_target)
-
+        location, current_value = _extract_rule_value(
+            entity,
+            source_field=source_field,
+            source_schema=source_schema,
+            canonical_target=canonical_target,
+        )
         if not location:
             continue
 
@@ -559,6 +640,111 @@ def preview_field_correspondence_rule_impact(
         affected_import_batches=len(affected_import_batches),
         matching_suggestions=matching_suggestions,
         examples=examples,
+    )
+
+
+@router.post(
+    "/field-correspondence-rules/{rule_id}/apply",
+    response_model=FieldCorrespondenceApplyResponse,
+    dependencies=[Depends(require_role("super_admin", "admin"))],
+)
+def apply_field_correspondence_rule(
+    payload: FieldCorrespondenceApplyPayload,
+    rule_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Dry-run or apply an approved rule to existing imported records."""
+    from backend.tenant_access import resolve_request_org_id
+    from datetime import datetime, timezone
+
+    org_id = resolve_request_org_id(db, current_user)
+    rule = db.get(models.FieldCorrespondenceRule, rule_id)
+    if not rule or rule.org_id != org_id:
+        raise HTTPException(status_code=404, detail=f"Rule '{rule_id}' not found")
+    if not rule.is_active:
+        raise HTTPException(status_code=409, detail="Only active rules can be applied")
+    if not rule.canonical_target or not hasattr(models.RawEntity, rule.canonical_target):
+        raise HTTPException(status_code=422, detail="Rule target is not an entity field")
+
+    candidates = _rule_candidate_query(db, org_id=org_id, source_field=rule.source_field)
+    affected_records = 0
+    affected_import_batches: set[int] = set()
+    examples: list[FieldCorrespondenceImpactExample] = []
+    updated_records = 0
+    skipped_existing = 0
+    skipped_missing_value = 0
+
+    for entity in candidates.limit(payload.limit).all():
+        location, current_value = _extract_rule_value(
+            entity,
+            source_field=rule.source_field,
+            source_schema=rule.source_schema,
+            canonical_target=rule.canonical_target,
+        )
+        if not location:
+            continue
+        affected_records += 1
+        if entity.import_batch_id is not None:
+            affected_import_batches.add(entity.import_batch_id)
+
+        existing_value = getattr(entity, rule.canonical_target)
+        if current_value is None or str(current_value).strip() == "":
+            skipped_missing_value += 1
+        elif existing_value not in (None, "") and not payload.overwrite_existing:
+            skipped_existing += 1
+        else:
+            if not payload.dry_run:
+                setattr(entity, rule.canonical_target, str(current_value))
+                entity.updated_at = datetime.now(timezone.utc)
+            updated_records += 1
+
+        if len(examples) < 5:
+            examples.append(FieldCorrespondenceImpactExample(
+                entity_id=entity.id,
+                primary_label=entity.primary_label,
+                import_batch_id=entity.import_batch_id,
+                source_field=rule.source_field,
+                current_value=str(current_value) if current_value is not None else None,
+                location=location,
+            ))
+
+    if not payload.dry_run:
+        db.add(models.AuditLog(
+            action="APPLY",
+            entity_type="field_correspondence_rule",
+            entity_id=rule.id,
+            user_id=getattr(current_user, "id", None),
+            username=getattr(current_user, "username", None),
+            details=json.dumps({
+                "rule": _dump_rule(rule),
+                "dry_run": False,
+                "overwrite_existing": payload.overwrite_existing,
+                "affected_records": affected_records,
+                "updated_records": updated_records,
+                "skipped_existing": skipped_existing,
+                "skipped_missing_value": skipped_missing_value,
+            }, ensure_ascii=False, default=str),
+        ))
+        db.commit()
+
+    return FieldCorrespondenceApplyResponse(
+        source_schema=rule.source_schema,
+        source_field=rule.source_field,
+        canonical_target=rule.canonical_target,
+        affected_records=affected_records,
+        affected_import_batches=len(affected_import_batches),
+        matching_suggestions=db.query(models.MappingSuggestionRecord).filter(
+            models.MappingSuggestionRecord.org_id.is_(None) if org_id is None else models.MappingSuggestionRecord.org_id == org_id,
+            models.MappingSuggestionRecord.source_field == rule.source_field,
+            models.MappingSuggestionRecord.source_schema == rule.source_schema,
+        ).count(),
+        examples=examples,
+        dry_run=payload.dry_run,
+        overwrite_existing=payload.overwrite_existing,
+        updated_records=updated_records,
+        skipped_existing=skipped_existing,
+        skipped_missing_value=skipped_missing_value,
     )
 
 

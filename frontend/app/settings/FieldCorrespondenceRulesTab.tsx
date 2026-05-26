@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import type { ToastVariant } from "../components/ui";
 
@@ -50,6 +50,23 @@ type GovernanceMetrics = {
     source_schema: string;
     pending_suggestions: number;
   }>;
+};
+
+type AuditEntry = {
+  id: number;
+  action: string;
+  username: string | null;
+  created_at: string | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+};
+
+type ApplyResult = ImpactPreview & {
+  dry_run: boolean;
+  overwrite_existing: boolean;
+  updated_records: number;
+  skipped_existing: number;
+  skipped_missing_value: number;
 };
 
 const emptyForm: FormState = {
@@ -117,6 +134,10 @@ export default function FieldCorrespondenceRulesTab({
   const [previewing, setPreviewing] = useState(false);
   const [impactPreview, setImpactPreview] = useState<ImpactPreview | null>(null);
   const [metrics, setMetrics] = useState<GovernanceMetrics | null>(null);
+  const [auditByRule, setAuditByRule] = useState<Record<number, AuditEntry[]>>({});
+  const [expandedAuditRuleId, setExpandedAuditRuleId] = useState<number | null>(null);
+  const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
+  const [applyingRuleId, setApplyingRuleId] = useState<number | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
 
   const fetchMetrics = useCallback(async () => {
@@ -237,6 +258,53 @@ export default function FieldCorrespondenceRulesTab({
       evidence: rule.evidence.join(", "),
     });
     setImpactPreview(null);
+  }
+
+  async function fetchAudit(rule: Rule) {
+    try {
+      const response = await apiFetch(`/field-correspondence-rules/${rule.id}/audit`);
+      const data = await response.json().catch(() => []);
+      if (!response.ok) {
+        throw new Error(data.detail ?? "No se pudo cargar la auditoria.");
+      }
+      setAuditByRule((current) => ({ ...current, [rule.id]: data as AuditEntry[] }));
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "No se pudo cargar la auditoria.", "error");
+    }
+  }
+
+  async function toggleAudit(rule: Rule) {
+    if (expandedAuditRuleId === rule.id) {
+      setExpandedAuditRuleId(null);
+      return;
+    }
+    setExpandedAuditRuleId(rule.id);
+    await fetchAudit(rule);
+  }
+
+  async function applyRule(rule: Rule, dryRun: boolean) {
+    setApplyingRuleId(rule.id);
+    try {
+      const response = await apiFetch(`/field-correspondence-rules/${rule.id}/apply`, {
+        method: "POST",
+        body: JSON.stringify({ dry_run: dryRun, overwrite_existing: false }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.detail ?? "No se pudo procesar la regla.");
+      }
+      setApplyResult(data as ApplyResult);
+      toast(dryRun ? "Preview de produccion calculado." : "Regla aplicada a registros existentes.", "success");
+      await fetchRules();
+      if (!dryRun) {
+        setExpandedAuditRuleId(rule.id);
+        await fetchAudit(rule);
+      }
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "No se pudo procesar la regla.", "error");
+    } finally {
+      setApplyingRuleId(null);
+    }
   }
 
   return (
@@ -404,6 +472,28 @@ export default function FieldCorrespondenceRulesTab({
             )}
           </div>
         )}
+        {applyResult && (
+          <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/20">
+            <div className="grid gap-3 sm:grid-cols-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">Modo</p>
+                <p className="mt-1 text-sm font-semibold text-emerald-950 dark:text-emerald-100">{applyResult.dry_run ? "Preview" : "Aplicado"}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">Actualizables</p>
+                <p className="mt-1 text-lg font-semibold text-emerald-950 dark:text-emerald-100">{applyResult.updated_records}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">Ya tenian valor</p>
+                <p className="mt-1 text-lg font-semibold text-emerald-950 dark:text-emerald-100">{applyResult.skipped_existing}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">Sin valor origen</p>
+                <p className="mt-1 text-lg font-semibold text-emerald-950 dark:text-emerald-100">{applyResult.skipped_missing_value}</p>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
@@ -431,31 +521,73 @@ export default function FieldCorrespondenceRulesTab({
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {rules.map((rule) => (
-                  <tr key={rule.id}>
-                    <td className="py-3 pr-4 font-mono text-xs text-gray-700 dark:text-gray-300">{rule.source_schema ?? "*"}</td>
-                    <td className="py-3 pr-4 font-mono text-xs text-gray-900 dark:text-white">{rule.source_field}</td>
-                    <td className="py-3 pr-4 font-mono text-xs text-emerald-700 dark:text-emerald-300">{rule.canonical_target ?? "ignore"}</td>
-                    <td className="py-3 pr-4 text-xs text-gray-600 dark:text-gray-300">
-                      {rule.semantic_concept ?? "-"}
-                      {rule.identifier_scheme ? ` / ${rule.identifier_scheme}` : ""}
-                    </td>
-                    <td className="py-3 pr-4 text-xs text-gray-500 dark:text-gray-400">{rule.evidence.join(", ") || "-"}</td>
-                    <td className="py-3 pr-4">
-                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${rule.is_active ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}>
-                        {rule.is_active ? "Activa" : "Inactiva"}
-                      </span>
-                    </td>
-                    <td className="py-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button onClick={() => editRule(rule)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">
-                          Editar
-                        </button>
-                        <button onClick={() => void toggleRule(rule)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">
-                          {rule.is_active ? "Desactivar" : "Reactivar"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                  <Fragment key={rule.id}>
+                    <tr>
+                      <td className="py-3 pr-4 font-mono text-xs text-gray-700 dark:text-gray-300">{rule.source_schema ?? "*"}</td>
+                      <td className="py-3 pr-4 font-mono text-xs text-gray-900 dark:text-white">{rule.source_field}</td>
+                      <td className="py-3 pr-4 font-mono text-xs text-emerald-700 dark:text-emerald-300">{rule.canonical_target ?? "ignore"}</td>
+                      <td className="py-3 pr-4 text-xs text-gray-600 dark:text-gray-300">
+                        {rule.semantic_concept ?? "-"}
+                        {rule.identifier_scheme ? ` / ${rule.identifier_scheme}` : ""}
+                      </td>
+                      <td className="py-3 pr-4 text-xs text-gray-500 dark:text-gray-400">{rule.evidence.join(", ") || "-"}</td>
+                      <td className="py-3 pr-4">
+                        <span className={`rounded-full px-2 py-1 text-xs font-semibold ${rule.is_active ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}>
+                          {rule.is_active ? "Activa" : "Inactiva"}
+                        </span>
+                      </td>
+                      <td className="py-3 text-right">
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <button onClick={() => editRule(rule)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">
+                            Editar
+                          </button>
+                          <button onClick={() => void toggleAudit(rule)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">
+                            Historial
+                          </button>
+                          <button onClick={() => void applyRule(rule, true)} disabled={applyingRuleId === rule.id || !rule.is_active} className="rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-950/30">
+                            Preview prod
+                          </button>
+                          <button onClick={() => void applyRule(rule, false)} disabled={applyingRuleId === rule.id || !rule.is_active} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+                            Aplicar
+                          </button>
+                          <button onClick={() => void toggleRule(rule)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">
+                            {rule.is_active ? "Desactivar" : "Reactivar"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {expandedAuditRuleId === rule.id && (
+                      <tr>
+                        <td colSpan={7} className="bg-gray-50 px-4 py-3 dark:bg-gray-950/40">
+                          <div className="space-y-2">
+                            {(auditByRule[rule.id] ?? []).length === 0 ? (
+                              <p className="text-xs text-gray-500 dark:text-gray-400">Sin cambios registrados.</p>
+                            ) : (
+                              (auditByRule[rule.id] ?? []).map((entry) => (
+                                <div key={entry.id} className="rounded-lg bg-white px-3 py-2 text-xs text-gray-700 dark:bg-gray-900 dark:text-gray-300">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <span className="font-semibold">{entry.action}</span>
+                                    <span className="text-gray-500 dark:text-gray-400">{entry.username ?? "-"} · {entry.created_at ? new Date(entry.created_at).toLocaleString() : "-"}</span>
+                                  </div>
+                                  <div className="mt-1 font-mono text-[11px] text-gray-500 dark:text-gray-400">
+                                    {entry.before?.identifier_scheme !== entry.after?.identifier_scheme && (
+                                      <span>scheme: {String(entry.before?.identifier_scheme ?? "-")} → {String(entry.after?.identifier_scheme ?? "-")} </span>
+                                    )}
+                                    {entry.before?.canonical_target !== entry.after?.canonical_target && (
+                                      <span>target: {String(entry.before?.canonical_target ?? "-")} → {String(entry.after?.canonical_target ?? "-")} </span>
+                                    )}
+                                    {entry.before?.is_active !== entry.after?.is_active && (
+                                      <span>active: {String(entry.before?.is_active ?? "-")} → {String(entry.after?.is_active ?? "-")}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
