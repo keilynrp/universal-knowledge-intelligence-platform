@@ -1,6 +1,11 @@
 import logging
 from typing import List, Optional
-from scholarly import scholarly, ProxyGenerator
+
+try:
+    from scholarly import scholarly, ProxyGenerator
+except ModuleNotFoundError:
+    scholarly = None
+    ProxyGenerator = None
 
 from backend.schemas_enrichment import EnrichedRecord
 from backend.adapters.enrichment.base import BaseScientometricAdapter
@@ -16,6 +21,12 @@ class ScholarAdapter(BaseScientometricAdapter):
         """
         Initializes the adapter with optional proxy configuration to avoid IP bans.
         """
+        if scholarly is None or ProxyGenerator is None:
+            logger.info("ScholarAdapter unavailable because optional dependency 'scholarly' is not installed.")
+            self.pg = None
+            self._proxy_ready = False
+            return
+
         self.pg = ProxyGenerator()
         setup_success = False
 
@@ -52,6 +63,9 @@ class ScholarAdapter(BaseScientometricAdapter):
         """
         Searches Google Scholar for a specific publication title.
         """
+        if scholarly is None:
+            return []
+
         try:
             results = []
             search_query = scholarly.search_pubs(title)
@@ -71,6 +85,9 @@ class ScholarAdapter(BaseScientometricAdapter):
         """
         Finds matching works depending on the author's normalized name.
         """
+        if scholarly is None:
+            return []
+
         try:
             results = []
             search_query = scholarly.search_pubs(f"author:{name}")
