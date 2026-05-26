@@ -418,6 +418,42 @@ class TestFieldCorrespondenceRulesAPI:
         assert again.json()["created"] == 0
         assert again.json()["updated"] == data["total_candidates"]
 
+    def test_evidence_scores_prioritize_rules_with_records_and_suggestions(self, client, auth_headers, db_session):
+        rule = models.FieldCorrespondenceRule(
+            source_schema="wos",
+            source_field="ID",
+            canonical_target="canonical_id",
+            identifier_scheme="local",
+            is_active=False,
+        )
+        entity = models.RawEntity(
+            primary_label="Imported candidate",
+            canonical_id=None,
+            normalized_json='{"ID": "LOCAL-42"}',
+            attributes_json="{}",
+            import_batch_id=7,
+        )
+        suggestion = models.MappingSuggestionRecord(
+            source_id="import_batch:7",
+            source_schema="wos",
+            source_field="ID",
+            canonical_target="canonical_id",
+            confidence=0.78,
+            status="review_required",
+        )
+        db_session.add_all([rule, entity, suggestion])
+        db_session.commit()
+
+        resp = client.get("/field-correspondence-rules/evidence-scores?active=false", headers=auth_headers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        scored = next(item for item in data if item["rule_id"] == rule.id)
+        assert scored["score"] == "medium"
+        assert scored["affected_records"] == 1
+        assert scored["matching_suggestions"] == 1
+        assert scored["sample_values"] == ["LOCAL-42"]
+
     def test_preview_rule_impact_counts_records_and_suggestions(self, client, auth_headers, db_session):
         from backend import models
 

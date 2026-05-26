@@ -89,6 +89,14 @@ type RuleJob = {
   reverted: boolean;
 };
 
+type EvidenceScore = {
+  rule_id: number;
+  score: "high" | "medium" | "low" | "none";
+  affected_records: number;
+  matching_suggestions: number;
+  sample_values: string[];
+};
+
 const emptyForm: FormState = {
   source_schema: "",
   source_field: "",
@@ -158,8 +166,10 @@ export default function FieldCorrespondenceRulesTab({
   const [expandedAuditRuleId, setExpandedAuditRuleId] = useState<number | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
   const [jobs, setJobs] = useState<RuleJob[]>([]);
+  const [evidenceScores, setEvidenceScores] = useState<Record<number, EvidenceScore>>({});
   const [applyingRuleId, setApplyingRuleId] = useState<number | null>(null);
   const [rollingBackJobId, setRollingBackJobId] = useState<number | null>(null);
+  const [scoringEvidence, setScoringEvidence] = useState(false);
   const [seedingPreventiveRules, setSeedingPreventiveRules] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
 
@@ -383,6 +393,52 @@ export default function FieldCorrespondenceRulesTab({
     } finally {
       setRollingBackJobId(null);
     }
+  }
+
+  async function scoreEvidence() {
+    setScoringEvidence(true);
+    try {
+      const params = new URLSearchParams();
+      if (sourceSchema.trim()) params.set("source_schema", sourceSchema.trim());
+      if (activeOnly) params.set("active", "true");
+      params.set("limit", "300");
+      const response = await apiFetch(`/field-correspondence-rules/evidence-scores?${params.toString()}`);
+      const data = await response.json().catch(() => []);
+      if (!response.ok) {
+        throw new Error(data.detail ?? "No se pudo calcular la evidencia.");
+      }
+      const scores = data as EvidenceScore[];
+      setEvidenceScores(Object.fromEntries(scores.map((item) => [item.rule_id, item])));
+      toast("Evidencia calculada para las reglas visibles.", "success");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "No se pudo calcular la evidencia.", "error");
+    } finally {
+      setScoringEvidence(false);
+    }
+  }
+
+  function evidenceBadge(score?: EvidenceScore) {
+    if (!score) return <span className="text-xs text-gray-400">-</span>;
+    const styles = {
+      high: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
+      medium: "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
+      low: "bg-sky-100 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300",
+      none: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
+    }[score.score];
+    const label = {
+      high: "Alta",
+      medium: "Media",
+      low: "Baja",
+      none: "Sin evidencia",
+    }[score.score];
+    return (
+      <div className="flex flex-col gap-1">
+        <span className={`w-fit rounded-full px-2 py-1 text-xs font-semibold ${styles}`}>{label}</span>
+        <span className="text-[11px] text-gray-500 dark:text-gray-400">
+          {score.affected_records} rec · {score.matching_suggestions} sug
+        </span>
+      </div>
+    );
   }
 
   return (
@@ -637,7 +693,16 @@ export default function FieldCorrespondenceRulesTab({
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-base font-semibold text-gray-900 dark:text-white">Reglas existentes</h3>
-          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">{rules.length} reglas</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void scoreEvidence()}
+              disabled={scoringEvidence}
+              className="rounded-lg border border-sky-200 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-50 disabled:opacity-50 dark:border-sky-900/40 dark:text-sky-300 dark:hover:bg-sky-950/30"
+            >
+              {scoringEvidence ? "Calculando..." : "Calcular evidencia"}
+            </button>
+            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">{rules.length} reglas</span>
+          </div>
         </div>
         {loading ? (
           <p className="mt-5 text-sm text-gray-500 dark:text-gray-400">Cargando reglas...</p>
@@ -653,6 +718,7 @@ export default function FieldCorrespondenceRulesTab({
                   <th className="py-3 pr-4">Destino</th>
                   <th className="py-3 pr-4">Concepto</th>
                   <th className="py-3 pr-4">Evidencia</th>
+                  <th className="py-3 pr-4">Score</th>
                   <th className="py-3 pr-4">Estado</th>
                   <th className="py-3 text-right">Acciones</th>
                 </tr>
@@ -669,6 +735,7 @@ export default function FieldCorrespondenceRulesTab({
                         {rule.identifier_scheme ? ` / ${rule.identifier_scheme}` : ""}
                       </td>
                       <td className="py-3 pr-4 text-xs text-gray-500 dark:text-gray-400">{rule.evidence.join(", ") || "-"}</td>
+                      <td className="py-3 pr-4">{evidenceBadge(evidenceScores[rule.id])}</td>
                       <td className="py-3 pr-4">
                         <span className={`rounded-full px-2 py-1 text-xs font-semibold ${rule.is_active ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}>
                           {rule.is_active ? "Activa" : "Inactiva"}
@@ -696,7 +763,7 @@ export default function FieldCorrespondenceRulesTab({
                     </tr>
                     {expandedAuditRuleId === rule.id && (
                       <tr>
-                        <td colSpan={7} className="bg-gray-50 px-4 py-3 dark:bg-gray-950/40">
+                        <td colSpan={8} className="bg-gray-50 px-4 py-3 dark:bg-gray-950/40">
                           <div className="space-y-2">
                             {(auditByRule[rule.id] ?? []).length === 0 ? (
                               <p className="text-xs text-gray-500 dark:text-gray-400">Sin cambios registrados.</p>

@@ -184,6 +184,14 @@ class GovernanceMetricsResponse(BaseModel):
     ambiguous_sources: list[AmbiguousSourceMetric] = Field(default_factory=list)
 
 
+class FieldCorrespondenceEvidenceScore(BaseModel):
+    rule_id: int
+    score: str
+    affected_records: int
+    matching_suggestions: int
+    sample_values: list[str] = Field(default_factory=list)
+
+
 class FieldCorrespondenceAuditEntry(BaseModel):
     id: int
     action: str
@@ -394,6 +402,16 @@ def _serialize_field_correspondence_job(log: models.HarmonizationLog) -> FieldCo
         executed_at=log.executed_at.isoformat() if log.executed_at else None,
         reverted=bool(log.reverted),
     )
+
+
+def _evidence_level(affected_records: int, matching_suggestions: int) -> str:
+    if affected_records >= 10 or matching_suggestions >= 3:
+        return "high"
+    if affected_records >= 3 or matching_suggestions >= 1:
+        return "medium"
+    if affected_records >= 1:
+        return "low"
+    return "none"
 
 
 # Module-level singleton for legacy tests that use the service without DB.
@@ -707,6 +725,74 @@ def list_field_correspondence_jobs(
         query = query.filter(models.HarmonizationLog.org_id == org_id)
     logs = query.order_by(models.HarmonizationLog.id.desc()).limit(limit).all()
     return [_serialize_field_correspondence_job(log) for log in logs]
+
+
+@router.get(
+    "/field-correspondence-rules/evidence-scores",
+    response_model=list[FieldCorrespondenceEvidenceScore],
+    dependencies=[Depends(get_current_user)],
+)
+def score_field_correspondence_rule_evidence(
+    active: bool | None = Query(default=None),
+    source_schema: str | None = Query(default=None, max_length=100),
+    limit: int = Query(default=100, ge=1, le=300),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Score visible rules against real records/suggestions so admins can prioritize review."""
+    from backend.tenant_access import resolve_request_org_id
+
+    org_id = resolve_request_org_id(db, current_user)
+    query = db.query(models.FieldCorrespondenceRule)
+    if org_id is None:
+        query = query.filter(models.FieldCorrespondenceRule.org_id.is_(None))
+    else:
+        query = query.filter(models.FieldCorrespondenceRule.org_id == org_id)
+    if active is not None:
+        query = query.filter(models.FieldCorrespondenceRule.is_active.is_(active))
+    if source_schema:
+        query = query.filter(models.FieldCorrespondenceRule.source_schema == source_schema)
+
+    rules = query.order_by(models.FieldCorrespondenceRule.id.desc()).limit(limit).all()
+    scores: list[FieldCorrespondenceEvidenceScore] = []
+    for rule in rules:
+        suggestion_query = db.query(models.MappingSuggestionRecord).filter(
+            models.MappingSuggestionRecord.source_field == rule.source_field,
+        )
+        if org_id is None:
+            suggestion_query = suggestion_query.filter(models.MappingSuggestionRecord.org_id.is_(None))
+        else:
+            suggestion_query = suggestion_query.filter(models.MappingSuggestionRecord.org_id == org_id)
+        if rule.source_schema:
+            suggestion_query = suggestion_query.filter(models.MappingSuggestionRecord.source_schema == rule.source_schema)
+        matching_suggestions = suggestion_query.count()
+
+        affected_records = 0
+        sample_values: list[str] = []
+        candidates = _rule_candidate_query(db, org_id=org_id, source_field=rule.source_field)
+        for entity in candidates.limit(500).all():
+            location, current_value = _extract_rule_value(
+                entity,
+                source_field=rule.source_field,
+                source_schema=rule.source_schema,
+                canonical_target=rule.canonical_target,
+            )
+            if not location:
+                continue
+            affected_records += 1
+            if current_value is not None and len(sample_values) < 3:
+                value = str(current_value)
+                if value not in sample_values:
+                    sample_values.append(value)
+
+        scores.append(FieldCorrespondenceEvidenceScore(
+            rule_id=rule.id,
+            score=_evidence_level(affected_records, matching_suggestions),
+            affected_records=affected_records,
+            matching_suggestions=matching_suggestions,
+            sample_values=sample_values,
+        ))
+    return scores
 
 
 @router.post(
