@@ -16,6 +16,16 @@ export type AssistantContext = {
   activeSources?: number | null;
   leadingGap?: string | null;
   recommendedActions?: string[];
+  actionLinks?: AssistantActionLink[];
+};
+
+export type AssistantActionLink = {
+  id: string;
+  label: string;
+  href: string;
+  kind?: "navigate" | "preview" | "export" | "mutation";
+  requiresConfirmation?: boolean;
+  confirmationLabel?: string;
 };
 
 type AssistantContextValue = {

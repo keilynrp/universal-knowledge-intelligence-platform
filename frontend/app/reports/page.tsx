@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { PageHeader, Badge } from "../components/ui";
 import PilotFlowCard from "../components/PilotFlowCard";
 import { apiFetch } from "../../lib/api";
+import { useAssistantContextRegistration } from "../contexts/AssistantContext";
 import { useDomain } from "../contexts/DomainContext";
 import { useToast } from "../components/ui";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -160,6 +161,27 @@ export default function ReportsPage() {
     { value: "excel", label: "Excel",      desc: tr("page.reports.format.excel", "Multi-sheet workbook with KPIs, entities & concepts"), icon: "📊" },
     { value: "pptx",  label: "PowerPoint", desc: tr("page.reports.format.pptx", "Branded slide deck for presentations"), icon: "📑" },
   ]), [tr]);
+  useAssistantContextRegistration({
+    route: "/reports",
+    domainId: activeDomainId || "all",
+    moduleLabel: "Reportes y briefs",
+    totalEntities: dashboardBrief?.kpis.total_entities ?? null,
+    enrichmentPct: dashboardBrief?.kpis.enrichment_pct ?? null,
+    readinessPct: dashboardBrief?.institutional_benchmark.readiness_pct ?? null,
+    activeSources: selected.size,
+    leadingGap: dashboardBrief?.institutional_benchmark.top_gaps?.[0]?.label ?? null,
+    recommendedActions: [
+      title ? `Titulo: ${title}` : "Definir titulo del reporte",
+      `${selected.size} secciones seleccionadas`,
+      `Formato: ${format}`,
+      `Stakeholder: ${selectedStakeholderProfile}`,
+    ],
+    actionLinks: [
+      { id: "reports-dashboard", label: "Volver al dashboard", href: "/analytics/dashboard", kind: "navigate" },
+      { id: "reports-scheduled", label: "Programar reportes", href: "/reports/scheduled", kind: "preview" },
+      { id: "reports-generate", label: "Generar reporte", href: "/reports", kind: "export", requiresConfirmation: true, confirmationLabel: "La generacion usa las secciones, formato y perfil actualmente seleccionados." },
+    ],
+  });
   const stakeholderOptions: { value: StakeholderProfile; label: string; desc: string }[] = useMemo(() => ([
     {
       value: "leadership",

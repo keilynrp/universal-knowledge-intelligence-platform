@@ -52,6 +52,12 @@ export default function ImportWizardPage() {
             preview ? `${Object.values(mapping).filter(Boolean).length}/${preview.columns.length} columnas mapeadas` : "Cargar preview para detectar columnas",
             domain ? `Dominio destino: ${domain}` : "Confirmar dominio destino",
         ],
+        actionLinks: [
+            { id: "import-catalogs", label: "Crear portal desde importacion", href: "/catalogs", kind: "preview" },
+            { id: "import-authority", label: "Revisar autoridad despues de importar", href: "/authority", kind: "preview" },
+            { id: "import-dashboard", label: "Validar dashboard", href: "/analytics/dashboard", kind: "navigate" },
+            { id: "import-brief", label: "Preparar brief", href: `/reports?preset=pilot-brief&domain=${encodeURIComponent(domain || "default")}`, kind: "export", requiresConfirmation: true, confirmationLabel: "Se abrira reportes para preparar un brief del dominio importado." },
+        ],
     });
     const stepGuidance: Record<number, { title: string; body: string }> = {
         1: {

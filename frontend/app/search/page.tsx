@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, Suspense, ReactElement } from "react"
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
+import { useAssistantContextRegistration } from "../contexts/AssistantContext";
 import { useLanguage } from "../contexts/LanguageContext";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -111,6 +112,24 @@ function SearchInner() {
 
   const totalPages  = results ? Math.ceil(results.total / PAGE_SIZE) : 0;
   const currentPage = Math.floor(skip / PAGE_SIZE) + 1;
+  useAssistantContextRegistration({
+    route: "/search",
+    domainId: "all",
+    moduleLabel: "Busqueda global",
+    totalEntities: results?.total ?? null,
+    activeSources: results ? new Set(results.items.map((item) => item.doc_type)).size : 0,
+    leadingGap: error,
+    recommendedActions: [
+      query ? `Busqueda: ${query}` : "Buscar entidades, autoridad o anotaciones",
+      docType ? `Filtro: ${docType}` : "Sin filtro de tipo",
+      results ? `${results.total} resultados` : "Sin resultados cargados",
+    ],
+    actionLinks: [
+      { id: "search-entities", label: "Abrir catalogo interno", href: "/", kind: "navigate" },
+      { id: "search-authority", label: "Revisar autoridad", href: "/authority", kind: "preview" },
+      { id: "search-rag", label: "Preguntar con RAG", href: "/rag", kind: "navigate" },
+    ],
+  });
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-6">

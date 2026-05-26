@@ -11,7 +11,7 @@ import EntityGraph from "../../components/EntityGraph";
 import RelationshipManager from "../../components/RelationshipManager";
 import PresenceAvatars from "../../components/PresenceAvatars";
 import { useWebSocket } from "@/lib/useWebSocket";
-import { useAssistantContextRegistration } from "../../contexts/AssistantContext";
+import { useAssistantContextRegistration, type AssistantContext } from "../../contexts/AssistantContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 
 type EntityValue =
@@ -1042,7 +1042,7 @@ export default function EntityDetailPage() {
                 .catch(() => {});
         }
     }, [tab, entity, qualityData, attentionData]);
-    const entityAssistantContext = useMemo(() => ({
+    const entityAssistantContext = useMemo<Partial<AssistantContext>>(() => ({
         route: `/entities/${entityId}`,
         domainId: entity?.domain || "all",
         moduleLabel: "Detalle de entidad",
@@ -1067,6 +1067,12 @@ export default function EntityDetailPage() {
             entity?.canonical_id ? `ID canonico: ${entity.canonical_id}` : "Validar ID canonico",
             entity?.entity_type ? `Tipo: ${entity.entity_type}` : "Mapear tipo de entidad",
             entity?.enrichment_status ? `Enrichment: ${entity.enrichment_status}` : "Ejecutar enriquecimiento",
+        ],
+        actionLinks: [
+            { id: "entity-enrichment", label: "Ver enriquecimiento", href: `/entities/${entityId}#enrichment`, kind: "preview" },
+            { id: "entity-authority", label: "Revisar autoridad", href: `/entities/${entityId}#authority`, kind: "preview" },
+            { id: "entity-graph", label: "Abrir relaciones", href: `/entities/${entityId}#graph`, kind: "navigate" },
+            { id: "entity-rag", label: "Preguntar en RAG", href: "/rag", kind: "navigate" },
         ],
     }), [attentionData, entity, entityId, qualityData]);
     useAssistantContextRegistration(entityAssistantContext);

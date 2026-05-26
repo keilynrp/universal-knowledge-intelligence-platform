@@ -18,6 +18,11 @@ export default function RAGPage() {
             "Reindexar el catalogo si faltan fuentes",
             "Comparar respuesta RAG con contexto del dominio",
         ],
+        actionLinks: [
+            { id: "rag-dashboard", label: "Volver al dashboard", href: "/analytics/dashboard", kind: "navigate" },
+            { id: "rag-entities", label: "Abrir catalogo interno", href: "/", kind: "navigate" },
+            { id: "rag-reports", label: "Convertir respuesta en brief", href: "/reports?preset=pilot-brief", kind: "export", requiresConfirmation: true, confirmationLabel: "Se abrira reportes para convertir hallazgos RAG en un brief." },
+        ],
     });
 
     return (

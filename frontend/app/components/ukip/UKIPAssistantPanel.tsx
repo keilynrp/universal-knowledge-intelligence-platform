@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useBranding } from "@/app/contexts/BrandingContext";
-import type { AssistantContext } from "@/app/contexts/AssistantContext";
+import type { AssistantActionLink, AssistantContext } from "@/app/contexts/AssistantContext";
 import BrandLockup from "./BrandLockup";
 
 type AssistantSource = {
@@ -42,6 +43,14 @@ type AssistantMessage = {
   error?: boolean;
 };
 
+type AssistantMemoryItem = {
+  route: string;
+  moduleLabel: string;
+  domainId: string;
+  summary: string;
+  timestamp: string;
+};
+
 type UKIPAssistantPanelProps = {
   context: AssistantContext;
   className?: string;
@@ -69,7 +78,7 @@ function Icon({
   name,
   className = "h-4 w-4",
 }: {
-  name: "bot" | "send" | "minimize" | "expand" | "close" | "database" | "chart" | "spark" | "shield" | "check" | "copy";
+  name: "bot" | "send" | "minimize" | "expand" | "close" | "database" | "chart" | "spark" | "shield" | "check" | "copy" | "arrow";
   className?: string;
 }) {
   const common = {
@@ -147,6 +156,12 @@ function Icon({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M6 16H4V4h10v2" />
         </svg>
       );
+    case "arrow":
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M5 12h14M13 6l6 6-6 6" />
+        </svg>
+      );
     case "bot":
     default:
       return (
@@ -156,6 +171,30 @@ function Icon({
         </svg>
       );
   }
+}
+
+const MEMORY_KEY = "ukip_assistant_session_memory";
+
+function readMemory(): AssistantMemoryItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.sessionStorage.getItem(MEMORY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.slice(0, 8) as AssistantMemoryItem[] : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeMemory(items: AssistantMemoryItem[]) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(MEMORY_KEY, JSON.stringify(items.slice(0, 8)));
+}
+
+function actionTone(action: AssistantActionLink) {
+  if (action.kind === "mutation" || action.requiresConfirmation) return "border-amber-300/25 bg-amber-500/12 text-amber-100 hover:bg-amber-500/18";
+  if (action.kind === "export") return "border-emerald-300/25 bg-emerald-500/12 text-emerald-100 hover:bg-emerald-500/18";
+  return "border-violet-300/25 bg-violet-500/15 text-violet-100 hover:bg-violet-500/22";
 }
 
 export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssistantPanelProps) {
@@ -172,6 +211,8 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
       time: nowLabel(),
     },
   ]);
+  const [memory, setMemory] = useState<AssistantMemoryItem[]>([]);
+  const [pendingAction, setPendingAction] = useState<AssistantActionLink | null>(null);
   const [isSending, setIsSending] = useState(false);
   const requestSeq = useRef(0);
 
@@ -189,6 +230,37 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
     ].filter(Boolean);
     return parts.join(" · ");
   }, [context.totalEntities, enrichmentPct, qualityPct, readinessPct]);
+  const contextualActions = useMemo<AssistantActionLink[]>(() => {
+    if (context.actionLinks?.length) return context.actionLinks.slice(0, 4);
+    const currentRoute = context.route || "/";
+    return [
+      { id: "open-current", label: "Abrir vista actual", href: currentRoute, kind: "navigate" },
+      { id: "open-dashboard", label: "Ver dashboard", href: "/analytics/dashboard", kind: "navigate" },
+      { id: "open-rag", label: "Consultar RAG", href: "/rag", kind: "navigate" },
+      { id: "open-reports", label: "Preparar brief", href: "/reports?preset=pilot-brief", kind: "export", requiresConfirmation: true, confirmationLabel: "Preparar un brief puede usar el contexto actual y abrir el generador de reportes." },
+    ];
+  }, [context.actionLinks, context.route]);
+
+  useEffect(() => {
+    setMemory(readMemory());
+  }, []);
+
+  useEffect(() => {
+    const summary = contextualSummary || context.leadingGap || (context.recommendedActions ?? [])[0] || "Contexto activo";
+    const item: AssistantMemoryItem = {
+      route: context.route,
+      moduleLabel: context.moduleLabel ?? "Workspace UKIP",
+      domainId: context.domainId,
+      summary,
+      timestamp: new Date().toISOString(),
+    };
+    setMemory((current) => {
+      const withoutSameRoute = current.filter((entry) => entry.route !== item.route);
+      const next = [item, ...withoutSameRoute].slice(0, 6);
+      writeMemory(next);
+      return next;
+    });
+  }, [context.domainId, context.leadingGap, context.moduleLabel, context.recommendedActions, context.route, contextualSummary]);
 
   const systemPrompt = useMemo(() => {
     return [
@@ -204,8 +276,17 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
       `fuentes_activas=${connectedSources}`,
       `brecha_principal=${context.leadingGap ?? "sin brecha principal"}`,
       `acciones_recomendadas=${(context.recommendedActions ?? []).join(" | ") || "sin acciones cargadas"}`,
+      `memoria_sesion=${memory.map((item) => `${item.moduleLabel}: ${item.summary}`).join(" -> ") || "sin memoria previa"}`,
     ].join("\n");
-  }, [connectedSources, context]);
+  }, [connectedSources, context, memory]);
+
+  function requestAction(action: AssistantActionLink) {
+    if (action.requiresConfirmation || action.kind === "mutation") {
+      setPendingAction(action);
+      return;
+    }
+    if (typeof window !== "undefined") window.location.href = action.href;
+  }
 
   async function askAssistant(question: string) {
     if (!question.trim() || isSending) return;
@@ -386,9 +467,13 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
                   {!!message.sources?.length && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {message.sources.slice(0, 4).map((source, index) => (
-                        <span key={`${source.entity_id ?? index}-${source.label ?? source.source ?? "source"}`} className="rounded-full border border-violet-300/20 bg-violet-500/15 px-2 py-1 text-[10px] font-semibold text-violet-100">
+                        <Link
+                          key={`${source.entity_id ?? index}-${source.label ?? source.source ?? "source"}`}
+                          href={source.entity_id ? `/entities/${source.entity_id}` : "/rag"}
+                          className="rounded-full border border-violet-300/20 bg-violet-500/15 px-2 py-1 text-[10px] font-semibold text-violet-100 transition hover:border-violet-200 hover:bg-violet-500/25"
+                        >
                           {source.label || source.source || `Fuente ${index + 1}`}
-                        </span>
+                        </Link>
                       ))}
                     </div>
                   )}
@@ -422,6 +507,63 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
               ))}
             </div>
           </div>
+          <div className="rounded-2xl border border-white/10 bg-white/6 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Acciones asistidas</p>
+            <div className="mt-2 grid gap-2">
+              {contextualActions.map((action) => (
+                <button
+                  key={action.id}
+                  type="button"
+                  onClick={() => requestAction(action)}
+                  className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left text-xs font-semibold transition ${actionTone(action)}`}
+                >
+                  <span className="min-w-0 truncate">{action.label}</span>
+                  <Icon name="arrow" className="h-3.5 w-3.5 shrink-0" />
+                </button>
+              ))}
+            </div>
+          </div>
+          {memory.length > 1 && (
+            <div className="rounded-2xl border border-white/10 bg-white/6 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Memoria de sesion</p>
+              <div className="mt-2 space-y-1.5">
+                {memory.slice(1, 4).map((item) => (
+                  <Link
+                    key={`${item.route}-${item.timestamp}`}
+                    href={item.route}
+                    className="block rounded-lg px-2 py-1.5 text-xs text-slate-300 transition hover:bg-white/8 hover:text-white"
+                  >
+                    <span className="font-semibold text-slate-100">{item.moduleLabel}</span>
+                    <span className="ml-1 text-slate-400">{item.summary}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+          {pendingAction && (
+            <div className="rounded-2xl border border-amber-300/25 bg-amber-500/12 p-3 text-xs text-amber-50">
+              <p className="font-semibold">Confirmacion requerida</p>
+              <p className="mt-1 text-amber-100/80">
+                {pendingAction.confirmationLabel ?? "Esta accion puede cambiar el flujo de trabajo o abrir una operacion sensible."}
+              </p>
+              <div className="mt-3 flex gap-2">
+                <Link
+                  href={pendingAction.href}
+                  onClick={() => setPendingAction(null)}
+                  className="rounded-lg bg-amber-300 px-3 py-1.5 font-semibold text-slate-950"
+                >
+                  Continuar
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setPendingAction(null)}
+                  className="rounded-lg border border-amber-200/25 px-3 py-1.5 font-semibold text-amber-50"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <form onSubmit={submit} className="border-t border-white/10 bg-slate-900/96 p-3">

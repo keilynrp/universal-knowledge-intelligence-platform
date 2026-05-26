@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
+import { useAssistantContextRegistration } from "../contexts/AssistantContext";
 import { useLanguage } from "../contexts/LanguageContext";
 import { ErrorBanner, useToast } from "../components/ui";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
@@ -189,6 +190,23 @@ export default function AuditLogPage() {
   // ── Pagination
   const totalPages = page ? Math.ceil(page.total / PAGE_SIZE) : 0;
   const currentPage = Math.floor(skip / PAGE_SIZE) + 1;
+  useAssistantContextRegistration({
+    route: "/audit-log",
+    domainId: "all",
+    moduleLabel: "Auditoria",
+    totalEntities: stats?.total ?? page?.total ?? null,
+    activeSources: stats?.top_users?.length ?? 0,
+    leadingGap: error,
+    recommendedActions: [
+      applied.action ? `Accion filtrada: ${applied.action}` : "Sin filtro de accion",
+      applied.resource ? `Recurso filtrado: ${applied.resource}` : "Sin filtro de recurso",
+      stats ? `${stats.total} eventos auditados` : "Cargar estadisticas de auditoria",
+    ],
+    actionLinks: [
+      { id: "audit-export", label: "Exportar auditoria", href: "/audit-log", kind: "export", requiresConfirmation: true, confirmationLabel: "La exportacion descarga eventos de auditoria filtrados en esta vista." },
+      { id: "audit-settings", label: "Abrir administracion", href: "/settings", kind: "navigate" },
+    ],
+  });
 
   // ── Render
 

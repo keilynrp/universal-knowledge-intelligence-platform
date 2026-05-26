@@ -18,7 +18,7 @@ import ConceptCloud from "../../components/ConceptCloud";
 import DerivedStatusPanel from "../../components/DerivedStatusPanel";
 import EnrichmentSchedulerCard from "../../components/EnrichmentSchedulerCard";
 import EnrichmentSourceHealthCard from "../../components/EnrichmentSourceHealthCard";
-import { useAssistantContextRegistration } from "../../contexts/AssistantContext";
+import { useAssistantContextRegistration, type AssistantContext } from "../../contexts/AssistantContext";
 import { useDomain, isAllScope } from "../../contexts/DomainContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { apiFetch } from "@/lib/api";
@@ -853,7 +853,7 @@ export default function ExecutiveDashboardPage() {
         { year: 5, count: 9 },
         { year: 6, count: 14 },
       ];
-  const assistantContext = useMemo(() => ({
+  const assistantContext = useMemo<Partial<AssistantContext>>(() => ({
     route: "analytics/dashboard",
     domainId: dashboardDomainId,
     moduleLabel: "Dashboard ejecutivo",
@@ -867,10 +867,17 @@ export default function ExecutiveDashboardPage() {
       ?? null,
     leadingGap: leadingGap ? translateRuleLabel(leadingGap.id, leadingGap.label) : null,
     recommendedActions: decisionHighlights.slice(0, 3).map((action) => action.title),
+    actionLinks: [
+      { id: "dashboard-brief", label: "Preparar brief ejecutivo", href: briefBuilderHref, kind: "export", requiresConfirmation: true, confirmationLabel: "Se abrira el generador de reportes con el contexto del dashboard actual." },
+      { id: "dashboard-rag", label: "Consultar evidencia RAG", href: "/rag", kind: "navigate" },
+      { id: "dashboard-graph", label: "Abrir grafo del dominio", href: `/analytics/graph?domain=${encodeURIComponent(data?.domain_id || dashboardDomainId)}`, kind: "navigate" },
+      { id: "dashboard-authority", label: "Revisar autoridad", href: "/authority", kind: "preview" },
+    ],
   }), [
     dashboardDomainId,
     data,
     decisionHighlights,
+    briefBuilderHref,
     leadingGap,
     qualityPct,
     translateRuleLabel,
