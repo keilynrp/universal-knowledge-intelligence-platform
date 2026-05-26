@@ -28,14 +28,28 @@ Each layer in isolation was survivable. Combined, they produced a corpus where 8
 
 ## Capabilities
 
-This change does not introduce capabilities. It retroactively constrains the following existing ones:
+This change introduces nine focused capability contracts that materialize invariants the enrichment/import/repair surfaces had been operating on implicitly:
+
+### New Capabilities
+
+**Enrichment cascade**
+- `adapter-activation-contract`: every concrete `BaseScientometricAdapter` MUST declare `is_active`; reading it MUST be I/O-free.
+- `adapter-credential-policy`: credentialed adapters MUST fail closed when credentials are missing; activation MUST re-evaluate when credentials change.
+
+**Scientific import**
+- `import-affiliation-field-isolation`: `publisher` MUST NOT leak into `affiliation`; affiliation fields MUST be sourced exclusively from `EnrichedRecord.affiliations`.
+- `import-structured-layer-persistence`: `canonical_affiliations` and `author_affiliations` MUST persist independently of the scalar string.
+
+**Data repair**
+- `data-repair-backup-policy`: cleared values MUST be backed up before overwrite; backup keys MUST be hidden from read endpoints.
+- `data-repair-source-scoping`: repairs MUST restrict to provenance-affected sources; matching MUST be case-insensitive and reviewable.
+- `data-repair-structured-layer-guard`: presence of structured affiliation layers MUST short-circuit the legacy detection.
+- `data-repair-idempotency`: re-runs MUST be safe across concurrent worker activity, orgs, and limit-partitioned batches.
+- `data-repair-rbac-and-audit`: data-repair endpoints MUST require `super_admin`, default to dry-run, log every invocation, and reject unknown payload fields.
 
 ### Modified Capabilities
 
-- `enrichment-cascade`: every concrete provider adapter must declare `is_active`. Missing the attribute is treated as a contract violation, not a default-inactive fallback.
-- `scientific-import-api`: `_ingest_records` cannot mirror `rec.publisher` into `attrs.affiliation`. Publisher belongs to `attrs.publisher`. Affiliations come from `rec.affiliations` (joined display) and `rec.canonical_affiliations` / `rec.author_affiliations` (structured).
-- `data-repair-operations`: legacy backfill scripts must skip rows where the structured canonical/author affiliation layers carry data. Their presence is proof of modern provenance.
-- `entity-detail-presentation`: deduplication groups must not cross-reference fields from different semantic groups (journal/venue ≠ affiliation).
+- `entity-detail-presentation`: deduplication groups must not cross-reference fields from different semantic groups (journal/venue ≠ affiliation). Implemented in `EntityTableDetailsModal.tsx`; not granularized into a formal spec here because the modal's dedup behavior is not consumed by other capabilities.
 
 ## Outcome
 
