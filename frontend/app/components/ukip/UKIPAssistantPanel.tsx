@@ -197,6 +197,30 @@ function actionTone(action: AssistantActionLink) {
   return "border-violet-300/25 bg-violet-500/15 text-violet-100 hover:bg-violet-500/22";
 }
 
+function buildBriefHref(context: AssistantContext) {
+  const sections = [
+    "entity_stats",
+    "enrichment_coverage",
+    "impact_projection",
+    "hidden_patterns",
+    "agentic_trace",
+    "decision_recommendations",
+    "institutional_benchmark",
+    "top_secondary_labels",
+    "topic_clusters",
+  ];
+  const params = new URLSearchParams({
+    preset: "pilot-brief",
+    domain: context.domainId || "all",
+    format: "pdf",
+    stakeholder: "leadership",
+    title: `UKIP Pilot Brief - ${context.moduleLabel ?? context.domainId ?? "workspace"}`,
+    sections: sections.join(","),
+  });
+  if (context.totalEntities != null) params.set("rows", String(context.totalEntities));
+  return `/reports?${params.toString()}`;
+}
+
 export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssistantPanelProps) {
   const { branding } = useBranding();
   const [open, setOpen] = useState(true);
@@ -234,13 +258,14 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
   const contextualActions = useMemo<AssistantActionLink[]>(() => {
     if (context.actionLinks?.length) return context.actionLinks.slice(0, 4);
     const currentRoute = context.route || "/";
+    const briefHref = buildBriefHref(context);
     return [
       { id: "open-current", label: "Abrir vista actual", href: currentRoute, kind: "navigate" },
       { id: "open-dashboard", label: "Ver dashboard", href: "/analytics/dashboard", kind: "navigate" },
       { id: "open-rag", label: "Consultar RAG", href: "/rag", kind: "navigate" },
-      { id: "open-reports", label: "Preparar brief", href: "/reports?preset=pilot-brief", kind: "export", requiresConfirmation: true, confirmationLabel: "Preparar un brief puede usar el contexto actual y abrir el generador de reportes." },
+      { id: "open-reports", label: "Preparar brief", href: briefHref, kind: "export", requiresConfirmation: true, confirmationLabel: "Se abrira reportes con dominio, formato PDF, secciones ejecutivas y titulo prellenados desde el contexto actual. Podras revisar antes de generar." },
     ];
-  }, [context.actionLinks, context.route]);
+  }, [context]);
 
   useEffect(() => {
     setMemory(readMemory());

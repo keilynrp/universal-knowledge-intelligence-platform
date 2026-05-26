@@ -179,7 +179,14 @@ export default function ReportsPage() {
     actionLinks: [
       { id: "reports-dashboard", label: "Volver al dashboard", href: "/analytics/dashboard", kind: "navigate" },
       { id: "reports-scheduled", label: "Programar reportes", href: "/reports/scheduled", kind: "preview" },
-      { id: "reports-generate", label: "Generar reporte", href: "/reports", kind: "export", requiresConfirmation: true, confirmationLabel: "La generacion usa las secciones, formato y perfil actualmente seleccionados." },
+      {
+        id: "reports-review-brief",
+        label: "Revisar brief prellenado",
+        href: `/reports?preset=pilot-brief&domain=${encodeURIComponent(activeDomainId || "all")}&format=${encodeURIComponent(format)}&benchmark_profile=${encodeURIComponent(selectedBenchmarkProfile)}&stakeholder=${encodeURIComponent(selectedStakeholderProfile)}&title=${encodeURIComponent(title || `UKIP Pilot Brief - ${activeDomainId || "workspace"}`)}&sections=${encodeURIComponent(Array.from(selected).join(","))}`,
+        kind: "export",
+        requiresConfirmation: true,
+        confirmationLabel: "Se recargara reportes con el preset de brief y los parametros actuales para revision antes de generar.",
+      },
     ],
   });
   const stakeholderOptions: { value: StakeholderProfile; label: string; desc: string }[] = useMemo(() => ([

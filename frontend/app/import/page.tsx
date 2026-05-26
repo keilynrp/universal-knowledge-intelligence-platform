@@ -56,7 +56,14 @@ export default function ImportWizardPage() {
             { id: "import-catalogs", label: "Crear portal desde importacion", href: "/catalogs", kind: "preview" },
             { id: "import-authority", label: "Revisar autoridad despues de importar", href: "/authority", kind: "preview" },
             { id: "import-dashboard", label: "Validar dashboard", href: "/analytics/dashboard", kind: "navigate" },
-            { id: "import-brief", label: "Preparar brief", href: `/reports?preset=pilot-brief&domain=${encodeURIComponent(domain || "default")}`, kind: "export", requiresConfirmation: true, confirmationLabel: "Se abrira reportes para preparar un brief del dominio importado." },
+            {
+                id: "import-brief",
+                label: "Preparar brief",
+                href: `/reports?preset=pilot-brief&domain=${encodeURIComponent(domain || "default")}&rows=${encodeURIComponent(String(preview?.row_count ?? importResult?.total_rows ?? ""))}&format=pdf&title=${encodeURIComponent(`UKIP Pilot Brief - ${domain || "default"}`)}`,
+                kind: "export",
+                requiresConfirmation: true,
+                confirmationLabel: "Se abrira reportes con el dominio y volumen de la importacion prellenados. Podras revisar secciones y formato antes de generar.",
+            },
         ],
     });
     const stepGuidance: Record<number, { title: string; body: string }> = {
