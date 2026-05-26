@@ -6,22 +6,39 @@ Phase 12 Sprint 51 — Audit Log endpoints
 """
 import csv
 import io
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.auth import require_role
+from backend.auth import get_current_user, require_role
 from backend.database import get_db
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/audit-log", tags=["audit"])
+
+
+class AssistantActionAuditPayload(BaseModel):
+    action_id: str = Field(..., min_length=1, max_length=120)
+    label: str = Field(..., min_length=1, max_length=240)
+    href: Optional[str] = Field(default=None, max_length=512)
+    kind: Optional[str] = Field(default=None, max_length=40)
+    route: Optional[str] = Field(default=None, max_length=512)
+    module_label: Optional[str] = Field(default=None, max_length=160)
+    domain_id: Optional[str] = Field(default=None, max_length=120)
+    api_path: Optional[str] = Field(default=None, max_length=512)
+    method: Optional[str] = Field(default=None, max_length=12)
+    status: str = Field(default="started", max_length=40)
+    status_code: Optional[int] = None
+    detail: Optional[str] = Field(default=None, max_length=1000)
 
 
 # ── Query helper ──────────────────────────────────────────────────────────────
@@ -49,6 +66,34 @@ def _base_query(
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@router.post("/assistant-action")
+def record_assistant_action(
+    payload: AssistantActionAuditPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Record a contextual UKIP Assistant action without granting audit-log access."""
+    endpoint = payload.api_path or payload.href or payload.route or "/assistant"
+    details = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
+    entry = models.AuditLog(
+        action="ASSISTANT_ACTION",
+        entity_type="assistant_action",
+        user_id=current_user.id,
+        username=current_user.username,
+        endpoint=endpoint,
+        method=(payload.method or "ASSISTANT").upper(),
+        status_code=payload.status_code,
+        ip_address=request.client.host if request.client else None,
+        details=json.dumps(details),
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    logger.info("Recorded assistant action audit event id=%s action_id=%s", entry.id, payload.action_id)
+    return {"recorded": True, "id": entry.id}
+
 
 @router.get("")
 def list_audit_log(

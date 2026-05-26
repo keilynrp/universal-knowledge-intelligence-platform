@@ -306,17 +306,48 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
     ].join("\n");
   }, [connectedSources, context, memory]);
 
+  async function recordAssistantAction(
+    action: AssistantActionLink,
+    status: "started" | "success" | "error" | "navigated",
+    statusCode?: number,
+    detail?: string,
+  ) {
+    try {
+      await apiFetch("/audit-log/assistant-action", {
+        method: "POST",
+        body: JSON.stringify({
+          action_id: action.id,
+          label: action.label,
+          href: action.href,
+          kind: action.kind,
+          route: context.route,
+          module_label: context.moduleLabel ?? "Workspace UKIP",
+          domain_id: context.domainId,
+          api_path: action.apiPath,
+          method: action.method ?? (action.apiPath ? "POST" : undefined),
+          status,
+          status_code: statusCode,
+          detail,
+        }),
+      });
+    } catch {
+      // Assistant auditing is best-effort and must never block the user action.
+    }
+  }
+
   function requestAction(action: AssistantActionLink) {
     if (action.requiresConfirmation || action.kind === "mutation") {
       setPendingAction(action);
       return;
     }
+    void recordAssistantAction(action, "navigated");
     if (typeof window !== "undefined") window.location.href = action.href;
   }
 
   async function executeAction(action: AssistantActionLink) {
     if (!action.apiPath) {
       setPendingAction(null);
+      void recordAssistantAction(action, "navigated");
       if (typeof window !== "undefined") window.location.href = action.href;
       return;
     }
@@ -334,13 +365,17 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
       },
     ]);
 
+    let actionErrorRecorded = false;
     try {
+      await recordAssistantAction(action, "started");
       const response = await apiFetch(action.apiPath, {
         method: action.method ?? "POST",
       });
       if (action.responseType === "blob") {
         if (!response.ok) {
           const detail = await response.text().catch(() => `HTTP ${response.status}`);
+          await recordAssistantAction(action, "error", response.status, detail);
+          actionErrorRecorded = true;
           throw new Error(detail || `HTTP ${response.status}`);
         }
         const blob = await response.blob();
@@ -358,15 +393,18 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
                   pending: false,
                   content: action.successLabel ?? "Exportacion descargada correctamente.",
                 }
-              : message,
+            : message,
           ),
         );
+        await recordAssistantAction(action, "success", response.status, "blob_downloaded");
         setPendingAction(null);
         return;
       }
       const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
       if (!response.ok) {
         const detail = payload && typeof payload.detail === "string" ? payload.detail : `HTTP ${response.status}`;
+        await recordAssistantAction(action, "error", response.status, detail);
+        actionErrorRecorded = true;
         throw new Error(detail);
       }
       const indexed = typeof payload?.indexed === "number" ? ` (${payload.indexed.toLocaleString()} registros indexados)` : "";
@@ -382,8 +420,12 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
             : message,
         ),
       );
+      await recordAssistantAction(action, "success", response.status, "json_response");
       setPendingAction(null);
     } catch (error) {
+      if (!actionErrorRecorded) {
+        await recordAssistantAction(action, "error", undefined, error instanceof Error ? error.message : "Unknown error");
+      }
       setMessages((current) =>
         current.map((message) =>
           message.id === actionMessageId
