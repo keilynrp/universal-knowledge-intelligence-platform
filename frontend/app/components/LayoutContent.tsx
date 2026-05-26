@@ -6,11 +6,14 @@ import { useSidebar } from "./SidebarProvider";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import { useAuth } from "../contexts/AuthContext";
+import { useAssistant } from "../contexts/AssistantContext";
 import { AppShell, PageShell } from "./layout";
+import { UKIPAssistantPanel } from "./ukip";
 
 export default function LayoutContent({ children }: { children: React.ReactNode }) {
   const { collapsed } = useSidebar();
   const { isAuthenticated, hydrated } = useAuth();
+  const { context: assistantContext } = useAssistant();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -48,6 +51,7 @@ export default function LayoutContent({ children }: { children: React.ReactNode 
   return (
     <AppShell sidebar={<Sidebar />} header={<Header />} collapsed={collapsed}>
       <PageShell constrained={!collapsed}>{children}</PageShell>
+      <UKIPAssistantPanel context={assistantContext} />
     </AppShell>
   );
 }

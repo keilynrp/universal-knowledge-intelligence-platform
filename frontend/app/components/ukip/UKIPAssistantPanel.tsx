@@ -3,20 +3,8 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useBranding } from "@/app/contexts/BrandingContext";
+import type { AssistantContext } from "@/app/contexts/AssistantContext";
 import BrandLockup from "./BrandLockup";
-
-type AssistantContext = {
-  route: string;
-  domainId: string;
-  totalEntities?: number | null;
-  enrichedCount?: number | null;
-  enrichmentPct?: number | null;
-  qualityPct?: number | null;
-  readinessPct?: number | null;
-  activeSources?: number | null;
-  leadingGap?: string | null;
-  recommendedActions?: string[];
-};
 
 type AssistantSource = {
   entity_id?: number | null;
@@ -204,8 +192,9 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
 
   const systemPrompt = useMemo(() => {
     return [
-      "Contexto actual del dashboard UKIP:",
+      "Contexto actual de UKIP:",
       `ruta=${context.route}`,
+      `modulo=${context.moduleLabel ?? "Workspace UKIP"}`,
       `dominio=${context.domainId}`,
       `registros=${context.totalEntities ?? "desconocido"}`,
       `enriquecidos=${context.enrichedCount ?? "desconocido"}`,
@@ -351,7 +340,7 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
           <div className="mt-3 rounded-xl border border-white/10 bg-white/8 px-3 py-2 text-xs text-slate-200">
             <div className="flex items-center gap-2 font-semibold text-emerald-300">
               <Icon name="check" className="h-3.5 w-3.5" />
-              Conectado al circuito de enriquecimiento
+              Conectado a {context.moduleLabel ?? "UKIP"}
             </div>
             <p className="mt-1 line-clamp-2 text-slate-300">{contextualSummary || "Contexto del dashboard activo"}</p>
           </div>
@@ -494,4 +483,4 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
   );
 }
 
-export type { AssistantContext, UKIPAssistantPanelProps };
+export type { UKIPAssistantPanelProps };

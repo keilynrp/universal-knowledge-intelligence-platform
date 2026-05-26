@@ -10,6 +10,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { BrandingProvider } from "./contexts/BrandingContext";
 import { PilotModeProvider } from "./contexts/PilotModeContext";
 import { EnrichmentProvider } from "./contexts/EnrichmentContext";
+import { AssistantProvider } from "./contexts/AssistantContext";
 import FaviconInjector from "./components/FaviconInjector";
 import { ToastProvider } from "./components/ui/Toast";
 import { DEFAULT_FAVICON_PATH } from "./lib/brandingAssets";
@@ -84,7 +85,9 @@ export default function RootLayout({
                     <EnrichmentProvider>
                       <SidebarProvider>
                         <ToastProvider>
-                          <LayoutContent>{children}</LayoutContent>
+                          <AssistantProvider>
+                            <LayoutContent>{children}</LayoutContent>
+                          </AssistantProvider>
                         </ToastProvider>
                       </SidebarProvider>
                     </EnrichmentProvider>

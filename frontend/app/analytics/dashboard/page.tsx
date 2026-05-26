@@ -18,7 +18,7 @@ import ConceptCloud from "../../components/ConceptCloud";
 import DerivedStatusPanel from "../../components/DerivedStatusPanel";
 import EnrichmentSchedulerCard from "../../components/EnrichmentSchedulerCard";
 import EnrichmentSourceHealthCard from "../../components/EnrichmentSourceHealthCard";
-import { UKIPAssistantPanel } from "../../components/ukip";
+import { useAssistantContextRegistration } from "../../contexts/AssistantContext";
 import { useDomain, isAllScope } from "../../contexts/DomainContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { apiFetch } from "@/lib/api";
@@ -856,6 +856,7 @@ export default function ExecutiveDashboardPage() {
   const assistantContext = useMemo(() => ({
     route: "analytics/dashboard",
     domainId: dashboardDomainId,
+    moduleLabel: "Dashboard ejecutivo",
     totalEntities: data?.kpis.total_entities ?? null,
     enrichedCount: data?.kpis.enriched_count ?? null,
     enrichmentPct: data?.kpis.enrichment_pct ?? null,
@@ -874,6 +875,7 @@ export default function ExecutiveDashboardPage() {
     qualityPct,
     translateRuleLabel,
   ]);
+  useAssistantContextRegistration(assistantContext);
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_22%_0%,rgba(124,58,237,0.08),transparent_28%),linear-gradient(180deg,#fbfbff_0%,#ffffff_52%,#fbfbff_100%)] px-5 py-7 text-[var(--ukip-text)] sm:px-8 lg:px-10">
@@ -1810,7 +1812,6 @@ export default function ExecutiveDashboardPage() {
         )}
       </div>
       </div>
-      <UKIPAssistantPanel context={assistantContext} />
     </main>
   );
 }
