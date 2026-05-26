@@ -20,6 +20,17 @@ class OpenAlexAdapter(BaseScientometricAdapter):
         self.client = httpx.Client(timeout=10.0)
         self.polite_email = polite_email
 
+    @property
+    def is_active(self) -> bool:
+        """OpenAlex is always active — no API key required (polite pool via mailto).
+
+        This must stay declared explicitly because the enrichment cascade
+        treats a missing attribute as inactive (``getattr(adapter, 'is_active',
+        False)`` in ``backend.enrichment_worker``). Without it, OpenAlex is
+        silently skipped and affiliation-rich data never reaches RawEntity.
+        """
+        return True
+
     def _build_params(self, custom_params: dict) -> dict:
         params = custom_params.copy()
         if self.polite_email:

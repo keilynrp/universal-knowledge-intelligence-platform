@@ -29,8 +29,17 @@ class ScholarAdapter(BaseScientometricAdapter):
         if setup_success:
             scholarly.use_proxy(self.pg)
             logger.info("Proxy successfully configured for ScholarAdapter.")
+            self._proxy_ready = True
         else:
             logger.warning("ScholarAdapter running WITHOUT proxy. High risk of IP ban.")
+            self._proxy_ready = False
+
+    @property
+    def is_active(self) -> bool:
+        """Scholar requires a proxy to be safely usable. Without it the
+        adapter is considered inactive so the cascade skips it explicitly
+        (the enrichment_worker treats missing ``is_active`` as inactive)."""
+        return bool(getattr(self, "_proxy_ready", False))
 
     def search_by_doi(self, doi: str) -> Optional[EnrichedRecord]:
         """
