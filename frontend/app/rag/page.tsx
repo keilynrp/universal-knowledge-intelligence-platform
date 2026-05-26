@@ -19,6 +19,17 @@ export default function RAGPage() {
             "Comparar respuesta RAG con contexto del dominio",
         ],
         actionLinks: [
+            {
+                id: "rag-reindex",
+                label: "Reindexar RAG",
+                href: "/rag",
+                kind: "mutation",
+                apiPath: "/rag/index",
+                method: "POST",
+                requiresConfirmation: true,
+                confirmationLabel: "Se reconstruira el indice RAG con las entidades enriquecidas disponibles. Puede tardar y requiere rol admin.",
+                successLabel: "Indice RAG reconstruido correctamente.",
+            },
             { id: "rag-dashboard", label: "Volver al dashboard", href: "/analytics/dashboard", kind: "navigate" },
             { id: "rag-entities", label: "Abrir catalogo interno", href: "/", kind: "navigate" },
             { id: "rag-reports", label: "Convertir respuesta en brief", href: "/reports?preset=pilot-brief", kind: "export", requiresConfirmation: true, confirmationLabel: "Se abrira reportes para convertir hallazgos RAG en un brief." },

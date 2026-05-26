@@ -214,6 +214,7 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
   const [memory, setMemory] = useState<AssistantMemoryItem[]>([]);
   const [pendingAction, setPendingAction] = useState<AssistantActionLink | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [executingActionId, setExecutingActionId] = useState<string | null>(null);
   const requestSeq = useRef(0);
 
   const connectedSources = context.activeSources ?? 0;
@@ -286,6 +287,67 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
       return;
     }
     if (typeof window !== "undefined") window.location.href = action.href;
+  }
+
+  async function executeAction(action: AssistantActionLink) {
+    if (!action.apiPath) {
+      setPendingAction(null);
+      if (typeof window !== "undefined") window.location.href = action.href;
+      return;
+    }
+
+    setExecutingActionId(action.id);
+    const actionMessageId = `action-${Date.now()}`;
+    setMessages((current) => [
+      ...current,
+      {
+        id: actionMessageId,
+        role: "assistant",
+        content: `Ejecutando accion controlada: ${action.label}...`,
+        time: nowLabel(),
+        pending: true,
+      },
+    ]);
+
+    try {
+      const response = await apiFetch(action.apiPath, {
+        method: action.method ?? "POST",
+      });
+      const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+      if (!response.ok) {
+        const detail = payload && typeof payload.detail === "string" ? payload.detail : `HTTP ${response.status}`;
+        throw new Error(detail);
+      }
+      const indexed = typeof payload?.indexed === "number" ? ` (${payload.indexed.toLocaleString()} registros indexados)` : "";
+      const skipped = typeof payload?.skipped === "number" && payload.skipped > 0 ? `, ${payload.skipped.toLocaleString()} omitidos` : "";
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === actionMessageId
+            ? {
+                ...message,
+                pending: false,
+                content: `${action.successLabel ?? "Accion completada."}${indexed}${skipped}`,
+              }
+            : message,
+        ),
+      );
+      setPendingAction(null);
+    } catch (error) {
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === actionMessageId
+            ? {
+                ...message,
+                pending: false,
+                error: true,
+                content: error instanceof Error ? `No se pudo ejecutar "${action.label}": ${error.message}` : `No se pudo ejecutar "${action.label}".`,
+              }
+            : message,
+        ),
+      );
+    } finally {
+      setExecutingActionId(null);
+    }
   }
 
   async function askAssistant(question: string) {
@@ -547,13 +609,14 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
                 {pendingAction.confirmationLabel ?? "Esta accion puede cambiar el flujo de trabajo o abrir una operacion sensible."}
               </p>
               <div className="mt-3 flex gap-2">
-                <Link
-                  href={pendingAction.href}
-                  onClick={() => setPendingAction(null)}
-                  className="rounded-lg bg-amber-300 px-3 py-1.5 font-semibold text-slate-950"
+                <button
+                  type="button"
+                  onClick={() => void executeAction(pendingAction)}
+                  disabled={executingActionId === pendingAction.id}
+                  className="rounded-lg bg-amber-300 px-3 py-1.5 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Continuar
-                </Link>
+                  {executingActionId === pendingAction.id ? "Ejecutando..." : "Continuar"}
+                </button>
                 <button
                   type="button"
                   onClick={() => setPendingAction(null)}

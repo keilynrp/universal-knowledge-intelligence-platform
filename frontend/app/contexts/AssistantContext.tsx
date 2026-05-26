@@ -24,6 +24,9 @@ export type AssistantActionLink = {
   label: string;
   href: string;
   kind?: "navigate" | "preview" | "export" | "mutation";
+  apiPath?: string;
+  method?: "GET" | "POST" | "PUT" | "DELETE";
+  successLabel?: string;
   requiresConfirmation?: boolean;
   confirmationLabel?: string;
 };
