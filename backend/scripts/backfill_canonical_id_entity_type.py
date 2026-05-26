@@ -237,6 +237,32 @@ def _fix_entity(
     return result
 
 
+def _would_violate_unique(
+    db,
+    entity: models.RawEntity,
+    new_canonical_id: Optional[str],
+    new_entity_type: Optional[str],
+) -> bool:
+    """Check whether applying the proposed values would violate the
+    ``uq_raw_entities_canonical_global`` unique constraint on
+    ``(domain, entity_type, canonical_id)``."""
+    cid = new_canonical_id or entity.canonical_id
+    etype = new_entity_type or entity.entity_type
+    if not cid or not etype:
+        return False
+    existing = (
+        db.query(models.RawEntity.id)
+        .filter(
+            models.RawEntity.domain == entity.domain,
+            models.RawEntity.entity_type == etype,
+            models.RawEntity.canonical_id == cid,
+            models.RawEntity.id != entity.id,
+        )
+        .first()
+    )
+    return existing is not None
+
+
 def run(
     *,
     dry_run: bool,
@@ -248,10 +274,38 @@ def run(
     scanned = 0
     fixed_canonical = 0
     fixed_entity_type = 0
+    skipped_duplicates = 0
+    # Track (domain, entity_type, canonical_id) tuples already claimed in this
+    # run so we can detect in-batch collisions that the DB check would miss
+    # (dirty reads inside the same transaction aren't visible to SQL queries).
+    claimed: set[tuple[str, str, str]] = set()
+    # Pre-populate with existing non-NULL rows so we also catch cross-batch dupes.
+    for row in db.query(
+        models.RawEntity.domain,
+        models.RawEntity.entity_type,
+        models.RawEntity.canonical_id,
+    ).filter(
+        models.RawEntity.canonical_id.isnot(None),
+        models.RawEntity.entity_type.isnot(None),
+    ):
+        claimed.add((row[0] or "", row[1], row[2]))
+
     try:
         for entity in _candidate_query(db, org_id=org_id, limit=limit):
             scanned += 1
             result = _fix_entity(entity, only=only)
+            if not any(result.values()):
+                continue
+            # Build the composite key that would result from this fix
+            cid = entity.canonical_id
+            etype = entity.entity_type
+            if cid and etype:
+                key = (entity.domain or "", etype, cid)
+                if key in claimed:
+                    db.expire(entity)
+                    skipped_duplicates += 1
+                    continue
+                claimed.add(key)
             if result["canonical_id"]:
                 fixed_canonical += 1
             if result["entity_type"]:
@@ -264,6 +318,7 @@ def run(
             "scanned": scanned,
             "fixed_canonical_id": fixed_canonical,
             "fixed_entity_type": fixed_entity_type,
+            "skipped_duplicates": skipped_duplicates,
         }
     finally:
         db.close()
@@ -302,7 +357,8 @@ def main() -> None:
     print(
         f"{mode}: scanned={result['scanned']} "
         f"fixed_canonical_id={result['fixed_canonical_id']} "
-        f"fixed_entity_type={result['fixed_entity_type']}"
+        f"fixed_entity_type={result['fixed_entity_type']} "
+        f"skipped_duplicates={result['skipped_duplicates']}"
     )
 
 
