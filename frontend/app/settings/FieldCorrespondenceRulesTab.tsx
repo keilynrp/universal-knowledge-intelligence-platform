@@ -28,6 +28,30 @@ type FormState = {
   evidence: string;
 };
 
+type ImpactPreview = {
+  affected_records: number;
+  affected_import_batches: number;
+  matching_suggestions: number;
+  examples: Array<{
+    entity_id: number;
+    primary_label: string | null;
+    import_batch_id: number | null;
+    current_value: string | null;
+    location: string;
+  }>;
+};
+
+type GovernanceMetrics = {
+  active_rules: number;
+  inactive_rules: number;
+  pending_suggestions: number;
+  rejected_false_positives: number;
+  ambiguous_sources: Array<{
+    source_schema: string;
+    pending_suggestions: number;
+  }>;
+};
+
 const emptyForm: FormState = {
   source_schema: "",
   source_field: "",
@@ -90,7 +114,22 @@ export default function FieldCorrespondenceRulesTab({
   const [activeOnly, setActiveOnly] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [impactPreview, setImpactPreview] = useState<ImpactPreview | null>(null);
+  const [metrics, setMetrics] = useState<GovernanceMetrics | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+
+  const fetchMetrics = useCallback(async () => {
+    try {
+      const response = await apiFetch("/field-correspondence-rules/governance-metrics");
+      const data = await response.json().catch(() => null);
+      if (response.ok) {
+        setMetrics(data as GovernanceMetrics);
+      }
+    } catch {
+      setMetrics(null);
+    }
+  }, []);
 
   const fetchRules = useCallback(async () => {
     setLoading(true);
@@ -105,12 +144,13 @@ export default function FieldCorrespondenceRulesTab({
         throw new Error(data.detail ?? "No se pudieron cargar las reglas.");
       }
       setRules(data as Rule[]);
+      await fetchMetrics();
     } catch (error) {
       toast(error instanceof Error ? error.message : "No se pudieron cargar las reglas.", "error");
     } finally {
       setLoading(false);
     }
-  }, [activeOnly, sourceSchema, toast]);
+  }, [activeOnly, fetchMetrics, sourceSchema, toast]);
 
   useEffect(() => {
     void fetchRules();
@@ -136,11 +176,35 @@ export default function FieldCorrespondenceRulesTab({
       }
       toast(form.id ? "Regla actualizada." : "Regla creada.", "success");
       setForm(emptyForm);
+      setImpactPreview(null);
       await fetchRules();
     } catch (error) {
       toast(error instanceof Error ? error.message : "No se pudo guardar la regla.", "error");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function previewImpact() {
+    if (!form.source_field.trim()) {
+      toast("El campo de origen es obligatorio para previsualizar.", "error");
+      return;
+    }
+    setPreviewing(true);
+    try {
+      const response = await apiFetch("/field-correspondence-rules/impact", {
+        method: "POST",
+        body: JSON.stringify(buildPayload(form)),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.detail ?? "No se pudo calcular el impacto.");
+      }
+      setImpactPreview(data as ImpactPreview);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "No se pudo calcular el impacto.", "error");
+    } finally {
+      setPreviewing(false);
     }
   }
 
@@ -172,10 +236,37 @@ export default function FieldCorrespondenceRulesTab({
       confidence: String(rule.confidence),
       evidence: rule.evidence.join(", "),
     });
+    setImpactPreview(null);
   }
 
   return (
     <div className="space-y-5">
+      {metrics && (
+        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <div className="grid gap-4 md:grid-cols-4">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Reglas activas</p>
+              <p className="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">{metrics.active_rules}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Sugerencias pendientes</p>
+              <p className="mt-1 text-2xl font-semibold text-amber-700 dark:text-amber-300">{metrics.pending_suggestions}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Falsos positivos rechazados</p>
+              <p className="mt-1 text-2xl font-semibold text-red-700 dark:text-red-300">{metrics.rejected_false_positives}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Fuentes ambiguas</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                {metrics.ambiguous_sources.length
+                  ? metrics.ambiguous_sources.map((source) => `${source.source_schema} (${source.pending_suggestions})`).join(", ")
+                  : "-"}
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
         <div className="grid gap-4 lg:grid-cols-[1fr,auto,auto]">
           <label className="block">
@@ -264,15 +355,55 @@ export default function FieldCorrespondenceRulesTab({
           >
             {saving ? "Guardando..." : form.id ? "Actualizar regla" : "Crear regla"}
           </button>
+          <button
+            onClick={() => void previewImpact()}
+            disabled={previewing}
+            className="rounded-lg border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-950/30"
+          >
+            {previewing ? "Calculando..." : "Previsualizar impacto"}
+          </button>
           {form.id && (
             <button
-              onClick={() => setForm(emptyForm)}
+              onClick={() => {
+                setForm(emptyForm);
+                setImpactPreview(null);
+              }}
               className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               Cancelar edicion
             </button>
           )}
         </div>
+        {impactPreview && (
+          <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300">Registros</p>
+                <p className="mt-1 text-lg font-semibold text-amber-950 dark:text-amber-100">{impactPreview.affected_records}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300">Batches</p>
+                <p className="mt-1 text-lg font-semibold text-amber-950 dark:text-amber-100">{impactPreview.affected_import_batches}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300">Sugerencias</p>
+                <p className="mt-1 text-lg font-semibold text-amber-950 dark:text-amber-100">{impactPreview.matching_suggestions}</p>
+              </div>
+            </div>
+            {impactPreview.examples.length > 0 && (
+              <div className="mt-4 space-y-2">
+                {impactPreview.examples.map((example) => (
+                  <div key={example.entity_id} className="rounded-lg bg-white/70 px-3 py-2 text-xs text-amber-950 dark:bg-gray-950/50 dark:text-amber-100">
+                    <span className="font-semibold">#{example.entity_id}</span>
+                    {example.primary_label ? ` · ${example.primary_label}` : ""}
+                    {example.current_value ? ` · ${example.current_value}` : ""}
+                    <span className="text-amber-700 dark:text-amber-300"> · {example.location}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">

@@ -33,6 +33,8 @@ export default function MappingSuggestionReview({
   const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [rejectRationale, setRejectRationale] = useState("");
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [bulkAction, setBulkAction] = useState<"accept" | "reject" | null>(null);
 
   const fetchSuggestions = useCallback(async () => {
     setLoading(true);
@@ -42,7 +44,11 @@ export default function MappingSuggestionReview({
         : "/mapping-suggestions";
       const res = await apiFetch(url);
       if (res.ok) {
-        setSuggestions(await res.json());
+        const data = await res.json();
+        setSuggestions(data);
+        setSelectedIds((current) =>
+          current.filter((id) => data.some((suggestion: MappingSuggestion) => suggestion.id === id)),
+        );
       }
     } finally {
       setLoading(false);
@@ -60,6 +66,7 @@ export default function MappingSuggestionReview({
         method: "POST",
       });
       if (res.ok) {
+        setSelectedIds((current) => current.filter((selectedId) => selectedId !== id));
         await fetchSuggestions();
         onUpdate?.();
       }
@@ -80,6 +87,7 @@ export default function MappingSuggestionReview({
       if (res.ok) {
         setRejectingId(null);
         setRejectRationale("");
+        setSelectedIds((current) => current.filter((selectedId) => selectedId !== id));
         await fetchSuggestions();
         onUpdate?.();
       }
@@ -87,6 +95,42 @@ export default function MappingSuggestionReview({
       setActionLoading(null);
     }
   }
+
+  async function handleBulkReview(action: "accept" | "reject") {
+    if (!selectedIds.length) return;
+    if (action === "reject" && !rejectRationale.trim()) return;
+    setBulkAction(action);
+    try {
+      const res = await apiFetch(`/mapping-suggestions/bulk/${action}`, {
+        method: "POST",
+        body: JSON.stringify({
+          suggestion_ids: selectedIds,
+          rationale: action === "reject" ? rejectRationale : undefined,
+        }),
+      });
+      if (res.ok) {
+        setSelectedIds([]);
+        setRejectRationale("");
+        await fetchSuggestions();
+        onUpdate?.();
+      }
+    } finally {
+      setBulkAction(null);
+    }
+  }
+
+  function toggleSelected(id: number) {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((selectedId) => selectedId !== id) : [...current, id],
+    );
+  }
+
+  const reviewableSuggestions = suggestions.filter(
+    (suggestion) => suggestion.status === "review_required" || suggestion.status === "auto_acceptable",
+  );
+  const allReviewableSelected =
+    reviewableSuggestions.length > 0 &&
+    reviewableSuggestions.every((suggestion) => selectedIds.includes(suggestion.id));
 
   if (loading) {
     return (
@@ -106,6 +150,44 @@ export default function MappingSuggestionReview({
 
   return (
     <div className="space-y-3">
+      {reviewableSuggestions.length > 0 && (
+        <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800/50 sm:flex-row sm:items-center sm:justify-between">
+          <label className="flex items-center gap-2 text-xs font-semibold text-gray-600 dark:text-gray-300">
+            <input
+              type="checkbox"
+              checked={allReviewableSelected}
+              onChange={(event) => {
+                setSelectedIds(event.target.checked ? reviewableSuggestions.map((suggestion) => suggestion.id) : []);
+              }}
+              className="h-4 w-4 rounded border-gray-300"
+            />
+            {selectedIds.length} selected
+          </label>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              type="text"
+              value={rejectRationale}
+              onChange={(event) => setRejectRationale(event.target.value)}
+              placeholder="Bulk rejection rationale..."
+              className="h-8 rounded border border-gray-300 bg-white px-2 text-xs text-gray-700 placeholder-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300"
+            />
+            <button
+              onClick={() => void handleBulkReview("accept")}
+              disabled={!selectedIds.length || bulkAction !== null}
+              className="rounded bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-200 disabled:opacity-50 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20"
+            >
+              {bulkAction === "accept" ? "Accepting..." : "Accept selected"}
+            </button>
+            <button
+              onClick={() => void handleBulkReview("reject")}
+              disabled={!selectedIds.length || !rejectRationale.trim() || bulkAction !== null}
+              className="rounded bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-200 disabled:opacity-50 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
+            >
+              {bulkAction === "reject" ? "Rejecting..." : "Reject selected"}
+            </button>
+          </div>
+        </div>
+      )}
       {suggestions.map((s) => (
         <div
           key={s.id}
@@ -114,6 +196,14 @@ export default function MappingSuggestionReview({
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
+                {(s.status === "review_required" || s.status === "auto_acceptable") && (
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(s.id)}
+                    onChange={() => toggleSelected(s.id)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                )}
                 <code className="text-sm font-mono text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
                   {s.source_field}
                 </code>

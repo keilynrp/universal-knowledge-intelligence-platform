@@ -63,6 +63,7 @@ def _reset_mapping_service():
     import backend.routers.governance as gov_mod
     gov_mod._mapping_service = None
     db = _TestSession()
+    db.query(models.AuditLog).filter(models.AuditLog.entity_type == "field_correspondence_rule").delete()
     db.query(models.FieldCorrespondenceRule).delete()
     db.query(models.MappingSuggestionRecord).delete()
     db.commit()
@@ -70,6 +71,7 @@ def _reset_mapping_service():
     yield
     gov_mod._mapping_service = None
     db = _TestSession()
+    db.query(models.AuditLog).filter(models.AuditLog.entity_type == "field_correspondence_rule").delete()
     db.query(models.FieldCorrespondenceRule).delete()
     db.query(models.MappingSuggestionRecord).delete()
     db.commit()
@@ -204,6 +206,44 @@ class TestMappingSuggestionsAPI:
         resp = client.post("/mapping-suggestions/1/accept", headers=viewer_headers)
         assert resp.status_code == 403
 
+    def test_bulk_accept_suggestions(self, client, auth_headers, db_session):
+        suggestions = [
+            models.MappingSuggestionRecord(
+                source_id=f"source:{idx}",
+                source_schema="csv",
+                source_field=f"Field {idx}",
+                canonical_target="canonical_id",
+                confidence=0.8,
+                status="review_required",
+                evidence_samples='["sample"]',
+                evidence='["test"]',
+            )
+            for idx in range(2)
+        ]
+        db_session.add_all(suggestions)
+        db_session.commit()
+        ids = [suggestion.id for suggestion in suggestions]
+
+        resp = client.post("/mapping-suggestions/bulk/accept", json={
+            "suggestion_ids": ids + [9999],
+        }, headers=auth_headers)
+
+        assert resp.status_code == 200
+        assert resp.json() == {"action": "accept", "reviewed": 2, "not_found": [9999]}
+        db_session.expire_all()
+        statuses = [
+            db_session.get(models.MappingSuggestionRecord, suggestion_id).status
+            for suggestion_id in ids
+        ]
+        assert statuses == ["accepted", "accepted"]
+
+    def test_bulk_reject_requires_rationale(self, client, auth_headers):
+        resp = client.post("/mapping-suggestions/bulk/reject", json={
+            "suggestion_ids": [1, 2],
+            "rationale": "",
+        }, headers=auth_headers)
+        assert resp.status_code == 422
+
     def test_list_includes_field_correspondence_metadata(self, client, auth_headers, db_session):
         from backend.services.mapping_suggestions import MappingSuggestionService
         from backend.services.source_profiler import FieldProfile, SourceProfile
@@ -279,6 +319,117 @@ class TestFieldCorrespondenceRulesAPI:
         assert data[0]["canonical_target"] == "canonical_id"
         assert "manual_admin_rule" in data[0]["evidence"]
 
+    def test_rule_create_writes_audit_log(self, client, auth_headers, db_session):
+        resp = client.post("/field-correspondence-rules", json={
+            "source_schema": "wos",
+            "source_field": "ID",
+            "canonical_target": "canonical_id",
+            "semantic_concept": "persistent_identifier",
+            "identifier_scheme": "local",
+        }, headers=auth_headers)
+
+        assert resp.status_code == 201
+        audit = db_session.query(models.AuditLog).filter_by(
+            entity_type="field_correspondence_rule",
+            action="CREATE",
+        ).one()
+        import json
+        details = json.loads(audit.details)
+        assert details["before"] is None
+        assert details["after"]["source_field"] == "ID"
+        assert details["after"]["canonical_target"] == "canonical_id"
+        assert audit.username == "testadmin"
+
+    def test_governance_metrics_summarize_rules_and_suggestions(self, client, auth_headers, db_session):
+        active_rule = models.FieldCorrespondenceRule(
+            source_schema="wos",
+            source_field="DI",
+            canonical_target="canonical_id",
+            is_active=True,
+        )
+        inactive_rule = models.FieldCorrespondenceRule(
+            source_schema="ris",
+            source_field="DO",
+            canonical_target="canonical_id",
+            is_active=False,
+        )
+        suggestions = [
+            models.MappingSuggestionRecord(
+                source_id="wos:1",
+                source_schema="wos",
+                source_field="ID",
+                canonical_target="canonical_id",
+                confidence=0.7,
+                status="review_required",
+            ),
+            models.MappingSuggestionRecord(
+                source_id="wos:2",
+                source_schema="wos",
+                source_field="UT",
+                canonical_target="canonical_id",
+                confidence=0.7,
+                status="auto_acceptable",
+            ),
+            models.MappingSuggestionRecord(
+                source_id="ris:1",
+                source_schema="ris",
+                source_field="XX",
+                canonical_target="canonical_id",
+                confidence=0.4,
+                status="rejected",
+            ),
+        ]
+        db_session.add_all([active_rule, inactive_rule, *suggestions])
+        db_session.commit()
+
+        resp = client.get("/field-correspondence-rules/governance-metrics", headers=auth_headers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["active_rules"] == 1
+        assert data["inactive_rules"] == 1
+        assert data["pending_suggestions"] == 2
+        assert data["rejected_false_positives"] == 1
+        assert data["ambiguous_sources"][0] == {"source_schema": "wos", "pending_suggestions": 2}
+
+    def test_preview_rule_impact_counts_records_and_suggestions(self, client, auth_headers, db_session):
+        from backend import models
+
+        entity = models.RawEntity(
+            primary_label="Imported candidate",
+            canonical_id=None,
+            normalized_json='{"ID": "LOCAL-42"}',
+            attributes_json="{}",
+            import_batch_id=7,
+        )
+        suggestion = models.MappingSuggestionRecord(
+            source_id="import_batch:7",
+            source_schema="wos",
+            source_field="ID",
+            canonical_target="canonical_id",
+            confidence=0.78,
+            status="review_required",
+            evidence_samples='["LOCAL-42"]',
+            evidence='["generic_identifier_header"]',
+        )
+        db_session.add_all([entity, suggestion])
+        db_session.commit()
+
+        resp = client.post("/field-correspondence-rules/impact", json={
+            "source_schema": "wos",
+            "source_field": "ID",
+            "canonical_target": "canonical_id",
+            "semantic_concept": "persistent_identifier",
+            "identifier_scheme": "local",
+        }, headers=auth_headers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["affected_records"] == 1
+        assert data["affected_import_batches"] == 1
+        assert data["matching_suggestions"] == 1
+        assert data["examples"][0]["current_value"] == "LOCAL-42"
+
     def test_deactivate_and_reactivate_rule(self, client, auth_headers):
         create = client.post("/field-correspondence-rules", json={
             "source_schema": "ris",
@@ -322,6 +473,45 @@ class TestFieldCorrespondenceRulesAPI:
         assert data["identifier_scheme"] == "doi"
         assert data["confidence"] == 0.99
         assert "corrected_admin_rule" in data["evidence"]
+
+    def test_rule_update_and_deactivate_write_audit_before_after(self, client, auth_headers, db_session):
+        import json
+
+        create = client.post("/field-correspondence-rules", json={
+            "source_schema": "csv",
+            "source_field": "Identifier",
+            "canonical_target": "canonical_id",
+            "identifier_scheme": "local",
+        }, headers=auth_headers)
+        assert create.status_code == 201
+        rule_id = create.json()["id"]
+
+        update = client.patch(f"/field-correspondence-rules/{rule_id}", json={
+            "source_schema": "csv",
+            "source_field": "Identifier",
+            "canonical_target": "canonical_id",
+            "semantic_concept": "persistent_identifier",
+            "identifier_scheme": "doi",
+            "confidence": 0.99,
+            "evidence": ["corrected_admin_rule"],
+        }, headers=auth_headers)
+        assert update.status_code == 200
+
+        off = client.post(f"/field-correspondence-rules/{rule_id}/deactivate", headers=auth_headers)
+        assert off.status_code == 200
+
+        audits = db_session.query(models.AuditLog).filter_by(
+            entity_type="field_correspondence_rule",
+        ).order_by(models.AuditLog.id.asc()).all()
+        assert [audit.action for audit in audits] == ["CREATE", "UPDATE", "DEACTIVATE"]
+
+        update_details = json.loads(audits[1].details)
+        assert update_details["before"]["identifier_scheme"] == "local"
+        assert update_details["after"]["identifier_scheme"] == "doi"
+
+        deactivate_details = json.loads(audits[2].details)
+        assert deactivate_details["before"]["is_active"] is True
+        assert deactivate_details["after"]["is_active"] is False
 
     def test_create_requires_admin(self, client, viewer_headers):
         resp = client.post("/field-correspondence-rules", json={

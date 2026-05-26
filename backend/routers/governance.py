@@ -108,6 +108,17 @@ class RejectPayload(BaseModel):
     rationale: str = Field(..., min_length=1, max_length=2000)
 
 
+class BulkSuggestionReviewPayload(BaseModel):
+    suggestion_ids: list[int] = Field(..., min_length=1, max_length=100)
+    rationale: str | None = Field(default=None, max_length=2000)
+
+
+class BulkSuggestionReviewResponse(BaseModel):
+    action: str
+    reviewed: int
+    not_found: list[int] = Field(default_factory=list)
+
+
 class FieldCorrespondenceRuleResponse(BaseModel):
     id: int
     source_schema: str | None = None
@@ -134,6 +145,38 @@ class FieldCorrespondenceRulePayload(BaseModel):
     evidence: list[str] = Field(default_factory=list, max_length=20)
 
 
+class FieldCorrespondenceImpactExample(BaseModel):
+    entity_id: int
+    primary_label: str | None = None
+    import_batch_id: int | None = None
+    source_field: str
+    current_value: str | None = None
+    location: str
+
+
+class FieldCorrespondenceImpactResponse(BaseModel):
+    source_schema: str | None = None
+    source_field: str
+    canonical_target: str | None = None
+    affected_records: int
+    affected_import_batches: int
+    matching_suggestions: int
+    examples: list[FieldCorrespondenceImpactExample] = Field(default_factory=list)
+
+
+class AmbiguousSourceMetric(BaseModel):
+    source_schema: str
+    pending_suggestions: int
+
+
+class GovernanceMetricsResponse(BaseModel):
+    active_rules: int
+    inactive_rules: int
+    pending_suggestions: int
+    rejected_false_positives: int
+    ambiguous_sources: list[AmbiguousSourceMetric] = Field(default_factory=list)
+
+
 def _json_list(value: str | None) -> list[str]:
     if not value:
         return []
@@ -142,6 +185,16 @@ def _json_list(value: str | None) -> list[str]:
     except json.JSONDecodeError:
         return []
     return [str(item) for item in loaded] if isinstance(loaded, list) else []
+
+
+def _json_object(value: str | None) -> dict:
+    if not value:
+        return {}
+    try:
+        loaded = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def _serialize_rule(rule: models.FieldCorrespondenceRule) -> FieldCorrespondenceRuleResponse:
@@ -160,6 +213,52 @@ def _serialize_rule(rule: models.FieldCorrespondenceRule) -> FieldCorrespondence
         created_at=rule.created_at.isoformat() if rule.created_at else None,
         updated_at=rule.updated_at.isoformat() if rule.updated_at else None,
     )
+
+
+def _dump_rule(rule: models.FieldCorrespondenceRule | None) -> dict | None:
+    if rule is None:
+        return None
+    serialized = _serialize_rule(rule)
+    if hasattr(serialized, "model_dump"):
+        return serialized.model_dump()
+    return serialized.dict()
+
+
+def _audit_rule_change(
+    db: Session,
+    *,
+    action: str,
+    rule: models.FieldCorrespondenceRule,
+    current_user,
+    before: dict | None,
+) -> None:
+    after = _dump_rule(rule)
+    db.add(models.AuditLog(
+        action=action,
+        entity_type="field_correspondence_rule",
+        entity_id=rule.id,
+        user_id=getattr(current_user, "id", None),
+        username=getattr(current_user, "username", None),
+        details=json.dumps({"before": before, "after": after}, ensure_ascii=False, default=str),
+    ))
+
+
+def _field_correspondence_matches(
+    attrs: dict,
+    *,
+    source_field: str,
+    source_schema: str | None,
+) -> bool:
+    correspondence = attrs.get("_field_correspondence")
+    if not isinstance(correspondence, dict) or source_field not in correspondence:
+        return False
+    if not source_schema:
+        return True
+    metadata = correspondence.get(source_field)
+    if not isinstance(metadata, dict):
+        return False
+    evidence = metadata.get("evidence") or []
+    return any(str(item).startswith(f"{source_schema}_") for item in evidence)
 
 
 # Module-level singleton for legacy tests that use the service without DB.
@@ -210,6 +309,48 @@ def list_mapping_suggestions(
         )
         for s in suggestions
     ]
+
+
+@router.post(
+    "/mapping-suggestions/bulk/{action}",
+    response_model=BulkSuggestionReviewResponse,
+    dependencies=[Depends(require_role("super_admin", "admin", "editor"))],
+)
+def bulk_review_mapping_suggestions(
+    payload: BulkSuggestionReviewPayload,
+    action: str = Path(..., pattern=r"^(accept|reject)$"),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Accept or reject multiple mapping suggestions in one review action."""
+    from backend.tenant_access import resolve_request_org_id
+
+    if action == "reject" and not (payload.rationale or "").strip():
+        raise HTTPException(status_code=422, detail="Rationale is required for bulk rejection")
+
+    service = _get_mapping_service(db, org_id=resolve_request_org_id(db, user))
+    reviewer_id = user.id if hasattr(user, 'id') else 0
+    reviewed = 0
+    not_found: list[int] = []
+    seen: set[int] = set()
+    for suggestion_id in payload.suggestion_ids:
+        if suggestion_id in seen:
+            continue
+        seen.add(suggestion_id)
+        if action == "accept":
+            suggestion = service.accept_suggestion(suggestion_id, reviewer_id=reviewer_id)
+        else:
+            suggestion = service.reject_suggestion(
+                suggestion_id,
+                rationale=(payload.rationale or "").strip(),
+                reviewer_id=reviewer_id,
+            )
+        if suggestion is None:
+            not_found.append(suggestion_id)
+        else:
+            reviewed += 1
+
+    return BulkSuggestionReviewResponse(action=action, reviewed=reviewed, not_found=not_found)
 
 
 @router.post(
@@ -288,6 +429,139 @@ def list_field_correspondence_rules(
     return [_serialize_rule(rule) for rule in rules]
 
 
+@router.get(
+    "/field-correspondence-rules/governance-metrics",
+    response_model=GovernanceMetricsResponse,
+    dependencies=[Depends(get_current_user)],
+)
+def get_field_correspondence_governance_metrics(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Summarize field correspondence governance health for the current tenant."""
+    from backend.tenant_access import resolve_request_org_id
+
+    org_id = resolve_request_org_id(db, current_user)
+    rule_query = db.query(models.FieldCorrespondenceRule)
+    suggestion_query = db.query(models.MappingSuggestionRecord)
+    if org_id is None:
+        rule_query = rule_query.filter(models.FieldCorrespondenceRule.org_id.is_(None))
+        suggestion_query = suggestion_query.filter(models.MappingSuggestionRecord.org_id.is_(None))
+    else:
+        rule_query = rule_query.filter(models.FieldCorrespondenceRule.org_id == org_id)
+        suggestion_query = suggestion_query.filter(models.MappingSuggestionRecord.org_id == org_id)
+
+    active_rules = rule_query.filter(models.FieldCorrespondenceRule.is_active.is_(True)).count()
+    inactive_rules = rule_query.filter(models.FieldCorrespondenceRule.is_active.is_(False)).count()
+    pending_records = suggestion_query.filter(
+        models.MappingSuggestionRecord.status.in_(["auto_acceptable", "review_required"]),
+    ).all()
+    rejected_false_positives = suggestion_query.filter(
+        models.MappingSuggestionRecord.status == "rejected",
+    ).count()
+
+    ambiguity: dict[str, int] = {}
+    for suggestion in pending_records:
+        source_schema = suggestion.source_schema or "unknown"
+        ambiguity[source_schema] = ambiguity.get(source_schema, 0) + 1
+
+    ambiguous_sources = [
+        AmbiguousSourceMetric(source_schema=source_schema, pending_suggestions=count)
+        for source_schema, count in sorted(ambiguity.items(), key=lambda item: item[1], reverse=True)[:5]
+    ]
+
+    return GovernanceMetricsResponse(
+        active_rules=active_rules,
+        inactive_rules=inactive_rules,
+        pending_suggestions=len(pending_records),
+        rejected_false_positives=rejected_false_positives,
+        ambiguous_sources=ambiguous_sources,
+    )
+
+
+@router.post(
+    "/field-correspondence-rules/impact",
+    response_model=FieldCorrespondenceImpactResponse,
+    dependencies=[Depends(require_role("super_admin", "admin"))],
+)
+def preview_field_correspondence_rule_impact(
+    payload: FieldCorrespondenceRulePayload,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Preview existing records and suggestions affected by a proposed rule."""
+    from backend.tenant_access import resolve_request_org_id
+
+    org_id = resolve_request_org_id(db, current_user)
+    source_field = payload.source_field.strip()
+    source_schema = payload.source_schema.strip() if payload.source_schema else None
+    canonical_target = payload.canonical_target.strip() if payload.canonical_target else None
+
+    suggestion_query = db.query(models.MappingSuggestionRecord).filter(
+        models.MappingSuggestionRecord.source_field == source_field,
+    )
+    if org_id is None:
+        suggestion_query = suggestion_query.filter(models.MappingSuggestionRecord.org_id.is_(None))
+    else:
+        suggestion_query = suggestion_query.filter(models.MappingSuggestionRecord.org_id == org_id)
+    if source_schema:
+        suggestion_query = suggestion_query.filter(models.MappingSuggestionRecord.source_schema == source_schema)
+    matching_suggestions = suggestion_query.count()
+
+    candidates = db.query(models.RawEntity).filter(
+        (
+            models.RawEntity.normalized_json.like(f'%"{source_field}"%')
+            | models.RawEntity.attributes_json.like(f'%"{source_field}"%')
+        )
+    )
+    if org_id is None:
+        candidates = candidates.filter(models.RawEntity.org_id.is_(None))
+    else:
+        candidates = candidates.filter(models.RawEntity.org_id == org_id)
+
+    affected_records = 0
+    affected_import_batches: set[int] = set()
+    examples: list[FieldCorrespondenceImpactExample] = []
+    for entity in candidates.limit(5000).all():
+        normalized = _json_object(entity.normalized_json)
+        attrs = _json_object(entity.attributes_json)
+        location: str | None = None
+        current_value = None
+        if source_field in normalized:
+            location = "normalized_json"
+            current_value = normalized.get(source_field)
+        elif _field_correspondence_matches(attrs, source_field=source_field, source_schema=source_schema):
+            location = "attributes_json._field_correspondence"
+            if canonical_target and hasattr(entity, canonical_target):
+                current_value = getattr(entity, canonical_target)
+
+        if not location:
+            continue
+
+        affected_records += 1
+        if entity.import_batch_id is not None:
+            affected_import_batches.add(entity.import_batch_id)
+        if len(examples) < 5:
+            examples.append(FieldCorrespondenceImpactExample(
+                entity_id=entity.id,
+                primary_label=entity.primary_label,
+                import_batch_id=entity.import_batch_id,
+                source_field=source_field,
+                current_value=str(current_value) if current_value is not None else None,
+                location=location,
+            ))
+
+    return FieldCorrespondenceImpactResponse(
+        source_schema=source_schema,
+        source_field=source_field,
+        canonical_target=canonical_target,
+        affected_records=affected_records,
+        affected_import_batches=len(affected_import_batches),
+        matching_suggestions=matching_suggestions,
+        examples=examples,
+    )
+
+
 @router.post(
     "/field-correspondence-rules",
     response_model=FieldCorrespondenceRuleResponse,
@@ -312,9 +586,11 @@ def create_field_correspondence_rule(
     ).first()
     if existing:
         rule = existing
+        before = _dump_rule(rule)
     else:
         from datetime import datetime, timezone
 
+        before = None
         rule = models.FieldCorrespondenceRule(
             org_id=org_id,
             source_schema=source_schema,
@@ -333,6 +609,14 @@ def create_field_correspondence_rule(
     rule.evidence = json.dumps(payload.evidence or ["manual_admin_rule"], ensure_ascii=False)
     rule.is_active = True
     rule.updated_at = datetime.now(timezone.utc)
+    db.flush()
+    _audit_rule_change(
+        db,
+        action="UPDATE" if before else "CREATE",
+        rule=rule,
+        current_user=current_user,
+        before=before,
+    )
     db.commit()
     db.refresh(rule)
     return _serialize_rule(rule)
@@ -358,6 +642,7 @@ def update_field_correspondence_rule(
     if not rule or rule.org_id != org_id:
         raise HTTPException(status_code=404, detail=f"Rule '{rule_id}' not found")
 
+    before = _dump_rule(rule)
     rule.source_schema = payload.source_schema.strip() if payload.source_schema else None
     rule.source_field = payload.source_field.strip()
     rule.canonical_target = payload.canonical_target.strip() if payload.canonical_target else None
@@ -366,6 +651,8 @@ def update_field_correspondence_rule(
     rule.confidence = payload.confidence
     rule.evidence = json.dumps(payload.evidence or ["manual_admin_rule"], ensure_ascii=False)
     rule.updated_at = datetime.now(timezone.utc)
+    db.flush()
+    _audit_rule_change(db, action="UPDATE", rule=rule, current_user=current_user, before=before)
     db.commit()
     db.refresh(rule)
     return _serialize_rule(rule)
@@ -389,8 +676,11 @@ def deactivate_field_correspondence_rule(
     rule = db.get(models.FieldCorrespondenceRule, rule_id)
     if not rule or rule.org_id != org_id:
         raise HTTPException(status_code=404, detail=f"Rule '{rule_id}' not found")
+    before = _dump_rule(rule)
     rule.is_active = False
     rule.updated_at = datetime.now(timezone.utc)
+    db.flush()
+    _audit_rule_change(db, action="DEACTIVATE", rule=rule, current_user=current_user, before=before)
     db.commit()
     db.refresh(rule)
     return _serialize_rule(rule)
@@ -414,8 +704,11 @@ def reactivate_field_correspondence_rule(
     rule = db.get(models.FieldCorrespondenceRule, rule_id)
     if not rule or rule.org_id != org_id:
         raise HTTPException(status_code=404, detail=f"Rule '{rule_id}' not found")
+    before = _dump_rule(rule)
     rule.is_active = True
     rule.updated_at = datetime.now(timezone.utc)
+    db.flush()
+    _audit_rule_change(db, action="REACTIVATE", rule=rule, current_user=current_user, before=before)
     db.commit()
     db.refresh(rule)
     return _serialize_rule(rule)
