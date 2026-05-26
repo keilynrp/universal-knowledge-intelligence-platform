@@ -13,10 +13,11 @@ import AuthSettingsTab from "./AuthSettingsTab";
 import UsersTab from "./UsersTab";
 import WebhooksTab from "./WebhooksTab";
 import WorkspaceResetTab from "./WorkspaceResetTab";
+import DataFixesTab from "./DataFixesTab";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-type Tab = "preferences" | "account" | "users" | "auth" | "webhooks" | "notifications" | "branding" | "workspace_reset";
+type Tab = "preferences" | "account" | "users" | "auth" | "webhooks" | "notifications" | "branding" | "workspace_reset" | "data_fixes";
 
 
 // ── Main Page ────────────────────────────────────────────────────────────────
@@ -40,6 +41,7 @@ export default function SettingsPage() {
         ...(isAdmin ? [{ id: "notifications", label: t("settings.tab.notifications") }] : []),
         ...(isAdmin ? [{ id: "branding", label: t("settings.tab.branding") }] : []),
         ...(isAdmin ? [{ id: "workspace_reset", label: t("settings.tab.workspace_reset") }] : []),
+        ...(isSuperAdmin ? [{ id: "data_fixes", label: "Data fixes" }] : []),
     ];
 
     const [tab, setTab] = useState<Tab>("preferences");
@@ -74,6 +76,7 @@ export default function SettingsPage() {
             {tab === "notifications"  && isAdmin && <NotificationsTab toast={toast} />}
             {tab === "branding"       && isAdmin && <BrandingTab toast={toast} />}
             {tab === "workspace_reset" && isAdmin && <WorkspaceResetTab toast={toast} />}
+            {tab === "data_fixes"      && isSuperAdmin && <DataFixesTab toast={toast} />}
         </div>
     );
 }

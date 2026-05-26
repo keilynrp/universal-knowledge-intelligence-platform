@@ -22,8 +22,10 @@ def _patch_session_local(monkeypatch, session_factory):
     which constructs its own session via the module-level SessionLocal. Bind it
     to the test factory so the work happens on the in-memory test DB."""
     import backend.scripts.fix_legacy_affiliations as script
+    import backend.scripts.backfill_canonical_id_entity_type as canonical_script
 
     monkeypatch.setattr(script, "SessionLocal", session_factory)
+    monkeypatch.setattr(canonical_script, "SessionLocal", session_factory)
     yield
 
 
@@ -37,6 +39,22 @@ def _seed_affected(session_factory, *, doi: str, attrs: dict, source: str = "ope
             enrichment_source=source,
             enrichment_status="completed",
             attributes_json=json.dumps(attrs, ensure_ascii=False),
+        )
+        db.add(entity)
+        db.commit()
+        return entity.id
+
+
+def _seed_missing_canonical_identity(session_factory, *, normalized: dict, domain: str = "science") -> int:
+    with session_factory() as db:
+        entity = models.RawEntity(
+            primary_label="Canonical Identity Fix Test",
+            domain=domain,
+            source="test",
+            canonical_id=None,
+            entity_type=None,
+            normalized_json=json.dumps(normalized, ensure_ascii=False),
+            attributes_json="{}",
         )
         db.add(entity)
         db.commit()
@@ -113,6 +131,28 @@ class TestPayloadValidation:
         resp = client.post(
             "/admin/data-fixes/legacy-affiliations",
             json={"limit": 0},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
+
+    def test_canonical_identity_empty_body_uses_safe_defaults(self, client, auth_headers):
+        resp = client.post(
+            "/admin/data-fixes/canonical-identity",
+            json={},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["mode"] == "dry-run"
+        assert "scanned" in body
+        assert "fixed_canonical_id" in body
+        assert "fixed_entity_type" in body
+        assert "skipped_duplicates" in body
+
+    def test_canonical_identity_rejects_invalid_only(self, client, auth_headers):
+        resp = client.post(
+            "/admin/data-fixes/canonical-identity",
+            json={"only": "bad_field"},
             headers=auth_headers,
         )
         assert resp.status_code == 422
@@ -201,3 +241,51 @@ class TestBehavior:
         )
         assert resp.status_code == 200
         assert resp.json()["requeue_enrichment"] is False
+
+    def test_canonical_identity_dry_run_does_not_mutate(self, client, auth_headers, session_factory):
+        eid = _seed_missing_canonical_identity(
+            session_factory,
+            normalized={"DOI": "10.0001/admin-canonical-dry", "Tipo": "article"},
+        )
+        try:
+            resp = client.post(
+                "/admin/data-fixes/canonical-identity",
+                json={"dry_run": True},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            assert resp.json()["mode"] == "dry-run"
+            assert resp.json()["fixed_canonical_id"] >= 1
+            assert resp.json()["fixed_entity_type"] >= 1
+            with session_factory() as db:
+                entity = db.query(models.RawEntity).filter_by(id=eid).one()
+                assert entity.canonical_id is None
+                assert entity.entity_type is None
+        finally:
+            _cleanup(session_factory, [eid])
+
+    def test_canonical_identity_apply_populates_existing_records(self, client, auth_headers, session_factory):
+        eid = _seed_missing_canonical_identity(
+            session_factory,
+            normalized={"Identificador único": "ID-ADMIN-42", "Tipo de entidad": "dataset"},
+        )
+        try:
+            resp = client.post(
+                "/admin/data-fixes/canonical-identity",
+                json={"dry_run": False},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["mode"] == "applied"
+            assert body["fixed_canonical_id"] >= 1
+            assert body["fixed_entity_type"] >= 1
+            with session_factory() as db:
+                entity = db.query(models.RawEntity).filter_by(id=eid).one()
+                assert entity.canonical_id == "ID-ADMIN-42"
+                assert entity.entity_type == "dataset"
+                attrs = json.loads(entity.attributes_json)
+                assert attrs["_canonical_backfill"]["canonical_id"].startswith("normalized_json.")
+                assert attrs["_canonical_backfill"]["entity_type"].startswith("normalized_json.")
+        finally:
+            _cleanup(session_factory, [eid])
