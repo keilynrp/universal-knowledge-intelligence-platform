@@ -394,6 +394,26 @@ class TestFieldCorrespondenceRulesAPI:
         assert data["rejected_false_positives"] == 1
         assert data["ambiguous_sources"][0] == {"source_schema": "wos", "pending_suggestions": 2}
 
+    def test_seed_preventive_rules_creates_inactive_candidates(self, client, auth_headers, db_session):
+        resp = client.post("/field-correspondence-rules/preventive-seed", headers=auth_headers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["created"] > 0
+        assert data["total_candidates"] == data["created"]
+        doi_rule = db_session.query(models.FieldCorrespondenceRule).filter_by(
+            source_schema="wos",
+            source_field="DI",
+        ).one()
+        assert doi_rule.canonical_target == "canonical_id"
+        assert doi_rule.identifier_scheme == "doi"
+        assert doi_rule.is_active is False
+
+        again = client.post("/field-correspondence-rules/preventive-seed", headers=auth_headers)
+        assert again.status_code == 200
+        assert again.json()["created"] == 0
+        assert again.json()["updated"] == data["total_candidates"]
+
     def test_preview_rule_impact_counts_records_and_suggestions(self, client, auth_headers, db_session):
         from backend import models
 

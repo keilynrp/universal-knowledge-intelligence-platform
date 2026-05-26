@@ -135,6 +135,13 @@ class FieldCorrespondenceRuleResponse(BaseModel):
     updated_at: str | None = None
 
 
+class PreventiveRuleSeedResponse(BaseModel):
+    created: int
+    updated: int
+    total_candidates: int
+    rules: list[FieldCorrespondenceRuleResponse] = Field(default_factory=list)
+
+
 class FieldCorrespondenceRulePayload(BaseModel):
     source_schema: str | None = Field(default=None, max_length=100)
     source_field: str = Field(..., min_length=1, max_length=255)
@@ -264,6 +271,37 @@ def _audit_rule_change(
         username=getattr(current_user, "username", None),
         details=json.dumps({"before": before, "after": after}, ensure_ascii=False, default=str),
     ))
+
+
+def _preventive_rule_candidates() -> list[dict]:
+    source_schemas = [None, "csv", "wos", "ris", "bibtex", "openalex", "crossref", "orcid", "ror"]
+    identifier_aliases = {
+        "doi": ["DOI", "doi", "DI", "DO", "doi_url", "external_doi"],
+        "orcid": ["ORCID", "orcid", "author_orcid", "researcher_id", "researcher_orcid"],
+        "ror": ["ROR", "ror", "affiliation_ror", "institution_ror", "organization_ror"],
+        "local": ["ID", "id", "source_id", "record_id", "UT", "UID", "EID", "Accession Number"],
+    }
+    entity_type_aliases = ["type", "Type", "entity_type", "document_type", "publication_type", "resource_type", "item_type", "TY"]
+    candidates: list[dict] = []
+    for source_schema in source_schemas:
+        for identifier_scheme, fields in identifier_aliases.items():
+            for source_field in fields:
+                candidates.append({
+                    "source_schema": source_schema,
+                    "source_field": source_field,
+                    "canonical_target": "canonical_id",
+                    "semantic_concept": "persistent_identifier",
+                    "identifier_scheme": identifier_scheme,
+                })
+        for source_field in entity_type_aliases:
+            candidates.append({
+                "source_schema": source_schema,
+                "source_field": source_field,
+                "canonical_target": "entity_type",
+                "semantic_concept": "entity_type",
+                "identifier_scheme": None,
+            })
+    return candidates
 
 
 def _field_correspondence_matches(
@@ -534,6 +572,76 @@ def get_field_correspondence_governance_metrics(
         pending_suggestions=len(pending_records),
         rejected_false_positives=rejected_false_positives,
         ambiguous_sources=ambiguous_sources,
+    )
+
+
+@router.post(
+    "/field-correspondence-rules/preventive-seed",
+    response_model=PreventiveRuleSeedResponse,
+    dependencies=[Depends(require_role("super_admin", "admin"))],
+)
+def seed_preventive_field_correspondence_rules(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Load inactive preventive correspondence candidates for admin validation."""
+    from backend.tenant_access import resolve_request_org_id
+    from datetime import datetime, timezone
+
+    org_id = resolve_request_org_id(db, current_user)
+    candidates = _preventive_rule_candidates()
+    created = 0
+    updated = 0
+    touched: list[models.FieldCorrespondenceRule] = []
+    now = datetime.now(timezone.utc)
+    for candidate in candidates:
+        rule = db.query(models.FieldCorrespondenceRule).filter(
+            models.FieldCorrespondenceRule.org_id == org_id,
+            models.FieldCorrespondenceRule.source_schema == candidate["source_schema"],
+            models.FieldCorrespondenceRule.source_field == candidate["source_field"],
+        ).first()
+        if rule:
+            updated += 1
+            before = _dump_rule(rule)
+        else:
+            created += 1
+            before = None
+            rule = models.FieldCorrespondenceRule(
+                org_id=org_id,
+                source_schema=candidate["source_schema"],
+                source_field=candidate["source_field"],
+                created_by_id=getattr(current_user, "id", None),
+                created_at=now,
+            )
+            db.add(rule)
+
+        rule.canonical_target = candidate["canonical_target"]
+        rule.semantic_concept = candidate["semantic_concept"]
+        rule.identifier_scheme = candidate["identifier_scheme"]
+        rule.confidence = 0.55
+        rule.evidence = json.dumps(["preventive_candidate_rule"], ensure_ascii=False)
+        if before is None:
+            rule.is_active = False
+        rule.updated_at = now
+        db.flush()
+        _audit_rule_change(
+            db,
+            action="PREVENTIVE_SEED_UPDATE" if before else "PREVENTIVE_SEED_CREATE",
+            rule=rule,
+            current_user=current_user,
+            before=before,
+        )
+        touched.append(rule)
+
+    db.commit()
+    for rule in touched:
+        db.refresh(rule)
+
+    return PreventiveRuleSeedResponse(
+        created=created,
+        updated=updated,
+        total_candidates=len(candidates),
+        rules=[_serialize_rule(rule) for rule in touched[:25]],
     )
 
 

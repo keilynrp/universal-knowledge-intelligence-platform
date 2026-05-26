@@ -69,6 +69,12 @@ type ApplyResult = ImpactPreview & {
   skipped_missing_value: number;
 };
 
+type PreventiveSeedResult = {
+  created: number;
+  updated: number;
+  total_candidates: number;
+};
+
 const emptyForm: FormState = {
   source_schema: "",
   source_field: "",
@@ -138,6 +144,7 @@ export default function FieldCorrespondenceRulesTab({
   const [expandedAuditRuleId, setExpandedAuditRuleId] = useState<number | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
   const [applyingRuleId, setApplyingRuleId] = useState<number | null>(null);
+  const [seedingPreventiveRules, setSeedingPreventiveRules] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
 
   const fetchMetrics = useCallback(async () => {
@@ -307,6 +314,27 @@ export default function FieldCorrespondenceRulesTab({
     }
   }
 
+  async function seedPreventiveRules() {
+    setSeedingPreventiveRules(true);
+    try {
+      const response = await apiFetch("/field-correspondence-rules/preventive-seed", {
+        method: "POST",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.detail ?? "No se pudieron cargar las reglas preventivas.");
+      }
+      const result = data as PreventiveSeedResult;
+      toast(`Reglas preventivas cargadas: ${result.created} nuevas, ${result.updated} actualizadas.`, "success");
+      setActiveOnly(false);
+      await fetchRules();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "No se pudieron cargar las reglas preventivas.", "error");
+    } finally {
+      setSeedingPreventiveRules(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       {metrics && (
@@ -336,7 +364,7 @@ export default function FieldCorrespondenceRulesTab({
         </section>
       )}
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        <div className="grid gap-4 lg:grid-cols-[1fr,auto,auto]">
+        <div className="grid gap-4 lg:grid-cols-[1fr,auto,auto,auto]">
           <label className="block">
             <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">Filtro por fuente</span>
             <input
@@ -360,6 +388,13 @@ export default function FieldCorrespondenceRulesTab({
             className="self-end rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800"
           >
             Actualizar
+          </button>
+          <button
+            onClick={() => void seedPreventiveRules()}
+            disabled={seedingPreventiveRules}
+            className="self-end rounded-lg border border-amber-200 px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-900/40 dark:text-amber-300 dark:hover:bg-amber-950/30"
+          >
+            {seedingPreventiveRules ? "Cargando..." : "Cargar preventivas"}
           </button>
         </div>
       </section>
