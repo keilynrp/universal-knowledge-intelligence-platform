@@ -83,7 +83,12 @@ yarn-error.log*
 htmlcov/
 .pytest_cache/
 .mypy_cache/
+# Claude Code: local session state and personal settings
+# (commands/ and skills/ ARE committed — they are shareable team artifacts)
 .claude/worktrees/
+.claude/projects/
+.claude/.claude/
+.claude/settings.local.json
 /static/
 
 # =========================
