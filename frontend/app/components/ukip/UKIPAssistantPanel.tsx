@@ -338,6 +338,32 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
       const response = await apiFetch(action.apiPath, {
         method: action.method ?? "POST",
       });
+      if (action.responseType === "blob") {
+        if (!response.ok) {
+          const detail = await response.text().catch(() => `HTTP ${response.status}`);
+          throw new Error(detail || `HTTP ${response.status}`);
+        }
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = action.downloadFilename ?? `ukip_assistant_export_${new Date().toISOString().slice(0, 10)}.csv`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === actionMessageId
+              ? {
+                  ...message,
+                  pending: false,
+                  content: action.successLabel ?? "Exportacion descargada correctamente.",
+                }
+              : message,
+          ),
+        );
+        setPendingAction(null);
+        return;
+      }
       const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
       if (!response.ok) {
         const detail = payload && typeof payload.detail === "string" ? payload.detail : `HTTP ${response.status}`;

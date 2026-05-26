@@ -26,6 +26,8 @@ export type AssistantActionLink = {
   kind?: "navigate" | "preview" | "export" | "mutation";
   apiPath?: string;
   method?: "GET" | "POST" | "PUT" | "DELETE";
+  responseType?: "json" | "blob";
+  downloadFilename?: string;
   successLabel?: string;
   requiresConfirmation?: boolean;
   confirmationLabel?: string;

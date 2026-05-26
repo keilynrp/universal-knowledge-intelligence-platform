@@ -190,6 +190,13 @@ export default function AuditLogPage() {
   // ── Pagination
   const totalPages = page ? Math.ceil(page.total / PAGE_SIZE) : 0;
   const currentPage = Math.floor(skip / PAGE_SIZE) + 1;
+  const auditExportParams = new URLSearchParams();
+  if (applied.action) auditExportParams.set("action", applied.action);
+  if (applied.resource) auditExportParams.set("resource_type", applied.resource);
+  if (applied.user) auditExportParams.set("username", applied.user);
+  if (applied.from) auditExportParams.set("from_date", applied.from);
+  if (applied.to) auditExportParams.set("to_date", applied.to);
+  const auditExportQuery = auditExportParams.toString();
   useAssistantContextRegistration({
     route: "/audit-log",
     domainId: "all",
@@ -203,7 +210,19 @@ export default function AuditLogPage() {
       stats ? `${stats.total} eventos auditados` : "Cargar estadisticas de auditoria",
     ],
     actionLinks: [
-      { id: "audit-export", label: "Exportar auditoria", href: "/audit-log", kind: "export", requiresConfirmation: true, confirmationLabel: "La exportacion descarga eventos de auditoria filtrados en esta vista." },
+      {
+        id: "audit-export",
+        label: "Exportar auditoria filtrada",
+        href: "/audit-log",
+        kind: "export",
+        apiPath: `/audit-log/export${auditExportQuery ? `?${auditExportQuery}` : ""}`,
+        method: "GET",
+        responseType: "blob",
+        downloadFilename: `ukip_audit_${new Date().toISOString().slice(0, 10)}.csv`,
+        successLabel: "Auditoria filtrada descargada correctamente.",
+        requiresConfirmation: true,
+        confirmationLabel: "La exportacion descargara eventos de auditoria respetando los filtros aplicados en esta vista.",
+      },
       { id: "audit-settings", label: "Abrir administracion", href: "/settings", kind: "navigate" },
     ],
   });
