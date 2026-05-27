@@ -130,6 +130,19 @@ interface AuthorityRecord {
 
 type Tab = "overview" | "enrichment" | "authority" | "graph" | "comments";
 
+interface EnrichmentSignalSection {
+    key: string;
+    label: string;
+    value: unknown;
+}
+
+interface EnrichmentSignalGroup {
+    provider: string;
+    title: string;
+    updatedAt: string | null;
+    sections: EnrichmentSignalSection[];
+}
+
 const CORE_FIELDS: (keyof Entity)[] = [
     "primary_label",
     "secondary_label",
@@ -904,6 +917,60 @@ function ExternalIdList({ values }: { values: string[] }) {
                         <a href={value} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 dark:text-blue-300" aria-label="Abrir identificador externo">
                             <SoftIcon type="external" />
                         </a>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function compactProviderName(provider: string): string {
+    const normalized = provider.trim().toLowerCase();
+    if (normalized === "openalex") return "OpenAlex";
+    if (normalized === "crossref") return "Crossref";
+    if (normalized === "orcid") return "ORCID";
+    if (normalized === "ror") return "ROR";
+    if (normalized === "datacite") return "DataCite";
+    if (normalized === "pubmed") return "PubMed";
+    if (normalized === "arxiv") return "arXiv";
+    if (normalized === "semantic_scholar" || normalized === "semanticscholar") return "Semantic Scholar";
+    return provider.charAt(0).toUpperCase() + provider.slice(1);
+}
+
+function providerFromFieldKey(key: string): string | null {
+    const normalized = key.toLowerCase();
+    const providers = ["openalex", "crossref", "orcid", "ror", "datacite", "pubmed", "arxiv", "semantic_scholar", "semanticscholar"];
+    return providers.find((provider) => normalized.includes(provider)) ?? null;
+}
+
+function EnrichmentProviderCard({ group }: { group: EnrichmentSignalGroup }) {
+    return (
+        <div className="rounded-[1.35rem] border border-blue-100 bg-blue-50/30 p-5 dark:border-blue-400/20 dark:bg-blue-400/10">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-5 text-lg font-black text-slate-900 dark:text-white">
+                    <span className="text-slate-950 dark:text-white"><SoftIcon type="openalex" /></span>
+                    <span className="text-blue-600 dark:text-blue-300">{group.title.toUpperCase()}</span>
+                    <span className="hidden h-8 w-px bg-slate-200 dark:bg-white/10 sm:block" />
+                    <span className="flex items-center gap-3 text-slate-600 dark:text-slate-200">
+                        <SoftIcon type="institution" />
+                        Proveedor académico: <span className="text-blue-600 dark:text-blue-300">{group.provider}</span>
+                    </span>
+                </div>
+                {group.updatedAt ? (
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-500 ring-1 ring-slate-200 dark:bg-white/10 dark:text-slate-300 dark:ring-white/10">
+                        {formatShortDate(group.updatedAt) ?? group.updatedAt}
+                    </span>
+                ) : null}
+            </div>
+            <div className="grid gap-5">
+                {group.sections.map((section) => (
+                    <div key={section.key} className="min-w-0">
+                        {section.label ? (
+                            <p className="mb-2 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
+                                {section.label}
+                            </p>
+                        ) : null}
+                        <StructuredFieldValue value={section.value} fieldKey={section.key} />
                     </div>
                 ))}
             </div>
@@ -2202,6 +2269,71 @@ export default function EntityDetailPage() {
         ["raw_record", "updated_date"],
         ["raw_record", "updated_at"],
     ]);
+    const enrichmentSignalGroups = (() => {
+        const groups = new Map<string, EnrichmentSignalGroup>();
+        const ensureGroup = (provider: string) => {
+            const normalizedProvider = provider.toLowerCase();
+            const existing = groups.get(normalizedProvider);
+            if (existing) return existing;
+            const group: EnrichmentSignalGroup = {
+                provider: normalizedProvider,
+                title: compactProviderName(normalizedProvider),
+                updatedAt: firstStringFromAttributes(attributeSources, [
+                    [`${normalizedProvider}_updated_at`],
+                    [`${normalizedProvider}_updated_date`],
+                    [`${normalizedProvider}_last_seen_at`],
+                    [`${normalizedProvider}_retrieved_at`],
+                    [`raw_record`, `${normalizedProvider}_updated_at`],
+                ]),
+                sections: [],
+            };
+            groups.set(normalizedProvider, group);
+            return group;
+        };
+        const primaryProvider = sanitizedEnrichmentSource || "openalex";
+        const primaryGroup = ensureGroup(primaryProvider);
+        primaryGroup.updatedAt = primaryGroup.updatedAt ?? enrichmentUpdatedLabel;
+        if (enrichmentConcepts.length > 0) {
+            primaryGroup.sections.push({
+                key: "enrichment_concept_ids",
+                label: "Enrichment Concept Ids",
+                value: enrichmentConcepts,
+            });
+        }
+        if (entity.enrichment_citation_count !== null && entity.enrichment_citation_count !== undefined) {
+            primaryGroup.sections.push({
+                key: "enrichment_citation_count",
+                label: tr("entities.detail.enrichment.citations_detected", "Citas detectadas"),
+                value: entity.enrichment_citation_count,
+            });
+        }
+        if (resolvedDoi) {
+            primaryGroup.sections.push({
+                key: "enrichment_doi",
+                label: tr("entities.detail.enrichment.normalized_doi", "DOI normalizado"),
+                value: `https://doi.org/${resolvedDoi}`,
+            });
+        }
+        for (const [key, value] of Object.entries(mergedAttributes)) {
+            if (!hasMeaningfulValue(value)) continue;
+            const provider = providerFromFieldKey(key);
+            if (!provider) continue;
+            if (["enrichment_source", "enrichment_status", "enrichment_concepts", "enrichment_doi", "enrichment_citation_count"].includes(key)) continue;
+            const group = ensureGroup(provider);
+            if (group.sections.some((section) => section.key === key)) continue;
+            group.sections.push({
+                key,
+                label: fieldLabel(key),
+                value,
+            });
+        }
+        return Array.from(groups.values())
+            .map((group) => ({
+                ...group,
+                sections: group.sections.filter((section) => hasMeaningfulValue(section.value)),
+            }))
+            .filter((group) => group.sections.length > 0);
+    })();
     const shortSource = sanitizedEnrichmentSource || entity.source || String(mergedAttributes.source_name || mergedAttributes.source || "");
     const attentionTimelineMax = attentionData?.timeline.length
         ? Math.max(...attentionData.timeline.map((item) => item.weighted_score), 1)
@@ -3055,19 +3187,12 @@ export default function EntityDetailPage() {
                                     </p>
                                 </div>
                             </div>
-                            {sanitizedEnrichmentSource ? (
-                                <div className="mb-8 flex flex-wrap items-center gap-7 rounded-[1.35rem] border border-blue-100 bg-blue-50/40 px-7 py-6 text-xl font-bold text-slate-600 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-slate-200">
-                                    <span className="text-slate-950 dark:text-white"><SoftIcon type="openalex" /></span>
-                                    <span className="text-blue-600 dark:text-blue-300">{sanitizedEnrichmentSource.toUpperCase()}</span>
-                                    <span className="hidden h-10 w-px bg-slate-200 dark:bg-white/10 sm:block" />
-                                    <span className="flex items-center gap-4">
-                                        <SoftIcon type="institution" />
-                                        Proveedor académico: <span className="text-blue-600 dark:text-blue-300">{sanitizedEnrichmentSource}</span>
-                                    </span>
+                            {enrichmentSignalGroups.length > 0 ? (
+                                <div className="space-y-6">
+                                    {enrichmentSignalGroups.map((group) => (
+                                        <EnrichmentProviderCard key={group.provider} group={group} />
+                                    ))}
                                 </div>
-                            ) : null}
-                            {enrichmentConcepts.length > 0 ? (
-                                <ExternalIdList values={enrichmentConcepts} />
                             ) : (
                                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-6 text-sm font-semibold text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
                                     {tr("entities.detail.enrichment.concepts_empty", "Aún no hay conceptos enriquecidos. Ejecuta el enriquecimiento para activar esta capa semántica.")}
