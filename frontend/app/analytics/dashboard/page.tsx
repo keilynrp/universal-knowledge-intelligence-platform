@@ -783,6 +783,16 @@ export default function ExecutiveDashboardPage() {
   const latestImportExplorerHref = importedDomain
     ? `/?ft_domain=${encodeURIComponent(importedDomain)}`
     : "/";
+  const actionHrefMap: Record<string, string> = useMemo(() => ({
+    bulk_enrichment: "/",
+    review_low_quality_records: "/?ft_enrichment_status=completed&max_quality=0.6",
+    focus_top_impact_entity: data?.top_entities?.[0]?.id
+      ? `/entities/${data.top_entities[0].id}`
+      : enrichedExplorerHref,
+    explore_leading_concept_cluster: `/analytics/topics?domain=${encodeURIComponent(dashboardDomainId)}`,
+    activate_semantic_opportunity: `/analytics/graph?domain=${encodeURIComponent(dashboardDomainId)}`,
+  }), [data, dashboardDomainId, enrichedExplorerHref]);
+
   const decisionHighlights = useMemo(() => {
     if (!data) return [];
 
@@ -799,9 +809,10 @@ export default function ExecutiveDashboardPage() {
         title: translateActionText(action, "title"),
         evidence: translateActionText(action, "evidence"),
         tone,
+        href: actionHrefMap[action.id] ?? "/",
       };
     });
-  }, [data, translateActionText]);
+  }, [data, translateActionText, actionHrefMap]);
 
   const toneStyles: Record<"violet" | "amber" | "emerald", string> = {
     violet: "border-violet-200 bg-violet-50 text-violet-900",
@@ -1246,9 +1257,10 @@ export default function ExecutiveDashboardPage() {
           {decisionHighlights.length > 0 && (
             <div className="mt-8 grid grid-cols-1 gap-5 xl:grid-cols-3">
               {decisionHighlights.slice(0, 3).map((highlight) => (
-                <div
+                <Link
                   key={highlight.title}
-                  className={`rounded-xl border p-5 ${toneStyles[highlight.tone]}`}
+                  href={highlight.href}
+                  className={`block rounded-xl border p-5 transition hover:shadow-md ${toneStyles[highlight.tone]}`}
                 >
                   <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-500">
                     {tr("page.exec_dashboard.suggested_next_action", "Acción sugerida")}
@@ -1259,17 +1271,13 @@ export default function ExecutiveDashboardPage() {
                     {tr("page.exec_dashboard.expected_impact", "Impacto esperado: +6-12pp")}
                   </p>
                   {highlight.id === "bulk_enrichment" && (
-                    <button
-                      onClick={handleBulkEnrichment}
-                      disabled={queueingBulkEnrichment}
-                      className="mt-4 inline-flex h-10 items-center rounded-lg bg-white px-4 text-xs font-semibold text-slate-900 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    <span
+                      className="mt-4 inline-flex h-10 items-center rounded-lg bg-white px-4 text-xs font-semibold text-slate-900 transition hover:bg-violet-50"
                     >
-                      {queueingBulkEnrichment
-                        ? tr("page.exec_dashboard.bulk_enrich_queueing", "Queueing enrichment…")
-                        : tr("page.exec_dashboard.bulk_enrich_cta", "Queue bulk enrichment")}
-                    </button>
+                      {tr("page.exec_dashboard.bulk_enrich_cta", "Queue bulk enrichment")}
+                    </span>
                   )}
-                </div>
+                </Link>
               ))}
             </div>
           )}
@@ -1279,6 +1287,34 @@ export default function ExecutiveDashboardPage() {
 
 
 
+
+      {/* ── Quick Nav ── */}
+      {data && (
+        <div className={`${showcaseCardClass} p-5`}>
+          <p className={showcaseLabelClass}>{tr("page.exec_dashboard.quick_nav_eyebrow", "Quick navigation")}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {[
+              { href: "/import/scientific", label: tr("nav.scientific_import", "Scientific Import"), icon: "🔬" },
+              { href: "/disambiguation", label: tr("nav.disambiguation", "Disambiguation"), icon: "💡" },
+              { href: "/authority", label: tr("nav.authority", "Authority Control"), icon: "📚" },
+              { href: "/harmonization", label: tr("nav.harmonization", "Harmonization"), icon: "⚗️" },
+              { href: `/analytics/topics?domain=${encodeURIComponent(dashboardDomainId)}`, label: tr("nav.topic_analysis", "Topic Analysis"), icon: "🔍" },
+              { href: `/analytics/graph?domain=${encodeURIComponent(dashboardDomainId)}`, label: tr("nav.graph_analytics", "Graph Analytics"), icon: "🕸️" },
+              { href: "/rag", label: tr("nav.rag", "Semantic AI"), icon: "✨" },
+              { href: "/reports", label: tr("nav.reports", "Report Builder"), icon: "📊" },
+            ].map((nav) => (
+              <Link
+                key={nav.href}
+                href={nav.href}
+                className="inline-flex items-center gap-2 rounded-lg border border-[var(--ukip-border)] bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700"
+              >
+                <span aria-hidden="true">{nav.icon}</span>
+                {nav.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Section 1: Signal KPIs ── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
