@@ -577,7 +577,11 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
 
   return (
     <aside
-      className={`fixed z-40 ${expanded ? "inset-x-4 bottom-4 top-20 max-w-none" : "bottom-6 right-6 top-auto w-[min(440px,calc(100vw-2rem))]"} ${className}`}
+      className={`fixed z-40 ${
+        expanded
+          ? "bottom-4 right-4 top-20 w-[min(820px,calc(100vw-2rem))] sm:right-6 sm:w-[min(860px,calc(100vw-3rem))]"
+          : "bottom-6 right-6 top-auto w-[min(440px,calc(100vw-2rem))]"
+      } ${className}`}
       aria-label="UKIP Assistant"
     >
       <div className="flex max-h-[calc(100vh-7rem)] flex-col overflow-hidden rounded-2xl border border-violet-400/35 bg-slate-950 text-white shadow-[0_24px_80px_rgb(15_23_42/0.42)]">
