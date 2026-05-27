@@ -417,6 +417,118 @@ function wordCount(text: string): number {
     return text.split(/\s+/).filter(Boolean).length;
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function valueString(value: unknown): string {
+    if (value === null || value === undefined || value === "") return "";
+    if (typeof value === "string") return stripInlineHtml(value);
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    return "";
+}
+
+function firstRecordValue(record: Record<string, unknown>, keys: string[]): string | null {
+    for (const key of keys) {
+        const direct = valueString(record[key]);
+        if (direct) return direct;
+    }
+    return null;
+}
+
+function normalizedOrcidHref(orcid: string): string {
+    const normalized = orcid
+        .trim()
+        .replace(/^https?:\/\/orcid\.org\//i, "")
+        .replace(/^orcid:\s*/i, "");
+    return `https://orcid.org/${normalized}`;
+}
+
+function isUrlValue(value: string): boolean {
+    return /^https?:\/\//i.test(value);
+}
+
+function FieldValueLink({ value }: { value: string }) {
+    if (!isUrlValue(value)) return <>{value}</>;
+    return (
+        <a
+            href={value}
+            target="_blank"
+            rel="noreferrer"
+            className="break-all text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-900 dark:text-blue-300 dark:decoration-blue-500"
+        >
+            {value}
+        </a>
+    );
+}
+
+function isAuthorRecord(record: Record<string, unknown>): boolean {
+    return Boolean(
+        firstRecordValue(record, ["author_name", "authorName", "name", "display_name", "displayName"]) ||
+        firstRecordValue(record, ["author_orcid", "authorOrcid", "orcid", "orcid_id", "orcidId"]) ||
+        firstRecordValue(record, ["author_openalex_id", "authorOpenalexId", "openalex_id", "openalexId"])
+    );
+}
+
+function AuthorRecordCard({ record, index }: { record: Record<string, unknown>; index: number }) {
+    const name = firstRecordValue(record, ["author_name", "authorName", "name", "display_name", "displayName"]) ?? `Autor ${index + 1}`;
+    const orcid = firstRecordValue(record, ["author_orcid", "authorOrcid", "orcid", "orcid_id", "orcidId"]);
+    const openAlex = firstRecordValue(record, ["author_openalex_id", "authorOpenalexId", "openalex_id", "openalexId"]);
+    const position = firstRecordValue(record, ["author_position", "authorPosition", "position"]);
+    const renderedKeys = new Set([
+        "author_name", "authorName", "name", "display_name", "displayName",
+        "author_orcid", "authorOrcid", "orcid", "orcid_id", "orcidId",
+        "author_openalex_id", "authorOpenalexId", "openalex_id", "openalexId",
+        "author_position", "authorPosition", "position",
+    ]);
+    const extraEntries = Object.entries(record).filter(([key, value]) => !renderedKeys.has(key) && valueString(value));
+
+    return (
+        <div className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                    <p className="break-words text-sm font-black text-slate-800 dark:text-slate-100">{name}</p>
+                    <p className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                        Autor {index + 1}
+                    </p>
+                </div>
+                {position ? (
+                    <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-violet-700 ring-1 ring-violet-100 dark:bg-violet-400/10 dark:text-violet-200 dark:ring-violet-400/20">
+                        {position}
+                    </span>
+                ) : null}
+            </div>
+            <div className="mt-3 grid gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                {orcid ? (
+                    <div className="min-w-0">
+                        <span className="mr-1 text-slate-400">ORCID:</span>
+                        <a
+                            href={normalizedOrcidHref(orcid)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="break-all text-emerald-700 underline decoration-emerald-300 underline-offset-2 hover:text-emerald-900 dark:text-emerald-300 dark:decoration-emerald-500"
+                        >
+                            {orcid}
+                        </a>
+                    </div>
+                ) : null}
+                {openAlex ? (
+                    <div className="min-w-0">
+                        <span className="mr-1 text-slate-400">OpenAlex:</span>
+                        <FieldValueLink value={openAlex} />
+                    </div>
+                ) : null}
+                {extraEntries.map(([key, value]) => (
+                    <div key={key} className="min-w-0">
+                        <span className="mr-1 text-slate-400">{fieldLabel(key)}:</span>
+                        <span className="break-words">{valueString(value)}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 function formatObjectSummary(value: Record<string, unknown>): string {
     const keyword = value.keyword;
     const score = value.opportunity_score;
@@ -455,6 +567,63 @@ function formatValue(value: unknown): React.ReactNode {
         return formatObjectSummary(value as Record<string, unknown>);
     }
     return stripInlineHtml(String(value));
+}
+
+function StructuredFieldValue({ value }: { value: unknown }) {
+    if (value === null || value === undefined || value === "") {
+        return <span className="italic text-gray-300 dark:text-gray-600">—</span>;
+    }
+    if (Array.isArray(value)) {
+        if (value.length === 0) return <span className="italic text-gray-300 dark:text-gray-600">—</span>;
+        if (value.every(isPlainRecord)) {
+            const records = value as Record<string, unknown>[];
+            const authorLike = records.some(isAuthorRecord);
+            return (
+                <div className="grid max-h-[28rem] gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
+                    {records.map((record, index) => (
+                        authorLike ? (
+                            <AuthorRecordCard key={`${index}-${firstRecordValue(record, ["author_name", "authorName", "name"]) ?? index}`} record={record} index={index} />
+                        ) : (
+                            <div key={index} className="rounded-xl border border-slate-200 bg-white/80 p-3 text-xs font-semibold text-slate-600 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300">
+                                <div className="grid gap-2">
+                                    {Object.entries(record).map(([key, entryValue]) => (
+                                        <div key={key} className="min-w-0">
+                                            <span className="mr-1 text-slate-400">{fieldLabel(key)}:</span>
+                                            <span className="break-words">{formatValue(entryValue)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )
+                    ))}
+                </div>
+            );
+        }
+        return (
+            <div className="flex flex-wrap gap-2">
+                {value.map((item, index) => (
+                    <span key={index} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600 dark:bg-white/10 dark:text-slate-200">
+                        {formatValue(item)}
+                    </span>
+                ))}
+            </div>
+        );
+    }
+    if (isPlainRecord(value)) {
+        return (
+            <div className="rounded-xl border border-slate-200 bg-white/80 p-3 text-xs font-semibold text-slate-600 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300">
+                <div className="grid gap-2">
+                    {Object.entries(value).map(([key, entryValue]) => (
+                        <div key={key} className="min-w-0">
+                            <span className="mr-1 text-slate-400">{fieldLabel(key)}:</span>
+                            <span className="break-words">{formatValue(entryValue)}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+    return <>{formatValue(value)}</>;
 }
 
 const Spinner = () => (
@@ -2241,9 +2410,9 @@ export default function EntityDetailPage() {
                                             />
                                         ) : null}
                                     </span>
-                                    <span className="block break-words text-sm font-bold leading-6 text-slate-700 dark:text-slate-200">
-                                        {formatValue(entry.value)}
-                                    </span>
+                                    <div className="block min-w-0 break-words text-sm font-bold leading-6 text-slate-700 dark:text-slate-200">
+                                        <StructuredFieldValue value={entry.value} />
+                                    </div>
                                     {entry.normalizedValue !== undefined ? (
                                         <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700 ring-1 ring-blue-100 dark:bg-blue-400/10 dark:text-blue-200 dark:ring-blue-400/20">
                                             Normalizado: {formatValue(entry.normalizedValue)}

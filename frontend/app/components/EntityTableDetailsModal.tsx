@@ -80,6 +80,99 @@ function titleCaseKey(key: string): string {
         .join(" ");
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function valueString(value: unknown): string {
+    if (value === null || value === undefined || value === "") return "";
+    if (typeof value === "string") return stripInlineHtml(value);
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    return "";
+}
+
+function firstRecordValue(record: Record<string, unknown>, keys: string[]): string | null {
+    for (const key of keys) {
+        const direct = valueString(record[key]);
+        if (direct) return direct;
+    }
+    return null;
+}
+
+function normalizedOrcidHref(orcid: string): string {
+    const normalized = orcid
+        .trim()
+        .replace(/^https?:\/\/orcid\.org\//i, "")
+        .replace(/^orcid:\s*/i, "");
+    return `https://orcid.org/${normalized}`;
+}
+
+function FieldValueLink({ value }: { value: string }) {
+    if (!/^https?:\/\//i.test(value)) return <>{value}</>;
+    return (
+        <a
+            href={value}
+            target="_blank"
+            rel="noreferrer"
+            className="break-all text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-900 dark:text-blue-300 dark:decoration-blue-500"
+        >
+            {value}
+        </a>
+    );
+}
+
+function isAuthorRecord(record: Record<string, unknown>): boolean {
+    return Boolean(
+        firstRecordValue(record, ["author_name", "authorName", "name", "display_name", "displayName"]) ||
+        firstRecordValue(record, ["author_orcid", "authorOrcid", "orcid", "orcid_id", "orcidId"]) ||
+        firstRecordValue(record, ["author_openalex_id", "authorOpenalexId", "openalex_id", "openalexId"])
+    );
+}
+
+function AuthorRecordCard({ record, index }: { record: Record<string, unknown>; index: number }) {
+    const name = firstRecordValue(record, ["author_name", "authorName", "name", "display_name", "displayName"]) ?? `Autor ${index + 1}`;
+    const orcid = firstRecordValue(record, ["author_orcid", "authorOrcid", "orcid", "orcid_id", "orcidId"]);
+    const openAlex = firstRecordValue(record, ["author_openalex_id", "authorOpenalexId", "openalex_id", "openalexId"]);
+    const position = firstRecordValue(record, ["author_position", "authorPosition", "position"]);
+
+    return (
+        <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-800/40">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                    <p className="break-words text-sm font-bold text-gray-900 dark:text-white">{name}</p>
+                    <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">Autor {index + 1}</p>
+                </div>
+                {position ? (
+                    <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-purple-700 dark:bg-purple-500/10 dark:text-purple-300">
+                        {position}
+                    </span>
+                ) : null}
+            </div>
+            <div className="mt-3 grid gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+                {orcid ? (
+                    <div className="min-w-0">
+                        <span className="mr-1 text-gray-400">ORCID:</span>
+                        <a
+                            href={normalizedOrcidHref(orcid)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="break-all text-emerald-700 underline decoration-emerald-300 underline-offset-2 hover:text-emerald-900 dark:text-emerald-300 dark:decoration-emerald-500"
+                        >
+                            {orcid}
+                        </a>
+                    </div>
+                ) : null}
+                {openAlex ? (
+                    <div className="min-w-0">
+                        <span className="mr-1 text-gray-400">OpenAlex:</span>
+                        <FieldValueLink value={openAlex} />
+                    </div>
+                ) : null}
+            </div>
+        </div>
+    );
+}
+
 function formatObjectSummary(value: Record<string, unknown>): string {
     const keyword = value.keyword;
     const score = value.opportunity_score;
@@ -114,6 +207,52 @@ function formatValue(value: unknown, emptyLabel: string): string {
     }
     if (typeof value === "object") return formatObjectSummary(value as Record<string, unknown>);
     return String(value);
+}
+
+function StructuredFieldValue({ value, emptyLabel }: { value: unknown; emptyLabel: string }) {
+    if (value === null || value === undefined || value === "") return <span>{emptyLabel}</span>;
+    if (Array.isArray(value)) {
+        if (value.length === 0) return <span>{emptyLabel}</span>;
+        if (value.every(isPlainRecord)) {
+            const records = value as Record<string, unknown>[];
+            const authorLike = records.some(isAuthorRecord);
+            return (
+                <div className="grid max-h-[24rem] gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
+                    {records.map((record, index) => (
+                        authorLike ? (
+                            <AuthorRecordCard key={`${index}-${firstRecordValue(record, ["author_name", "authorName", "name"]) ?? index}`} record={record} index={index} />
+                        ) : (
+                            <div key={index} className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 text-xs font-medium text-gray-600 dark:border-gray-800 dark:bg-gray-800/40 dark:text-gray-300">
+                                <div className="grid gap-2">
+                                    {Object.entries(record).map(([key, entryValue]) => (
+                                        <div key={key} className="min-w-0">
+                                            <span className="mr-1 text-gray-400">{titleCaseKey(key)}:</span>
+                                            <span className="break-words">{formatValue(entryValue, emptyLabel)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )
+                    ))}
+                </div>
+            );
+        }
+    }
+    if (isPlainRecord(value)) {
+        return (
+            <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 text-xs font-medium text-gray-600 dark:border-gray-800 dark:bg-gray-800/40 dark:text-gray-300">
+                <div className="grid gap-2">
+                    {Object.entries(value).map(([key, entryValue]) => (
+                        <div key={key} className="min-w-0">
+                            <span className="mr-1 text-gray-400">{titleCaseKey(key)}:</span>
+                            <span className="break-words">{formatValue(entryValue, emptyLabel)}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+    return <span>{formatValue(value, emptyLabel)}</span>;
 }
 
 const ABSTRACT_FIELD_KEYS = new Set([
@@ -662,9 +801,9 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
                                                 {hasOrcids ? (
                                                     <AuthorsWithOrcids authors={authorsList} orcids={enrichmentOrcids} />
                                                 ) : (
-                                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                        {formatValue(field.value, t("common.no_data"))}
-                                                    </span>
+                                                    <div className="min-w-0 text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                        <StructuredFieldValue value={field.value} emptyLabel={t("common.no_data")} />
+                                                    </div>
                                                 )}
                                             </div>
                                         );
