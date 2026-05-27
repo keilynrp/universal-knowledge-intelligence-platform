@@ -128,7 +128,7 @@ interface AuthorityRecord {
     resolution_status: string;
 }
 
-type Tab = "overview" | "enrichment" | "authority" | "graph" | "comments";
+type Tab = "overview" | "enrichment" | "authority" | "graph" | "impact" | "comments";
 
 interface EnrichmentSignalSection {
     key: string;
@@ -1101,6 +1101,7 @@ const DETAIL_TABS: { id: Tab; labelKey: string }[] = [
     { id: "enrichment", labelKey: "entities.detail.tab.enrichment" },
     { id: "authority", labelKey: "entities.detail.tab.authority" },
     { id: "graph", labelKey: "entities.detail.tab.graph" },
+    { id: "impact", labelKey: "entities.detail.enrichment.projection_title" },
     { id: "comments", labelKey: "entities.detail.tab.comments" },
 ];
 
@@ -3205,48 +3206,6 @@ export default function EntityDetailPage() {
                                 Datos proporcionados por {enrichmentProviderLabel}.{formatShortDate(enrichmentUpdatedLabel) ? ` Última actualización: ${formatShortDate(enrichmentUpdatedLabel)}` : ""}
                             </div>
                         </section>
-
-                        <section className={`${DETAIL_CARD} p-6 md:p-8`}>
-                            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-200">
-                                        <IconGlyph name="chart" className="h-6 w-6" />
-                                    </div>
-                                    <div>
-                                        <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
-                                            {tr("entities.detail.enrichment.projection_title", "Proyección de impacto")}
-                                        </p>
-                                        <p className="mt-1 text-sm font-semibold text-slate-400">
-                                            {tr("entities.detail.enrichment.projection_subtitle", "Simulación conectada al registro enriquecido")}
-                                        </p>
-                                    </div>
-                                </div>
-                                {entity.enrichment_status !== "pending" && entity.enrichment_status !== "processing" && entity.enrichment_status !== "completed" ? (
-                                    <button
-                                        onClick={handleEnrich}
-                                        disabled={enriching}
-                                        className="flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-bold text-white shadow-[0_14px_35px_rgba(124,58,237,0.28)] transition hover:bg-violet-700 disabled:opacity-50"
-                                    >
-                                        {enriching ? <Spinner /> : <IconGlyph name="spark" className="h-4 w-4" />}
-                                        {enriching ? tr("entities.detail.btn.enriching", "Enriqueciendo") : tr("entities.detail.btn.enrich_now", "Enriquecer ahora")}
-                                    </button>
-                                ) : null}
-                            </div>
-                            {entity.enrichment_status === "completed" ? (
-                                <MonteCarloChart productId={entity.id} />
-                            ) : (
-                                <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-8 text-center dark:border-white/10 dark:bg-white/5">
-                                    <IconGlyph name="spark" className="mb-4 h-10 w-10 text-violet-500 dark:text-violet-300" />
-                                    <p className="max-w-md text-sm font-bold leading-6 text-slate-500 dark:text-slate-400">
-                                        {entity.enrichment_status === "failed"
-                                            ? tr("entities.detail.projection.empty_failed", "No se pudo completar el enriquecimiento. Reintenta para recalcular conceptos, DOI, citas y proyección.")
-                                            : entity.enrichment_status === "pending" || entity.enrichment_status === "processing"
-                                            ? tr("entities.detail.projection.empty_pending", "El enriquecimiento sigue en proceso. La proyección aparecerá cuando el estado cambie a completado.")
-                                            : tr("entities.detail.projection.empty_idle", "La proyección se activa cuando el registro queda enriquecido con señales académicas confiables.")}
-                                    </p>
-                                </div>
-                            )}
-                        </section>
                     </div>
                 </div>
             )}
@@ -3298,6 +3257,56 @@ export default function EntityDetailPage() {
                             onRefreshGraph={() => setGraphKey((k) => k + 1)}
                         />
                         </div>
+                    </section>
+                </div>
+            )}
+
+            {/* ── Impact Projection ── */}
+            {tab === "impact" && (
+                <div className="space-y-6">
+                    <section className={`${DETAIL_CARD} p-6 md:p-8`}>
+                        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+                            <div className="flex items-center gap-4">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-200">
+                                    <IconGlyph name="chart" className="h-6 w-6" />
+                                </div>
+                                <div>
+                                    <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
+                                        {tr("entities.detail.enrichment.projection_title", "Proyección de impacto")}
+                                    </p>
+                                    <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950 dark:text-white">
+                                        Lectura probabilística del registro
+                                    </h2>
+                                    <p className="mt-1 text-sm font-semibold text-slate-400">
+                                        Score ponderado, trayectoria Monte Carlo y evidencia usada para interpretar el potencial del registro.
+                                    </p>
+                                </div>
+                            </div>
+                            {entity.enrichment_status !== "pending" && entity.enrichment_status !== "processing" && entity.enrichment_status !== "completed" ? (
+                                <button
+                                    onClick={handleEnrich}
+                                    disabled={enriching}
+                                    className="flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-bold text-white shadow-[0_14px_35px_rgba(124,58,237,0.28)] transition hover:bg-violet-700 disabled:opacity-50"
+                                >
+                                    {enriching ? <Spinner /> : <IconGlyph name="spark" className="h-4 w-4" />}
+                                    {enriching ? tr("entities.detail.btn.enriching", "Enriqueciendo") : tr("entities.detail.btn.enrich_now", "Enriquecer ahora")}
+                                </button>
+                            ) : null}
+                        </div>
+                        {entity.enrichment_status === "completed" ? (
+                            <MonteCarloChart productId={entity.id} />
+                        ) : (
+                            <div className="flex min-h-80 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-8 text-center dark:border-white/10 dark:bg-white/5">
+                                <IconGlyph name="spark" className="mb-4 h-10 w-10 text-violet-500 dark:text-violet-300" />
+                                <p className="max-w-md text-sm font-bold leading-6 text-slate-500 dark:text-slate-400">
+                                    {entity.enrichment_status === "failed"
+                                        ? tr("entities.detail.projection.empty_failed", "No se pudo completar el enriquecimiento. Reintenta para recalcular conceptos, DOI, citas y proyección.")
+                                        : entity.enrichment_status === "pending" || entity.enrichment_status === "processing"
+                                        ? tr("entities.detail.projection.empty_pending", "El enriquecimiento sigue en proceso. La proyección aparecerá cuando el estado cambie a completado.")
+                                        : tr("entities.detail.projection.empty_idle", "La proyección se activa cuando el registro queda enriquecido con señales académicas confiables.")}
+                                </p>
+                            </div>
+                        )}
                     </section>
                 </div>
             )}
