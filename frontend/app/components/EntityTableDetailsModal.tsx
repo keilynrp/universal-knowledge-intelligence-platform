@@ -121,7 +121,7 @@ function FieldValueLink({ value }: { value: string }) {
     );
 }
 
-function SoftIcon({ type }: { type: "author" | "institution" | "keyword" | "openalex" | "ror" | "orcid" }) {
+function SoftIcon({ type }: { type: "author" | "institution" | "keyword" | "openalex" | "ror" | "orcid" | "funding" | "external" | "info" }) {
     const common = {
         className: "h-5 w-5",
         fill: "none",
@@ -162,6 +162,33 @@ function SoftIcon({ type }: { type: "author" | "institution" | "keyword" | "open
             </svg>
         );
     }
+    if (type === "funding") {
+        return (
+            <svg {...common}>
+                <path d="M12 4v10" />
+                <path d="M8.5 7.5A3.5 3.5 0 0112 4a3.5 3.5 0 013.5 3.5c0 2-1.6 2.8-3.5 2.8s-3.5.8-3.5 2.7A3.5 3.5 0 0012 16.5a3.5 3.5 0 003.5-3.5" />
+                <path d="M4 16.5c2.4 2.8 5 4 8 4s5.6-1.2 8-4" />
+            </svg>
+        );
+    }
+    if (type === "external") {
+        return (
+            <svg {...common}>
+                <path d="M14 4h6v6" />
+                <path d="M20 4l-9 9" />
+                <path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4" />
+            </svg>
+        );
+    }
+    if (type === "info") {
+        return (
+            <svg {...common}>
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 10v6" />
+                <path d="M12 7h.01" />
+            </svg>
+        );
+    }
     if (type === "orcid") {
         return <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-lime-500 text-[10px] font-black leading-none text-white">iD</span>;
     }
@@ -188,6 +215,27 @@ function countryFlag(country: string): string | null {
     if (code === "FR") return "🇫🇷";
     if (code === "BR") return "🇧🇷";
     return null;
+}
+
+function countryName(country: string): string {
+    const code = country.trim().toUpperCase();
+    if (code === "CN") return "China";
+    if (code === "US" || code === "USA") return "United States";
+    if (code === "GB" || code === "UK") return "United Kingdom";
+    if (code === "MX") return "Mexico";
+    if (code === "ES") return "Spain";
+    if (code === "DE") return "Germany";
+    if (code === "FR") return "France";
+    if (code === "BR") return "Brazil";
+    return country;
+}
+
+function compactIdentifier(value: string, prefixes: string[]): string {
+    let compact = value.trim();
+    for (const prefix of prefixes) {
+        compact = compact.replace(new RegExp(`^https?://${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i"), "");
+    }
+    return compact.replace(/^\/+/, "");
 }
 
 function isAuthorRecord(record: Record<string, unknown>): boolean {
@@ -254,6 +302,35 @@ function isAffiliationRecord(record: Record<string, unknown>): boolean {
     );
 }
 
+function AffiliationCards({ records }: { records: Record<string, unknown>[] }) {
+    return (
+        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white/80 shadow-sm dark:border-gray-800 dark:bg-gray-800/40">
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                {records.map((record, index) => {
+                    const institution = firstRecordValue(record, ["institution", "institution_name", "organization", "organization_name", "affiliation", "name", "display_name"]) ?? `Institución ${index + 1}`;
+                    const ror = firstRecordValue(record, ["ror", "ror_id", "rorId"]);
+                    const openAlex = firstRecordValue(record, ["openalex_id", "openalexId", "institution_openalex_id", "institutionOpenalexId"]);
+                    const country = firstRecordValue(record, ["country", "country_code", "countryCode"]);
+                    const flag = country ? countryFlag(country) : null;
+                    return (
+                        <div key={`${index}-${institution}`} className="grid gap-4 p-5 md:grid-cols-[auto_1fr_auto] md:items-center">
+                            <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200"><SoftIcon type="institution" /></span>
+                            <div className="min-w-0">
+                                <p className="break-words text-lg font-black text-gray-900 dark:text-white">{institution}</p>
+                                <div className="mt-3 flex flex-wrap items-center gap-4 text-sm font-bold text-blue-600 dark:text-blue-300">
+                                    {ror ? <span className="inline-flex min-w-0 items-center gap-2"><SoftIcon type="ror" />ROR: {compactIdentifier(ror, ["ror.org"])}</span> : null}
+                                    {openAlex ? <span className="inline-flex min-w-0 items-center gap-2"><span className="text-gray-500"><SoftIcon type="openalex" /></span>OpenAlex ID: {compactIdentifier(openAlex, ["openalex.org/"])}</span> : null}
+                                </div>
+                            </div>
+                            {country ? <span className="inline-flex w-fit items-center gap-3 rounded-xl bg-gray-50 px-4 py-2 text-sm font-black text-gray-800 ring-1 ring-gray-200 dark:bg-white/10 dark:text-gray-100 dark:ring-white/10">{flag ? <span>{flag}</span> : null}{countryName(country)}</span> : null}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 function NormalizedAffiliationsTable({ records }: { records: Record<string, unknown>[] }) {
     return (
         <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white/80 shadow-sm dark:border-gray-800 dark:bg-gray-800/40">
@@ -282,6 +359,37 @@ function NormalizedAffiliationsTable({ records }: { records: Record<string, unkn
                     })}
                 </div>
             </div>
+        </div>
+    );
+}
+
+function isFundingRecord(record: Record<string, unknown>): boolean {
+    return Boolean(
+        firstRecordValue(record, ["funder", "funder_name", "funderName", "funding", "funding_agency", "agency", "name", "display_name"]) ||
+        firstRecordValue(record, ["award", "award_id", "grant", "grant_id"])
+    );
+}
+
+function FundingTable({ records }: { records: Record<string, unknown>[] }) {
+    return (
+        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white/80 shadow-sm dark:border-gray-800 dark:bg-gray-800/40">
+            <div className="grid grid-cols-[minmax(16rem,1fr)_minmax(12rem,0.5fr)] border-b border-gray-100 bg-gray-50/80 text-base font-black text-gray-700 dark:border-gray-800 dark:bg-gray-900/30 dark:text-gray-200">
+                <div className="px-5 py-5">Entidad financiadora</div>
+                <div className="px-5 py-5">Tipo</div>
+            </div>
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                {records.map((record, index) => {
+                    const name = firstRecordValue(record, ["funder", "funder_name", "funderName", "funding", "funding_agency", "agency", "name", "display_name"]) ?? `Entidad ${index + 1}`;
+                    const type = firstRecordValue(record, ["type", "role", "entity_type", "relationship"]) ?? "Entidad financiadora";
+                    return (
+                        <div key={`${index}-${name}`} className="grid grid-cols-[minmax(16rem,1fr)_minmax(12rem,0.5fr)] items-center text-sm font-bold text-gray-900 dark:text-white">
+                            <div className="flex min-w-0 items-center gap-5 px-5 py-5"><span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200"><SoftIcon type="institution" /></span><span className="break-words text-lg font-black">{name}</span></div>
+                            <div className="px-5 py-5"><span className="inline-flex items-center gap-2 rounded-xl bg-lime-50 px-4 py-2 text-sm font-black text-lime-800 dark:bg-lime-400/15 dark:text-lime-100"><SoftIcon type="openalex" />{type}</span></div>
+                        </div>
+                    );
+                })}
+            </div>
+            <div className="flex items-center gap-3 px-5 py-5 text-sm font-bold text-gray-500 dark:text-gray-400"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200"><SoftIcon type="info" /></span>{records.length} entidades financiadoras</div>
         </div>
     );
 }
@@ -321,10 +429,35 @@ function KeywordSignalGrid({ records }: { records: Record<string, unknown>[] }) 
     );
 }
 
+function isExternalIdList(value: unknown): value is string[] {
+    return Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === "string" && /^https?:\/\//i.test(item));
+}
+
+function ExternalIdList({ values }: { values: string[] }) {
+    return (
+        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white/80 shadow-sm dark:border-gray-800 dark:bg-gray-800/40">
+            <div className="flex items-center justify-between gap-4 border-b border-gray-100 bg-gray-50/80 px-5 py-4 dark:border-gray-800 dark:bg-gray-900/30">
+                <div className="flex items-center gap-3 text-sm font-black text-gray-800 dark:text-gray-100"><span className="text-blue-600 dark:text-blue-300"><SoftIcon type="keyword" /></span>Enrichment Concept Ids</div>
+                <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-600 dark:bg-blue-400/10 dark:text-blue-200">{values.length} conceptos</span>
+            </div>
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                {values.map((value, index) => (
+                    <div key={`${index}-${value}`} className="grid grid-cols-[3.5rem_1fr_auto] items-center gap-4 px-5 py-4 text-sm font-bold">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-blue-700 dark:bg-blue-400/10 dark:text-blue-200">{index + 1}</span>
+                        <FieldValueLink value={value} />
+                        <a href={value} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 dark:text-blue-300" aria-label="Abrir identificador externo"><SoftIcon type="external" /></a>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 function isRichStructuredValue(value: unknown): boolean {
+    if (isExternalIdList(value)) return true;
     if (!Array.isArray(value) || value.length === 0 || !value.every(isPlainRecord)) return false;
     const records = value as Record<string, unknown>[];
-    return records.some(isAuthorRecord) || records.some(isAffiliationRecord) || records.some(isKeywordSignalRecord);
+    return records.some(isAuthorRecord) || records.some(isAffiliationRecord) || records.some(isKeywordSignalRecord) || records.some(isFundingRecord);
 }
 
 function formatObjectSummary(value: Record<string, unknown>): string {
@@ -363,8 +496,9 @@ function formatValue(value: unknown, emptyLabel: string): string {
     return String(value);
 }
 
-function StructuredFieldValue({ value, emptyLabel }: { value: unknown; emptyLabel: string }) {
+function StructuredFieldValue({ value, emptyLabel, fieldKey }: { value: unknown; emptyLabel: string; fieldKey?: string }) {
     if (value === null || value === undefined || value === "") return <span>{emptyLabel}</span>;
+    if (isExternalIdList(value)) return <ExternalIdList values={value} />;
     if (Array.isArray(value)) {
         if (value.length === 0) return <span>{emptyLabel}</span>;
         if (value.every(isPlainRecord)) {
@@ -372,8 +506,11 @@ function StructuredFieldValue({ value, emptyLabel }: { value: unknown; emptyLabe
             const authorLike = records.some(isAuthorRecord);
             const affiliationLike = records.some(isAffiliationRecord);
             const keywordLike = records.some(isKeywordSignalRecord);
+            const fundingLike = records.some(isFundingRecord);
             if (authorLike) return <AuthorAffiliationsTable records={records} />;
             if (keywordLike) return <KeywordSignalGrid records={records} />;
+            if (fundingLike) return <FundingTable records={records} />;
+            if (affiliationLike && ["affiliation", "affiliations"].includes((fieldKey ?? "").toLowerCase())) return <AffiliationCards records={records} />;
             if (affiliationLike) return <NormalizedAffiliationsTable records={records} />;
             return (
                 <div className="grid max-h-[24rem] gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
@@ -958,7 +1095,7 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
                                                     <AuthorsWithOrcids authors={authorsList} orcids={enrichmentOrcids} />
                                                 ) : (
                                                     <div className="min-w-0 text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                        <StructuredFieldValue value={field.value} emptyLabel={t("common.no_data")} />
+                                                        <StructuredFieldValue value={field.value} emptyLabel={t("common.no_data")} fieldKey={field.key} />
                                                     </div>
                                                 )}
                                             </div>
