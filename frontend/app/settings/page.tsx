@@ -15,10 +15,11 @@ import WebhooksTab from "./WebhooksTab";
 import WorkspaceResetTab from "./WorkspaceResetTab";
 import DataFixesTab from "./DataFixesTab";
 import FieldCorrespondenceRulesTab from "./FieldCorrespondenceRulesTab";
+import AssistantGuardrailsTab from "./AssistantGuardrailsTab";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-type Tab = "preferences" | "account" | "users" | "auth" | "webhooks" | "notifications" | "branding" | "workspace_reset" | "field_rules" | "data_fixes";
+type Tab = "preferences" | "account" | "users" | "auth" | "webhooks" | "notifications" | "branding" | "workspace_reset" | "field_rules" | "assistant_guardrails" | "data_fixes";
 
 
 // ── Main Page ────────────────────────────────────────────────────────────────
@@ -43,6 +44,7 @@ export default function SettingsPage() {
         ...(isAdmin ? [{ id: "branding", label: t("settings.tab.branding") }] : []),
         ...(isAdmin ? [{ id: "workspace_reset", label: t("settings.tab.workspace_reset") }] : []),
         ...(isAdmin ? [{ id: "field_rules", label: "Field rules" }] : []),
+        ...(isAdmin ? [{ id: "assistant_guardrails", label: "Assistant guardrails" }] : []),
         ...(isSuperAdmin ? [{ id: "data_fixes", label: "Data fixes" }] : []),
     ];
 
@@ -79,6 +81,7 @@ export default function SettingsPage() {
             {tab === "branding"       && isAdmin && <BrandingTab toast={toast} />}
             {tab === "workspace_reset" && isAdmin && <WorkspaceResetTab toast={toast} />}
             {tab === "field_rules"     && isAdmin && <FieldCorrespondenceRulesTab toast={toast} />}
+            {tab === "assistant_guardrails" && isAdmin && <AssistantGuardrailsTab toast={toast} />}
             {tab === "data_fixes"      && isSuperAdmin && <DataFixesTab toast={toast} />}
         </div>
     );

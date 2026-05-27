@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
+from backend.services.assistant_actions import require_assistant_action
 
 logger = logging.getLogger(__name__)
 
@@ -176,15 +177,19 @@ def audit_stats(
 
 @router.get("/export")
 def export_csv(
+    request:       Request,
     action:        Optional[str]      = Query(default=None),
     resource_type: Optional[str]      = Query(default=None),
     username:      Optional[str]      = Query(default=None),
     from_date:     Optional[datetime] = Query(default=None),
     to_date:       Optional[datetime] = Query(default=None),
     db:            Session            = Depends(get_db),
-    _:             models.User        = Depends(require_role("super_admin", "admin")),
+    current_user:  models.User        = Depends(require_role("super_admin", "admin")),
 ):
     """Download filtered audit log as CSV."""
+    if request.headers.get("X-Assistant-Action-Id") == "audit-export":
+        require_assistant_action(current_user, "audit-export")
+
     rows = (
         _base_query(db, action, resource_type, username, from_date, to_date)
         .order_by(models.AuditLog.created_at.desc())

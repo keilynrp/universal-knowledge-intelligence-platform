@@ -38,6 +38,7 @@ from backend import entity_linker as _entity_linker
 from backend.routers.deps import _audit, _dispatch_webhook
 from backend.routers.limiter import limiter
 from backend.services.entity_service import EntityService
+from backend.services.assistant_actions import require_assistant_action
 from backend.tenant_access import get_scoped_record, resolve_request_org_id, scope_query_to_org
 from backend.domain_scope import parse_scope, resolve_domain_filter
 
@@ -472,6 +473,7 @@ def enrich_single_entity(
     current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
 ):
     """Enriches a single row manually (e.g. from a UI click)."""
+    require_assistant_action(current_user, "entity-enrich-current")
     org_id = resolve_request_org_id(db, current_user)
     entity = get_scoped_record(db, models.RawEntity, entity_id, org_id)
     if not entity:

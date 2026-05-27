@@ -33,6 +33,7 @@ from backend.routers import (
     ai_rag,
     agentic_chat,
     alert_channels,
+    assistant_actions,
     api_import,
     analytics,
     annotations,
@@ -374,6 +375,7 @@ app.include_router(governance.router)
 app.include_router(stores.router)
 app.include_router(ai_rag.router)
 app.include_router(agentic_chat.router)
+app.include_router(assistant_actions.router)
 app.include_router(reports.router)
 app.include_router(webhooks.router)
 app.include_router(demo.router)

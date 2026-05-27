@@ -51,6 +51,14 @@ type AssistantMemoryItem = {
   timestamp: string;
 };
 
+type AssistantActionCapability = {
+  id: string;
+  enabled: boolean;
+  executable?: boolean;
+  allowed_roles: string[];
+  requires_confirmation: boolean;
+};
+
 type UKIPAssistantPanelProps = {
   context: AssistantContext;
   className?: string;
@@ -239,6 +247,7 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
   const [pendingAction, setPendingAction] = useState<AssistantActionLink | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [executingActionId, setExecutingActionId] = useState<string | null>(null);
+  const [capabilities, setCapabilities] = useState<Record<string, AssistantActionCapability>>({});
   const requestSeq = useRef(0);
 
   const connectedSources = context.activeSources ?? 0;
@@ -256,19 +265,42 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
     return parts.join(" · ");
   }, [context.totalEntities, enrichmentPct, qualityPct, readinessPct]);
   const contextualActions = useMemo<AssistantActionLink[]>(() => {
-    if (context.actionLinks?.length) return context.actionLinks.slice(0, 4);
+    const applyCapabilities = (actions: AssistantActionLink[]) =>
+      actions
+        .filter((action) => capabilities[action.id]?.enabled !== false)
+        .filter((action) => capabilities[action.id]?.executable !== false)
+        .map((action) => ({
+          ...action,
+          requiresConfirmation: capabilities[action.id]?.requires_confirmation ?? action.requiresConfirmation,
+        }))
+        .slice(0, 4);
+    if (context.actionLinks?.length) return applyCapabilities(context.actionLinks);
     const currentRoute = context.route || "/";
     const briefHref = buildBriefHref(context);
-    return [
+    return applyCapabilities([
       { id: "open-current", label: "Abrir vista actual", href: currentRoute, kind: "navigate" },
       { id: "open-dashboard", label: "Ver dashboard", href: "/analytics/dashboard", kind: "navigate" },
       { id: "open-rag", label: "Consultar RAG", href: "/rag", kind: "navigate" },
       { id: "open-reports", label: "Preparar brief", href: briefHref, kind: "export", requiresConfirmation: true, confirmationLabel: "Se abrira reportes con dominio, formato PDF, secciones ejecutivas y titulo prellenados desde el contexto actual. Podras revisar antes de generar." },
-    ];
-  }, [context]);
+    ]);
+  }, [capabilities, context]);
 
   useEffect(() => {
     setMemory(readMemory());
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch("/assistant/actions")
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload: { items?: AssistantActionCapability[] } | null) => {
+        if (cancelled || !payload?.items) return;
+        setCapabilities(Object.fromEntries(payload.items.map((item) => [item.id, item])));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -370,6 +402,7 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
       await recordAssistantAction(action, "started");
       const response = await apiFetch(action.apiPath, {
         method: action.method ?? "POST",
+        headers: { "X-Assistant-Action-Id": action.id },
       });
       if (action.responseType === "blob") {
         if (!response.ok) {

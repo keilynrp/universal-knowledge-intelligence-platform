@@ -23,6 +23,7 @@ from backend.database import get_db
 from backend.encryption import encrypt
 from backend.routers.deps import _get_active_integration
 from backend.routers.limiter import limiter
+from backend.services.assistant_actions import require_assistant_action
 from backend.tenant_access import get_scoped_record, resolve_request_org_id, scope_query_to_org
 
 logger = logging.getLogger(__name__)
@@ -170,6 +171,7 @@ def rag_index_catalog(
     current_user: models.User = Depends(require_role("super_admin", "admin")),
 ):
     """Phase 5: Bulk index all enriched entities into the ChromaDB Vector Store."""
+    require_assistant_action(current_user, "rag-reindex")
     integration = _get_active_integration(db)
     if not integration:
         raise HTTPException(
