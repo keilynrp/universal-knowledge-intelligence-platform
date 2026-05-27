@@ -2993,31 +2993,52 @@ export default function EntityDetailPage() {
                     </section>
 
                     <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
-                        <section className={`${DETAIL_CARD} p-6 md:p-8`}>
-                            <div className="mb-6 flex items-center gap-4">
-                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-200">
-                                    <IconGlyph name="nodes" className="h-6 w-6" />
+                        <section className={`${DETAIL_CARD} p-6 md:p-8 lg:col-span-2`}>
+                            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200">
+                                        <SoftIcon type="keyword" />
+                                    </div>
+                                    <div>
+                                        <p className="flex items-center gap-3 text-3xl font-black tracking-tight text-slate-950 dark:text-white">
+                                            {tr("entities.detail.section.enrichment_provider", "Señales enriquecidas")}
+                                            <span className="text-blue-600 dark:text-blue-300"><SoftIcon type="info" /></span>
+                                        </p>
+                                        <p className="mt-2 text-base font-semibold text-slate-500 dark:text-slate-400">
+                                            {tr("entities.detail.section.enrichment_subtitle", "Información enriquecida proveniente de proveedores académicos.")}
+                                        </p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
-                                        {tr("entities.detail.enrichment.concepts_detected", "Conceptos detectados")}
-                                    </p>
-                                    <p className="mt-1 text-sm font-semibold text-slate-400">
-                                        {tr("entities.detail.enrichment.concepts_count", "{count} conceptos semánticos").replace("{count}", String(enrichmentConcepts.length))}
-                                    </p>
-                                </div>
+                                {academicEnrichmentSource ? (
+                                    <Badge variant={sourceVariant(academicEnrichmentSource.toLowerCase())}>
+                                        {academicEnrichmentSource.toUpperCase()}
+                                    </Badge>
+                                ) : null}
                             </div>
-                            {enrichmentConcepts.length > 0 ? (
-                                <div className="flex flex-wrap gap-2">
-                                    {enrichmentConcepts.map((concept) => (
-                                        <Badge key={concept} variant="info">{concept}</Badge>
-                                    ))}
+                            {academicEnrichmentSource ? (
+                                <div className="mb-6 flex flex-wrap items-center gap-5 rounded-2xl border border-blue-100 bg-blue-50/50 px-5 py-4 text-base font-bold text-slate-600 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-slate-200">
+                                    <span className="text-slate-900 dark:text-white"><SoftIcon type="openalex" /></span>
+                                    <span className="text-blue-600 dark:text-blue-300">{academicEnrichmentSource.toUpperCase()}</span>
+                                    <span className="hidden h-8 w-px bg-slate-200 dark:bg-white/10 sm:block" />
+                                    <span className="flex items-center gap-3">
+                                        <SoftIcon type="institution" />
+                                        {tr("entities.detail.section.enrichment_subtitle", "Proveedor académico")}: <span className="text-blue-600 dark:text-blue-300">{academicEnrichmentSource}</span>
+                                    </span>
                                 </div>
+                            ) : null}
+                            {enrichmentConcepts.length > 0 ? (
+                                <ExternalIdList values={enrichmentConcepts} />
                             ) : (
                                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-6 text-sm font-semibold text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
                                     {tr("entities.detail.enrichment.concepts_empty", "Aún no hay conceptos enriquecidos. Ejecuta el enriquecimiento para activar esta capa semántica.")}
                                 </div>
                             )}
+                            <div className="mt-5 flex items-center gap-3 text-sm font-bold text-slate-500 dark:text-slate-400">
+                                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200">
+                                    <SoftIcon type="info" />
+                                </span>
+                                Datos proporcionados por {academicEnrichmentSource ?? "proveedor académico"}.
+                            </div>
                         </section>
 
                         <section className={`${DETAIL_CARD} p-6 md:p-8`}>
