@@ -250,6 +250,29 @@ function QualityIndexTooltip({
     );
 }
 
+function FieldHint({ title, body, ariaLabel }: { title: string; body: string; ariaLabel: string }) {
+    return (
+        <span className="group relative inline-flex">
+            <button
+                type="button"
+                className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] font-black text-slate-500 transition hover:border-violet-400 hover:text-violet-600 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-1 dark:border-white/20 dark:bg-white/10 dark:text-slate-300 dark:hover:border-violet-300 dark:hover:text-violet-200 dark:focus:ring-offset-slate-950"
+                aria-label={ariaLabel}
+            >
+                i
+            </button>
+            <span
+                role="tooltip"
+                className="pointer-events-none absolute left-0 top-6 z-30 w-72 -translate-x-2 rounded-2xl border border-slate-200 bg-slate-950 p-3.5 text-left text-xs font-medium leading-5 text-white opacity-0 shadow-2xl transition group-hover:opacity-100 group-focus-within:opacity-100 dark:border-white/10 dark:bg-white dark:text-slate-900"
+            >
+                <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-violet-300 dark:text-violet-600">
+                    {title}
+                </span>
+                <span className="mt-1.5 block normal-case tracking-normal">{body}</span>
+            </span>
+        </span>
+    );
+}
+
 function alertClass(severity: "low" | "medium" | "high") {
     return severity === "high" ? "border-red-200 bg-red-50 text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200" :
            severity === "medium" ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200" :
@@ -1293,12 +1316,44 @@ export default function EntityDetailPage() {
         normalizeIdentifier(entity.canonical_id) === normalizeIdentifier(resolvedDoi)
     );
     const canonicalDisplayValue = canonicalDuplicatesDoi ? null : entity.canonical_id;
-    const primaryFields = [
-        { key: "primary_label", label: "Etiqueta principal", value: entity.primary_label, icon: "type" },
-        { key: "secondary_label", label: "Etiqueta secundaria (autor / institución / fuente)", value: entity.secondary_label, icon: "tag" },
-        { key: "canonical_id", label: tr("entities.detail.fields.canonical_id", "ID canónico (DOI / ORCID / ROR / ID local)"), value: canonicalDisplayValue, icon: "link", copyable: true },
-        { key: "entity_type", label: "Tipo de entidad", value: resolvedEntityType, icon: "cube" },
-        { key: "domain", label: "Dominio", value: entity.domain, icon: "globe" },
+    const primaryFields: Array<{
+        key: string;
+        label: string;
+        value: unknown;
+        icon: string;
+        copyable?: boolean;
+        hint?: { title: string; body: string };
+    }> = [
+        { key: "primary_label", label: tr("entities.detail.fields.primary_label", "Etiqueta principal"), value: entity.primary_label, icon: "type" },
+        {
+            key: "secondary_label",
+            label: tr("entities.detail.fields.secondary_label_short", "Etiqueta secundaria"),
+            value: entity.secondary_label,
+            icon: "tag",
+            hint: {
+                title: tr("entities.detail.fields.secondary_label_short", "Etiqueta secundaria"),
+                body: tr(
+                    "entities.detail.fields.secondary_label_hint",
+                    "Contexto del registro: autor, institución, fuente, revista, afiliación u otra etiqueta de soporte."
+                ),
+            },
+        },
+        {
+            key: "canonical_id",
+            label: tr("entities.detail.fields.canonical_id_short", "ID canónico"),
+            value: canonicalDisplayValue,
+            icon: "link",
+            copyable: true,
+            hint: {
+                title: tr("entities.detail.fields.canonical_id_short", "ID canónico"),
+                body: tr(
+                    "entities.detail.fields.canonical_id_hint",
+                    "Identificador único del registro: DOI, ORCID, ROR, ISBN, ID local u otro identificador estable."
+                ),
+            },
+        },
+        { key: "entity_type", label: tr("entities.detail.fields.entity_type", "Tipo de entidad"), value: resolvedEntityType, icon: "cube" },
+        { key: "domain", label: tr("entities.detail.fields.domain", "Dominio"), value: entity.domain, icon: "globe" },
     ];
     const systemFields = [
         { key: "validation_status", label: tr("entities.detail.fields.validation_status", "Validación"), value: entity.validation_status, badge: "validation", icon: "quality" },
@@ -1656,8 +1711,15 @@ export default function EntityDetailPage() {
                                     <div key={field.key} className={DETAIL_ROW}>
                                         <div className="flex items-center gap-3 text-violet-600 dark:text-violet-300">
                                             <IconGlyph name={field.icon} className="h-5 w-5" />
-                                            <span className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400">
+                                            <span className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.15em] text-slate-400">
                                                 {field.label}
+                                                {field.hint ? (
+                                                    <FieldHint
+                                                        title={field.hint.title}
+                                                        body={field.hint.body}
+                                                        ariaLabel={tr("entities.detail.fields.hint_aria", "Más información sobre este campo")}
+                                                    />
+                                                ) : null}
                                             </span>
                                         </div>
                                         {isEditing ? (
