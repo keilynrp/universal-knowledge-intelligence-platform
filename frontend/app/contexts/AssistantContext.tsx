@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useDomain } from "./DomainContext";
 
@@ -91,9 +91,18 @@ export function useAssistant() {
 
 export function useAssistantContextRegistration(context: Partial<AssistantContext> | null) {
   const { setAssistantContext } = useAssistant();
+  // Stabilize by structural equality — callers commonly pass inline objects
+  // which would otherwise trigger an infinite re-render loop.
+  const serialized = useMemo(() => (context ? JSON.stringify(context) : null), [context]);
+  const lastSerializedRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setAssistantContext(context);
-    return () => setAssistantContext(null);
-  }, [context, setAssistantContext]);
+    if (lastSerializedRef.current === serialized) return;
+    lastSerializedRef.current = serialized;
+    setAssistantContext(serialized ? (JSON.parse(serialized) as Partial<AssistantContext>) : null);
+    return () => {
+      lastSerializedRef.current = null;
+      setAssistantContext(null);
+    };
+  }, [serialized, setAssistantContext]);
 }
