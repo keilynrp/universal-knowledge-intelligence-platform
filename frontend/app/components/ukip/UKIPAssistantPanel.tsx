@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/app/contexts/AuthContext";
 import { useBranding } from "@/app/contexts/BrandingContext";
 import type { AssistantActionLink, AssistantContext } from "@/app/contexts/AssistantContext";
 import BrandLockup from "./BrandLockup";
@@ -231,15 +232,17 @@ function buildBriefHref(context: AssistantContext) {
 
 export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssistantPanelProps) {
   const { branding } = useBranding();
-  const [open, setOpen] = useState(true);
+  const { user } = useAuth();
+  const userName = user?.display_name || user?.username || "usuario";
+  const welcomeMessage = `Hola, bienvenido ${userName}. En que puedo ayudarte?`;
+  const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<AssistantMessage[]>([
     {
       id: "welcome",
       role: "assistant",
-      content:
-        "Hola. Soy UKIP Assistant. Estoy conectado al circuito de enriquecimiento, RAG, NLQ y señales del dashboard para ayudarte a interpretar tus datos con evidencia.",
+      content: "Hola, bienvenido usuario. En que puedo ayudarte?",
       time: nowLabel(),
     },
   ]);
@@ -288,6 +291,14 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
   useEffect(() => {
     setMemory(readMemory());
   }, []);
+
+  useEffect(() => {
+    setMessages((current) =>
+      current.map((message) =>
+        message.id === "welcome" ? { ...message, content: welcomeMessage } : message,
+      ),
+    );
+  }, [welcomeMessage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -547,14 +558,20 @@ export default function UKIPAssistantPanel({ context, className = "" }: UKIPAssi
 
   if (!open) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className={`fixed bottom-6 right-6 z-40 flex h-16 w-16 items-center justify-center rounded-full border border-violet-300 bg-violet-600 text-white shadow-[0_18px_50px_rgb(124_58_237/0.38)] transition hover:bg-violet-500 ${className}`}
-        aria-label="Abrir UKIP Assistant"
-      >
-        <Icon name="bot" className="h-7 w-7" />
-      </button>
+      <div className={`group fixed bottom-6 right-6 z-40 ${className}`}>
+        <span className="pointer-events-none absolute bottom-full right-0 mb-3 w-max max-w-[240px] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-semibold text-white opacity-0 shadow-lg transition group-hover:opacity-100 group-focus-within:opacity-100">
+          Abrir UKIP Assistant para preguntar o ejecutar acciones
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          title="Abrir UKIP Assistant para preguntar o ejecutar acciones"
+          className="flex h-16 w-16 items-center justify-center rounded-full border border-violet-300 bg-violet-600 text-white shadow-[0_18px_50px_rgb(124_58_237/0.38)] transition hover:bg-violet-500"
+          aria-label="Abrir UKIP Assistant para preguntar o ejecutar acciones"
+        >
+          <Icon name="bot" className="h-7 w-7" />
+        </button>
+      </div>
     );
   }
 
