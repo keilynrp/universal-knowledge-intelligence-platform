@@ -33,6 +33,34 @@ function clampScore(value: number): number {
     return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+function impactTone(value: number) {
+    if (value >= 70) {
+        return {
+            panelClass: "bg-gradient-to-br from-emerald-600 to-teal-600 shadow-[0_18px_50px_rgba(16,185,129,0.22)]",
+            barClass: "bg-emerald-500",
+            textClass: "text-emerald-600 dark:text-emerald-300",
+            badgeClass: "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200",
+            label: "Alto impacto",
+        };
+    }
+    if (value >= 45) {
+        return {
+            panelClass: "bg-gradient-to-br from-amber-500 to-orange-500 shadow-[0_18px_50px_rgba(245,158,11,0.22)]",
+            barClass: "bg-amber-500",
+            textClass: "text-amber-600 dark:text-amber-300",
+            badgeClass: "bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-200",
+            label: "Impacto medio",
+        };
+    }
+    return {
+        panelClass: "bg-gradient-to-br from-red-600 to-rose-600 shadow-[0_18px_50px_rgba(239,68,68,0.24)]",
+        barClass: "bg-red-500",
+        textClass: "text-red-600 dark:text-red-300",
+        badgeClass: "bg-red-50 text-red-700 dark:bg-red-400/10 dark:text-red-200",
+        label: "Bajo impacto",
+    };
+}
+
 export default function MonteCarloChart({ productId }: { productId: number }) {
     const [data, setData] = useState<MonteCarloData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -103,6 +131,7 @@ export default function MonteCarloChart({ productId }: { productId: number }) {
     const score = clampScore(citationSignal * 0.45 + growthSignal * 0.35 + stabilitySignal * 0.20);
     const confidenceScore = stabilitySignal;
     const confidenceLabel = confidenceScore >= 70 ? "Alta" : confidenceScore >= 45 ? "Media" : "Baja";
+    const tone = impactTone(score);
     const interpretation = score >= 70
         ? "Registro con potencial alto y base bibliométrica defendible."
         : score >= 45
@@ -117,16 +146,24 @@ export default function MonteCarloChart({ productId }: { productId: number }) {
     return (
         <div className="space-y-6">
             <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-                <div className="rounded-[1.25rem] bg-gradient-to-br from-violet-600 to-indigo-700 p-6 text-white shadow-[0_18px_45px_rgba(124,58,237,0.28)]">
+                <div className={`rounded-[1.25rem] p-6 text-white ${tone.panelClass}`}>
                     <p className="text-xs font-black uppercase tracking-[0.18em] text-white/70">Impacto proyectado</p>
                     <div className="mt-4 flex items-end justify-between gap-4">
                         <div>
                             <p className="text-6xl font-black tracking-tight">{score}</p>
                             <p className="text-sm font-bold text-white/70">sobre 100</p>
                         </div>
-                        <span className="rounded-full bg-white/15 px-4 py-2 text-sm font-black">
-                            Confianza {confidenceLabel} · {confidenceScore}/100
-                        </span>
+                        <div className="flex flex-col items-end gap-2">
+                            <span className="rounded-full bg-white/15 px-4 py-2 text-sm font-black">
+                                {tone.label}
+                            </span>
+                            <span className="rounded-full bg-white/15 px-4 py-2 text-sm font-black">
+                                Confianza {confidenceLabel} · {confidenceScore}/100
+                            </span>
+                        </div>
+                    </div>
+                    <div className="mt-5 h-3 rounded-full bg-white/20">
+                        <div className="h-3 rounded-full bg-white" style={{ width: `${score}%` }} />
                     </div>
                     <p className="mt-5 text-sm font-semibold leading-6 text-white/82">{interpretation}</p>
                 </div>
@@ -138,7 +175,7 @@ export default function MonteCarloChart({ productId }: { productId: number }) {
                     </div>
                     <div className="rounded-[1.25rem] border border-gray-100 bg-white p-5 dark:border-white/10 dark:bg-white/[0.04]">
                         <p className="text-[11px] font-black uppercase tracking-[0.14em] text-gray-400">Mediana a 5 años</p>
-                        <p className="mt-3 text-3xl font-black text-violet-600 dark:text-violet-300">{p50}</p>
+                        <p className={`mt-3 text-3xl font-black ${tone.textClass}`}>{p50}</p>
                     </div>
                     <div className="rounded-[1.25rem] border border-gray-100 bg-white p-5 dark:border-white/10 dark:bg-white/[0.04]">
                         <p className="text-[11px] font-black uppercase tracking-[0.14em] text-gray-400">Rango probable</p>
@@ -156,7 +193,7 @@ export default function MonteCarloChart({ productId }: { productId: number }) {
                                 {data.total_simulations} simulaciones · horizonte de {data.simulation_years} años
                             </p>
                         </div>
-                        <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-black text-violet-700 dark:bg-violet-400/10 dark:text-violet-200">
+                        <span className={`rounded-full px-3 py-1 text-xs font-black ${tone.badgeClass}`}>
                             p10 / p50 / p90
                         </span>
                     </div>
@@ -165,8 +202,8 @@ export default function MonteCarloChart({ productId }: { productId: number }) {
                             <AreaChart data={data.trajectories} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                 <defs>
                                     <linearGradient id="colorMedian" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                                        <stop offset="5%" stopColor={score >= 70 ? "#10b981" : score >= 45 ? "#f59e0b" : "#ef4444"} stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor={score >= 70 ? "#10b981" : score >= 45 ? "#f59e0b" : "#ef4444"} stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" className="dark:stroke-gray-800" />
@@ -176,12 +213,12 @@ export default function MonteCarloChart({ productId }: { productId: number }) {
                                     contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)", fontSize: "12px" }}
                                     itemStyle={{ fontWeight: 600 }}
                                 />
-                                <Area type="monotone" dataKey="optimistic" stroke="none" fill="#ede9fe" fillOpacity={0.55} className="dark:fill-violet-950/50" />
+                                <Area type="monotone" dataKey="optimistic" stroke="none" fill={score >= 70 ? "#d1fae5" : score >= 45 ? "#fef3c7" : "#fee2e2"} fillOpacity={0.55} />
                                 <Area type="monotone" dataKey="pessimistic" stroke="none" fill="#ffffff" fillOpacity={1} className="dark:fill-gray-900" />
                                 <Area
                                     type="monotone"
                                     dataKey="median"
-                                    stroke="#8b5cf6"
+                                    stroke={score >= 70 ? "#10b981" : score >= 45 ? "#f59e0b" : "#ef4444"}
                                     strokeWidth={3}
                                     fillOpacity={1}
                                     fill="url(#colorMedian)"
@@ -198,10 +235,10 @@ export default function MonteCarloChart({ productId }: { productId: number }) {
                             <div key={driver.label}>
                                 <div className="mb-1 flex items-center justify-between text-xs font-black text-gray-500 dark:text-gray-400">
                                     <span>{driver.label}</span>
-                                    <span>{driver.value}/100</span>
+                                    <span className={impactTone(driver.value).textClass}>{driver.value}/100</span>
                                 </div>
                                 <div className="h-2 rounded-full bg-gray-100 dark:bg-white/10">
-                                    <div className="h-2 rounded-full bg-violet-600" style={{ width: `${driver.value}%` }} />
+                                    <div className={`h-2 rounded-full ${impactTone(driver.value).barClass}`} style={{ width: `${driver.value}%` }} />
                                 </div>
                             </div>
                         ))}
