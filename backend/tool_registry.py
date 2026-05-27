@@ -149,6 +149,12 @@ def _tool_enrichment_stats(params: Dict[str, Any], db: Session) -> Dict[str, Any
     }
 
 
+def _optional_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    return int(value)
+
+
 def _tool_researchers_by_topic(params: Dict[str, Any], db: Session) -> Dict[str, Any]:
     from backend.services.researcher_topic_analytics import researchers_by_topic
 
@@ -158,6 +164,12 @@ def _tool_researchers_by_topic(params: Dict[str, Any], db: Session) -> Dict[str,
         org_id=None,
         topic=params.get("topic", ""),
         limit=int(params.get("limit", 25)),
+        source=params.get("source"),
+        year_from=_optional_int(params.get("year_from")),
+        year_to=_optional_int(params.get("year_to")),
+        country=params.get("country"),
+        institution=params.get("institution"),
+        min_citations=int(params.get("min_citations", 0)),
     )
 
 
@@ -171,6 +183,12 @@ def _tool_topic_researcher_graph(params: Dict[str, Any], db: Session) -> Dict[st
         topic=params.get("topic", ""),
         limit=int(params.get("limit", 50)),
         min_weight=int(params.get("min_weight", 1)),
+        source=params.get("source"),
+        year_from=_optional_int(params.get("year_from")),
+        year_to=_optional_int(params.get("year_to")),
+        country=params.get("country"),
+        institution=params.get("institution"),
+        min_citations=int(params.get("min_citations", 0)),
     )
 
 
@@ -219,6 +237,12 @@ def _build_registry() -> ToolRegistry:
             "domain_id": {"type": "string", "default": "default"},
             "topic": {"type": "string"},
             "limit": {"type": "integer", "default": 25},
+            "source": {"type": "string"},
+            "year_from": {"type": "integer"},
+            "year_to": {"type": "integer"},
+            "country": {"type": "string"},
+            "institution": {"type": "string"},
+            "min_citations": {"type": "integer", "default": 0},
         },
         handler=_tool_researchers_by_topic,
     )
@@ -230,6 +254,12 @@ def _build_registry() -> ToolRegistry:
             "topic": {"type": "string"},
             "limit": {"type": "integer", "default": 50},
             "min_weight": {"type": "integer", "default": 1},
+            "source": {"type": "string"},
+            "year_from": {"type": "integer"},
+            "year_to": {"type": "integer"},
+            "country": {"type": "string"},
+            "institution": {"type": "string"},
+            "min_citations": {"type": "integer", "default": 0},
         },
         handler=_tool_topic_researcher_graph,
     )

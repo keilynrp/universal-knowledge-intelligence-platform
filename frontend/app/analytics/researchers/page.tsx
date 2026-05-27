@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { apiFetch } from "@/lib/api";
@@ -40,9 +40,11 @@ type Researcher = {
 type ResearchersPayload = {
   domain_id: string;
   topic: string;
+  filters: TopicFilters;
   records_analyzed: number;
   researcher_count: number;
   researchers: Researcher[];
+  executive_summary: ExecutiveSummary;
 };
 
 type GraphNode = {
@@ -69,10 +71,41 @@ type GraphPayload = {
     relationship_count: number;
     records_analyzed: number;
     top_researcher: Researcher | null;
+    executive_summary: ExecutiveSummary;
   };
 };
 
 type PositionedNode = GraphNode & { x: number; y: number };
+
+type TopicFilters = {
+  source: string | null;
+  year_from: number | null;
+  year_to: number | null;
+  country: string | null;
+  institution: string | null;
+  min_citations: number;
+};
+
+type ExecutiveSummary = {
+  topic: string;
+  confidence: number;
+  coverage_score: number;
+  network_density_score: number | null;
+  high_confidence_researchers: number;
+  total_citations: number;
+  top_researcher: Researcher | null;
+  headline: string;
+  stakeholder_value: string;
+};
+
+type FilterForm = {
+  source: string;
+  yearFrom: string;
+  yearTo: string;
+  country: string;
+  institution: string;
+  minCitations: string;
+};
 
 const DRIVER_LABELS: Array<{ key: keyof ScoreDrivers; label: string }> = [
   { key: "topic_match", label: "Tema" },
@@ -100,6 +133,54 @@ function externalHref(id: string | null) {
   if (id.startsWith("http")) return id;
   if (id.startsWith("0000-")) return `https://orcid.org/${id}`;
   return id;
+}
+
+function buildQuery(topic: string, domainId: string, filters: FilterForm, limit: string, minWeight?: string) {
+  const params = new URLSearchParams({ topic, domain_id: domainId, limit });
+  if (minWeight) params.set("min_weight", minWeight);
+  if (filters.source.trim()) params.set("source", filters.source.trim());
+  if (filters.yearFrom.trim()) params.set("year_from", filters.yearFrom.trim());
+  if (filters.yearTo.trim()) params.set("year_to", filters.yearTo.trim());
+  if (filters.country.trim()) params.set("country", filters.country.trim());
+  if (filters.institution.trim()) params.set("institution", filters.institution.trim());
+  if (filters.minCitations.trim()) params.set("min_citations", filters.minCitations.trim());
+  return params;
+}
+
+function ExecutiveMetricCard({ summary }: { summary: ExecutiveSummary | null }) {
+  const confidence = summary?.confidence ?? 0;
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-950">
+      <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
+        <div className={`rounded-3xl p-5 ring-1 ${scoreTone(confidence)}`}>
+          <p className="text-xs font-black uppercase tracking-[0.14em]">Metrica ejecutiva</p>
+          <p className="mt-3 text-5xl font-black tabular-nums">{confidence}</p>
+          <p className="mt-1 text-sm font-bold">confianza del mapa</p>
+        </div>
+        <div className="min-w-0">
+          <h2 className="text-xl font-black tracking-normal text-slate-950 dark:text-white">
+            {summary?.headline ?? "Ejecuta una busqueda para generar el mapa ejecutivo."}
+          </h2>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            {summary?.stakeholder_value ?? "La metrica resume cobertura, autoridad, citas, evidencia y densidad de red para briefs y conversaciones ejecutivas."}
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-4">
+            {[
+              { label: "Cobertura", value: summary?.coverage_score ?? 0 },
+              { label: "Alta confianza", value: summary?.high_confidence_researchers ?? 0 },
+              { label: "Citas", value: summary?.total_citations ?? 0 },
+              { label: "Densidad red", value: summary?.network_density_score ?? 0 },
+            ].map((metric) => (
+              <div key={metric.label} className="rounded-2xl bg-slate-50 p-3 dark:bg-white/5">
+                <p className="text-xs font-bold text-slate-500">{metric.label}</p>
+                <p className="mt-1 text-2xl font-black text-slate-950 dark:text-white">{metric.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function TopicGraph({ graph }: { graph: GraphPayload | null }) {
@@ -288,15 +369,31 @@ export default function ResearchersByTopicPage() {
   const [graph, setGraph] = useState<GraphPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<FilterForm>({
+    source: "",
+    yearFrom: "",
+    yearTo: "",
+    country: "",
+    institution: "",
+    minCitations: "",
+  });
+  const filtersRef = useRef(filters);
+  const [feedback, setFeedback] = useState<"useful" | "review" | null>(null);
 
-  const loadTopic = useCallback(async (topic: string) => {
+  useEffect(() => {
+    filtersRef.current = filters;
+  }, [filters]);
+
+  const loadTopic = useCallback(async (topic: string, nextFilters: FilterForm) => {
     const trimmed = topic.trim();
     if (!trimmed) return;
     setLoading(true);
     setError(null);
+    setFeedback(null);
     try {
-      const params = new URLSearchParams({ topic: trimmed, domain_id: activeDomainId || "default", limit: "25" });
-      const graphParams = new URLSearchParams({ topic: trimmed, domain_id: activeDomainId || "default", limit: "50", min_weight: "1" });
+      const domainId = activeDomainId || "default";
+      const params = buildQuery(trimmed, domainId, nextFilters, "25");
+      const graphParams = buildQuery(trimmed, domainId, nextFilters, "50", "1");
       const [researchersResponse, graphResponse] = await Promise.all([
         apiFetch(`/analytics/researchers-by-topic?${params.toString()}`),
         apiFetch(`/analytics/topic-researcher-graph?${graphParams.toString()}`),
@@ -316,8 +413,11 @@ export default function ResearchersByTopicPage() {
   }, [activeDomainId]);
 
   useEffect(() => {
-    void loadTopic(initialTopic);
-  }, [initialTopic, loadTopic]);
+    void loadTopic(initialTopic, filtersRef.current);
+  }, [activeDomainId, initialTopic, loadTopic]);
+
+  const topResearcher = data?.researchers[0] ?? null;
+  const executiveSummary = graph?.summary.executive_summary ?? data?.executive_summary ?? null;
 
   useAssistantContextRegistration({
     route: "/analytics/researchers",
@@ -329,6 +429,7 @@ export default function ResearchersByTopicPage() {
     recommendedActions: [
       `Listar investigadores que trabajan en ${activeTopic}`,
       `Explorar red de coautoria para ${activeTopic}`,
+      `Usar confianza ejecutiva ${executiveSummary?.confidence ?? 0} como senal para briefing`,
     ],
     actionLinks: [
       { id: "topic-researchers-ranking", label: "Ver ranking del tema", href: `/analytics/researchers?topic=${encodeURIComponent(activeTopic)}`, kind: "navigate" },
@@ -339,10 +440,8 @@ export default function ResearchersByTopicPage() {
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void loadTopic(topicInput);
+    void loadTopic(topicInput, filters);
   }
-
-  const topResearcher = data?.researchers[0] ?? null;
 
   return (
     <div className="space-y-8">
@@ -353,26 +452,50 @@ export default function ResearchersByTopicPage() {
       />
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-950">
-        <form onSubmit={submit} className="grid gap-3 lg:grid-cols-[1fr_auto]">
-          <label className="sr-only" htmlFor="topic-search">Tema a analizar</label>
-          <input
-            id="topic-search"
-            value={topicInput}
-            onChange={(event) => setTopicInput(event.target.value)}
-            className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 outline-none ring-blue-500/20 transition focus:border-blue-400 focus:ring-4 dark:border-white/10 dark:bg-slate-900 dark:text-white"
-            placeholder="Ej. open science, quantum materials, knowledge graphs"
-          />
-          <button
-            type="submit"
-            disabled={loading || topicInput.trim().length === 0}
-            className="h-12 rounded-2xl bg-blue-600 px-6 text-sm font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loading ? "Analizando..." : "Analizar tema"}
-          </button>
+        <form onSubmit={submit} className="space-y-4">
+          <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+            <label className="sr-only" htmlFor="topic-search">Tema a analizar</label>
+            <input
+              id="topic-search"
+              value={topicInput}
+              onChange={(event) => setTopicInput(event.target.value)}
+              className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 outline-none ring-blue-500/20 transition focus:border-blue-400 focus:ring-4 dark:border-white/10 dark:bg-slate-900 dark:text-white"
+              placeholder="Ej. open science, quantum materials, knowledge graphs"
+            />
+            <button
+              type="submit"
+              disabled={loading || topicInput.trim().length === 0}
+              className="h-12 rounded-2xl bg-blue-600 px-6 text-sm font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading ? "Analizando..." : "Analizar tema"}
+            </button>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+            {[
+              { key: "source", label: "Fuente", placeholder: "openalex" },
+              { key: "yearFrom", label: "Desde", placeholder: "2020" },
+              { key: "yearTo", label: "Hasta", placeholder: "2026" },
+              { key: "country", label: "Pais", placeholder: "China" },
+              { key: "institution", label: "Institucion", placeholder: "University" },
+              { key: "minCitations", label: "Min. citas", placeholder: "10" },
+            ].map((field) => (
+              <label key={field.key} className="block">
+                <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">{field.label}</span>
+                <input
+                  value={filters[field.key as keyof FilterForm]}
+                  onChange={(event) => setFilters((current) => ({ ...current, [field.key]: event.target.value }))}
+                  className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none ring-blue-500/20 transition focus:border-blue-400 focus:ring-4 dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                  placeholder={field.placeholder}
+                />
+              </label>
+            ))}
+          </div>
         </form>
       </section>
 
-      {error && <ErrorBanner message={error} onRetry={() => void loadTopic(activeTopic)} variant="card" />}
+      {error && <ErrorBanner message={error} onRetry={() => void loadTopic(activeTopic, filters)} variant="card" />}
+
+      <ExecutiveMetricCard summary={executiveSummary} />
 
       <section className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-950">
@@ -390,6 +513,38 @@ export default function ResearchersByTopicPage() {
       </section>
 
       <TopicGraph graph={graph} />
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-950">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 className="text-base font-black tracking-normal text-slate-950 dark:text-white">Calibracion stakeholder</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Marca si el mapa parece accionable. Esta senal nos ayuda a ajustar el scoring cuando validemos con usuarios reales.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setFeedback("useful")}
+              className={`rounded-xl px-4 py-2 text-sm font-black ring-1 transition ${feedback === "useful" ? "bg-emerald-600 text-white ring-emerald-600" : "bg-emerald-50 text-emerald-700 ring-emerald-200 hover:bg-emerald-100 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-400/20"}`}
+            >
+              Util
+            </button>
+            <button
+              type="button"
+              onClick={() => setFeedback("review")}
+              className={`rounded-xl px-4 py-2 text-sm font-black ring-1 transition ${feedback === "review" ? "bg-amber-600 text-white ring-amber-600" : "bg-amber-50 text-amber-700 ring-amber-200 hover:bg-amber-100 dark:bg-amber-400/10 dark:text-amber-200 dark:ring-amber-400/20"}`}
+            >
+              Revisar
+            </button>
+          </div>
+        </div>
+        {feedback && (
+          <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600 dark:bg-white/5 dark:text-slate-300">
+            Feedback registrado localmente para este corte: {feedback === "useful" ? "mapa util" : "requiere revision"}.
+          </p>
+        )}
+      </section>
 
       <section className="space-y-4">
         <div>

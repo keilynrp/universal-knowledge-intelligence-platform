@@ -31,6 +31,8 @@ _TEXT_FIELDS = (
     "enrichment_concepts",
 )
 _YEAR_FIELDS = ("year", "publication_year", "published_year", "publicationYear", "publishedYear")
+_COUNTRY_KEYS = ("country", "country_code", "countryCode", "countries")
+_INSTITUTION_KEYS = ("institution", "institution_name", "institutionName", "organization", "organization_name", "affiliation", "raw_affiliation_string")
 
 
 def _parse_json(raw: str | None) -> dict[str, Any]:
@@ -173,12 +175,113 @@ def _extract_year(attrs: dict[str, Any], normalized: dict[str, Any], entity: mod
     return None
 
 
+def _source_text(attrs: dict[str, Any], normalized: dict[str, Any], entity: models.RawEntity) -> str:
+    values = [
+        entity.enrichment_source,
+        attrs.get("source"),
+        attrs.get("provider"),
+        attrs.get("source_name"),
+        normalized.get("source"),
+        normalized.get("provider"),
+    ]
+    return _clean_text(values).lower()
+
+
+def _field_text(attrs: dict[str, Any], normalized: dict[str, Any], keys: tuple[str, ...]) -> str:
+    values: list[Any] = []
+    for source in (attrs, normalized):
+        for key in keys:
+            values.append(source.get(key))
+        for container_key in ("author_affiliations", "affiliations", "institutions", "normalized_affiliations"):
+            container = source.get(container_key)
+            if isinstance(container, list):
+                for item in container:
+                    if isinstance(item, dict):
+                        for key in keys:
+                            values.append(item.get(key))
+            elif isinstance(container, dict):
+                for key in keys:
+                    values.append(container.get(key))
+    return _clean_text(values).lower()
+
+
+def _matches_filters(
+    attrs: dict[str, Any],
+    normalized: dict[str, Any],
+    entity: models.RawEntity,
+    *,
+    source: str | None,
+    year_from: int | None,
+    year_to: int | None,
+    country: str | None,
+    institution: str | None,
+    min_citations: int,
+) -> bool:
+    citations = int(entity.enrichment_citation_count or 0)
+    if citations < min_citations:
+        return False
+    year = _extract_year(attrs, normalized, entity)
+    if year_from is not None and (year is None or year < year_from):
+        return False
+    if year_to is not None and (year is None or year > year_to):
+        return False
+    if source and source.lower() not in _source_text(attrs, normalized, entity):
+        return False
+    if country and country.lower() not in _field_text(attrs, normalized, _COUNTRY_KEYS):
+        return False
+    if institution and institution.lower() not in _field_text(attrs, normalized, _INSTITUTION_KEYS):
+        return False
+    return True
+
+
 def _evidence_item(entity: models.RawEntity) -> dict[str, Any]:
     return {
         "entity_id": entity.id,
         "title": entity.primary_label,
         "secondary_label": entity.secondary_label,
         "citations": entity.enrichment_citation_count or 0,
+    }
+
+
+def _executive_summary(
+    *,
+    topic: str,
+    records_analyzed: int,
+    ranked: list[dict[str, Any]],
+    relationship_count: int | None = None,
+) -> dict[str, Any]:
+    top = ranked[0] if ranked else None
+    high_confidence = sum(1 for item in ranked if int(item.get("topic_score") or 0) >= 70)
+    total_citations = sum(int(item.get("citation_count") or 0) for item in ranked)
+    coverage = min(100, records_analyzed * 10)
+    density = min(100, int((relationship_count or 0) / max(len(ranked), 1) * 20)) if relationship_count is not None else None
+    confidence = round(
+        min(
+            100,
+            (coverage * 0.35)
+            + (min(100, len(ranked) * 8) * 0.25)
+            + (min(100, high_confidence * 20) * 0.25)
+            + (min(100, math.log1p(total_citations) / math.log1p(10000) * 100) * 0.15),
+        )
+    )
+    return {
+        "topic": topic,
+        "confidence": confidence,
+        "coverage_score": coverage,
+        "network_density_score": density,
+        "high_confidence_researchers": high_confidence,
+        "total_citations": total_citations,
+        "top_researcher": top,
+        "headline": (
+            f"{top['name']} lidera la evidencia sobre {topic} con score {top['topic_score']}."
+            if top
+            else f"No hay suficiente evidencia para mapear investigadores sobre {topic}."
+        ),
+        "stakeholder_value": (
+            "Mapa accionable de expertos y colaboraciones listo para briefing."
+            if confidence >= 70
+            else "Senal preliminar: conviene validar fuentes, filtros y cobertura antes de usarlo en decisiones."
+        ),
     }
 
 
@@ -189,6 +292,12 @@ def researchers_by_topic(
     org_id: int | None,
     topic: str,
     limit: int = 25,
+    source: str | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
+    country: str | None = None,
+    institution: str | None = None,
+    min_citations: int = 0,
 ) -> dict[str, Any]:
     query = entity_base_q(db, domain_id, org_id).order_by(models.RawEntity.id.asc()).limit(3000)
     rows = query.all()
@@ -198,6 +307,18 @@ def researchers_by_topic(
     for entity in rows:
         attrs = _parse_json(entity.attributes_json)
         normalized = _parse_json(entity.normalized_json)
+        if not _matches_filters(
+            attrs,
+            normalized,
+            entity,
+            source=source,
+            year_from=year_from,
+            year_to=year_to,
+            country=country,
+            institution=institution,
+            min_citations=min_citations,
+        ):
+            continue
         match_score = _topic_match_score(topic, _topic_text(attrs, normalized, entity))
         if match_score <= 0:
             continue
@@ -277,9 +398,18 @@ def researchers_by_topic(
     return {
         "domain_id": domain_id,
         "topic": topic,
+        "filters": {
+            "source": source,
+            "year_from": year_from,
+            "year_to": year_to,
+            "country": country,
+            "institution": institution,
+            "min_citations": min_citations,
+        },
         "records_analyzed": records_analyzed,
         "researcher_count": len(ranked),
         "researchers": ranked[:limit],
+        "executive_summary": _executive_summary(topic=topic, records_analyzed=records_analyzed, ranked=ranked[:limit]),
     }
 
 
@@ -291,8 +421,26 @@ def topic_researcher_graph(
     topic: str,
     limit: int = 50,
     min_weight: int = 1,
+    source: str | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
+    country: str | None = None,
+    institution: str | None = None,
+    min_citations: int = 0,
 ) -> dict[str, Any]:
-    ranking = researchers_by_topic(db, domain_id=domain_id, org_id=org_id, topic=topic, limit=limit)
+    ranking = researchers_by_topic(
+        db,
+        domain_id=domain_id,
+        org_id=org_id,
+        topic=topic,
+        limit=limit,
+        source=source,
+        year_from=year_from,
+        year_to=year_to,
+        country=country,
+        institution=institution,
+        min_citations=min_citations,
+    )
     allowed = {
         (item.get("orcid") or item.get("openalex_id") or item["name"]).lower()
         for item in ranking["researchers"]
@@ -324,6 +472,18 @@ def topic_researcher_graph(
     for entity in query.all():
         attrs = _parse_json(entity.attributes_json)
         normalized = _parse_json(entity.normalized_json)
+        if not _matches_filters(
+            attrs,
+            normalized,
+            entity,
+            source=source,
+            year_from=year_from,
+            year_to=year_to,
+            country=country,
+            institution=institution,
+            min_citations=min_citations,
+        ):
+            continue
         if _topic_match_score(topic, _topic_text(attrs, normalized, entity)) <= 0:
             continue
         authors = []
@@ -331,8 +491,8 @@ def topic_researcher_graph(
             author_id = author.get("orcid") or author.get("openalex_id") or author["name"]
             if author_id.lower() in allowed:
                 authors.append(author_id)
-        for source, target in combinations(sorted(set(authors)), 2):
-            edges_counter[(source, target, "coauthor_with")] += 1
+        for edge_source, edge_target in combinations(sorted(set(authors)), 2):
+            edges_counter[(edge_source, edge_target, "coauthor_with")] += 1
 
     edges = [
         {"source": source, "target": target, "type": relation, "weight": weight}
@@ -350,6 +510,12 @@ def topic_researcher_graph(
             "relationship_count": len(edges),
             "records_analyzed": ranking["records_analyzed"],
             "top_researcher": ranking["researchers"][0] if ranking["researchers"] else None,
+            "executive_summary": _executive_summary(
+                topic=topic,
+                records_analyzed=ranking["records_analyzed"],
+                ranked=ranking["researchers"],
+                relationship_count=len(edges),
+            ),
         },
         "scoring": {
             "topic_score": "Normaliza coincidencia tema-texto, cantidad de registros y señal de citas a una escala 0-100.",

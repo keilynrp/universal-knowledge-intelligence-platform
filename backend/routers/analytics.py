@@ -240,6 +240,12 @@ def analytics_researchers_by_topic(
     topic: str = Query(..., min_length=2, max_length=160),
     domain_id: str = Query(default="default", min_length=1, max_length=64),
     limit: int = Query(default=25, ge=1, le=100),
+    source: str | None = Query(default=None, max_length=80),
+    year_from: int | None = Query(default=None, ge=1800, le=2100),
+    year_to: int | None = Query(default=None, ge=1800, le=2100),
+    country: str | None = Query(default=None, max_length=80),
+    institution: str | None = Query(default=None, max_length=160),
+    min_citations: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -247,7 +253,19 @@ def analytics_researchers_by_topic(
     if domain_id != "all":
         _validate_domain_id(domain_id)
     org_id = resolve_request_org_id(db, current_user)
-    return researchers_by_topic(db, domain_id=domain_id, org_id=org_id, topic=topic, limit=limit)
+    return researchers_by_topic(
+        db,
+        domain_id=domain_id,
+        org_id=org_id,
+        topic=topic,
+        limit=limit,
+        source=source,
+        year_from=year_from,
+        year_to=year_to,
+        country=country,
+        institution=institution,
+        min_citations=min_citations,
+    )
 
 
 @router.get("/analytics/topic-researcher-graph", tags=["analytics"])
@@ -256,6 +274,12 @@ def analytics_topic_researcher_graph(
     domain_id: str = Query(default="default", min_length=1, max_length=64),
     limit: int = Query(default=50, ge=1, le=200),
     min_weight: int = Query(default=1, ge=1),
+    source: str | None = Query(default=None, max_length=80),
+    year_from: int | None = Query(default=None, ge=1800, le=2100),
+    year_to: int | None = Query(default=None, ge=1800, le=2100),
+    country: str | None = Query(default=None, max_length=80),
+    institution: str | None = Query(default=None, max_length=160),
+    min_citations: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -270,6 +294,12 @@ def analytics_topic_researcher_graph(
         topic=topic,
         limit=limit,
         min_weight=min_weight,
+        source=source,
+        year_from=year_from,
+        year_to=year_to,
+        country=country,
+        institution=institution,
+        min_citations=min_citations,
     )
 
 
