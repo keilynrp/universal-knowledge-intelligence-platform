@@ -612,6 +612,91 @@ function fieldLabel(key: string, fallback?: string): string {
     return fallback || DETAIL_FIELD_LABELS[key] || labelize(key);
 }
 
+const FIELD_HINTS: Record<string, string> = {
+    title: "Título oficial de la publicación o del recurso.",
+    name: "Nombre del recurso, persona u organización.",
+    authors: "Lista de autores reportada por la fuente. Puede combinarse con ORCID, afiliación y orden.",
+    full_authors: "Listado completo y expandido de autores (no abreviado).",
+    author: "Autor principal del registro.",
+    author_orcids: "Identificadores ORCID asociados a los autores.",
+    enrichment_authors: "Autores reportados por el proveedor académico durante el enriquecimiento.",
+    enrichment_author_orcids: "ORCID de autores devueltos por el proveedor académico.",
+    affiliation: "Institución u organización a la que pertenece el autor / registro.",
+    affiliations: "Lista de instituciones u organizaciones asociadas.",
+    institution: "Institución académica o de investigación.",
+    institutions: "Conjunto de instituciones vinculadas al registro.",
+    organization: "Organización responsable o vinculada.",
+    journal: "Revista o publicación donde apareció el registro.",
+    venue: "Lugar de publicación: revista, conferencia, evento o repositorio.",
+    publisher: "Editorial o entidad responsable de la publicación.",
+    source_title: "Título de la fuente declarada en los metadatos originales.",
+    year: "Año de publicación o referencia temporal del registro.",
+    publication_year: "Año en que se publicó el registro.",
+    publication_date: "Fecha completa de publicación.",
+    date: "Fecha asociada al registro.",
+    retrieved_at: "Fecha en la que se recuperó este registro desde la fuente.",
+    doi: "Digital Object Identifier — clave para deduplicar y referenciar.",
+    isbn: "International Standard Book Number.",
+    issn: "International Standard Serial Number.",
+    pmid: "PubMed ID.",
+    url: "URL canónica del registro.",
+    abstract: "Resumen o sinopsis del contenido.",
+    summary: "Resumen breve del registro.",
+    keywords: "Palabras clave declaradas por la fuente.",
+    concepts: "Conceptos temáticos inferidos o declarados por el proveedor académico.",
+    enrichment_concepts: "Conceptos temáticos detectados por el proveedor académico (OpenAlex, Scholar…).",
+    citation_count: "Número de citas reportadas para este registro.",
+    citations: "Citas detectadas.",
+    enrichment_citation_count: "Citas reportadas por el proveedor académico tras el enriquecimiento.",
+    reference_count: "Cantidad de referencias citadas dentro del registro.",
+    references_count: "Cantidad de referencias citadas dentro del registro.",
+    language: "Idioma principal del registro.",
+    volume: "Volumen de la publicación.",
+    issue: "Número o ejemplar dentro del volumen.",
+    page: "Páginas que ocupa el registro.",
+    pages: "Rango de páginas.",
+    start_page: "Primera página del registro.",
+    end_page: "Última página del registro.",
+    open_access: "Indica si el registro está disponible en acceso abierto.",
+    license: "Licencia de uso o redistribución declarada.",
+    type: "Tipo / clasificación del registro reportada por la fuente.",
+    document_type: "Tipo de documento (artículo, libro, capítulo, dataset…).",
+    publication_type: "Tipo de publicación reportado.",
+    subtype: "Subtipo dentro de la categoría declarada.",
+    funding: "Información de financiamiento o ayuda económica.",
+    source: "Fuente declarada de los datos.",
+    source_name: "Nombre legible de la fuente.",
+    _source_name: "Nombre del adaptador o canal que ingestó el registro.",
+    _source_version: "Versión del adaptador / esquema en el momento de la ingesta.",
+    raw_record: "Estructura completa tal como llegó del proveedor original (snapshot).",
+};
+
+function fieldHintFor(key: string): string | null {
+    if (FIELD_HINTS[key]) return FIELD_HINTS[key];
+    const normalized = key.toLocaleLowerCase();
+    if (normalized.startsWith("raw_")) {
+        return "Campo original tal como llegó de la fuente, sin normalizar. Útil para auditoría.";
+    }
+    if (normalized.includes("orcid")) return "Identificador ORCID asociado al autor o autora.";
+    if (normalized.includes("doi")) return "Digital Object Identifier — clave de referencia única.";
+    if (normalized.includes("issn") || normalized.includes("isbn")) {
+        return "Identificador estándar internacional (ISSN para revistas, ISBN para libros).";
+    }
+    if (normalized.includes("citation") || normalized.includes("cited_by")) {
+        return "Conteo de citas reportadas para este registro.";
+    }
+    if (normalized.includes("year")) return "Año asociado al registro.";
+    if (normalized.includes("date")) return "Fecha asociada al registro.";
+    if (normalized.includes("author")) return "Información de autor o autores del registro.";
+    if (normalized.includes("affiliation") || normalized.includes("institution")) {
+        return "Institución u organización vinculada al registro.";
+    }
+    if (normalized.includes("language")) return "Idioma del registro.";
+    if (normalized.includes("publisher")) return "Editorial responsable de la publicación.";
+    if (normalized.includes("url") || normalized.includes("link")) return "Enlace asociado al registro.";
+    return null;
+}
+
 function hasMeaningfulValue(value: unknown): boolean {
     if (value === null || value === undefined || value === "") return false;
     if (Array.isArray(value)) return value.length > 0;
@@ -1324,7 +1409,19 @@ export default function EntityDetailPage() {
         copyable?: boolean;
         hint?: { title: string; body: string };
     }> = [
-        { key: "primary_label", label: tr("entities.detail.fields.primary_label", "Etiqueta principal"), value: entity.primary_label, icon: "type" },
+        {
+            key: "primary_label",
+            label: tr("entities.detail.fields.primary_label", "Etiqueta principal"),
+            value: entity.primary_label,
+            icon: "type",
+            hint: {
+                title: tr("entities.detail.fields.primary_label", "Etiqueta principal"),
+                body: tr(
+                    "entities.detail.fields.primary_label_hint",
+                    "Nombre principal del registro: título de la publicación, nombre del autor, denominación de la institución u otra etiqueta canónica."
+                ),
+            },
+        },
         {
             key: "secondary_label",
             label: tr("entities.detail.fields.secondary_label_short", "Etiqueta secundaria"),
@@ -1352,15 +1449,109 @@ export default function EntityDetailPage() {
                 ),
             },
         },
-        { key: "entity_type", label: tr("entities.detail.fields.entity_type", "Tipo de entidad"), value: resolvedEntityType, icon: "cube" },
-        { key: "domain", label: tr("entities.detail.fields.domain", "Dominio"), value: entity.domain, icon: "globe" },
+        {
+            key: "entity_type",
+            label: tr("entities.detail.fields.entity_type", "Tipo de entidad"),
+            value: resolvedEntityType,
+            icon: "cube",
+            hint: {
+                title: tr("entities.detail.fields.entity_type", "Tipo de entidad"),
+                body: tr(
+                    "entities.detail.fields.entity_type_hint",
+                    "Clasificación del registro: artículo, libro, persona, organización, concepto, conjunto de datos, etc. Se infiere de los metadatos de origen."
+                ),
+            },
+        },
+        {
+            key: "domain",
+            label: tr("entities.detail.fields.domain", "Dominio"),
+            value: entity.domain,
+            icon: "globe",
+            hint: {
+                title: tr("entities.detail.fields.domain", "Dominio"),
+                body: tr(
+                    "entities.detail.fields.domain_hint",
+                    "Dominio temático al que pertenece el registro (ciencia, salud, default…). Define el esquema y las reglas aplicables."
+                ),
+            },
+        },
     ];
-    const systemFields = [
-        { key: "validation_status", label: tr("entities.detail.fields.validation_status", "Validación"), value: entity.validation_status, badge: "validation", icon: "quality" },
-        { key: "enrichment_status", label: tr("entities.enrichment_status", "Estado de enriquecimiento"), value: entity.enrichment_status, badge: "enrichment", icon: "shield" },
-        { key: "source", label: "Fuente", value: entity.source, icon: "user" },
-        { key: "import_batch_id", label: "Import batch id", value: entity.import_batch_id, icon: "database" },
-        { key: "quality_score", label: tr("entities.detail.fields.quality_score", "Puntuación de calidad"), value: qualityPercent > 0 ? `${Math.round(qualityPercent)}%` : null, icon: "star" },
+    const systemFields: Array<{
+        key: string;
+        label: string;
+        value: unknown;
+        icon: string;
+        badge?: string;
+        copyable?: boolean;
+        hint?: { title: string; body: string };
+    }> = [
+        {
+            key: "validation_status",
+            label: tr("entities.detail.fields.validation_status", "Validación"),
+            value: entity.validation_status,
+            badge: "validation",
+            icon: "quality",
+            hint: {
+                title: tr("entities.detail.fields.validation_status", "Validación"),
+                body: tr(
+                    "entities.detail.fields.validation_status_hint",
+                    "Estado de validación del registro: pendiente, válido o requiere revisión. Lo determinan las reglas de calidad y la autoridad confirmada."
+                ),
+            },
+        },
+        {
+            key: "enrichment_status",
+            label: tr("entities.enrichment_status", "Estado de enriquecimiento"),
+            value: entity.enrichment_status,
+            badge: "enrichment",
+            icon: "shield",
+            hint: {
+                title: tr("entities.enrichment_status", "Estado de enriquecimiento"),
+                body: tr(
+                    "entities.detail.fields.enrichment_status_hint",
+                    "Estado del enriquecimiento académico: ninguno, pendiente, en proceso, completado o fallido. Se calcula tras consultar proveedores como OpenAlex, Scholar o WoS."
+                ),
+            },
+        },
+        {
+            key: "source",
+            label: tr("entities.detail.fields.source", "Fuente"),
+            value: entity.source,
+            icon: "user",
+            hint: {
+                title: tr("entities.detail.fields.source", "Fuente"),
+                body: tr(
+                    "entities.detail.fields.source_hint",
+                    "Origen del registro: carga manual del usuario, dataset demo o un adaptador externo (tienda conectada, API)."
+                ),
+            },
+        },
+        {
+            key: "import_batch_id",
+            label: tr("entities.detail.fields.import_batch_id", "Lote de importación"),
+            value: entity.import_batch_id,
+            icon: "database",
+            hint: {
+                title: tr("entities.detail.fields.import_batch_id", "Lote de importación"),
+                body: tr(
+                    "entities.detail.fields.import_batch_id_hint",
+                    "Identificador del batch de ingesta al que pertenece el registro. Permite trazar de qué archivo / sincronización vino."
+                ),
+            },
+        },
+        {
+            key: "quality_score",
+            label: tr("entities.detail.fields.quality_score", "Puntuación de calidad"),
+            value: qualityPercent > 0 ? `${Math.round(qualityPercent)}%` : null,
+            icon: "star",
+            hint: {
+                title: tr("entities.detail.fields.quality_score", "Puntuación de calidad"),
+                body: tr(
+                    "entities.detail.fields.quality_score_hint",
+                    "Índice de calidad global del registro (0-100%). Combina completitud, identificadores, enriquecimiento, validación y autoridad."
+                ),
+            },
+        },
         {
             key: "attention_score",
             label: tr("entities.detail.attention.badge_label", "Atención externa"),
@@ -1369,10 +1560,54 @@ export default function EntityDetailPage() {
                 : null,
             badge: "attention",
             icon: "spark",
+            hint: {
+                title: tr("entities.detail.attention.badge_label", "Atención externa"),
+                body: tr(
+                    "entities.detail.fields.attention_score_hint",
+                    "Señal de atención fuera del catálogo: menciones en noticias, políticas, repositorios, redes y web académica. No mide calidad académica."
+                ),
+            },
         },
-        { key: "enrichment_citation_count", label: "Citas", value: entity.enrichment_citation_count ?? 0, icon: "quote" },
-        { key: "enrichment_source", label: tr("entities.detail.enrichment.source", "Fuente"), value: entity.enrichment_source === "None" ? tr("common.none", "Ninguno") : entity.enrichment_source, icon: "cube" },
-        { key: "enrichment_doi", label: "DOI", value: resolvedDoi, icon: "link", copyable: true },
+        {
+            key: "enrichment_citation_count",
+            label: tr("entities.detail.fields.enrichment_citation_count", "Citas"),
+            value: entity.enrichment_citation_count ?? 0,
+            icon: "quote",
+            hint: {
+                title: tr("entities.detail.fields.enrichment_citation_count", "Citas"),
+                body: tr(
+                    "entities.detail.fields.enrichment_citation_count_hint",
+                    "Número de citas detectadas por el proveedor académico para este registro (OpenAlex, Scholar, WoS)."
+                ),
+            },
+        },
+        {
+            key: "enrichment_source",
+            label: tr("entities.detail.enrichment.source", "Fuente académica"),
+            value: entity.enrichment_source === "None" ? tr("common.none", "Ninguno") : entity.enrichment_source,
+            icon: "cube",
+            hint: {
+                title: tr("entities.detail.enrichment.source", "Fuente académica"),
+                body: tr(
+                    "entities.detail.fields.enrichment_source_hint",
+                    "Proveedor académico que entregó las señales enriquecidas: OpenAlex, Google Scholar, Web of Science, Crossref u otro."
+                ),
+            },
+        },
+        {
+            key: "enrichment_doi",
+            label: tr("entities.detail.fields.enrichment_doi", "DOI"),
+            value: resolvedDoi,
+            icon: "link",
+            copyable: true,
+            hint: {
+                title: tr("entities.detail.fields.enrichment_doi", "DOI"),
+                body: tr(
+                    "entities.detail.fields.enrichment_doi_hint",
+                    "Digital Object Identifier confirmado o inferido durante el enriquecimiento. Es la clave principal para deduplicación y referencia externa."
+                ),
+            },
+        },
     ];
     const enrichmentPercent =
         entity.enrichment_status === "completed" ? 100 :
@@ -1762,8 +1997,15 @@ export default function EntityDetailPage() {
                                     <div key={field.key} className={DETAIL_ROW}>
                                         <div className="flex items-center gap-3 text-violet-600 dark:text-violet-300">
                                             <IconGlyph name={field.icon} className="h-5 w-5" />
-                                            <span className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400">
+                                            <span className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.15em] text-slate-400">
                                                 {field.label}
+                                                {field.hint ? (
+                                                    <FieldHint
+                                                        title={field.hint.title}
+                                                        body={field.hint.body}
+                                                        ariaLabel={tr("entities.detail.fields.hint_aria", "Más información sobre este campo")}
+                                                    />
+                                                ) : null}
                                             </span>
                                         </div>
                                         {field.badge === "validation" && entity.validation_status ? (
@@ -1980,14 +2222,24 @@ export default function EntityDetailPage() {
                             key.includes("doi") || key.includes("id") || key.includes("url") ? "link" :
                             key.includes("source") ? "database" : "file";
 
-                        const renderRow = (entry: ProvenanceEntry, accent: string) => (
+                        const renderRow = (entry: ProvenanceEntry, accent: string) => {
+                            const hintBody = fieldHintFor(entry.key);
+                            const fieldName = fieldLabel(entry.key);
+                            return (
                             <div key={entry.key} className="grid grid-cols-[1.5rem_1fr] gap-x-4 border-b border-slate-100 pb-5 dark:border-white/10">
                                 <span className={`mt-1 ${accent}`}>
                                     <IconGlyph name={iconFor(entry.key)} className="h-5 w-5" />
                                 </span>
                                 <div className="min-w-0 space-y-1">
-                                    <span className="block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
-                                        {fieldLabel(entry.key)}
+                                    <span className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
+                                        {fieldName}
+                                        {hintBody ? (
+                                            <FieldHint
+                                                title={fieldName}
+                                                body={hintBody}
+                                                ariaLabel={tr("entities.detail.fields.hint_aria", "Más información sobre este campo")}
+                                            />
+                                        ) : null}
                                     </span>
                                     <span className="block break-words text-sm font-bold leading-6 text-slate-700 dark:text-slate-200">
                                         {formatValue(entry.value)}
@@ -1999,7 +2251,8 @@ export default function EntityDetailPage() {
                                     ) : null}
                                 </div>
                             </div>
-                        );
+                            );
+                        };
 
                         return (
                             <>
