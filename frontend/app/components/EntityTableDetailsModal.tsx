@@ -372,24 +372,57 @@ function isFundingRecord(record: Record<string, unknown>): boolean {
 
 function FundingTable({ records }: { records: Record<string, unknown>[] }) {
     return (
-        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white/80 shadow-sm dark:border-gray-800 dark:bg-gray-800/40">
-            <div className="grid grid-cols-[minmax(16rem,1fr)_minmax(12rem,0.5fr)] border-b border-gray-100 bg-gray-50/80 text-base font-black text-gray-700 dark:border-gray-800 dark:bg-gray-900/30 dark:text-gray-200">
-                <div className="px-5 py-5">Entidad financiadora</div>
-                <div className="px-5 py-5">Tipo</div>
+        <div className="rounded-[1.35rem] border border-gray-100 bg-white/90 p-6 shadow-sm dark:border-gray-800 dark:bg-gray-800/40">
+            <div className="mb-8 flex items-center gap-6">
+                <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[1.35rem] bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200">
+                    <SoftIcon type="funding" />
+                </span>
+                <div className="min-w-0">
+                    <p className="flex flex-wrap items-center gap-3 text-4xl font-black tracking-tight text-gray-950 dark:text-white">
+                        Financiamiento
+                        <span className="text-blue-600 dark:text-blue-300"><SoftIcon type="info" /></span>
+                    </p>
+                    <p className="mt-3 text-xl font-semibold text-gray-500 dark:text-gray-400">
+                        Información de financiamiento o ayuda económica.
+                    </p>
+                </div>
             </div>
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                {records.map((record, index) => {
-                    const name = firstRecordValue(record, ["funder", "funder_name", "funderName", "funding", "funding_agency", "agency", "name", "display_name"]) ?? `Entidad ${index + 1}`;
-                    const type = firstRecordValue(record, ["type", "role", "entity_type", "relationship"]) ?? "Entidad financiadora";
-                    return (
-                        <div key={`${index}-${name}`} className="grid grid-cols-[minmax(16rem,1fr)_minmax(12rem,0.5fr)] items-center text-sm font-bold text-gray-900 dark:text-white">
-                            <div className="flex min-w-0 items-center gap-5 px-5 py-5"><span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200"><SoftIcon type="institution" /></span><span className="break-words text-lg font-black">{name}</span></div>
-                            <div className="px-5 py-5"><span className="inline-flex items-center gap-2 rounded-xl bg-lime-50 px-4 py-2 text-sm font-black text-lime-800 dark:bg-lime-400/15 dark:text-lime-100"><SoftIcon type="openalex" />{type}</span></div>
-                        </div>
-                    );
-                })}
+            <div className="overflow-x-auto rounded-[1.35rem] border border-gray-100 bg-white/80 dark:border-gray-800 dark:bg-gray-900/30">
+                <div className="min-w-[48rem]">
+                    <div className="grid grid-cols-[minmax(18rem,1fr)_minmax(16rem,0.5fr)] border-b border-gray-100 bg-gray-50/70 text-xl font-black text-gray-900 dark:border-gray-800 dark:bg-white/[0.04] dark:text-white">
+                        <div className="px-8 py-7">Entidad financiadora</div>
+                        <div className="px-8 py-7">Tipo</div>
+                    </div>
+                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                        {records.map((record, index) => {
+                            const name = firstRecordValue(record, ["funder", "funder_name", "funderName", "funding", "funding_agency", "agency", "name", "display_name"]) ?? `Entidad ${index + 1}`;
+                            const type = firstRecordValue(record, ["type", "role", "entity_type", "relationship"]) ?? "Entidad financiadora";
+                            return (
+                                <div key={`${index}-${name}`} className="grid grid-cols-[minmax(18rem,1fr)_minmax(16rem,0.5fr)] items-center text-gray-900 dark:text-white">
+                                    <div className="flex min-w-0 items-center gap-8 px-8 py-7">
+                                        <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200">
+                                            <SoftIcon type="institution" />
+                                        </span>
+                                        <span className="break-words text-2xl font-black">{name}</span>
+                                    </div>
+                                    <div className="px-8 py-7">
+                                        <span className="inline-flex items-center gap-3 rounded-2xl bg-lime-50 px-6 py-3 text-lg font-black text-lime-800 dark:bg-lime-400/15 dark:text-lime-100">
+                                            <SoftIcon type="openalex" />
+                                            {type}
+                                        </span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <div className="flex items-center gap-4 border-t border-gray-100 px-8 py-7 text-xl font-semibold text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200">
+                            <SoftIcon type="info" />
+                        </span>
+                        {records.length} entidades financiadoras
+                    </div>
+                </div>
             </div>
-            <div className="flex items-center gap-3 px-5 py-5 text-sm font-bold text-gray-500 dark:text-gray-400"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200"><SoftIcon type="info" /></span>{records.length} entidades financiadoras</div>
         </div>
     );
 }

@@ -417,6 +417,17 @@ function wordCount(text: string): number {
     return text.split(/\s+/).filter(Boolean).length;
 }
 
+function formatShortDate(value: string | null): string | null {
+    if (!value) return null;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return new Intl.DateTimeFormat("es", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+    }).format(parsed);
+}
+
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -768,38 +779,54 @@ function isFundingRecord(record: Record<string, unknown>): boolean {
 
 function FundingTable({ records }: { records: Record<string, unknown>[] }) {
     return (
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white/80 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
-            <div className="grid grid-cols-[minmax(16rem,1fr)_minmax(12rem,0.5fr)] border-b border-slate-200 bg-slate-50/80 text-base font-black text-slate-700 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-200">
-                <div className="px-5 py-5">Entidad financiadora</div>
-                <div className="px-5 py-5">Tipo</div>
-            </div>
-            <div className="divide-y divide-slate-200 dark:divide-white/10">
-                {records.map((record, index) => {
-                    const name = firstRecordValue(record, ["funder", "funder_name", "funderName", "funding", "funding_agency", "agency", "name", "display_name"]) ?? `Entidad ${index + 1}`;
-                    const type = firstRecordValue(record, ["type", "role", "entity_type", "relationship"]) ?? "Entidad financiadora";
-                    return (
-                        <div key={`${index}-${name}`} className="grid grid-cols-[minmax(16rem,1fr)_minmax(12rem,0.5fr)] items-center text-sm font-bold text-slate-900 dark:text-white">
-                            <div className="flex min-w-0 items-center gap-5 px-5 py-5">
-                                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200">
-                                    <SoftIcon type="institution" />
-                                </span>
-                                <span className="break-words text-lg font-black">{name}</span>
-                            </div>
-                            <div className="px-5 py-5">
-                                <span className="inline-flex items-center gap-2 rounded-xl bg-lime-50 px-4 py-2 text-sm font-black text-lime-800 dark:bg-lime-400/15 dark:text-lime-100">
-                                    <SoftIcon type="openalex" />
-                                    {type}
-                                </span>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-            <div className="flex items-center gap-3 px-5 py-5 text-sm font-bold text-slate-500 dark:text-slate-400">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200">
-                    <SoftIcon type="info" />
+        <div className="rounded-[1.35rem] border border-slate-200 bg-white/90 p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="mb-8 flex items-center gap-6">
+                <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[1.35rem] bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200">
+                    <SoftIcon type="funding" />
                 </span>
-                {records.length} entidades financiadoras
+                <div className="min-w-0">
+                    <p className="flex flex-wrap items-center gap-3 text-4xl font-black tracking-tight text-slate-950 dark:text-white">
+                        Financiamiento
+                        <span className="text-blue-600 dark:text-blue-300"><SoftIcon type="info" /></span>
+                    </p>
+                    <p className="mt-3 text-xl font-semibold text-slate-500 dark:text-slate-400">
+                        Información de financiamiento o ayuda económica.
+                    </p>
+                </div>
+            </div>
+            <div className="overflow-hidden rounded-[1.35rem] border border-slate-200 bg-white/80 dark:border-white/10 dark:bg-white/[0.03]">
+                <div className="grid grid-cols-[minmax(18rem,1fr)_minmax(16rem,0.5fr)] border-b border-slate-200 bg-slate-50/70 text-xl font-black text-slate-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-white">
+                    <div className="px-8 py-7">Entidad financiadora</div>
+                    <div className="px-8 py-7">Tipo</div>
+                </div>
+                <div className="divide-y divide-slate-200 dark:divide-white/10">
+                    {records.map((record, index) => {
+                        const name = firstRecordValue(record, ["funder", "funder_name", "funderName", "funding", "funding_agency", "agency", "name", "display_name"]) ?? `Entidad ${index + 1}`;
+                        const type = firstRecordValue(record, ["type", "role", "entity_type", "relationship"]) ?? "Entidad financiadora";
+                        return (
+                            <div key={`${index}-${name}`} className="grid grid-cols-[minmax(18rem,1fr)_minmax(16rem,0.5fr)] items-center text-slate-900 dark:text-white">
+                                <div className="flex min-w-0 items-center gap-8 px-8 py-7">
+                                    <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200">
+                                        <SoftIcon type="institution" />
+                                    </span>
+                                    <span className="break-words text-2xl font-black">{name}</span>
+                                </div>
+                                <div className="px-8 py-7">
+                                    <span className="inline-flex items-center gap-3 rounded-2xl bg-lime-50 px-6 py-3 text-lg font-black text-lime-800 dark:bg-lime-400/15 dark:text-lime-100">
+                                        <SoftIcon type="openalex" />
+                                        {type}
+                                    </span>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+                <div className="flex items-center gap-4 border-t border-slate-200 px-8 py-7 text-xl font-semibold text-slate-500 dark:border-white/10 dark:text-slate-400">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200">
+                        <SoftIcon type="info" />
+                    </span>
+                    {records.length} entidades financiadoras
+                </div>
             </div>
         </div>
     );
@@ -850,23 +877,30 @@ function isExternalIdList(value: unknown): value is string[] {
 
 function ExternalIdList({ values }: { values: string[] }) {
     return (
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white/80 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
-            <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50/80 px-5 py-4 dark:border-white/10 dark:bg-white/[0.03]">
-                <div className="flex items-center gap-3 text-sm font-black text-slate-800 dark:text-slate-100">
+        <div className="overflow-hidden rounded-[1.35rem] border border-slate-200 bg-white/90 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-white/60 px-6 py-5 dark:border-white/10 dark:bg-white/[0.03]">
+                <div className="flex items-center gap-5 text-lg font-black text-slate-900 dark:text-white">
                     <span className="text-blue-600 dark:text-blue-300"><SoftIcon type="keyword" /></span>
                     Enrichment Concept Ids
                 </div>
-                <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-600 dark:bg-blue-400/10 dark:text-blue-200">
+                <span className="rounded-full bg-blue-50 px-5 py-2 text-base font-black text-blue-600 dark:bg-blue-400/10 dark:text-blue-200">
                     {values.length} conceptos
                 </span>
             </div>
             <div className="divide-y divide-slate-200 dark:divide-white/10">
                 {values.map((value, index) => (
-                    <div key={`${index}-${value}`} className="grid grid-cols-[3.5rem_1fr_auto] items-center gap-4 px-5 py-4 text-sm font-bold">
-                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-blue-700 dark:bg-blue-400/10 dark:text-blue-200">
+                    <div key={`${index}-${value}`} className="grid grid-cols-[4rem_1fr_auto] items-center gap-5 px-6 py-5 text-lg font-bold">
+                        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-50 text-blue-700 dark:bg-blue-400/10 dark:text-blue-200">
                             {index + 1}
                         </span>
-                        <FieldValueLink value={value} />
+                        <a
+                            href={value}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="min-w-0 break-all text-blue-600 underline decoration-transparent underline-offset-4 transition hover:text-blue-800 hover:decoration-blue-300 dark:text-blue-300"
+                        >
+                            {value}
+                        </a>
                         <a href={value} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 dark:text-blue-300" aria-label="Abrir identificador externo">
                             <SoftIcon type="external" />
                         </a>
@@ -2155,6 +2189,19 @@ export default function EntityDetailPage() {
         ? entity.enrichment_concepts.split(",").map((concept) => concept.trim()).filter(Boolean)
         : [];
     const sanitizedEnrichmentSource = entity.enrichment_source && entity.enrichment_source !== "None" ? entity.enrichment_source : "";
+    const enrichmentProviderLabel = sanitizedEnrichmentSource
+        ? sanitizedEnrichmentSource.charAt(0).toUpperCase() + sanitizedEnrichmentSource.slice(1)
+        : "proveedor académico";
+    const enrichmentUpdatedLabel = firstStringFromAttributes(attributeSources, [
+        ["enrichment_updated_at"],
+        ["enrichment_updated"],
+        ["openalex_updated_at"],
+        ["openalex_updated_date"],
+        ["updated_date"],
+        ["updated_at"],
+        ["raw_record", "updated_date"],
+        ["raw_record", "updated_at"],
+    ]);
     const shortSource = sanitizedEnrichmentSource || entity.source || String(mergedAttributes.source_name || mergedAttributes.source || "");
     const attentionTimelineMax = attentionData?.timeline.length
         ? Math.max(...attentionData.timeline.map((item) => item.weighted_score), 1)
@@ -2994,35 +3041,28 @@ export default function EntityDetailPage() {
 
                     <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
                         <section className={`${DETAIL_CARD} p-6 md:p-8 lg:col-span-2`}>
-                            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200">
-                                        <SoftIcon type="keyword" />
-                                    </div>
-                                    <div>
-                                        <p className="flex items-center gap-3 text-3xl font-black tracking-tight text-slate-950 dark:text-white">
-                                            {tr("entities.detail.section.enrichment_provider", "Señales enriquecidas")}
-                                            <span className="text-blue-600 dark:text-blue-300"><SoftIcon type="info" /></span>
-                                        </p>
-                                        <p className="mt-2 text-base font-semibold text-slate-500 dark:text-slate-400">
-                                            {tr("entities.detail.section.enrichment_subtitle", "Información enriquecida proveniente de proveedores académicos.")}
-                                        </p>
-                                    </div>
+                            <div className="mb-8 flex items-center gap-6">
+                                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[1.35rem] bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200">
+                                    <IconGlyph name="nodes" className="h-10 w-10" />
                                 </div>
-                                {academicEnrichmentSource ? (
-                                    <Badge variant={sourceVariant(academicEnrichmentSource.toLowerCase())}>
-                                        {academicEnrichmentSource.toUpperCase()}
-                                    </Badge>
-                                ) : null}
+                                <div className="min-w-0">
+                                    <p className="flex flex-wrap items-center gap-3 text-4xl font-black tracking-tight text-slate-950 dark:text-white">
+                                        {tr("entities.detail.section.enrichment_provider", "Señales enriquecidas")}
+                                        <span className="text-blue-600 dark:text-blue-300"><SoftIcon type="info" /></span>
+                                    </p>
+                                    <p className="mt-3 text-xl font-semibold text-slate-500 dark:text-slate-400">
+                                        {tr("entities.detail.enrichment.provider_information", "Información enriquecida proveniente de proveedores académicos.")}
+                                    </p>
+                                </div>
                             </div>
-                            {academicEnrichmentSource ? (
-                                <div className="mb-6 flex flex-wrap items-center gap-5 rounded-2xl border border-blue-100 bg-blue-50/50 px-5 py-4 text-base font-bold text-slate-600 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-slate-200">
-                                    <span className="text-slate-900 dark:text-white"><SoftIcon type="openalex" /></span>
-                                    <span className="text-blue-600 dark:text-blue-300">{academicEnrichmentSource.toUpperCase()}</span>
-                                    <span className="hidden h-8 w-px bg-slate-200 dark:bg-white/10 sm:block" />
-                                    <span className="flex items-center gap-3">
+                            {sanitizedEnrichmentSource ? (
+                                <div className="mb-8 flex flex-wrap items-center gap-7 rounded-[1.35rem] border border-blue-100 bg-blue-50/40 px-7 py-6 text-xl font-bold text-slate-600 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-slate-200">
+                                    <span className="text-slate-950 dark:text-white"><SoftIcon type="openalex" /></span>
+                                    <span className="text-blue-600 dark:text-blue-300">{sanitizedEnrichmentSource.toUpperCase()}</span>
+                                    <span className="hidden h-10 w-px bg-slate-200 dark:bg-white/10 sm:block" />
+                                    <span className="flex items-center gap-4">
                                         <SoftIcon type="institution" />
-                                        {tr("entities.detail.section.enrichment_subtitle", "Proveedor académico")}: <span className="text-blue-600 dark:text-blue-300">{academicEnrichmentSource}</span>
+                                        Proveedor académico: <span className="text-blue-600 dark:text-blue-300">{sanitizedEnrichmentSource}</span>
                                     </span>
                                 </div>
                             ) : null}
@@ -3033,11 +3073,11 @@ export default function EntityDetailPage() {
                                     {tr("entities.detail.enrichment.concepts_empty", "Aún no hay conceptos enriquecidos. Ejecuta el enriquecimiento para activar esta capa semántica.")}
                                 </div>
                             )}
-                            <div className="mt-5 flex items-center gap-3 text-sm font-bold text-slate-500 dark:text-slate-400">
-                                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200">
+                            <div className="mt-7 flex items-center gap-4 text-lg font-semibold text-slate-500 dark:text-slate-400">
+                                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200">
                                     <SoftIcon type="info" />
                                 </span>
-                                Datos proporcionados por {academicEnrichmentSource ?? "proveedor académico"}.
+                                Datos proporcionados por {enrichmentProviderLabel}.{formatShortDate(enrichmentUpdatedLabel) ? ` Última actualización: ${formatShortDate(enrichmentUpdatedLabel)}` : ""}
                             </div>
                         </section>
 
