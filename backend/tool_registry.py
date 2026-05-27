@@ -149,6 +149,31 @@ def _tool_enrichment_stats(params: Dict[str, Any], db: Session) -> Dict[str, Any
     }
 
 
+def _tool_researchers_by_topic(params: Dict[str, Any], db: Session) -> Dict[str, Any]:
+    from backend.services.researcher_topic_analytics import researchers_by_topic
+
+    return researchers_by_topic(
+        db,
+        domain_id=params.get("domain_id", "default"),
+        org_id=None,
+        topic=params.get("topic", ""),
+        limit=int(params.get("limit", 25)),
+    )
+
+
+def _tool_topic_researcher_graph(params: Dict[str, Any], db: Session) -> Dict[str, Any]:
+    from backend.services.researcher_topic_analytics import topic_researcher_graph
+
+    return topic_researcher_graph(
+        db,
+        domain_id=params.get("domain_id", "default"),
+        org_id=None,
+        topic=params.get("topic", ""),
+        limit=int(params.get("limit", 50)),
+        min_weight=int(params.get("min_weight", 1)),
+    )
+
+
 # ── Registry factory ───────────────────────────────────────────────────────────
 
 def _build_registry() -> ToolRegistry:
@@ -186,6 +211,27 @@ def _build_registry() -> ToolRegistry:
         description="Returns enrichment coverage and average citation count for a domain.",
         parameters={"domain_id": {"type": "string", "default": "default"}},
         handler=_tool_enrichment_stats,
+    )
+    r.register(
+        name="find_researchers_by_topic",
+        description="Returns researchers working on a requested topic, ranked by evidence, citations, authority identifiers, recency, and enrichment quality.",
+        parameters={
+            "domain_id": {"type": "string", "default": "default"},
+            "topic": {"type": "string"},
+            "limit": {"type": "integer", "default": 25},
+        },
+        handler=_tool_researchers_by_topic,
+    )
+    r.register(
+        name="get_topic_researcher_graph",
+        description="Builds a topic-centered researcher graph with works-on-topic and coauthor relationships.",
+        parameters={
+            "domain_id": {"type": "string", "default": "default"},
+            "topic": {"type": "string"},
+            "limit": {"type": "integer", "default": 50},
+            "min_weight": {"type": "integer", "default": 1},
+        },
+        handler=_tool_topic_researcher_graph,
     )
     r.register(
         name="analyze_domain",

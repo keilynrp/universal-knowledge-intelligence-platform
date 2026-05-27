@@ -286,6 +286,16 @@ export const navSections: NavSection[] = [
         translationKey: "nav.authors",
       },
       {
+        label: "Researchers by Topic",
+        href: "/analytics/researchers",
+        icon: (
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a8.25 8.25 0 0115 0M7.5 14.25h9M9 17.25h6" />
+          </svg>
+        ),
+        translationKey: "nav.researchers_by_topic",
+      },
+      {
         label: "Co-authorship Network",
         href: "/analytics/coauthorship",
         icon: (

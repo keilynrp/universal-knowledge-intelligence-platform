@@ -47,6 +47,10 @@ from backend.services.engine_delegation import (
     try_engine_analytics,
 )
 from backend.services.pattern_discovery import PatternDiscoveryService
+from backend.services.researcher_topic_analytics import (
+    researchers_by_topic,
+    topic_researcher_graph,
+)
 from backend.services.semantic_keyword_signal_engine import materialize_keyword_signals
 from backend.analyzers.concept_hierarchy import (
     build_concept_tree,
@@ -229,6 +233,44 @@ def get_semantic_keyword_signals(
         _validate_domain_id(domain_id)
     org_id = resolve_request_org_id(db, current_user)
     return materialize_keyword_signals(db, domain_id, org_id=org_id, persist=False, limit=limit)
+
+
+@router.get("/analytics/researchers-by-topic", tags=["analytics"])
+def analytics_researchers_by_topic(
+    topic: str = Query(..., min_length=2, max_length=160),
+    domain_id: str = Query(default="default", min_length=1, max_length=64),
+    limit: int = Query(default=25, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Rank researchers associated with a topic using ingested and enriched record evidence."""
+    if domain_id != "all":
+        _validate_domain_id(domain_id)
+    org_id = resolve_request_org_id(db, current_user)
+    return researchers_by_topic(db, domain_id=domain_id, org_id=org_id, topic=topic, limit=limit)
+
+
+@router.get("/analytics/topic-researcher-graph", tags=["analytics"])
+def analytics_topic_researcher_graph(
+    topic: str = Query(..., min_length=2, max_length=160),
+    domain_id: str = Query(default="default", min_length=1, max_length=64),
+    limit: int = Query(default=50, ge=1, le=200),
+    min_weight: int = Query(default=1, ge=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Build a topic-centered researcher graph from co-authorship and topic affinity evidence."""
+    if domain_id != "all":
+        _validate_domain_id(domain_id)
+    org_id = resolve_request_org_id(db, current_user)
+    return topic_researcher_graph(
+        db,
+        domain_id=domain_id,
+        org_id=org_id,
+        topic=topic,
+        limit=limit,
+        min_weight=min_weight,
+    )
 
 
 @router.get("/analytics/abstract-coverage", tags=["analytics"])
