@@ -1369,6 +1369,45 @@ export default function EntityDetailPage() {
             !hasDisplayedEquivalent(key, value, displayedValuesByGroup)
     );
 
+    // Provenance split: distinguish ingested data, normalized data, and enrichment signals
+    type ProvenanceEntry = {
+        key: string;
+        value: unknown;
+        normalizedValue?: unknown; // present when source value was rewritten by normalization
+    };
+    const ingestionEntries: ProvenanceEntry[] = [];
+    const normalizationEntries: ProvenanceEntry[] = [];
+    const enrichmentExtraEntries: ProvenanceEntry[] = [];
+
+    for (const [key, value] of extendedEntries) {
+        const isEnrichmentField = key.startsWith("enrichment_") || key === "concepts";
+        if (isEnrichmentField) {
+            enrichmentExtraEntries.push({ key, value });
+            continue;
+        }
+        const inSource = Object.prototype.hasOwnProperty.call(sourceAttributes, key);
+        const inNormalized = Object.prototype.hasOwnProperty.call(normalizedAttributes, key);
+        if (inNormalized && !inSource) {
+            normalizationEntries.push({ key, value });
+        } else if (inSource && inNormalized) {
+            const srcVal = sourceAttributes[key];
+            const normVal = normalizedAttributes[key];
+            const same = comparableValue(srcVal) === comparableValue(normVal);
+            if (same) {
+                ingestionEntries.push({ key, value: srcVal });
+            } else {
+                ingestionEntries.push({ key, value: srcVal, normalizedValue: normVal });
+            }
+        } else {
+            ingestionEntries.push({ key, value });
+        }
+    }
+
+    const ingestionSourceLabel = entity.source
+        ? (entity.source === "user" ? "Carga manual" : entity.source === "demo" ? "Datos demo" : entity.source)
+        : "—";
+    const academicEnrichmentSource = sanitizedEnrichmentSource || null;
+
     async function copyValue(value: unknown) {
         if (!value) return;
         await navigator.clipboard.writeText(String(value));
@@ -1870,56 +1909,133 @@ export default function EntityDetailPage() {
                         </section>
                     )}
 
-                    {extendedEntries.length > 0 && (
-                        <section className={`${DETAIL_CARD} p-6 md:p-8`}>
-                            <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-200">
-                                        <IconGlyph name="database" className="h-6 w-6" />
-                                    </div>
-                                    <div>
-                                        <h2 className="text-sm font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
-                                            Atributos extendidos
-                                        </h2>
-                                        {shortSource ? (
-                                            <p className="mt-1 text-xs font-semibold text-slate-400">
-                                                Fuente normalizada: {shortSource}
-                                            </p>
-                                        ) : null}
-                                    </div>
-                                </div>
-                                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500 dark:bg-white/10 dark:text-slate-300">
-                                    {extendedEntries.length} campos
+                    {(() => {
+                        const iconFor = (key: string) =>
+                            key.includes("author") || key.includes("orcid") ? "user" :
+                            key.includes("year") || key.includes("date") || key.includes("retrieved") ? "calendar" :
+                            key.includes("institution") || key.includes("affiliation") ? "institution" :
+                            key.includes("citation") || key.includes("count") ? "chart" :
+                            key.includes("doi") || key.includes("id") || key.includes("url") ? "link" :
+                            key.includes("source") ? "database" : "file";
+
+                        const renderRow = (entry: ProvenanceEntry, accent: string) => (
+                            <div key={entry.key} className="grid grid-cols-[1.5rem_1fr] gap-x-4 border-b border-slate-100 pb-5 dark:border-white/10">
+                                <span className={`mt-1 ${accent}`}>
+                                    <IconGlyph name={iconFor(entry.key)} className="h-5 w-5" />
                                 </span>
+                                <div className="min-w-0 space-y-1">
+                                    <span className="block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
+                                        {fieldLabel(entry.key)}
+                                    </span>
+                                    <span className="block break-words text-sm font-bold leading-6 text-slate-700 dark:text-slate-200">
+                                        {formatValue(entry.value)}
+                                    </span>
+                                    {entry.normalizedValue !== undefined ? (
+                                        <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700 ring-1 ring-blue-100 dark:bg-blue-400/10 dark:text-blue-200 dark:ring-blue-400/20">
+                                            Normalizado: {formatValue(entry.normalizedValue)}
+                                        </span>
+                                    ) : null}
+                                </div>
                             </div>
-                            <div className="grid grid-cols-1 gap-x-10 gap-y-5 lg:grid-cols-2">
-                                {extendedEntries.map(([key, val]) => {
-                                    const icon =
-                                        key.includes("author") || key.includes("orcid") ? "user" :
-                                        key.includes("year") || key.includes("date") || key.includes("retrieved") ? "calendar" :
-                                        key.includes("institution") || key.includes("affiliation") ? "institution" :
-                                        key.includes("citation") || key.includes("count") ? "chart" :
-                                        key.includes("doi") || key.includes("id") || key.includes("url") ? "link" :
-                                        key.includes("source") ? "database" : "file";
-                                    return (
-                                        <div key={key} className="grid grid-cols-[1.5rem_1fr] gap-x-4 border-b border-slate-100 pb-5 dark:border-white/10">
-                                            <span className="mt-1 text-violet-600 dark:text-violet-300">
-                                                <IconGlyph name={icon} className="h-5 w-5" />
-                                            </span>
-                                            <div className="min-w-0 space-y-1">
-                                                <span className="block text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
-                                                    {fieldLabel(key)}
+                        );
+
+                        return (
+                            <>
+                                {ingestionEntries.length > 0 && (
+                                    <section className={`${DETAIL_CARD} p-6 md:p-8`}>
+                                        <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
+                                            <div className="flex items-center gap-4">
+                                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200">
+                                                    <IconGlyph name="database" className="h-6 w-6" />
+                                                </div>
+                                                <div>
+                                                    <h2 className="text-sm font-black uppercase tracking-[0.18em] text-slate-700 dark:text-slate-200">
+                                                        {tr("entities.detail.section.ingested", "Datos de la fuente original")}
+                                                    </h2>
+                                                    <p className="mt-1 text-xs font-semibold text-slate-400">
+                                                        {tr("entities.detail.section.ingested_subtitle", "Tal como llegaron desde la ingesta")}: <span className="font-bold text-slate-600 dark:text-slate-300">{ingestionSourceLabel}</span>
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white dark:bg-white/15">
+                                                    {ingestionSourceLabel}
                                                 </span>
-                                                <span className="block break-words text-sm font-bold leading-6 text-slate-700 dark:text-slate-200">
-                                                    {formatValue(val)}
+                                                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500 dark:bg-white/10 dark:text-slate-300">
+                                                    {ingestionEntries.length} {tr("entities.detail.section.fields_suffix", "campos")}
                                                 </span>
                                             </div>
                                         </div>
-                                    );
-                                })}
-                            </div>
-                        </section>
-                    )}
+                                        <div className="grid grid-cols-1 gap-x-10 gap-y-5 lg:grid-cols-2">
+                                            {ingestionEntries.map((entry) => renderRow(entry, "text-slate-500 dark:text-slate-300"))}
+                                        </div>
+                                    </section>
+                                )}
+
+                                {normalizationEntries.length > 0 && (
+                                    <section className={`${DETAIL_CARD} p-6 md:p-8`}>
+                                        <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
+                                            <div className="flex items-center gap-4">
+                                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200">
+                                                    <IconGlyph name="shield" className="h-6 w-6" />
+                                                </div>
+                                                <div>
+                                                    <h2 className="text-sm font-black uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">
+                                                        {tr("entities.detail.section.normalized", "Campos normalizados")}
+                                                    </h2>
+                                                    <p className="mt-1 text-xs font-semibold text-slate-400">
+                                                        {tr("entities.detail.section.normalized_subtitle", "Generados o reescritos por harmonización / reglas")}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700 ring-1 ring-blue-100 dark:bg-blue-400/10 dark:text-blue-200 dark:ring-blue-400/20">
+                                                {normalizationEntries.length} {tr("entities.detail.section.fields_suffix", "campos")}
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-1 gap-x-10 gap-y-5 lg:grid-cols-2">
+                                            {normalizationEntries.map((entry) => renderRow(entry, "text-blue-600 dark:text-blue-300"))}
+                                        </div>
+                                    </section>
+                                )}
+
+                                {(enrichmentExtraEntries.length > 0 || academicEnrichmentSource) && (
+                                    <section className={`${DETAIL_CARD} p-6 md:p-8`}>
+                                        <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
+                                            <div className="flex items-center gap-4">
+                                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-200">
+                                                    <IconGlyph name="spark" className="h-6 w-6" />
+                                                </div>
+                                                <div>
+                                                    <h2 className="text-sm font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
+                                                        {tr("entities.detail.section.enrichment_provider", "Señales enriquecidas")}
+                                                    </h2>
+                                                    <p className="mt-1 text-xs font-semibold text-slate-400">
+                                                        {academicEnrichmentSource
+                                                            ? `${tr("entities.detail.section.enrichment_subtitle", "Proveedor académico")}: ${academicEnrichmentSource}`
+                                                            : tr("entities.detail.section.enrichment_subtitle_empty", "Sin proveedor académico todavía")}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            {academicEnrichmentSource ? (
+                                                <Badge variant={sourceVariant(academicEnrichmentSource.toLowerCase())}>
+                                                    {academicEnrichmentSource.toUpperCase()}
+                                                </Badge>
+                                            ) : null}
+                                        </div>
+                                        {enrichmentExtraEntries.length > 0 ? (
+                                            <div className="grid grid-cols-1 gap-x-10 gap-y-5 lg:grid-cols-2">
+                                                {enrichmentExtraEntries.map((entry) => renderRow(entry, "text-violet-600 dark:text-violet-300"))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                                                {tr("entities.detail.section.enrichment_only_columns", "Revisa la pestaña 'Enriquecimiento' para ver el detalle del proveedor.")}
+                                            </p>
+                                        )}
+                                    </section>
+                                )}
+                            </>
+                        );
+                    })()}
                 </div>
             )}
 
