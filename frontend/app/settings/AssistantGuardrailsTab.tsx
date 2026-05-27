@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import type { ToastVariant } from "../components/ui";
 
@@ -34,7 +34,7 @@ export default function AssistantGuardrailsTab({
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const response = await apiFetch("/assistant/actions");
@@ -46,11 +46,11 @@ export default function AssistantGuardrailsTab({
     } finally {
       setLoading(false);
     }
-  }
+  }, [toast]);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   async function save(item: AssistantCapability, patch: Partial<AssistantCapability>) {
     setSavingId(item.id);
