@@ -121,6 +121,75 @@ function FieldValueLink({ value }: { value: string }) {
     );
 }
 
+function SoftIcon({ type }: { type: "author" | "institution" | "keyword" | "openalex" | "ror" | "orcid" }) {
+    const common = {
+        className: "h-5 w-5",
+        fill: "none",
+        stroke: "currentColor",
+        strokeWidth: 1.9,
+        strokeLinecap: "round" as const,
+        strokeLinejoin: "round" as const,
+        viewBox: "0 0 24 24",
+    };
+    if (type === "author") {
+        return (
+            <svg {...common}>
+                <path d="M9 11a4 4 0 100-8 4 4 0 000 8z" />
+                <path d="M2.5 21a6.5 6.5 0 0113 0" />
+                <path d="M17 8.5a3 3 0 110 6" />
+                <path d="M18.5 17a5 5 0 013 4" />
+            </svg>
+        );
+    }
+    if (type === "institution") {
+        return (
+            <svg {...common}>
+                <path d="M4 10h16" />
+                <path d="M6 10v8" />
+                <path d="M10 10v8" />
+                <path d="M14 10v8" />
+                <path d="M18 10v8" />
+                <path d="M3 18h18" />
+                <path d="M12 3l8 5H4l8-5z" />
+            </svg>
+        );
+    }
+    if (type === "keyword") {
+        return (
+            <svg {...common}>
+                <path d="M20 12l-8 8-8-8V4h8l8 8z" />
+                <path d="M7.5 7.5h.01" />
+            </svg>
+        );
+    }
+    if (type === "orcid") {
+        return <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-lime-500 text-[10px] font-black leading-none text-white">iD</span>;
+    }
+    if (type === "ror") {
+        return <span className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-gray-400 text-[8px] font-black text-gray-600 dark:border-gray-500 dark:text-gray-300">ROR</span>;
+    }
+    return (
+        <svg {...common}>
+            <path d="M12 3l7 4v10l-7 4-7-4V7l7-4z" />
+            <path d="M12 8l4 2.25v4.5L12 17l-4-2.25v-4.5L12 8z" />
+            <path d="M19 7l-7 4-7-4" />
+        </svg>
+    );
+}
+
+function countryFlag(country: string): string | null {
+    const code = country.trim().toUpperCase();
+    if (code === "CN") return "🇨🇳";
+    if (code === "US" || code === "USA") return "🇺🇸";
+    if (code === "GB" || code === "UK") return "🇬🇧";
+    if (code === "MX") return "🇲🇽";
+    if (code === "ES") return "🇪🇸";
+    if (code === "DE") return "🇩🇪";
+    if (code === "FR") return "🇫🇷";
+    if (code === "BR") return "🇧🇷";
+    return null;
+}
+
 function isAuthorRecord(record: Record<string, unknown>): boolean {
     return Boolean(
         firstRecordValue(record, ["author_name", "authorName", "name", "display_name", "displayName"]) ||
@@ -129,48 +198,133 @@ function isAuthorRecord(record: Record<string, unknown>): boolean {
     );
 }
 
-function AuthorRecordCard({ record, index }: { record: Record<string, unknown>; index: number }) {
-    const name = firstRecordValue(record, ["author_name", "authorName", "name", "display_name", "displayName"]) ?? `Autor ${index + 1}`;
-    const orcid = firstRecordValue(record, ["author_orcid", "authorOrcid", "orcid", "orcid_id", "orcidId"]);
-    const openAlex = firstRecordValue(record, ["author_openalex_id", "authorOpenalexId", "openalex_id", "openalexId"]);
-    const position = firstRecordValue(record, ["author_position", "authorPosition", "position"]);
+function authorPositionLabel(position: string | null): { label: string; className: string; prefix: string } {
+    const normalized = position?.toLowerCase();
+    if (normalized === "first") return { label: "Primero", prefix: "★", className: "bg-amber-100 text-amber-800 dark:bg-amber-400/15 dark:text-amber-200" };
+    if (normalized === "last") return { label: "Último", prefix: "★", className: "bg-purple-100 text-purple-800 dark:bg-purple-400/15 dark:text-purple-200" };
+    return { label: "Medio", prefix: "•••", className: "bg-blue-50 text-blue-700 dark:bg-blue-400/10 dark:text-blue-200" };
+}
 
+function AuthorAffiliationsTable({ records }: { records: Record<string, unknown>[] }) {
     return (
-        <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-800/40">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0">
-                    <p className="break-words text-sm font-bold text-gray-900 dark:text-white">{name}</p>
-                    <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">Autor {index + 1}</p>
+        <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white/80 shadow-sm dark:border-gray-800 dark:bg-gray-800/40">
+            <div className="min-w-[54rem]">
+                <div className="grid grid-cols-[10rem_minmax(12rem,1fr)_minmax(13rem,1.1fr)_minmax(15rem,1.2fr)] border-b border-gray-100 bg-gray-50/80 text-sm font-bold text-gray-600 dark:border-gray-800 dark:bg-gray-900/30 dark:text-gray-300">
+                    <div className="px-4 py-4">Posición</div>
+                    <div className="px-4 py-4">Autor</div>
+                    <div className="flex items-center gap-2 px-4 py-4">ORCID <SoftIcon type="orcid" /></div>
+                    <div className="flex items-center gap-2 px-4 py-4">OpenAlex ID <SoftIcon type="openalex" /></div>
                 </div>
-                {position ? (
-                    <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-purple-700 dark:bg-purple-500/10 dark:text-purple-300">
-                        {position}
-                    </span>
-                ) : null}
-            </div>
-            <div className="mt-3 grid gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
-                {orcid ? (
-                    <div className="min-w-0">
-                        <span className="mr-1 text-gray-400">ORCID:</span>
-                        <a
-                            href={normalizedOrcidHref(orcid)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="break-all text-emerald-700 underline decoration-emerald-300 underline-offset-2 hover:text-emerald-900 dark:text-emerald-300 dark:decoration-emerald-500"
-                        >
-                            {orcid}
-                        </a>
-                    </div>
-                ) : null}
-                {openAlex ? (
-                    <div className="min-w-0">
-                        <span className="mr-1 text-gray-400">OpenAlex:</span>
-                        <FieldValueLink value={openAlex} />
-                    </div>
-                ) : null}
+                <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {records.map((record, index) => {
+                        const name = firstRecordValue(record, ["author_name", "authorName", "name", "display_name", "displayName"]) ?? `Autor ${index + 1}`;
+                        const orcid = firstRecordValue(record, ["author_orcid", "authorOrcid", "orcid", "orcid_id", "orcidId"]);
+                        const openAlex = firstRecordValue(record, ["author_openalex_id", "authorOpenalexId", "openalex_id", "openalexId"]);
+                        const position = authorPositionLabel(firstRecordValue(record, ["author_position", "authorPosition", "position"]));
+                        return (
+                            <div key={`${index}-${name}`} className="grid grid-cols-[10rem_minmax(12rem,1fr)_minmax(13rem,1.1fr)_minmax(15rem,1.2fr)] items-center text-sm font-bold text-gray-900 dark:text-white">
+                                <div className="px-4 py-4">
+                                    <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${position.className}`}>
+                                        <span>{position.prefix}</span>
+                                        {position.label}
+                                    </span>
+                                </div>
+                                <div className="min-w-0 px-4 py-4">{name}</div>
+                                <div className="min-w-0 px-4 py-4">
+                                    {orcid ? <a href={normalizedOrcidHref(orcid)} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-2 text-blue-600 dark:text-blue-300"><SoftIcon type="orcid" /><span className="break-all">{orcid}</span></a> : <span className="text-gray-300">—</span>}
+                                </div>
+                                <div className="min-w-0 px-4 py-4">
+                                    {openAlex ? <span className="inline-flex min-w-0 items-center gap-3"><span className="text-gray-500"><SoftIcon type="openalex" /></span><FieldValueLink value={openAlex} /></span> : <span className="text-gray-300">—</span>}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
         </div>
     );
+}
+
+function isAffiliationRecord(record: Record<string, unknown>): boolean {
+    return Boolean(
+        firstRecordValue(record, ["institution", "institution_name", "organization", "organization_name", "affiliation"]) ||
+        firstRecordValue(record, ["ror", "ror_id", "rorId"]) ||
+        firstRecordValue(record, ["institution_openalex_id", "institutionOpenalexId"]) ||
+        (firstRecordValue(record, ["country", "country_code", "countryCode"]) && firstRecordValue(record, ["name", "display_name", "openalex_id", "openalexId"]))
+    );
+}
+
+function NormalizedAffiliationsTable({ records }: { records: Record<string, unknown>[] }) {
+    return (
+        <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white/80 shadow-sm dark:border-gray-800 dark:bg-gray-800/40">
+            <div className="min-w-[58rem]">
+                <div className="grid grid-cols-[minmax(16rem,1.5fr)_minmax(12rem,1fr)_minmax(15rem,1.2fr)_8rem] border-b border-gray-100 bg-gray-50/80 text-sm font-bold text-gray-600 dark:border-gray-800 dark:bg-gray-900/30 dark:text-gray-300">
+                    <div className="px-4 py-4">Institución / Organización</div>
+                    <div className="flex items-center gap-2 px-4 py-4">ROR <SoftIcon type="ror" /></div>
+                    <div className="flex items-center gap-2 px-4 py-4">OpenAlex ID <SoftIcon type="openalex" /></div>
+                    <div className="px-4 py-4">País</div>
+                </div>
+                <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {records.map((record, index) => {
+                        const institution = firstRecordValue(record, ["institution", "institution_name", "organization", "organization_name", "affiliation", "name", "display_name"]) ?? `Institución ${index + 1}`;
+                        const ror = firstRecordValue(record, ["ror", "ror_id", "rorId"]);
+                        const openAlex = firstRecordValue(record, ["openalex_id", "openalexId", "institution_openalex_id", "institutionOpenalexId"]);
+                        const country = firstRecordValue(record, ["country", "country_code", "countryCode"]);
+                        const flag = country ? countryFlag(country) : null;
+                        return (
+                            <div key={`${index}-${institution}`} className="grid grid-cols-[minmax(16rem,1.5fr)_minmax(12rem,1fr)_minmax(15rem,1.2fr)_8rem] items-center text-sm font-bold text-gray-900 dark:text-white">
+                                <div className="flex min-w-0 items-center gap-4 px-4 py-4"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200"><SoftIcon type="institution" /></span><span className="break-words">{institution}</span></div>
+                                <div className="min-w-0 px-4 py-4">{ror ? <span className="inline-flex min-w-0 items-center gap-3"><SoftIcon type="ror" /><FieldValueLink value={ror} /></span> : <span className="text-gray-300">—</span>}</div>
+                                <div className="min-w-0 px-4 py-4">{openAlex ? <span className="inline-flex min-w-0 items-center gap-3"><span className="text-gray-500"><SoftIcon type="openalex" /></span><FieldValueLink value={openAlex} /></span> : <span className="text-gray-300">—</span>}</div>
+                                <div className="px-4 py-4">{country ? <span className="inline-flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-1 text-xs font-black text-gray-700 ring-1 ring-gray-200 dark:bg-white/10 dark:text-gray-200 dark:ring-white/10">{flag ? <span>{flag}</span> : null}{country.toUpperCase()}</span> : <span className="text-gray-300">—</span>}</div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function isKeywordSignalRecord(record: Record<string, unknown>): boolean {
+    return Boolean(firstRecordValue(record, ["keyword", "label", "name", "concept"]) && (
+        valueString(record.opportunity_score) ||
+        valueString(record.score) ||
+        valueString(record.support_count) ||
+        valueString(record.records)
+    ));
+}
+
+function KeywordSignalGrid({ records }: { records: Record<string, unknown>[] }) {
+    return (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {records.map((record, index) => {
+                const keyword = firstRecordValue(record, ["keyword", "label", "name", "concept"]) ?? `Keyword ${index + 1}`;
+                const score = firstRecordValue(record, ["opportunity_score", "score"]) ?? "—";
+                const support = firstRecordValue(record, ["support_count", "records", "support"]) ?? "0";
+                return (
+                    <div key={`${index}-${keyword}`} className="rounded-2xl border border-gray-100 bg-white/80 p-5 shadow-sm dark:border-gray-800 dark:bg-gray-800/40">
+                        <div className="flex items-center gap-4">
+                            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-200"><SoftIcon type="keyword" /></span>
+                            <p className="min-w-0 break-words text-base font-black text-gray-900 dark:text-white">{keyword}</p>
+                        </div>
+                        <div className="mt-5 flex flex-wrap items-center gap-3 text-sm font-bold text-gray-700 dark:text-gray-200">
+                            <span>Score</span>
+                            <span className="rounded-full bg-lime-100 px-3 py-0.5 text-xs font-black text-lime-800 dark:bg-lime-400/20 dark:text-lime-100">{score}</span>
+                            <span className="text-gray-400">•</span>
+                            <span className="text-blue-600 dark:text-blue-300">{support} registros</span>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+function isRichStructuredValue(value: unknown): boolean {
+    if (!Array.isArray(value) || value.length === 0 || !value.every(isPlainRecord)) return false;
+    const records = value as Record<string, unknown>[];
+    return records.some(isAuthorRecord) || records.some(isAffiliationRecord) || records.some(isKeywordSignalRecord);
 }
 
 function formatObjectSummary(value: Record<string, unknown>): string {
@@ -216,23 +370,24 @@ function StructuredFieldValue({ value, emptyLabel }: { value: unknown; emptyLabe
         if (value.every(isPlainRecord)) {
             const records = value as Record<string, unknown>[];
             const authorLike = records.some(isAuthorRecord);
+            const affiliationLike = records.some(isAffiliationRecord);
+            const keywordLike = records.some(isKeywordSignalRecord);
+            if (authorLike) return <AuthorAffiliationsTable records={records} />;
+            if (keywordLike) return <KeywordSignalGrid records={records} />;
+            if (affiliationLike) return <NormalizedAffiliationsTable records={records} />;
             return (
                 <div className="grid max-h-[24rem] gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
                     {records.map((record, index) => (
-                        authorLike ? (
-                            <AuthorRecordCard key={`${index}-${firstRecordValue(record, ["author_name", "authorName", "name"]) ?? index}`} record={record} index={index} />
-                        ) : (
-                            <div key={index} className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 text-xs font-medium text-gray-600 dark:border-gray-800 dark:bg-gray-800/40 dark:text-gray-300">
-                                <div className="grid gap-2">
-                                    {Object.entries(record).map(([key, entryValue]) => (
-                                        <div key={key} className="min-w-0">
-                                            <span className="mr-1 text-gray-400">{titleCaseKey(key)}:</span>
-                                            <span className="break-words">{formatValue(entryValue, emptyLabel)}</span>
-                                        </div>
-                                    ))}
-                                </div>
+                        <div key={index} className="rounded-xl border border-gray-100 bg-gray-50/70 p-3 text-xs font-medium text-gray-600 dark:border-gray-800 dark:bg-gray-800/40 dark:text-gray-300">
+                            <div className="grid gap-2">
+                                {Object.entries(record).map(([key, entryValue]) => (
+                                    <div key={key} className="min-w-0">
+                                        <span className="mr-1 text-gray-400">{titleCaseKey(key)}:</span>
+                                        <span className="break-words">{formatValue(entryValue, emptyLabel)}</span>
+                                    </div>
+                                ))}
                             </div>
-                        )
+                        </div>
                     ))}
                 </div>
             );
@@ -795,8 +950,9 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
                                     {extendedFields.map((field) => {
                                         const isAuthorsField = field.key === "authors" || field.key === "full_authors";
                                         const hasOrcids = isAuthorsField && enrichmentOrcids.length > 0 && authorsList.length > 0;
+                                        const richStructured = isRichStructuredValue(field.value);
                                         return (
-                                            <div key={field.label} className={`flex flex-col gap-1 border-b border-gray-50 pb-2 dark:border-gray-800/50${hasOrcids ? " md:col-span-2" : ""}`}>
+                                            <div key={field.label} className={`flex flex-col gap-1 border-b border-gray-50 pb-2 dark:border-gray-800/50${hasOrcids || richStructured ? " md:col-span-2" : ""}`}>
                                                 <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{field.label}</span>
                                                 {hasOrcids ? (
                                                     <AuthorsWithOrcids authors={authorsList} orcids={enrichmentOrcids} />
