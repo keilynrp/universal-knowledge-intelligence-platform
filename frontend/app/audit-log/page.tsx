@@ -20,6 +20,21 @@ interface AuditEntry {
   status_code:   number | null;
   ip_address:    string | null;
   created_at:    string | null;
+  details?: {
+    action_id?: string;
+    label?: string;
+    href?: string;
+    kind?: string;
+    route?: string;
+    module_label?: string;
+    domain_id?: string;
+    api_path?: string;
+    method?: string;
+    status?: string;
+    status_code?: number;
+    detail?: string;
+    raw?: string;
+  } | null;
 }
 
 interface AuditPage {
@@ -39,19 +54,21 @@ interface AuditStats {
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const ACTION_OPTIONS = ["", "CREATE", "UPDATE", "DELETE"];
+const ACTION_OPTIONS = ["", "CREATE", "UPDATE", "DELETE", "ASSISTANT_ACTION"];
 const PAGE_SIZE      = 50;
 
 const ACTION_STYLES: Record<string, string> = {
   CREATE: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
   UPDATE: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
   DELETE: "bg-red-100  text-red-700  dark:bg-red-900/30  dark:text-red-400",
+  ASSISTANT_ACTION: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300",
 };
 
 const ACTION_DOT: Record<string, string> = {
   CREATE: "bg-green-500",
   UPDATE: "bg-amber-500",
   DELETE: "bg-red-500",
+  ASSISTANT_ACTION: "bg-violet-500",
 };
 
 const STATUS_COLOR = (code: number | null) => {
@@ -76,7 +93,12 @@ function getActionLabel(action: string, t: (key: string) => string) {
   if (action === "CREATE") return t("common.create");
   if (action === "UPDATE") return t("common.update");
   if (action === "DELETE") return t("common.delete");
+  if (action === "ASSISTANT_ACTION") return "Assistant";
   return action;
+}
+
+function canRollback(entry: AuditEntry) {
+  return entry.action === "ASSISTANT_ACTION" && entry.details?.kind === "mutation" && entry.details?.status === "success";
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────────
@@ -90,10 +112,12 @@ export default function AuditLogPage() {
   const [filterUser,     setFilterUser]     = useState("");
   const [filterFrom,     setFilterFrom]     = useState("");
   const [filterTo,       setFilterTo]       = useState("");
+  const [assistantOnly, setAssistantOnly] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<AuditEntry | null>(null);
 
   // Applied filters (only update on Apply)
   const [applied, setApplied] = useState({
-    action: "", resource: "", user: "", from: "", to: "",
+    action: "", resource: "", user: "", from: "", to: "", assistantOnly: false,
   });
 
   // ── Data state
@@ -125,8 +149,13 @@ export default function AuditLogPage() {
       const params = new URLSearchParams();
       params.set("skip",  String(currentSkip));
       params.set("limit", String(PAGE_SIZE));
-      if (filters.action)   params.set("action",        filters.action);
-      if (filters.resource) params.set("resource_type", filters.resource);
+      if (filters.assistantOnly) {
+        params.set("action", "ASSISTANT_ACTION");
+        params.set("resource_type", "assistant_action");
+      } else if (filters.action) {
+        params.set("action", filters.action);
+      }
+      if (!filters.assistantOnly && filters.resource) params.set("resource_type", filters.resource);
       if (filters.user)     params.set("username",      filters.user);
       if (filters.from)     params.set("from_date",     filters.from);
       if (filters.to)       params.set("to_date",       filters.to);
@@ -154,20 +183,25 @@ export default function AuditLogPage() {
 
   function handleApply() {
     setSkip(0);
-    setApplied({ action: filterAction, resource: filterResource, user: filterUser, from: filterFrom, to: filterTo });
+    setApplied({ action: filterAction, resource: filterResource, user: filterUser, from: filterFrom, to: filterTo, assistantOnly });
   }
 
   function handleReset() {
     setFilterAction(""); setFilterResource(""); setFilterUser("");
-    setFilterFrom(""); setFilterTo("");
+    setFilterFrom(""); setFilterTo(""); setAssistantOnly(false);
     setSkip(0);
-    setApplied({ action: "", resource: "", user: "", from: "", to: "" });
+    setApplied({ action: "", resource: "", user: "", from: "", to: "", assistantOnly: false });
   }
 
   async function handleExport() {
     const params = new URLSearchParams();
-    if (applied.action)   params.set("action",        applied.action);
-    if (applied.resource) params.set("resource_type", applied.resource);
+    if (applied.assistantOnly) {
+      params.set("action", "ASSISTANT_ACTION");
+      params.set("resource_type", "assistant_action");
+    } else if (applied.action) {
+      params.set("action", applied.action);
+    }
+    if (!applied.assistantOnly && applied.resource) params.set("resource_type", applied.resource);
     if (applied.user)     params.set("username",      applied.user);
     if (applied.from)     params.set("from_date",     applied.from);
     if (applied.to)       params.set("to_date",       applied.to);
@@ -190,9 +224,17 @@ export default function AuditLogPage() {
   // ── Pagination
   const totalPages = page ? Math.ceil(page.total / PAGE_SIZE) : 0;
   const currentPage = Math.floor(skip / PAGE_SIZE) + 1;
+  const assistantItems = page?.items.filter((entry) => entry.action === "ASSISTANT_ACTION") ?? [];
+  const assistantSuccess = assistantItems.filter((entry) => entry.details?.status === "success" || entry.details?.status === "navigated").length;
+  const assistantErrors = assistantItems.filter((entry) => entry.details?.status === "error" || (entry.status_code ?? 0) >= 400).length;
+  const assistantMutations = assistantItems.filter((entry) => entry.details?.kind === "mutation").length;
+  const assistantRollbackCandidates = assistantItems.filter(canRollback).length;
   const auditExportParams = new URLSearchParams();
-  if (applied.action) auditExportParams.set("action", applied.action);
-  if (applied.resource) auditExportParams.set("resource_type", applied.resource);
+  if (applied.assistantOnly) {
+    auditExportParams.set("action", "ASSISTANT_ACTION");
+    auditExportParams.set("resource_type", "assistant_action");
+  } else if (applied.action) auditExportParams.set("action", applied.action);
+  if (!applied.assistantOnly && applied.resource) auditExportParams.set("resource_type", applied.resource);
   if (applied.user) auditExportParams.set("username", applied.user);
   if (applied.from) auditExportParams.set("from_date", applied.from);
   if (applied.to) auditExportParams.set("to_date", applied.to);
@@ -205,6 +247,7 @@ export default function AuditLogPage() {
     activeSources: stats?.top_users?.length ?? 0,
     leadingGap: error,
     recommendedActions: [
+      applied.assistantOnly ? "Vista de ejecuciones del Assistant activa" : "Activar vista Assistant para trazabilidad operacional",
       applied.action ? `Accion filtrada: ${applied.action}` : "Sin filtro de accion",
       applied.resource ? `Recurso filtrado: ${applied.resource}` : "Sin filtro de recurso",
       stats ? `${stats.total} eventos auditados` : "Cargar estadisticas de auditoria",
@@ -224,6 +267,7 @@ export default function AuditLogPage() {
         confirmationLabel: "La exportacion descargara eventos de auditoria respetando los filtros aplicados en esta vista.",
       },
       { id: "audit-settings", label: "Abrir administracion", href: "/settings", kind: "navigate" },
+      { id: "audit-assistant", label: "Ver actividad del Assistant", href: "/audit-log", kind: "navigate" },
     ],
   });
 
@@ -259,6 +303,14 @@ export default function AuditLogPage() {
           value={loadingStats ? "…" : String(stats?.top_users?.length ?? 0)}
           color="purple"
         />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <StatCard label="Assistant visible" value={String(assistantItems.length)} color="purple" />
+        <StatCard label="Exitos" value={String(assistantSuccess)} color="green" />
+        <StatCard label="Errores" value={String(assistantErrors)} color="red" />
+        <StatCard label="Mutaciones" value={String(assistantMutations)} color="amber" />
+        <StatCard label="Rollback manual" value={String(assistantRollbackCandidates)} color="blue" />
       </div>
 
       {/* ── 7-day sparkline + top users ───────────────────────────────────── */}
@@ -312,6 +364,19 @@ export default function AuditLogPage() {
       {/* ── Filter bar ────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
         <div className="flex flex-wrap items-end gap-3">
+          <div className="flex min-w-[210px] items-center gap-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 dark:border-violet-800 dark:bg-violet-950/30">
+            <input
+              id="assistant-only"
+              type="checkbox"
+              checked={assistantOnly}
+              onChange={(e) => setAssistantOnly(e.target.checked)}
+              className="h-4 w-4 rounded border-violet-300 text-violet-600 focus:ring-violet-500"
+            />
+            <label htmlFor="assistant-only" className="text-sm font-semibold text-violet-700 dark:text-violet-300">
+              Assistant Activity
+            </label>
+          </div>
+
           {/* Action */}
           <div className="min-w-[130px]">
             <label className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">{t("page.audit.action")}</label>
@@ -401,6 +466,29 @@ export default function AuditLogPage() {
         </div>
       </div>
 
+      {applied.assistantOnly && (
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Rollback</p>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              Las acciones mutativas exitosas se marcan como candidatas. La reversa queda en modo manual hasta que cada endpoint declare una estrategia compensatoria segura.
+            </p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Guardrails</p>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              Navegacion y previews se auditan sin bloqueo. Exportaciones y mutaciones requieren confirmacion desde el Assistant antes de ejecutarse.
+            </p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Confianza operacional</p>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              Revisa errores, endpoints repetidos y usuarios con mayor actividad antes de promover nuevas acciones automaticas.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── Timeline ──────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
         {/* Header row */}
@@ -485,6 +573,16 @@ export default function AuditLogPage() {
                             {entry.status_code}
                           </span>
                         )}
+                        {entry.details?.status && (
+                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                            {entry.details.status}
+                          </span>
+                        )}
+                        {canRollback(entry) && (
+                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                            rollback manual
+                          </span>
+                        )}
                       </div>
                       {/* Secondary row */}
                       <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-gray-400 dark:text-gray-500">
@@ -499,6 +597,8 @@ export default function AuditLogPage() {
                         {entry.ip_address && (
                           <span>{entry.ip_address}</span>
                         )}
+                        {entry.details?.module_label && <span>{entry.details.module_label}</span>}
+                        {entry.details?.domain_id && <span>domain:{entry.details.domain_id}</span>}
                       </div>
                     </div>
 
@@ -507,6 +607,15 @@ export default function AuditLogPage() {
                       <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums">
                         {fmtDate(entry.created_at, language)}
                       </span>
+                      {entry.details && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedEntry(entry)}
+                          className="mt-2 block rounded-lg border border-gray-300 px-2 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+                        >
+                          Detalle
+                        </button>
+                      )}
                     </div>
                   </li>
                 ))}
@@ -544,6 +653,43 @@ export default function AuditLogPage() {
           </>
         )}
       </div>
+
+      {selectedEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-h-[82vh] w-full max-w-2xl overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900">
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
+              <div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Assistant execution #{selectedEntry.id}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {selectedEntry.details?.label ?? selectedEntry.endpoint ?? "Evento de auditoria"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedEntry(null)}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                Cerrar
+              </button>
+            </div>
+            <div className="space-y-4 overflow-y-auto p-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Detail label="Usuario" value={selectedEntry.username ?? "anonymous"} />
+                <Detail label="Estado" value={selectedEntry.details?.status ?? String(selectedEntry.status_code ?? "sin estado")} />
+                <Detail label="Modulo" value={selectedEntry.details?.module_label ?? "—"} />
+                <Detail label="Dominio" value={selectedEntry.details?.domain_id ?? "—"} />
+                <Detail label="Endpoint" value={`${selectedEntry.method ?? "—"} ${selectedEntry.endpoint ?? "—"}`} />
+                <Detail label="Rollback" value={canRollback(selectedEntry) ? "Candidato manual" : "No aplica"} />
+              </div>
+              <pre className="max-h-80 overflow-auto rounded-lg bg-gray-950 p-4 text-xs text-gray-100">
+                {JSON.stringify(selectedEntry.details ?? selectedEntry, null, 2)}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -563,6 +709,15 @@ function StatCard({ label, value, color }: { label: string; value: string; color
     <div className={`rounded-xl p-4 ${COLOR_MAP[color] ?? COLOR_MAP.blue}`}>
       <p className="text-xs font-medium opacity-70">{label}</p>
       <p className="mt-1 text-2xl font-bold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
+      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
+      <p className="mt-1 break-words text-sm font-semibold text-gray-800 dark:text-gray-100">{value}</p>
     </div>
   );
 }

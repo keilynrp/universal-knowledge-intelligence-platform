@@ -196,14 +196,14 @@ def export_csv(
     writer = csv.writer(buf)
     writer.writerow([
         "id", "username", "action", "resource_type", "resource_id",
-        "endpoint", "method", "status_code", "ip_address", "created_at",
+        "endpoint", "method", "status_code", "ip_address", "created_at", "details",
     ])
     for r in rows:
         writer.writerow([
             r.id, r.username or "", r.action, r.entity_type or "",
             str(r.entity_id) if r.entity_id else "", r.endpoint, r.method,
             r.status_code or "", r.ip_address or "",
-            r.created_at.isoformat() if r.created_at else "",
+            r.created_at.isoformat() if r.created_at else "", r.details or "",
         ])
 
     ts  = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -218,6 +218,12 @@ def export_csv(
 # ── Serialiser ─────────────────────────────────────────────────────────────────
 
 def _serialize(r: models.AuditLog) -> dict:
+    details = None
+    if r.details:
+        try:
+            details = json.loads(r.details)
+        except json.JSONDecodeError:
+            details = {"raw": r.details}
     return {
         "id":            r.id,
         "username":      r.username,
@@ -229,4 +235,5 @@ def _serialize(r: models.AuditLog) -> dict:
         "status_code":   r.status_code,
         "ip_address":    r.ip_address,
         "created_at":    r.created_at.isoformat() if r.created_at else None,
+        "details":       details,
     }
