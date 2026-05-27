@@ -18,20 +18,20 @@ describe("TabNav", () => {
 
   it("active tab has blue border class", () => {
     render(<TabNav tabs={tabs} activeTab="analytics" onTabChange={vi.fn()} />);
-    const active = screen.getByRole("button", { name: "Analytics" });
+    const active = screen.getByRole("tab", { name: "Analytics" });
     expect(active.className).toContain("border-blue-600");
   });
 
   it("inactive tab does not have blue border class", () => {
     render(<TabNav tabs={tabs} activeTab="overview" onTabChange={vi.fn()} />);
-    const inactive = screen.getByRole("button", { name: "Analytics" });
+    const inactive = screen.getByRole("tab", { name: "Analytics" });
     expect(inactive.className).not.toContain("border-blue-600");
   });
 
   it("calls onTabChange with correct id when tab is clicked", () => {
     const onChange = vi.fn();
     render(<TabNav tabs={tabs} activeTab="overview" onTabChange={onChange} />);
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
     expect(onChange).toHaveBeenCalledWith("settings");
   });
 
@@ -44,7 +44,7 @@ describe("TabNav", () => {
   it("does not render badge element when badge is absent", () => {
     render(<TabNav tabs={[{ id: "a", label: "A" }]} activeTab="a" onTabChange={vi.fn()} />);
     // No span with rounded-full (badge class) inside the button
-    const btn = screen.getByRole("button", { name: "A" });
+    const btn = screen.getByRole("tab", { name: "A" });
     expect(btn.querySelector("span")).toBeNull();
   });
 });
