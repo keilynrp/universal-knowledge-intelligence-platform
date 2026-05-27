@@ -3,7 +3,7 @@ import json
 import pytest
 from backend import models
 from backend.database import SessionLocal
-from backend.analyzers.geographic import extract_country, geographic_analysis
+from backend.analyzers.geographic import country_timeseries, extract_country, geographic_analysis
 
 
 class TestCountryExtraction:
@@ -147,3 +147,189 @@ class TestGeographicEndpoints:
         assert resp.status_code == 200
         data = resp.json()
         assert "collaboration_rate" in data
+
+
+def _seed_entities_with_years(entries: list[dict], domain: str = "__geo_ts_test__"):
+    """Seed entities with publication_year + affiliation, using a fresh session."""
+    db = SessionLocal()
+    try:
+        for e in entries:
+            attrs: dict = {"affiliation": e.get("affiliation", "")}
+            if "publication_year" in e:
+                attrs["publication_year"] = e["publication_year"]
+            if "extracted_country" in e:
+                attrs["extracted_country"] = e["extracted_country"]
+            db.add(models.RawEntity(
+                primary_label=e.get("title", "Paper"),
+                domain=domain,
+                enrichment_citation_count=e.get("citations", 0),
+                enrichment_status="completed",
+                attributes_json=json.dumps(attrs),
+            ))
+        db.commit()
+    finally:
+        db.close()
+
+
+class TestCountryTimeseries:
+    def test_returns_requested_span(self):
+        _seed_entities_with_years([
+            {"affiliation": "MIT, USA", "publication_year": 2020, "citations": 5},
+            {"affiliation": "Stanford, USA", "publication_year": 2024, "citations": 10},
+        ], domain="__geo_ts_span__")
+        result = country_timeseries("__geo_ts_span__", "US", years=9, reference_year=2024)
+        assert result["years"] == 9
+        assert len(result["series"]) == 9
+        assert result["series"][0]["year"] == 2016
+        assert result["series"][-1]["year"] == 2024
+        # Year buckets reflect seeded data
+        years_map = {p["year"]: p["citation_sum"] for p in result["series"]}
+        assert years_map[2020] == 5
+        assert years_map[2024] == 10
+        # All other buckets zero
+        assert sum(p["citation_sum"] for p in result["series"]) == 15
+
+    def test_total_aggregates(self):
+        _seed_entities_with_years([
+            {"affiliation": "MIT, USA", "publication_year": 2022, "citations": 3},
+            {"affiliation": "Lab, USA", "publication_year": 2023, "citations": 7},
+            {"affiliation": "Lab, Germany", "publication_year": 2023, "citations": 100},
+        ], domain="__geo_ts_total__")
+        result = country_timeseries("__geo_ts_total__", "US", years=9, reference_year=2024)
+        assert result["total_entities"] == 2
+        assert result["total_citations"] == 10
+        assert result["country_code"] == "US"
+        assert result["country_name"] == "United States"
+
+    def test_lowercase_code_normalized(self):
+        _seed_entities_with_years([
+            {"affiliation": "Lab, France", "publication_year": 2023, "citations": 4},
+        ], domain="__geo_ts_lower__")
+        result = country_timeseries("__geo_ts_lower__", "fr", years=9, reference_year=2024)
+        assert result["country_code"] == "FR"
+        assert result["total_entities"] == 1
+
+    def test_unknown_country_empty(self):
+        _seed_entities_with_years([
+            {"affiliation": "MIT, USA", "publication_year": 2023, "citations": 5},
+        ], domain="__geo_ts_empty__")
+        result = country_timeseries("__geo_ts_empty__", "JP", years=9, reference_year=2024)
+        assert result["total_entities"] == 0
+        assert all(p["citation_sum"] == 0 for p in result["series"])
+
+    def test_missing_year_counted_in_total_only(self):
+        """Entities without publication_year contribute to total but not to any year bucket."""
+        _seed_entities_with_years([
+            {"affiliation": "MIT, USA", "citations": 5},  # no year
+            {"affiliation": "Lab, USA", "publication_year": 2023, "citations": 7},
+        ], domain="__geo_ts_missing_year__")
+        result = country_timeseries("__geo_ts_missing_year__", "US", years=9, reference_year=2024)
+        assert result["total_entities"] == 2
+        assert result["total_citations"] == 12
+        year_sum = sum(p["citation_sum"] for p in result["series"])
+        assert year_sum == 7  # only the dated paper
+
+    def test_invalid_domain(self):
+        with pytest.raises(ValueError):
+            country_timeseries("__nonexistent_domain_xyz__", "US", years=9)
+
+
+class TestCountryTimeseriesEndpoint:
+    def test_endpoint_ok(self, client, auth_headers):
+        resp = client.get(
+            "/analyzers/geographic/default/country/US?years=9", headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["country_code"] == "US"
+        assert len(data["series"]) == 9
+
+    def test_endpoint_requires_auth(self, client):
+        resp = client.get("/analyzers/geographic/default/country/US")
+        assert resp.status_code in (401, 403)
+
+    def test_endpoint_years_bounds(self, client, auth_headers):
+        resp = client.get(
+            "/analyzers/geographic/default/country/US?years=0", headers=auth_headers,
+        )
+        assert resp.status_code == 422
+        resp = client.get(
+            "/analyzers/geographic/default/country/US?years=999", headers=auth_headers,
+        )
+        assert resp.status_code == 422
+
+    def test_endpoint_invalid_domain(self, client, auth_headers):
+        resp = client.get(
+            "/analyzers/geographic/nonexistent_xyz_999/country/US",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+
+class TestGeographicFilters:
+    def test_year_range_filter(self):
+        _seed_entities_with_years([
+            {"affiliation": "MIT, USA", "publication_year": 2010, "citations": 5},
+            {"affiliation": "MIT, USA", "publication_year": 2020, "citations": 10},
+            {"affiliation": "MIT, USA", "publication_year": 2024, "citations": 15},
+        ], domain="__geo_filter_year__")
+        result = geographic_analysis(
+            "__geo_filter_year__", year_from=2020, year_to=2024,
+        )
+        us = next((c for c in result["countries"] if c["country_code"] == "US"), None)
+        assert us is not None
+        assert us["entity_count"] == 2
+        assert us["citation_sum"] == 25
+        assert result["total_entities"] == 2
+
+    def test_min_citations_filter(self):
+        _seed_entities_with_years([
+            {"affiliation": "MIT, USA", "publication_year": 2022, "citations": 2},
+            {"affiliation": "MIT, USA", "publication_year": 2023, "citations": 50},
+        ], domain="__geo_filter_cites__")
+        result = geographic_analysis(
+            "__geo_filter_cites__", min_citations=10,
+        )
+        us = next((c for c in result["countries"] if c["country_code"] == "US"), None)
+        assert us["entity_count"] == 1
+        assert us["citation_sum"] == 50
+
+    def test_year_filter_excludes_undated(self):
+        """Entities without publication_year are excluded when a year filter is set."""
+        _seed_entities_with_years([
+            {"affiliation": "MIT, USA", "citations": 5},  # no year
+            {"affiliation": "MIT, USA", "publication_year": 2023, "citations": 10},
+        ], domain="__geo_filter_undated__")
+        result = geographic_analysis(
+            "__geo_filter_undated__", year_from=2020,
+        )
+        us = next((c for c in result["countries"] if c["country_code"] == "US"), None)
+        assert us["entity_count"] == 1
+
+    def test_endpoint_year_param(self, client, auth_headers):
+        resp = client.get(
+            "/analyzers/geographic/default?year_from=2020&year_to=2024",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+    def test_endpoint_min_citations_param(self, client, auth_headers):
+        resp = client.get(
+            "/analyzers/geographic/default?min_citations=10",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+    def test_endpoint_year_out_of_range(self, client, auth_headers):
+        resp = client.get(
+            "/analyzers/geographic/default?year_from=1800",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
+
+    def test_endpoint_negative_min_citations(self, client, auth_headers):
+        resp = client.get(
+            "/analyzers/geographic/default?min_citations=-1",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422

@@ -30,7 +30,7 @@ from backend.analyzers.external_attention import compute_attention_summary
 from backend.analyzers.author_metrics import author_detail, author_rankings
 from backend.analyzers.coauthorship import coauthorship_network
 from backend.analyzers.correlation import CorrelationAnalyzer
-from backend.analyzers.geographic import geographic_analysis, geographic_heatmap
+from backend.analyzers.geographic import country_timeseries, geographic_analysis, geographic_heatmap
 from backend.analyzers.roi_calculator import ROIParams, simulate as _roi_simulate
 from backend.analyzers.topic_modeling import TopicAnalyzer
 from backend.analyzers.trend_analysis import TrendAnalyzer
@@ -722,20 +722,28 @@ def analyzer_geographic(
     sort_by: str = Query(default="entity_count", pattern="^(entity_count|citation_sum)$"),
     limit: int | None = Query(default=None, ge=1, le=200),
     include_collaboration: bool = Query(default=False),
+    year_from: int | None = Query(default=None, ge=1900, le=2100),
+    year_to: int | None = Query(default=None, ge=1900, le=2100),
+    min_citations: int | None = Query(default=None, ge=0),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """Per-country aggregation with optional international collaboration analysis."""
+    """Per-country aggregation with optional filters and collaboration analysis."""
     _validate_domain_id(domain_id)
     org_id = resolve_request_org_id(db, current_user)
-    _key = f"geo_{domain_id}_{scope_tag(org_id)}_{sort_by}_{limit}_{include_collaboration}"
+    _key = (
+        f"geo_{domain_id}_{scope_tag(org_id)}_{sort_by}_{limit}_{include_collaboration}"
+        f"_{year_from}_{year_to}_{min_citations}"
+    )
     cached = _analytics_cache.get(_key)
     if cached is not None:
         return cached
     try:
         result = geographic_analysis(
             domain_id, sort_by=sort_by, limit=limit,
-            include_collaboration=include_collaboration, org_id=org_id,
+            include_collaboration=include_collaboration,
+            year_from=year_from, year_to=year_to, min_citations=min_citations,
+            org_id=org_id,
         )
         _analytics_cache.set(_key, result)
         return result
@@ -743,6 +751,32 @@ def analyzer_geographic(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception:
         logger.exception("analyzer_geographic error for domain '%s'", domain_id)
+        raise HTTPException(status_code=500, detail="Analysis error")
+
+
+@router.get("/analyzers/geographic/{domain_id}/country/{country_code}")
+def analyzer_geographic_country(
+    domain_id: str,
+    country_code: str,
+    years: int = Query(default=9, ge=1, le=30),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Yearly entity & citation series for a single country."""
+    _validate_domain_id(domain_id)
+    org_id = resolve_request_org_id(db, current_user)
+    _key = f"geo_ts_{domain_id}_{scope_tag(org_id)}_{country_code.upper()}_{years}"
+    cached = _analytics_cache.get(_key)
+    if cached is not None:
+        return cached
+    try:
+        result = country_timeseries(domain_id, country_code, years=years, org_id=org_id)
+        _analytics_cache.set(_key, result)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception:
+        logger.exception("analyzer_geographic_country error %s/%s", domain_id, country_code)
         raise HTTPException(status_code=500, detail="Analysis error")
 
 

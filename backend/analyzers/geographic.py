@@ -179,18 +179,46 @@ def _get_extracted_country(attributes_json: str | None) -> str | None:
     return None
 
 
+def _row_passes_filters(
+    row: dict[str, Any],
+    *,
+    year_from: int | None,
+    year_to: int | None,
+    min_citations: int | None,
+) -> bool:
+    """Apply optional filters to a single entity row."""
+    if min_citations is not None and (row.get("enrichment_citation_count") or 0) < min_citations:
+        return False
+    if year_from is not None or year_to is not None:
+        year = _extract_year(row.get("attributes_json"))
+        if year is None:
+            return False
+        if year_from is not None and year < year_from:
+            return False
+        if year_to is not None and year > year_to:
+            return False
+    return True
+
+
 def geographic_analysis(
     domain_id: str,
     *,
     sort_by: str = "entity_count",
     limit: int | None = None,
     include_collaboration: bool = False,
+    year_from: int | None = None,
+    year_to: int | None = None,
+    min_citations: int | None = None,
     org_id: int | None = None,
 ) -> dict[str, Any]:
-    """Per-country aggregation with optional collaboration analysis."""
+    """Per-country aggregation with optional filters and collaboration analysis."""
     _validate_domain(domain_id, org_id=org_id)
 
-    rows = _load_entities_with_affiliations(domain_id, org_id=org_id)
+    all_rows = _load_entities_with_affiliations(domain_id, org_id=org_id)
+    rows = [
+        r for r in all_rows
+        if _row_passes_filters(r, year_from=year_from, year_to=year_to, min_citations=min_citations)
+    ]
     if not rows:
         result: dict[str, Any] = {
             "domain_id": domain_id,
@@ -300,6 +328,101 @@ def geographic_analysis(
         result["top_country_pairs"] = top_pairs
 
     return result
+
+
+_YEAR_FIELDS = ("publication_year", "year", "published_year", "publicationYear", "publishedYear")
+
+
+def _extract_year(attributes_json: str | None) -> int | None:
+    """Pull a 4-digit year from common attribute fields."""
+    if not attributes_json:
+        return None
+    try:
+        attrs = json.loads(attributes_json)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(attrs, dict):
+        return None
+    for key in _YEAR_FIELDS:
+        val = attrs.get(key)
+        if val is None:
+            continue
+        try:
+            year = int(str(val)[:4])
+        except (ValueError, TypeError):
+            continue
+        if 1900 <= year <= 2100:
+            return year
+    return None
+
+
+def country_timeseries(
+    domain_id: str,
+    country_code: str,
+    *,
+    years: int = 9,
+    reference_year: int | None = None,
+    org_id: int | None = None,
+) -> dict[str, Any]:
+    """Per-year entity and citation counts for a single country."""
+    _validate_domain(domain_id, org_id=org_id)
+    country_code = (country_code or "").upper().strip()
+
+    rows = _load_entities_with_affiliations(domain_id, org_id=org_id)
+
+    matched_rows: list[dict[str, Any]] = []
+    for row in rows:
+        attrs_json = row.get("attributes_json")
+        structured = _get_structured_countries(attrs_json)
+        code = _get_extracted_country(attrs_json)
+        if structured:
+            code = sorted(structured)[0]
+        elif not code:
+            affiliation = _get_affiliation_from_attrs(attrs_json)
+            code = extract_country(affiliation)
+        if code == country_code or country_code in structured:
+            matched_rows.append(row)
+
+    yearly: dict[int, dict[str, int]] = defaultdict(lambda: {"entity_count": 0, "citation_sum": 0})
+    total_entities = 0
+    total_citations = 0
+    for row in matched_rows:
+        total_entities += 1
+        cites = int(row.get("enrichment_citation_count") or 0)
+        total_citations += cites
+        year = _extract_year(row.get("attributes_json"))
+        if year is None:
+            continue
+        yearly[year]["entity_count"] += 1
+        yearly[year]["citation_sum"] += cites
+
+    if reference_year is None:
+        reference_year = max(yearly.keys()) if yearly else 0
+    if not reference_year:
+        from datetime import datetime, timezone
+        reference_year = datetime.now(timezone.utc).year
+
+    span = max(1, int(years))
+    start = reference_year - span + 1
+    series = [
+        {
+            "year": y,
+            "entity_count": yearly.get(y, {}).get("entity_count", 0),
+            "citation_sum": yearly.get(y, {}).get("citation_sum", 0),
+        }
+        for y in range(start, reference_year + 1)
+    ]
+
+    return {
+        "domain_id": domain_id,
+        "country_code": country_code,
+        "country_name": _CODE_TO_NAME.get(country_code, country_code),
+        "total_entities": total_entities,
+        "total_citations": total_citations,
+        "reference_year": reference_year,
+        "years": span,
+        "series": series,
+    }
 
 
 def geographic_heatmap(domain_id: str, org_id: int | None = None) -> list[dict[str, Any]]:
