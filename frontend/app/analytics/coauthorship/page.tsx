@@ -1,11 +1,18 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useDomain } from "../../contexts/DomainContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { apiFetch } from "@/lib/api";
 import { SkeletonList, ErrorBanner, EmptyState as UiEmptyState } from "../../components/ui";
+
+// Lazy-load NetworkGraph so d3-force (~25 KB gz) only ships to this page.
+const NetworkGraph = dynamic(
+  () => import("../../components/graph/NetworkGraph").then((m) => m.NetworkGraph),
+  { ssr: false, loading: () => <div className="h-[520px] animate-pulse rounded-lg bg-slate-100 dark:bg-slate-900" /> },
+);
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -80,6 +87,21 @@ export default function CoauthorshipPage() {
   }, [activeDomainId, minWeight, fetchNetwork]);
 
   const communityCount = data ? new Set(data.nodes.map((n) => n.community_id)).size : 0;
+
+  const [selected, setSelected] = useState<string | null>(null);
+  const selectedNode = useMemo(
+    () => (data && selected ? data.nodes.find((n) => n.id === selected) || null : null),
+    [data, selected],
+  );
+  const neighborEdges = useMemo(
+    () =>
+      data && selected
+        ? data.edges
+            .filter((e) => e.source === selected || e.target === selected)
+            .slice(0, 12)
+        : [],
+    [data, selected],
+  );
 
   return (
     <div className="space-y-6 p-6">
@@ -163,9 +185,119 @@ export default function CoauthorshipPage() {
               />
             </div>
           ) : (
-            <div className="grid gap-6 lg:grid-cols-2">
-              {/* Node table — top collaborators by centrality */}
-              <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+            <div className="grid gap-4 lg:grid-cols-3">
+              {/* Force-directed graph */}
+              <div className="col-span-1 rounded-xl border border-gray-200 bg-white p-3 lg:col-span-2 dark:border-gray-800 dark:bg-gray-900">
+                <NetworkGraph
+                  nodes={data.nodes}
+                  edges={data.edges}
+                  selected={selected}
+                  onNodeClick={setSelected}
+                />
+              </div>
+
+              {/* Inspection panel */}
+              <div className="col-span-1 rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+                {!selectedNode && (
+                  <div className="flex h-full min-h-[420px] flex-col items-center justify-center p-6 text-center">
+                    <div className="text-4xl">🕸️</div>
+                    <p className="mt-3 text-sm font-medium text-gray-700 dark:text-gray-200">
+                      {t("page.coauthorship.pick_node") || "Pick an author"}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {t("page.coauthorship.pick_hint") ||
+                        "Click a node in the graph to inspect their collaborators."}
+                    </p>
+                  </div>
+                )}
+
+                {selectedNode && (() => {
+                  const colorIdx = selectedNode.community_id % COMMUNITY_COLORS.length;
+                  return (
+                    <div className="flex h-full min-h-[420px] flex-col">
+                      <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`inline-block h-2.5 w-2.5 rounded-full ${COMMUNITY_COLORS[colorIdx]}`}
+                            />
+                            <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+                              {selectedNode.label}
+                            </h3>
+                          </div>
+                          <p className={`mt-0.5 text-xs ${COMMUNITY_TEXT_COLORS[colorIdx]}`}>
+                            {t("page.coauthorship.community")} C{selectedNode.community_id}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setSelected(null)}
+                          className="rounded-full p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                          aria-label="Close"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 px-5 py-4">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            {t("page.coauthorship.degree")}
+                          </p>
+                          <p className="mt-1 text-xl font-semibold tabular-nums text-gray-900 dark:text-white">
+                            {selectedNode.degree}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Centrality
+                          </p>
+                          <p className="mt-1 text-xl font-semibold tabular-nums text-gray-900 dark:text-white">
+                            {selectedNode.centrality.toFixed(3)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto px-5 pb-5">
+                        <p className="mb-2 text-[11px] uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                          {t("page.coauthorship.top_collaborators")}
+                        </p>
+                        {neighborEdges.length === 0 ? (
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {t("page.coauthorship.no_collaborators") || "No collaborators in current view."}
+                          </p>
+                        ) : (
+                          <ul className="space-y-1">
+                            {neighborEdges.map((edge, i) => {
+                              const other =
+                                edge.source === selectedNode.id ? edge.target : edge.source;
+                              return (
+                                <li
+                                  key={`${edge.source}-${edge.target}-${i}`}
+                                  className="flex items-center justify-between rounded px-2 py-1.5 text-sm text-gray-800 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800/40"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelected(other)}
+                                    className="truncate text-left hover:underline"
+                                  >
+                                    {other}
+                                  </button>
+                                  <span className="ml-2 shrink-0 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
+                                    {edge.weight}
+                                  </span>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Top-collaborators table (full width below the graph) */}
+              <div className="col-span-1 rounded-xl border border-gray-200 bg-white lg:col-span-3 dark:border-gray-800 dark:bg-gray-900">
                 <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
                   <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
                     {t("page.coauthorship.top_collaborators")}
@@ -180,10 +312,17 @@ export default function CoauthorshipPage() {
                 <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-96 overflow-y-auto">
                   {data.nodes.map((node) => {
                     const colorIdx = node.community_id % COMMUNITY_COLORS.length;
+                    const isSel = selected === node.id;
                     return (
-                      <div
+                      <button
                         key={node.id}
-                        className="grid grid-cols-[1fr_4rem_4rem_5rem] items-center gap-2 px-4 py-2.5"
+                        type="button"
+                        onClick={() => setSelected(node.id)}
+                        className={`grid w-full grid-cols-[1fr_4rem_4rem_5rem] items-center gap-2 px-4 py-2.5 text-left transition ${
+                          isSel
+                            ? "bg-blue-50 dark:bg-blue-900/20"
+                            : "hover:bg-gray-50 dark:hover:bg-gray-800/40"
+                        }`}
                       >
                         <div className="flex items-center gap-2 truncate">
                           <span className={`inline-block h-2.5 w-2.5 rounded-full ${COMMUNITY_COLORS[colorIdx]}`} />
@@ -200,34 +339,9 @@ export default function CoauthorshipPage() {
                         <span className="text-right text-xs tabular-nums font-mono text-gray-500 dark:text-gray-400">
                           {node.centrality.toFixed(3)}
                         </span>
-                      </div>
+                      </button>
                     );
                   })}
-                </div>
-              </div>
-
-              {/* Edge table — strongest collaborations */}
-              <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-                <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-                  <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {t("page.coauthorship.edges")} (top by {t("page.coauthorship.weight")})
-                  </h3>
-                </div>
-                <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-96 overflow-y-auto">
-                  {data.edges.slice(0, 50).map((edge, i) => (
-                    <div key={`${edge.source}-${edge.target}-${i}`} className="flex items-center gap-3 px-4 py-2.5">
-                      <span className="truncate text-sm text-gray-800 dark:text-gray-200">
-                        {edge.source}
-                      </span>
-                      <span className="text-gray-300 dark:text-gray-600">&harr;</span>
-                      <span className="truncate text-sm text-gray-800 dark:text-gray-200">
-                        {edge.target}
-                      </span>
-                      <span className="ml-auto shrink-0 rounded bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
-                        {edge.weight}
-                      </span>
-                    </div>
-                  ))}
                 </div>
               </div>
             </div>

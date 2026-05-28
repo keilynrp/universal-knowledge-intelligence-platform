@@ -3151,6 +3151,9 @@ export const translations = {
         'page.coauthorship.community': 'Community',
         'page.coauthorship.weight': 'Weight',
         'page.coauthorship.top_collaborators': 'Top Collaborators',
+        'page.coauthorship.pick_node': 'Pick an author',
+        'page.coauthorship.pick_hint': 'Click a node in the graph to inspect their collaborators.',
+        'page.coauthorship.no_collaborators': 'No collaborators in current view.',
 
         // Geographic Analysis page
         'page.geographic.title': 'Geographic Analysis',
@@ -6541,6 +6544,9 @@ export const translations = {
         'page.coauthorship.community': 'Comunidad',
         'page.coauthorship.weight': 'Peso',
         'page.coauthorship.top_collaborators': 'Principales colaboradores',
+        'page.coauthorship.pick_node': 'Selecciona un autor',
+        'page.coauthorship.pick_hint': 'Haz clic en un nodo del grafo para inspeccionar sus colaboradores.',
+        'page.coauthorship.no_collaborators': 'Sin colaboradores en la vista actual.',
 
         // Geographic Analysis page
         'page.geographic.title': 'Análisis Geográfico',
