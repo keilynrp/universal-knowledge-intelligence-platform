@@ -3,7 +3,10 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { CountryDatum, MapProjection } from "../../types/geo";
+import { flagEmoji } from "../../analytics/geographic/countryMeta";
 import { useWorldGeographies } from "./useWorldGeographies";
+
+const LABEL_TOP_N = 15;
 
 /**
  * Reusable choropleth world map for UKIP.
@@ -83,6 +86,16 @@ export function WorldMap({
     return m;
   }, [data]);
 
+  // Top-N countries that should always get a flag label on the map.
+  const labelCodes = useMemo(() => {
+    const top = [...data]
+      .filter((d) => d.country_code !== "OTHER")
+      .sort((a, b) => b.entity_count - a.entity_count)
+      .slice(0, LABEL_TOP_N)
+      .map((d) => d.country_code);
+    return new Set(top);
+  }, [data]);
+
   // ── zoom + pan state
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ tx: 0, ty: 0 });
@@ -96,6 +109,9 @@ export function WorldMap({
     startTy: number;
     moved: boolean;
   } | null>(null);
+  // Set on pointerup when the gesture WAS a drag (moved > threshold). Cleared
+  // on the next microtask, after the trailing click event has been suppressed.
+  const justDraggedRef = useRef<boolean>(false);
 
   // ── selection-based centroid (when manual override is off)
   const selectionTransform = useMemo(() => {
@@ -162,17 +178,16 @@ export function WorldMap({
   );
 
   // ── drag-to-pan
+  //
+  // IMPORTANT: do NOT call preventDefault or setPointerCapture on pointerdown.
+  // Both would cancel the subsequent `click` event on country <path>s and
+  // break selection. We only "promote" the gesture to a real drag after the
+  // pointer has moved past the 3px threshold inside pointermove.
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
       const target = e.target as Element;
       if (target.closest("[data-marker]")) return;
       if (e.button !== 0) return;
-      e.preventDefault();
-      try {
-        svgRef.current?.setPointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
-      }
       dragRef.current = {
         startX: e.clientX,
         startY: e.clientY,
@@ -195,7 +210,15 @@ export function WorldMap({
       drag.moved = true;
       setIsPanning(true);
       setManualOverride(true);
+      // NOW it is a real drag — capture so we still get pointermove/up
+      // even if the pointer leaves the SVG.
+      try {
+        svg.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
     }
+    e.preventDefault();
     const rect = svg.getBoundingClientRect();
     const sx = rect.width > 0 ? DEFAULT_W / rect.width : 1;
     const sy = rect.height > 0 ? DEFAULT_H / rect.height : 1;
@@ -206,10 +229,19 @@ export function WorldMap({
   }, []);
 
   const handlePointerUp = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
-    try {
-      svgRef.current?.releasePointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
+    const wasDragging = !!dragRef.current?.moved;
+    if (wasDragging) {
+      try {
+        svgRef.current?.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      justDraggedRef.current = true;
+      // Click event fires AFTER pointerup synchronously, so a microtask is
+      // enough to outlive that click without affecting later clicks.
+      queueMicrotask(() => {
+        justDraggedRef.current = false;
+      });
     }
     dragRef.current = null;
     setIsPanning(false);
@@ -302,7 +334,7 @@ export function WorldMap({
                   strokeWidth={isSel ? 1.2 : 0.4}
                   className={c.iso ? "cursor-pointer" : ""}
                   onClick={() => {
-                    if (dragRef.current === null && c.iso && onCountryClick) {
+                    if (!justDraggedRef.current && c.iso && onCountryClick) {
                       onCountryClick(c.iso);
                     }
                   }}
@@ -325,6 +357,38 @@ export function WorldMap({
                   }}
                   onMouseLeave={() => onCountryHover?.(null)}
                 />
+              );
+            })}
+
+          {/* Flag labels — for top-N countries plus the selected one. */}
+          {loaded &&
+            countries.map((c) => {
+              if (!c.iso || c.iso === "OTHER") return null;
+              const isSel = selected === c.iso;
+              if (!isSel && !labelCodes.has(c.iso)) return null;
+              if (!Number.isFinite(c.cx) || !Number.isFinite(c.cy)) return null;
+              // Counter-scale text so it stays legible while zoomed in.
+              const scaleInv = 1 / Math.max(zoom, 1);
+              return (
+                <g
+                  key={`label-${c.iso}`}
+                  transform={`translate(${c.cx} ${c.cy}) scale(${scaleInv})`}
+                  pointerEvents="none"
+                >
+                  <text
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize={isSel ? 14 : 11}
+                    fontWeight={isSel ? 700 : 600}
+                    className="fill-slate-900 dark:fill-slate-100"
+                    paintOrder="stroke"
+                    stroke="rgba(255,255,255,0.85)"
+                    strokeWidth={3}
+                    strokeLinejoin="round"
+                  >
+                    {flagEmoji(c.iso)} {c.iso}
+                  </text>
+                </g>
               );
             })}
 

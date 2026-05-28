@@ -21,6 +21,9 @@ export interface ProjectedCountry {
   iso: string;          // ISO alpha-2 (or "" if unmapped)
   name: string;         // English display name from atlas properties
   d: string;            // SVG path "d" attribute
+  /** Projected centroid in SVG (viewBox) coordinates — for label placement. */
+  cx: number;
+  cy: number;
 }
 
 interface WorldGeographiesResult {
@@ -86,10 +89,13 @@ export function useWorldGeographies(
       const iso = ISO_NUM_TO_ALPHA2[numericId] ?? "";
       const d = pathGen(f) ?? "";
       if (!d) continue;
+      const [cx, cy] = pathGen.centroid(f);
       result.push({
         iso,
         name: f.properties?.name ?? iso ?? "Unknown",
         d,
+        cx: Number.isFinite(cx) ? cx : 0,
+        cy: Number.isFinite(cy) ? cy : 0,
       });
     }
     return result;

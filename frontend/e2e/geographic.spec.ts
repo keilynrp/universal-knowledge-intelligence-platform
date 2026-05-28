@@ -175,6 +175,24 @@ test.describe("Geographic intelligence panel", () => {
     await expect(page.getByTestId("collab-pairs")).toHaveCount(0);
   });
 
+  test("clicking a country polygon opens the detail panel", async ({ page }) => {
+    await gotoGeo(page);
+    // Wait for the world atlas chunk to load and render a US polygon.
+    const usPath = page.locator('path[data-iso="US"]');
+    await expect(usPath).toBeVisible({ timeout: 10_000 });
+
+    // Sanity: detail panel shows the placeholder before any selection.
+    await expect(page.getByText(/Pick a country|Selecciona un país/)).toBeVisible();
+
+    // Click straight on the US polygon (not on a marker / table row).
+    await usPath.click();
+
+    // Detail panel now populated.
+    await expect(page.getByText(/Citations · last 9 years|Citas · últimos 9 años/)).toBeVisible();
+    await expect(page.getByText(/38\.7%\s+(of total|del total)/)).toBeVisible();
+    await expect(page.locator(".recharts-area").first()).toBeVisible();
+  });
+
   test("drag-to-pan shifts the map and shows grab cursor", async ({ page }) => {
     await gotoGeo(page);
     const svg = page.locator("svg.cursor-grab").first();
