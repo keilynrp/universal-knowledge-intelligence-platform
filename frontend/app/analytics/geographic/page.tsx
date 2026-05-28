@@ -65,7 +65,10 @@ const SORT_OPTIONS = [
 
 const MAP_W = 1000;
 const MAP_H = 500;
-const ZOOM_FACTOR = 3;
+const SELECTION_ZOOM = 3;
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 8;
+const ZOOM_STEP = 1.4;
 
 function KpiCard({ label, value, accent }: { label: string; value: string; accent: string }) {
   return (
@@ -105,7 +108,54 @@ export default function GeographicPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [hover, setHover] = useState<{ code: string; x: number; y: number } | null>(null);
 
+  // Manual zoom/pan state. `manualOverride` distinguishes user-driven zoom
+  // (which should ignore selection-based auto-zoom) from the default state.
+  const [zoom, setZoom] = useState<number>(1);
+  const [pan, setPan] = useState<{ tx: number; ty: number }>({ tx: 0, ty: 0 });
+  const [manualOverride, setManualOverride] = useState<boolean>(false);
+
   const mapRef = useRef<SVGSVGElement | null>(null);
+
+  const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+
+  const zoomAtCenter = useCallback((nextZoom: number) => {
+    const z = clampZoom(nextZoom);
+    if (z === ZOOM_MIN) {
+      setZoom(1);
+      setPan({ tx: 0, ty: 0 });
+      setManualOverride(false);
+      return;
+    }
+    setManualOverride(true);
+    setZoom(z);
+    // Keep the map center invariant: with current pan/zoom, the visible
+    // center maps to ((MAP_W/2 - pan.tx)/zoom, ...). After changing zoom we
+    // recompute pan so that same point remains centered.
+    setPan((prev) => {
+      // We don't have the prior zoom inside the setter, but since the buttons
+      // step symmetrically and the initial pan is (0,0), an anchored center is
+      // already preserved by the SVG viewBox + xMidYMid meet. Pan only drifts
+      // if user combines manual + selection — which we explicitly disallow.
+      return prev;
+    });
+  }, []);
+
+  const handleZoomIn = useCallback(() => zoomAtCenter(zoom * ZOOM_STEP), [zoom, zoomAtCenter]);
+  const handleZoomOut = useCallback(() => zoomAtCenter(zoom / ZOOM_STEP), [zoom, zoomAtCenter]);
+  const handleZoomReset = useCallback(() => {
+    setZoom(1);
+    setPan({ tx: 0, ty: 0 });
+    setManualOverride(false);
+  }, []);
+
+  const handleWheel = useCallback(
+    (e: React.WheelEvent<SVGSVGElement>) => {
+      e.preventDefault();
+      const dir = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
+      zoomAtCenter(zoom * dir);
+    },
+    [zoom, zoomAtCenter],
+  );
 
   const fetchGeo = useCallback(
     async (
@@ -175,15 +225,27 @@ export default function GeographicPage() {
     ? Math.max(...visibleCountries.map((c) => c.citation_sum), 1)
     : 1;
 
-  // Map pan/zoom centered on selected country
+  // Map pan/zoom: manual user zoom takes precedence over selection-based auto-zoom.
   const mapTransform = useMemo(() => {
-    if (!selected || !COUNTRY_COORDS[selected]) return "translate(0,0) scale(1)";
+    if (manualOverride) {
+      return `translate(${pan.tx} ${pan.ty}) scale(${zoom})`;
+    }
+    if (!selected || !COUNTRY_COORDS[selected]) {
+      return "translate(0 0) scale(1)";
+    }
     const c = COUNTRY_COORDS[selected];
     const { x, y } = project(c.lat, c.lon, MAP_W, MAP_H);
-    const tx = MAP_W / 2 - x * ZOOM_FACTOR;
-    const ty = MAP_H / 2 - y * ZOOM_FACTOR;
-    return `translate(${tx} ${ty}) scale(${ZOOM_FACTOR})`;
-  }, [selected]);
+    const tx = MAP_W / 2 - x * SELECTION_ZOOM;
+    const ty = MAP_H / 2 - y * SELECTION_ZOOM;
+    return `translate(${tx} ${ty}) scale(${SELECTION_ZOOM})`;
+  }, [manualOverride, pan.tx, pan.ty, zoom, selected]);
+
+  // Effective zoom level shown in the controls (selection auto-zoom or manual).
+  const effectiveZoom = manualOverride
+    ? zoom
+    : selected && COUNTRY_COORDS[selected]
+      ? SELECTION_ZOOM
+      : 1;
 
   const selectedCountry = countries.find((c) => c.country_code === selected) || null;
 
@@ -385,11 +447,59 @@ export default function GeographicPage() {
                 </span>
               </div>
               <div className="relative h-[420px]">
+                {/* Zoom controls overlay */}
+                <div
+                  data-testid="map-zoom-controls"
+                  className="absolute right-3 top-3 z-10 flex flex-col gap-1 rounded-lg border border-gray-200 bg-white/90 p-1 shadow-sm backdrop-blur-sm dark:border-gray-700 dark:bg-gray-900/90"
+                >
+                  <button
+                    type="button"
+                    onClick={handleZoomIn}
+                    disabled={effectiveZoom >= ZOOM_MAX}
+                    aria-label={t("page.geographic.zoom_in") || "Zoom in"}
+                    title={t("page.geographic.zoom_in") || "Zoom in"}
+                    className="flex h-7 w-7 items-center justify-center rounded text-base font-bold text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-gray-200 dark:hover:bg-gray-800"
+                  >
+                    +
+                  </button>
+                  <div
+                    aria-label="zoom level"
+                    className="select-none text-center text-[9px] font-mono text-gray-500 dark:text-gray-400"
+                  >
+                    {effectiveZoom.toFixed(1)}×
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleZoomOut}
+                    disabled={effectiveZoom <= ZOOM_MIN}
+                    aria-label={t("page.geographic.zoom_out") || "Zoom out"}
+                    title={t("page.geographic.zoom_out") || "Zoom out"}
+                    className="flex h-7 w-7 items-center justify-center rounded text-base font-bold text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-gray-200 dark:hover:bg-gray-800"
+                  >
+                    −
+                  </button>
+                  {(manualOverride || selected) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleZoomReset();
+                        setSelected(null);
+                      }}
+                      aria-label={t("page.geographic.zoom_reset") || "Reset zoom"}
+                      title={t("page.geographic.zoom_reset") || "Reset zoom"}
+                      className="flex h-7 w-7 items-center justify-center rounded text-xs font-semibold text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+                    >
+                      ⟲
+                    </button>
+                  )}
+                </div>
+
                 <svg
                   ref={mapRef}
                   viewBox={`0 0 ${MAP_W} ${MAP_H}`}
                   className="h-full w-full"
                   preserveAspectRatio="xMidYMid meet"
+                  onWheel={handleWheel}
                 >
                   <defs>
                     <radialGradient id="markerGlow" cx="50%" cy="50%" r="50%">

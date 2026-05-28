@@ -175,6 +175,30 @@ test.describe("Geographic intelligence panel", () => {
     await expect(page.getByTestId("collab-pairs")).toHaveCount(0);
   });
 
+  test("manual zoom in / out controls update the map transform", async ({ page }) => {
+    await gotoGeo(page);
+    const mapGroup = page.locator('svg g[transform*="scale"]').first();
+    await expect(mapGroup).toHaveAttribute("transform", /scale\(1\)/);
+
+    const zoomIn = page.getByRole("button", { name: /Zoom in|Acercar/ });
+    await zoomIn.click();
+    // 1 × 1.4 = 1.4 → still rendered
+    await expect(mapGroup).toHaveAttribute("transform", /scale\(1\.4/);
+
+    // Click zoom in 3 more times → 1.4^4 ≈ 3.84
+    await zoomIn.click();
+    await zoomIn.click();
+    await zoomIn.click();
+    const after = (await mapGroup.getAttribute("transform")) || "";
+    const match = after.match(/scale\(([0-9.]+)\)/);
+    const z = match ? parseFloat(match[1]) : 0;
+    expect(z).toBeGreaterThan(3);
+
+    // Reset button appears + clears the zoom
+    await page.getByRole("button", { name: /Reset zoom|Restablecer zoom/ }).click();
+    await expect(mapGroup).toHaveAttribute("transform", /scale\(1\)/);
+  });
+
   test("map zooms when country selected (transform changes)", async ({ page }) => {
     await gotoGeo(page);
     // Map root <g> uses translate+scale; pre-selection it's identity scale(1).
