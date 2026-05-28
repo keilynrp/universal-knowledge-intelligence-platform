@@ -1319,15 +1319,25 @@ def test_tenancy_reassignment_moves_publications(db, write_on):
 - [ ] **Step 2: Implement** the new module entry point in `enrichment_worker.py`. Add the function (don't yet call it from the worker loop — that's step 3):
 
 ```python
-def write_coauthor_artifacts(db, entity) -> None:
+def write_coauthor_artifacts(db, entity, *, force: bool = False) -> None:
     """Write V2 coauthorship rows for one entity. Idempotent.
 
-    Gated by COAUTHOR_V2_WRITE. Does NOT touch legacy entity_relationships
-    (decision per spec Appendix B item 2). Handles tenancy reassignment by
-    UPDATEing existing publications to the entity's current org_id and
-    enqueueing both old and new scopes."""
+    Gated by COAUTHOR_V2_WRITE unless `force=True` (used by the migration
+    script which orchestrates writes regardless of the runtime flag —
+    safer than mutating the global flag at module scope).
+
+    **Transaction ownership: the caller owns the transaction boundary.**
+    This helper uses `db.begin_nested()` for per-pair savepoints but never
+    calls `db.commit()` on the outer transaction. The caller (worker loop
+    or migration script) is responsible for the outer commit so that the
+    coauthor writes participate in the same transaction as the enrichment
+    or migration step that triggered them.
+
+    Does NOT touch legacy entity_relationships (per spec Appendix B item 2).
+    Handles tenancy reassignment by UPDATEing existing publications to the
+    entity's current org_id and enqueueing both old and new scopes."""
     from backend import config
-    if not config.COAUTHOR_V2_WRITE:
+    if not force and not config.COAUTHOR_V2_WRITE:
         return
     from backend.analyzers.coauthorship import authors_from_attrs
     from backend.coauthorship.identity import get_or_create_author
@@ -1413,12 +1423,25 @@ def write_coauthor_artifacts(db, entity) -> None:
                 org_id=org_id, domain_id=domain_id, weight=1,
             ))
 
-    # 5. Enqueue current scope
+    # 6. Enqueue current scope. Caller commits.
     db.merge(models.CoauthorDirtyScope(org_id=org_id, domain_id=domain_id, reason="enrichment"))
-    db.commit()
+    # NB: no db.commit() here — see docstring on transaction ownership.
 ```
 
-- [ ] **Step 3: Call from worker loop**. In `enrichment_worker.py`, after a successful enrichment commit, invoke `write_coauthor_artifacts(db, entity)`. Guard with try/except — never let coauthor write failure break enrichment.
+- [ ] **Step 3: Call from worker loop**. In `enrichment_worker.py`, in the same transaction as the enrichment write (i.e. *before* the enrichment commit, not after), invoke `write_coauthor_artifacts(db, entity)`. Then `db.commit()` once for the combined unit. Guard with try/except `Exception` around the helper — log + roll back the partial coauthor state but allow the enrichment to be re-committed without it, so coauthor failure never breaks enrichment.
+
+```python
+try:
+    write_coauthor_artifacts(db, entity)
+    db.commit()
+except Exception:
+    logger.exception("coauthor write failed for entity %s; committing enrichment only",
+                     entity.id)
+    db.rollback()
+    # Re-apply the enrichment fields and commit alone
+    db.merge(entity)
+    db.commit()
+```
 
 - [ ] **Step 4: Run tests, commit**:
 
@@ -1602,33 +1625,29 @@ def migrate_coauthor_graph(db, *, dry_run: bool = True, domain: str | None = Non
         if dry_run:
             continue
 
-        # Reuse worker hook logic but temporarily force write=on
-        from backend import config
-        orig = config.COAUTHOR_V2_WRITE
-        config.COAUTHOR_V2_WRITE = True
-        try:
-            from backend.enrichment_worker import write_coauthor_artifacts
-            # Detect self-pairs in source — multiple surface forms collapsing to one name_key
-            keys = {name_key(a) for a in authors}
-            if len(keys) < 2:
-                stats["self_pairs_skipped"] += 1
-                # Still write publications (one author, many entities), but skip edges path
-                for name in authors:
-                    a = get_or_create_author(db, name)
-                    if not db.query(models.AuthorPublication).filter_by(
+        # Use the worker hook with `force=True` — no global flag mutation,
+        # so a concurrent worker tick during migration doesn't get confused.
+        from backend.enrichment_worker import write_coauthor_artifacts
+        # Detect self-pairs in source — multiple surface forms collapsing to one name_key
+        keys = {name_key(a) for a in authors}
+        if len(keys) < 2:
+            stats["self_pairs_skipped"] += 1
+            # Still write publications (one author, many entities), but skip edges path
+            for name in authors:
+                a = get_or_create_author(db, name)
+                if not db.query(models.AuthorPublication).filter_by(
+                    author_id=a.id, entity_id=ent.id,
+                ).first():
+                    db.add(models.AuthorPublication(
                         author_id=a.id, entity_id=ent.id,
-                    ).first():
-                        db.add(models.AuthorPublication(
-                            author_id=a.id, entity_id=ent.id,
-                            org_id=ent.org_id or 0,
-                            domain_id=ent.domain or "default",
-                            position=1,
-                        ))
-                db.commit()
-                continue
-            write_coauthor_artifacts(db, ent)
-        finally:
-            config.COAUTHOR_V2_WRITE = orig
+                        org_id=ent.org_id or 0,
+                        domain_id=ent.domain or "default",
+                        position=1,
+                    ))
+            db.commit()
+            continue
+        write_coauthor_artifacts(db, ent, force=True)
+        db.commit()  # migration owns the transaction boundary, see F3.3 docstring
 
     stats["authors_created"] = db.query(models.Author).count() - initial_author_count if not dry_run else 0
     stats["publications_created"] = db.query(models.AuthorPublication).count() if not dry_run else 0
