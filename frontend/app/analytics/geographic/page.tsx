@@ -180,6 +180,11 @@ export default function GeographicPage() {
     : 1;
 
   const selectedCountry = countries.find((c) => c.country_code === selected) || null;
+  // Display info for the panel header — falls back to the API-returned name
+  // when the user clicks a country that has no entities in the filtered
+  // dataset (otherwise the panel would stay on the "Pick a country" hint).
+  const selectedName =
+    selectedCountry?.country_name || detail?.country_name || selected || "";
 
   return (
     <div className="space-y-6 p-6">
@@ -439,21 +444,24 @@ export default function GeographicPage() {
                 </div>
               )}
 
-              {selected && selectedCountry && (
+              {selected && (
                 <div className="flex h-full min-h-[420px] flex-col">
                   <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4 dark:border-gray-800">
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-2xl leading-none">{flagEmoji(selected)}</span>
                         <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-                          {selectedCountry.country_name}
+                          {selectedName}
                         </h3>
                         <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                           {selected}
                         </span>
                       </div>
                       <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                        {selectedCountry.percentage.toFixed(1)}% {t("page.geographic.of_total") || "of total"}
+                        {selectedCountry
+                          ? `${selectedCountry.percentage.toFixed(1)}% ${t("page.geographic.of_total") || "of total"}`
+                          : t("page.geographic.no_data_in_filters") ||
+                            "No entities match the current filters"}
                       </p>
                     </div>
                     <button
@@ -471,7 +479,7 @@ export default function GeographicPage() {
                         {t("page.geographic.entities")}
                       </p>
                       <p className="mt-1 text-xl font-semibold tabular-nums text-gray-900 dark:text-white">
-                        {selectedCountry.entity_count.toLocaleString()}
+                        {(selectedCountry?.entity_count ?? detail?.total_entities ?? 0).toLocaleString()}
                       </p>
                     </div>
                     <div>
@@ -479,7 +487,7 @@ export default function GeographicPage() {
                         {t("page.geographic.citations")}
                       </p>
                       <p className="mt-1 text-xl font-semibold tabular-nums text-gray-900 dark:text-white">
-                        {selectedCountry.citation_sum.toLocaleString()}
+                        {(selectedCountry?.citation_sum ?? detail?.total_citations ?? 0).toLocaleString()}
                       </p>
                     </div>
                   </div>

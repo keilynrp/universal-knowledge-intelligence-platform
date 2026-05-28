@@ -70,6 +70,25 @@ test.describe("Geographic intelligence panel", () => {
     await page.route(`${API_BASE}/**`, (route) => {
       const url = route.request().url();
       if (url.includes("/analyzers/geographic/") && url.includes("/country/")) {
+        // Specific stubs for tests that exercise non-US country drilldowns.
+        if (url.includes("/country/MN")) {
+          return route.fulfill({
+            json: {
+              domain_id: "default",
+              country_code: "MN",
+              country_name: "Mongolia",
+              total_entities: 0,
+              total_citations: 0,
+              reference_year: 2024,
+              years: 9,
+              series: Array.from({ length: 9 }, (_, i) => ({
+                year: 2016 + i,
+                entity_count: 0,
+                citation_sum: 0,
+              })),
+            },
+          });
+        }
         return route.fulfill({ json: US_TIMESERIES });
       }
       if (url.includes("/analyzers/geographic/")) {
@@ -191,6 +210,19 @@ test.describe("Geographic intelligence panel", () => {
     await expect(page.getByText(/Citations · last 9 years|Citas · últimos 9 años/)).toBeVisible();
     await expect(page.getByText(/38\.7%\s+(of total|del total)/)).toBeVisible();
     await expect(page.locator(".recharts-area").first()).toBeVisible();
+  });
+
+  test("clicking a country with no data still opens the panel", async ({ page }) => {
+    await gotoGeo(page);
+    const mn = page.locator('path[data-iso="MN"]');
+    await expect(mn).toBeVisible({ timeout: 10_000 });
+    await mn.click();
+
+    // Panel opens with country name + "no data" hint, even with no row in table.
+    await expect(page.getByRole("heading", { name: "Mongolia" })).toBeVisible();
+    await expect(
+      page.getByText(/No entities match the current filters|Ninguna entidad coincide/),
+    ).toBeVisible();
   });
 
   test("drag-to-pan shifts the map and shows grab cursor", async ({ page }) => {
