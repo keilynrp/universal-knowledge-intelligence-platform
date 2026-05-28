@@ -244,6 +244,15 @@ def viewer_headers():
 # ── DB cleanup (function-scoped) ────────────────────────────────────────────
 
 _TABLES_TO_CLEAN = [
+    # V2 coauthorship tables — must be cleaned before raw_entities / authors
+    "coauthor_contributions",
+    "coauthor_edges",
+    "author_publications",
+    "author_stats",
+    "author_merge_suggestions",
+    "author_merge_audit",
+    "coauthor_dirty_scopes",
+    "authors",
     "raw_entities",
     "store_connections",
     "store_sync_mappings",
