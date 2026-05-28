@@ -15,6 +15,7 @@
     "e2e:debug": "playwright test --debug"
   },
   "dependencies": {
+    "country-flag-emoji-polyfill": "^0.1.8",
     "next": "^16.2.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",

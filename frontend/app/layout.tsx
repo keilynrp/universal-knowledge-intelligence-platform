@@ -12,6 +12,7 @@ import { PilotModeProvider } from "./contexts/PilotModeContext";
 import { EnrichmentProvider } from "./contexts/EnrichmentContext";
 import { AssistantProvider } from "./contexts/AssistantContext";
 import FaviconInjector from "./components/FaviconInjector";
+import FlagEmojiPolyfill from "./components/FlagEmojiPolyfill";
 import { ToastProvider } from "./components/ui/Toast";
 import { DEFAULT_FAVICON_PATH } from "./lib/brandingAssets";
 
@@ -79,6 +80,7 @@ export default function RootLayout({
           <AuthProvider>
             <BrandingProvider>
               <FaviconInjector />
+              <FlagEmojiPolyfill />
               <LanguageProvider>
                 <DomainProvider>
                   <PilotModeProvider>
