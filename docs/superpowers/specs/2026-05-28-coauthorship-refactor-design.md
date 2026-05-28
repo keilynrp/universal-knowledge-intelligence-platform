@@ -359,7 +359,7 @@ Seven mergeable phases (F4 split into a/b/c per architect review H2), each behin
 |-------|-------|------|--------------|
 | F1 — Schema | Create the seven new tables; SQLAlchemy models; lifespan migration. No logic yet. | Low | ~280 |
 | F2 — Identity engine | `backend/coauthorship/identity.py` with `name_key`, `get_or_create_author`, `merge_authors`, `classify_merge`. Pytest golden file (≥150 cases). | Low | ~450 |
-| F3 — Worker integration (shadow) | Hook in `enrichment_worker.py` writes `author_publications` + `coauthor_edges` + enqueues `coauthor_dirty_scopes`. `recompute_coauthor_stats` with `python-louvain`. Feature flag `COAUTHOR_V2_WRITE=false`. Initially in **shadow mode**: writes go to `*_shadow` mirror tables for one week of A/B verification before promoting. | Medium | ~400 |
+| F3 — Worker integration | Hook in `enrichment_worker.py` writes `author_publications` + `coauthor_edges` + enqueues `coauthor_dirty_scopes`. `recompute_coauthor_stats` with `python-louvain`. Feature flag `COAUTHOR_V2_WRITE=false`. **Shadow-table mirroring deferred** — equivalent safety via `WRITE=false` gating + `migrate_coauthor_graph` dry-run audits on a prod replica + `/diagnostics` monitoring once enabled. | Medium | ~400 |
 | F4a — Migration + diagnostics | `migrate_coauthor_graph.py` (idempotent UPSERT semantics) + admin endpoint + `/diagnostics` endpoint. Promote shadow tables to real tables once F3 verification passes. No UI changes. | Medium-High | ~300 |
 | F4b — V2 read endpoints | New readers behind `COAUTHOR_V2_READ=false`: `coauthorship_network`, `/author/{id}`, merge-suggestions API. Old endpoint preserved untouched. | Medium | ~250 |
 | F4c — Frontend rebuild | `NetworkGraph.tsx` rewrite, `NodePropertiesPanel.tsx`, `MergeSuggestionsPanel.tsx`, `coauthorship/page.tsx` simplification, e2e spec. | Medium | ~500 |
@@ -371,8 +371,10 @@ Net: ~2260 new LOC, ~400 removed. Seven reviewable PRs.
 
 ```python
 COAUTHOR_V2_WRITE  = os.getenv("COAUTHOR_V2_WRITE",  "false").lower() == "true"
-COAUTHOR_V2_SHADOW = os.getenv("COAUTHOR_V2_SHADOW", "true").lower()  == "true"  # default true
 COAUTHOR_V2_READ   = os.getenv("COAUTHOR_V2_READ",   "false").lower() == "true"
+# Note: COAUTHOR_V2_SHADOW was reserved in rev 2 but the shadow-table mechanism
+# is deferred. The two-flag split (WRITE × READ) plus dry-run audit on a
+# replica achieves equivalent safety without doubling schema surface.
 ```
 
 ### Migration ↔ live-write conflict semantics
@@ -385,13 +387,13 @@ When `WRITE=true` is active, both the migration script and the worker write conc
 
 ### Production cutover sequence
 
-1. Deploy F1, F2, F3 (`WRITE=false, SHADOW=true, READ=false`). Tables exist, code dormant.
-2. Set `WRITE=true` with `SHADOW=true`. Worker dual-writes to shadow tables only. Compare shadow vs legacy for 7 days via `/diagnostics`.
-3. Promote shadow to real (F4a deploys). Worker dual-writes to real tables AND legacy `entity_relationships`.
-4. Wait 24h. Run `migrate_coauthor_graph` for legacy backlog. Validate `/diagnostics` shows `coverage_pct == 100`.
+1. Deploy F1, F2, F3 (`WRITE=false, READ=false`). Tables exist, code dormant.
+2. Run `migrate_coauthor_graph --dry-run` on a prod replica. Audit `/diagnostics` shape on the replica. Confirm `name_key` collapse counts and edge counts look sane.
+3. Deploy F4a. Set `WRITE=true`. Worker begins populating V2 tables for new ingest; legacy `entity_relationships` rows are NOT updated from this point forward (per Appendix B item 2).
+4. Run `migrate_coauthor_graph` (real) for the legacy backlog. Validate `/diagnostics` shows `coverage_pct == 100`.
 5. Deploy F4b. Set `READ=true`. Frontend (still V1) serves V2 data. Monitor errors for 24h.
 6. Deploy F4c. Frontend rebuild visible to users.
-7. Wait 7 stable days. Deploy F5. Remove dual-write, delete legacy rows, drop flags.
+7. Wait 7 stable days. Deploy F5. Delete legacy `entity_relationships` CO_AUTHOR rows; drop flags.
 
 `READ=false` reverts to legacy reads instantly without redeploy if anything misbehaves at steps 5–6.
 
