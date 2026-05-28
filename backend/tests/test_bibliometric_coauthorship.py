@@ -177,6 +177,159 @@ class TestCoauthorshipEndpoints:
         assert "nodes" in data
         assert "edges" in data
 
+
+class TestEnrichmentHook:
+    def test_post_enrichment_persists_coauthor_edges(self):
+        """Replays the enrichment side-effect that materializes CO_AUTHOR rows."""
+        import json
+        from backend.enrichment_worker import _extract_and_persist_coauthor_edges
+
+        db = SessionLocal()
+        try:
+            entity = models.RawEntity(
+                primary_label="Multi-author paper",
+                domain="__coauth_hook__",
+                enrichment_status="completed",
+                attributes_json=json.dumps(
+                    {"enrichment_authors": ["Alice", "Bob", "Carol"]},
+                ),
+            )
+            db.add(entity)
+            db.commit()
+            _extract_and_persist_coauthor_edges(db, entity)
+            db.commit()
+
+            rows = (
+                db.query(models.EntityRelationship)
+                .filter(models.EntityRelationship.relation_type == "CO_AUTHOR")
+                .filter(models.EntityRelationship.source_id == entity.id)
+                .all()
+            )
+            assert len(rows) == 3  # 3 pairs from 3 authors
+        finally:
+            db.close()
+
+        result = coauthorship_network("__coauth_hook__")
+        names = {n["id"] for n in result["nodes"]}
+        assert names == {"Alice", "Bob", "Carol"}
+
+    def test_hook_no_authors_is_noop(self):
+        import json
+        from backend.enrichment_worker import _extract_and_persist_coauthor_edges
+
+        db = SessionLocal()
+        try:
+            entity = models.RawEntity(
+                primary_label="Solo paper",
+                domain="__coauth_hook_solo__",
+                enrichment_status="completed",
+                attributes_json=json.dumps({"enrichment_authors": ["Solo"]}),
+            )
+            db.add(entity)
+            db.commit()
+            _extract_and_persist_coauthor_edges(db, entity)
+            db.commit()
+
+            count = (
+                db.query(models.EntityRelationship)
+                .filter(models.EntityRelationship.source_id == entity.id)
+                .count()
+            )
+            assert count == 0
+        finally:
+            db.close()
+
+    def test_hook_accepts_string_separated_authors(self):
+        import json
+        from backend.enrichment_worker import _extract_and_persist_coauthor_edges
+
+        db = SessionLocal()
+        try:
+            entity = models.RawEntity(
+                primary_label="String authors",
+                domain="__coauth_hook_string__",
+                enrichment_status="completed",
+                attributes_json=json.dumps({"authors": "Alice; Bob; Carol"}),
+            )
+            db.add(entity)
+            db.commit()
+            _extract_and_persist_coauthor_edges(db, entity)
+            db.commit()
+
+            count = (
+                db.query(models.EntityRelationship)
+                .filter(models.EntityRelationship.relation_type == "CO_AUTHOR")
+                .filter(models.EntityRelationship.source_id == entity.id)
+                .count()
+            )
+            assert count == 3
+        finally:
+            db.close()
+
+
+class TestBackfillScript:
+    def test_backfill_populates_existing_entities(self):
+        import json
+        from backend.scripts.backfill_coauthor_edges import backfill
+
+        db = SessionLocal()
+        try:
+            for i, authors in enumerate([
+                ["Alice", "Bob"],
+                ["Alice", "Bob", "Carol"],
+                ["Solo"],          # < 2 authors → skipped
+                None,              # no authors → skipped
+            ]):
+                attrs: dict = {}
+                if authors is not None:
+                    attrs["enrichment_authors"] = authors
+                db.add(models.RawEntity(
+                    primary_label=f"Paper {i}",
+                    domain="__coauth_backfill__",
+                    enrichment_status="completed",
+                    attributes_json=json.dumps(attrs) if attrs else None,
+                ))
+            db.commit()
+        finally:
+            db.close()
+
+        stats = backfill(domain="__coauth_backfill__")
+        assert stats["with_authors"] == 2
+
+        result = coauthorship_network("__coauth_backfill__")
+        # 2 multi-author papers produce: Alice-Bob (twice → weight 2) +
+        # Alice-Carol + Bob-Carol
+        names = {n["id"] for n in result["nodes"]}
+        assert names == {"Alice", "Bob", "Carol"}
+        ab_edge = next(
+            e for e in result["edges"]
+            if {e["source"], e["target"]} == {"Alice", "Bob"}
+        )
+        assert ab_edge["weight"] == 2  # seen in both seeded papers
+
+    def test_backfill_dry_run_does_not_write(self):
+        import json
+        from backend.scripts.backfill_coauthor_edges import backfill
+
+        db = SessionLocal()
+        try:
+            db.add(models.RawEntity(
+                primary_label="Dry run paper",
+                domain="__coauth_backfill_dry__",
+                enrichment_status="completed",
+                attributes_json=json.dumps(
+                    {"enrichment_authors": ["X", "Y", "Z"]},
+                ),
+            ))
+            db.commit()
+        finally:
+            db.close()
+
+        backfill(domain="__coauth_backfill_dry__", dry_run=True)
+
+        result = coauthorship_network("__coauth_backfill_dry__")
+        assert result["nodes"] == []
+
     def test_coauthorship_invalid_domain(self, client, auth_headers):
         resp = client.get("/analyzers/coauthorship/nonexistent_xyz_999", headers=auth_headers)
         assert resp.status_code == 404

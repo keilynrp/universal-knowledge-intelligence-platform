@@ -300,6 +300,55 @@ def _extract_and_cache_country(entity: models.RawEntity) -> None:
         entity.attributes_json = json.dumps(attrs)
 
 
+def _extract_and_persist_coauthor_edges(db: Session, entity: models.RawEntity) -> None:
+    """Materialize CO_AUTHOR edges from this entity's `enrichment_authors`.
+
+    The coauthorship analyzer reads ``entity_relationships`` rows with
+    ``relation_type='CO_AUTHOR'``. Without this hook the table would stay
+    empty for entities enriched by the worker, even though the structured
+    author list is already on ``attributes_json``.
+    """
+    import json
+    from backend.analyzers.coauthorship import extract_coauthor_edges
+
+    try:
+        attrs = json.loads(entity.attributes_json or "{}") or {}
+    except (ValueError, TypeError):
+        return
+
+    authors_raw = attrs.get("enrichment_authors") or attrs.get("authors")
+    if not authors_raw:
+        return
+
+    # Normalize: enrichment_authors is usually a list of strings; some adapters
+    # store a semicolon-joined string in `authors`.
+    if isinstance(authors_raw, str):
+        authors = [a.strip() for a in authors_raw.split(";") if a.strip()]
+    elif isinstance(authors_raw, list):
+        authors = [
+            str(a).strip()
+            for a in authors_raw
+            if a and str(a).strip()
+        ]
+    else:
+        return
+
+    if len(authors) < 2:
+        return
+
+    try:
+        extract_coauthor_edges(
+            entity.id,
+            authors,
+            db,
+            org_id=getattr(entity, "org_id", None),
+        )
+    except Exception:
+        logger.exception(
+            "coauthor edge extraction failed for entity %s", entity.id,
+        )
+
+
 def _try_epistemic_classify(db: Session, entity: models.RawEntity) -> None:
     """Auto-classify entity if its domain has epistemology configuration."""
     try:
@@ -488,6 +537,10 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
 
             # Extract and cache country from affiliation data
             _extract_and_cache_country(entity)
+
+            # Materialize co-author relationships into entity_relationships
+            # so the coauthorship analyzer has data to work with.
+            _extract_and_persist_coauthor_edges(db, entity)
 
             # Epistemic classification (if domain has epistemology config)
             _try_epistemic_classify(db, entity)
