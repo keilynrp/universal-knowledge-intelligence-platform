@@ -16,7 +16,6 @@ purge existing rows first when re-running for an audit. See --reset.
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import sys
 from typing import Optional
@@ -24,28 +23,15 @@ from typing import Optional
 from sqlalchemy import or_
 
 from backend import models
-from backend.analyzers.coauthorship import _coauthor_pairs, extract_coauthor_edges
+from backend.analyzers.coauthorship import (
+    _coauthor_pairs,
+    authors_from_attrs,
+    extract_coauthor_edges,
+)
 from backend.database import SessionLocal
 
 logger = logging.getLogger("backfill_coauthor_edges")
 logging.basicConfig(level=logging.INFO, format="%(message)s")
-
-
-def _authors_from_attrs(attrs_json: Optional[str]) -> list[str]:
-    if not attrs_json:
-        return []
-    try:
-        attrs = json.loads(attrs_json) or {}
-    except (ValueError, TypeError):
-        return []
-    raw = attrs.get("enrichment_authors") or attrs.get("authors")
-    if not raw:
-        return []
-    if isinstance(raw, str):
-        return [a.strip() for a in raw.split(";") if a.strip()]
-    if isinstance(raw, list):
-        return [str(a).strip() for a in raw if a and str(a).strip()]
-    return []
 
 
 def _eligible_payloads(
@@ -76,7 +62,7 @@ def _eligible_payloads(
 
     payloads: list[tuple[int, Optional[int], list[str]]] = []
     for entity_id, org_id, attrs_json in query.all():
-        authors = _authors_from_attrs(attrs_json)
+        authors = authors_from_attrs(attrs_json)
         if len(authors) >= 2:
             payloads.append((entity_id, org_id, authors))
     return payloads

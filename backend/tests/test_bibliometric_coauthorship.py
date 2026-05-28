@@ -334,6 +334,57 @@ class TestBackfillScript:
         )
         assert ab_edge["weight"] == 2  # seen in both seeded papers
 
+    def test_backfill_reads_canonical_author_shapes(self):
+        import json
+        from backend.scripts.backfill_coauthor_edges import backfill
+
+        db = SessionLocal()
+        try:
+            db.add(models.RawEntity(
+                primary_label="Canonical authors paper",
+                domain="__coauth_canonical_shapes__",
+                enrichment_status="completed",
+                attributes_json=json.dumps({
+                    "canonical_authors": [
+                        {"name": "Alice"},
+                        {"name": "Bob"},
+                        {"name": "Alice"},
+                    ],
+                }),
+            ))
+            db.add(models.RawEntity(
+                primary_label="Author affiliations paper",
+                domain="__coauth_canonical_shapes__",
+                enrichment_status="completed",
+                attributes_json=json.dumps({
+                    "author_affiliations": [
+                        {"author_name": "Carol"},
+                        {"author_name": "Dave"},
+                    ],
+                }),
+            ))
+            db.add(models.RawEntity(
+                primary_label="Raw record authors paper",
+                domain="__coauth_canonical_shapes__",
+                enrichment_status="completed",
+                attributes_json=json.dumps({
+                    "raw_record": {"authors": "Eve; Frank"},
+                }),
+            ))
+            db.commit()
+        finally:
+            db.close()
+
+        stats = backfill(domain="__coauth_canonical_shapes__")
+        assert stats["with_authors"] == 3
+        assert stats["edges_generated"] == 3
+
+        result = coauthorship_network("__coauth_canonical_shapes__")
+        edges = {frozenset((e["source"], e["target"])) for e in result["edges"]}
+        assert frozenset(("Alice", "Bob")) in edges
+        assert frozenset(("Carol", "Dave")) in edges
+        assert frozenset(("Eve", "Frank")) in edges
+
     def test_backfill_dry_run_does_not_write(self):
         import json
         from backend.scripts.backfill_coauthor_edges import backfill

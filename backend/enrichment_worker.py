@@ -308,31 +308,9 @@ def _extract_and_persist_coauthor_edges(db: Session, entity: models.RawEntity) -
     empty for entities enriched by the worker, even though the structured
     author list is already on ``attributes_json``.
     """
-    import json
-    from backend.analyzers.coauthorship import extract_coauthor_edges
+    from backend.analyzers.coauthorship import authors_from_attrs, extract_coauthor_edges
 
-    try:
-        attrs = json.loads(entity.attributes_json or "{}") or {}
-    except (ValueError, TypeError):
-        return
-
-    authors_raw = attrs.get("enrichment_authors") or attrs.get("authors")
-    if not authors_raw:
-        return
-
-    # Normalize: enrichment_authors is usually a list of strings; some adapters
-    # store a semicolon-joined string in `authors`.
-    if isinstance(authors_raw, str):
-        authors = [a.strip() for a in authors_raw.split(";") if a.strip()]
-    elif isinstance(authors_raw, list):
-        authors = [
-            str(a).strip()
-            for a in authors_raw
-            if a and str(a).strip()
-        ]
-    else:
-        return
-
+    authors = authors_from_attrs(entity.attributes_json)
     if len(authors) < 2:
         return
 

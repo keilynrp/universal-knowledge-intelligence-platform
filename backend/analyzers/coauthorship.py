@@ -8,6 +8,7 @@ greedy modularity).
 from __future__ import annotations
 
 import logging
+import json
 from collections import defaultdict
 from itertools import combinations
 from typing import Any
@@ -36,6 +37,58 @@ def _coauthor_pairs(authors: list[str]) -> list[tuple[str, str]]:
         pairs = list(combinations(clean_authors, 2))
 
     return [(min(a, b), max(a, b)) for a, b in pairs if a != b]
+
+
+def authors_from_attrs(attrs_json: str | None) -> list[str]:
+    if not attrs_json:
+        return []
+    try:
+        attrs = json.loads(attrs_json) or {}
+    except (ValueError, TypeError):
+        return []
+    candidates = [
+        attrs.get("enrichment_authors"),
+        attrs.get("authors"),
+        attrs.get("canonical_authors"),
+        attrs.get("author_affiliations"),
+    ]
+    raw_record = attrs.get("raw_record")
+    if isinstance(raw_record, dict):
+        candidates.extend([
+            raw_record.get("authors"),
+            raw_record.get("author"),
+            raw_record.get("AU"),
+            raw_record.get("AF"),
+        ])
+
+    for raw in candidates:
+        authors = _normalize_author_payload(raw)
+        if len(authors) >= 2:
+            return authors
+    return []
+
+
+def _normalize_author_payload(raw) -> list[str]:
+    """Extract author display names from common enrichment/import shapes."""
+    if not raw:
+        return []
+    if isinstance(raw, str):
+        parts = raw.replace("|", ";").split(";")
+        return [a.strip() for a in parts if a.strip()]
+    if isinstance(raw, dict):
+        name = (
+            raw.get("name")
+            or raw.get("author_name")
+            or raw.get("display_name")
+            or raw.get("full_name")
+        )
+        return [str(name).strip()] if name and str(name).strip() else []
+    if isinstance(raw, list):
+        authors: list[str] = []
+        for item in raw:
+            authors.extend(_normalize_author_payload(item))
+        return list(dict.fromkeys(authors))
+    return []
 
 
 def extract_coauthor_edges(
