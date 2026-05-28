@@ -158,8 +158,11 @@ export default function GeographicPage() {
     if (selected) fetchDetail(selected);
   }, [selected, fetchDetail]);
 
-  const countries = data?.countries ?? [];
-  const visibleCountries = countries.filter((c) => c.country_code !== "OTHER");
+  const countries = useMemo(() => data?.countries ?? [], [data?.countries]);
+  const visibleCountries = useMemo(
+    () => countries.filter((c) => c.country_code !== "OTHER"),
+    [countries],
+  );
   const totalCitations = useMemo(
     () => countries.reduce((acc, c) => acc + (c.citation_sum || 0), 0),
     [countries],
