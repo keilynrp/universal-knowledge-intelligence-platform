@@ -175,6 +175,37 @@ test.describe("Geographic intelligence panel", () => {
     await expect(page.getByTestId("collab-pairs")).toHaveCount(0);
   });
 
+  test("drag-to-pan shifts the map and shows grab cursor", async ({ page }) => {
+    await gotoGeo(page);
+    const svg = page.locator("svg.cursor-grab").first();
+    await expect(svg).toBeVisible();
+
+    const box = await svg.boundingBox();
+    if (!box) throw new Error("map bounding box unavailable");
+
+    // Drag from a blank area near the top-left (not on a marker).
+    const startX = box.x + 80;
+    const startY = box.y + 80;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX + 120, startY + 60, { steps: 10 });
+
+    // While dragging, cursor class swaps to grabbing.
+    const grabbing = page.locator("svg.cursor-grabbing").first();
+    await expect(grabbing).toBeVisible();
+
+    await page.mouse.up();
+
+    // After release, the map group has a non-identity translate from manual pan.
+    const mapGroup = page.locator('svg g[transform*="scale"]').first();
+    const transform = (await mapGroup.getAttribute("transform")) || "";
+    expect(transform).not.toMatch(/translate\(0 0\)/);
+
+    // Reset clears it.
+    await page.getByRole("button", { name: /Reset zoom|Restablecer zoom/ }).click();
+    await expect(mapGroup).toHaveAttribute("transform", /translate\(0 0\) scale\(1\)/);
+  });
+
   test("manual zoom in / out controls update the map transform", async ({ page }) => {
     await gotoGeo(page);
     const mapGroup = page.locator('svg g[transform*="scale"]').first();

@@ -113,8 +113,16 @@ export default function GeographicPage() {
   const [zoom, setZoom] = useState<number>(1);
   const [pan, setPan] = useState<{ tx: number; ty: number }>({ tx: 0, ty: 0 });
   const [manualOverride, setManualOverride] = useState<boolean>(false);
+  const [isPanning, setIsPanning] = useState<boolean>(false);
 
   const mapRef = useRef<SVGSVGElement | null>(null);
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    startTx: number;
+    startTy: number;
+    moved: boolean;
+  } | null>(null);
 
   const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
 
@@ -155,6 +163,70 @@ export default function GeographicPage() {
       zoomAtCenter(zoom * dir);
     },
     [zoom, zoomAtCenter],
+  );
+
+  // ── Drag-to-pan ─────────────────────────────────────────────────────────
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<SVGSVGElement>) => {
+      // Skip pan when the press starts on a marker — let its click fire.
+      const target = e.target as Element;
+      if (target.closest('[data-marker]')) return;
+      // Ignore non-primary buttons.
+      if (e.button !== 0) return;
+      e.preventDefault();
+      try {
+        mapRef.current?.setPointerCapture(e.pointerId);
+      } catch {
+        // setPointerCapture can fail in non-mouse harnesses — ignore.
+      }
+      dragRef.current = {
+        startX: e.clientX,
+        startY: e.clientY,
+        startTx: pan.tx,
+        startTy: pan.ty,
+        moved: false,
+      };
+    },
+    [pan.tx, pan.ty],
+  );
+
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent<SVGSVGElement>) => {
+      const drag = dragRef.current;
+      const svg = mapRef.current;
+      if (!drag || !svg) return;
+      const dx = e.clientX - drag.startX;
+      const dy = e.clientY - drag.startY;
+      if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 3) return;
+      if (!drag.moved) {
+        drag.moved = true;
+        setIsPanning(true);
+        setManualOverride(true);
+      }
+      // Convert client px → viewBox units (the SVG is sized by CSS but
+      // its internal coordinate system is MAP_W × MAP_H).
+      const rect = svg.getBoundingClientRect();
+      const sx = rect.width > 0 ? MAP_W / rect.width : 1;
+      const sy = rect.height > 0 ? MAP_H / rect.height : 1;
+      setPan({
+        tx: drag.startTx + dx * sx,
+        ty: drag.startTy + dy * sy,
+      });
+    },
+    [],
+  );
+
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent<SVGSVGElement>) => {
+      try {
+        mapRef.current?.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+      dragRef.current = null;
+      setIsPanning(false);
+    },
+    [],
   );
 
   const fetchGeo = useCallback(
@@ -497,9 +569,15 @@ export default function GeographicPage() {
                 <svg
                   ref={mapRef}
                   viewBox={`0 0 ${MAP_W} ${MAP_H}`}
-                  className="h-full w-full"
+                  className={`h-full w-full select-none touch-none ${
+                    isPanning ? "cursor-grabbing" : "cursor-grab"
+                  }`}
                   preserveAspectRatio="xMidYMid meet"
                   onWheel={handleWheel}
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  onPointerCancel={handlePointerUp}
                 >
                   <defs>
                     <radialGradient id="markerGlow" cx="50%" cy="50%" r="50%">
@@ -513,7 +591,11 @@ export default function GeographicPage() {
 
                   <g
                     className="text-slate-400 dark:text-slate-600"
-                    style={{ transition: "transform 700ms cubic-bezier(0.22,1,0.36,1)" }}
+                    style={{
+                      transition: isPanning
+                        ? "none"
+                        : "transform 700ms cubic-bezier(0.22,1,0.36,1)",
+                    }}
                     transform={mapTransform}
                   >
                     <rect width={MAP_W} height={MAP_H} fill="url(#grid)" />
@@ -562,9 +644,15 @@ export default function GeographicPage() {
                       return (
                         <g
                           key={c.country_code}
+                          data-marker={c.country_code}
                           transform={`translate(${x} ${y})`}
                           className="cursor-pointer"
-                          onClick={() => setSelected(c.country_code)}
+                          onClick={() => {
+                            // Suppress click that arrives after a drag.
+                            if (dragRef.current === null) {
+                              setSelected(c.country_code);
+                            }
+                          }}
                           onMouseEnter={() =>
                             setHover({ code: c.country_code, x, y })
                           }
