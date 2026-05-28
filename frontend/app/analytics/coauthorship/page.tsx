@@ -99,7 +99,7 @@ export default function CoauthorshipPage() {
     try {
       const r = await apiFetch("/admin/data-fixes/coauthor-edges", {
         method: "POST",
-        body: JSON.stringify({ dry_run: false }),
+        body: JSON.stringify({ dry_run: false, domain: activeDomainId }),
       });
       if (!r.ok) {
         // Surface the FastAPI `detail` so the admin can see the real cause.

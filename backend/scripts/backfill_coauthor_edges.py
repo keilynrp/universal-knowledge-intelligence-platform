@@ -21,10 +21,10 @@ import logging
 import sys
 from typing import Optional
 
-from sqlalchemy import and_, or_, text
+from sqlalchemy import or_
 
 from backend import models
-from backend.analyzers.coauthorship import extract_coauthor_edges
+from backend.analyzers.coauthorship import _coauthor_pairs, extract_coauthor_edges
 from backend.database import SessionLocal
 
 logger = logging.getLogger("backfill_coauthor_edges")
@@ -131,7 +131,7 @@ def backfill(
 
         if dry_run:
             stats["edges_generated"] = sum(
-                len(authors) - 1 for _, _, authors in payloads
+                len(_coauthor_pairs(authors)) for _, _, authors in payloads
             )
             return stats
 

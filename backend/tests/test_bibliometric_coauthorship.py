@@ -168,6 +168,22 @@ class TestCoauthorshipNetwork:
         result = coauthorship_network("default", limit=2)
         assert len(result["nodes"]) <= 2
 
+    def test_same_pair_is_scoped_by_source_domain(self, db_session):
+        first = models.RawEntity(primary_label="Paper A", domain="__coauth_scope_a__")
+        second = models.RawEntity(primary_label="Paper B", domain="__coauth_scope_b__")
+        db_session.add_all([first, second])
+        db_session.flush()
+
+        extract_coauthor_edges(first.id, ["Alice", "Bob"], db_session)
+        extract_coauthor_edges(second.id, ["Alice", "Bob"], db_session)
+        db_session.commit()
+
+        result_a = coauthorship_network("__coauth_scope_a__")
+        result_b = coauthorship_network("__coauth_scope_b__")
+
+        assert result_a["edges"] == [{"source": "Alice", "target": "Bob", "weight": 1.0}]
+        assert result_b["edges"] == [{"source": "Alice", "target": "Bob", "weight": 1.0}]
+
 
 class TestCoauthorshipEndpoints:
     def test_coauthorship_endpoint_ok(self, client, auth_headers):

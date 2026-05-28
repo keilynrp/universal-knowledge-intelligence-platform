@@ -12,6 +12,7 @@ from collections import defaultdict
 from itertools import combinations
 from typing import Any
 
+from sqlalchemy import or_
 from sqlalchemy import text
 
 from backend.analyzers.topic_modeling import _validate_domain
@@ -21,6 +22,20 @@ from backend.tenant_access import add_org_sql_filter
 logger = logging.getLogger(__name__)
 
 MAX_AUTHORS_FOR_COAUTH = 15
+
+
+def _coauthor_pairs(authors: list[str]) -> list[tuple[str, str]]:
+    """Return canonical coauthor pairs for a publication author list."""
+    clean_authors = list(dict.fromkeys(a.strip() for a in authors if a and a.strip()))
+    if len(clean_authors) < 2:
+        return []
+
+    if len(clean_authors) > MAX_AUTHORS_FOR_COAUTH:
+        pairs = [(clean_authors[0], a) for a in clean_authors[1:]]
+    else:
+        pairs = list(combinations(clean_authors, 2))
+
+    return [(min(a, b), max(a, b)) for a, b in pairs if a != b]
 
 
 def extract_coauthor_edges(
@@ -35,35 +50,38 @@ def extract_coauthor_edges(
     """
     from backend import models
 
-    if len(authors) < 2:
+    pairs = _coauthor_pairs(authors)
+    if not pairs:
         return 0
 
-    edges_count = 0
+    source = db_session.get(models.RawEntity, entity_id)
+    source_domain = getattr(source, "domain", None)
+    notes = [f"{a}||{b}" for a, b in pairs]
 
-    if len(authors) > MAX_AUTHORS_FOR_COAUTH:
-        # Star topology: first author linked to all others
-        pairs = [(authors[0], a) for a in authors[1:]]
+    existing_query = (
+        db_session.query(models.EntityRelationship)
+        .join(models.RawEntity, models.RawEntity.id == models.EntityRelationship.source_id)
+        .filter(
+            models.EntityRelationship.relation_type == "CO_AUTHOR",
+            models.EntityRelationship.notes.in_(notes),
+        )
+    )
+    if org_id is None:
+        existing_query = existing_query.filter(models.EntityRelationship.org_id.is_(None))
     else:
-        # Full pairwise
-        pairs = list(combinations(authors, 2))
+        existing_query = existing_query.filter(models.EntityRelationship.org_id == org_id)
+    if source_domain in (None, "default"):
+        existing_query = existing_query.filter(
+            or_(models.RawEntity.domain == "default", models.RawEntity.domain.is_(None))
+        )
+    else:
+        existing_query = existing_query.filter(models.RawEntity.domain == source_domain)
+
+    existing_by_note = {row.notes: row for row in existing_query.all()}
 
     for a, b in pairs:
-        # Canonical ordering: alphabetical
-        if a > b:
-            a, b = b, a
-
-        # Check if edge exists (by matching primary_labels via entity lookup)
-        # We store edges as source_id → target_id where source/target are entity IDs
-        # For co-authorship, we use notes to store the author names
-        existing = (
-            db_session.query(models.EntityRelationship)
-            .filter(
-                models.EntityRelationship.relation_type == "CO_AUTHOR",
-                models.EntityRelationship.notes == f"{a}||{b}",
-            )
-            .first()
-        )
-
+        note = f"{a}||{b}"
+        existing = existing_by_note.get(note)
         if existing:
             existing.weight = (existing.weight or 1.0) + 1.0
         else:
@@ -72,12 +90,11 @@ def extract_coauthor_edges(
                 target_id=entity_id,  # self-ref placeholder; real IDs would need author entity lookup
                 relation_type="CO_AUTHOR",
                 weight=1.0,
-                notes=f"{a}||{b}",
+                notes=note,
                 org_id=org_id,
             ))
-        edges_count += 1
 
-    return edges_count
+    return len(pairs)
 
 
 def _load_coauthor_edges(
