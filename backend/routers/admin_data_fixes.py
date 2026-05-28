@@ -275,6 +275,12 @@ def fix_coauthor_edges(
             detail=f"coauthor edge backfill failed: {type(exc).__name__}: {exc}",
         )
 
+    # Bust the in-memory analytics cache so the next GET /analyzers/coauthorship
+    # sees the newly-materialized edges instead of the 5-minute-old empty result.
+    if not payload.dry_run:
+        from backend.routers.analytics import _analytics_cache  # local import to avoid cycle
+        _analytics_cache.invalidate("coauth_")
+
     return CoauthorBackfillResponse(
         mode="dry-run" if payload.dry_run else "applied",
         reset=payload.reset and not payload.dry_run,

@@ -983,6 +983,7 @@ def invalidate_analytics_for_domain(domain_id: str) -> None:
     _analytics_cache.invalidate(f"trends_{domain_id}_")
     _analytics_cache.invalidate(f"authors_{domain_id}_")
     _analytics_cache.invalidate(f"geo_{domain_id}_")
+    _analytics_cache.invalidate(f"coauth_{domain_id}_")
     _dashboard_cache.invalidate(f"dashboard_{domain_id}")
 
 
