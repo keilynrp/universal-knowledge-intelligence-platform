@@ -266,9 +266,14 @@ def fix_coauthor_edges(
             dry_run=payload.dry_run,
             reset=payload.reset,
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("coauthor edge backfill failed")
-        raise HTTPException(status_code=500, detail="coauthor edge backfill failed")
+        # Surface a redacted error to the admin caller. Full traceback stays
+        # in server logs via logger.exception above.
+        raise HTTPException(
+            status_code=500,
+            detail=f"coauthor edge backfill failed: {type(exc).__name__}: {exc}",
+        )
 
     return CoauthorBackfillResponse(
         mode="dry-run" if payload.dry_run else "applied",

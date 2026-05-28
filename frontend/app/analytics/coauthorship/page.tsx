@@ -102,7 +102,15 @@ export default function CoauthorshipPage() {
         body: JSON.stringify({ dry_run: false }),
       });
       if (!r.ok) {
-        throw new Error(`Backfill failed: ${r.status}`);
+        // Surface the FastAPI `detail` so the admin can see the real cause.
+        let detail = `${r.status}`;
+        try {
+          const body = await r.json();
+          if (typeof body?.detail === "string") detail = body.detail;
+        } catch {
+          /* not JSON */
+        }
+        throw new Error(`Backfill failed: ${detail}`);
       }
       const result = await r.json();
       setBackfillState({ running: false, result, error: null });
