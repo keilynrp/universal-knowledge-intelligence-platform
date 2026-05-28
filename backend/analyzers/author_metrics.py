@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import zlib
 from collections import Counter, defaultdict
 from typing import Any
 
@@ -17,8 +18,12 @@ from sqlalchemy import text
 
 from backend.analyzers.topic_modeling import _extract_record_year, _validate_domain
 from backend.database import engine
+from backend.tenant_access import add_org_sql_filter
 
 logger = logging.getLogger(__name__)
+
+
+_AUTHOR_NAME_KEYS = ("name", "author_name", "display_name", "full_name")
 
 
 def compute_h_index(citation_counts: list[int]) -> int:
@@ -31,12 +36,70 @@ def compute_h_index(citation_counts: list[int]) -> int:
     return h
 
 
+def _author_record_id(author_name: str) -> int:
+    """Return a deterministic synthetic ID for authors without authority records."""
+    return -int(zlib.crc32(author_name.casefold().encode("utf-8")))
+
+
+def _author_names_from_payload(raw: Any) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        separator = ";" if ";" in raw else ","
+        return [part.strip() for part in raw.replace("|", separator).split(separator) if part.strip()]
+    if isinstance(raw, dict):
+        name = next((raw.get(key) for key in _AUTHOR_NAME_KEYS if raw.get(key)), None)
+        return [str(name).strip()] if name and str(name).strip() else []
+    if isinstance(raw, list):
+        authors: list[str] = []
+        for item in raw:
+            authors.extend(_author_names_from_payload(item))
+        return list(dict.fromkeys(authors))
+    return []
+
+
+def _extract_author_names(attrs_json: str | None, secondary_label: str | None) -> list[str]:
+    attrs: dict[str, Any] = {}
+    if attrs_json:
+        try:
+            parsed = json.loads(attrs_json) or {}
+            if isinstance(parsed, dict):
+                attrs = parsed
+        except (ValueError, TypeError):
+            attrs = {}
+
+    candidates: list[Any] = [
+        attrs.get("canonical_authors"),
+        attrs.get("enrichment_authors"),
+        attrs.get("author_affiliations"),
+        attrs.get("authors"),
+        attrs.get("full_authors"),
+        attrs.get("author"),
+    ]
+    raw_record = attrs.get("raw_record")
+    if isinstance(raw_record, dict):
+        candidates.extend([
+            raw_record.get("authors"),
+            raw_record.get("author"),
+            raw_record.get("AU"),
+            raw_record.get("AF"),
+        ])
+    candidates.append(secondary_label)
+
+    authors: list[str] = []
+    for candidate in candidates:
+        for name in _author_names_from_payload(candidate):
+            if name not in authors:
+                authors.append(name)
+    return authors
+
+
 def _load_author_entities(domain_id: str, org_id: int | None = None) -> list[dict[str, Any]]:
     """
     Load entities with their authority-linked authors.
     Joins authority_records (field_name='author', status='confirmed') with raw_entities.
     """
-    where_clauses = ["ar.field_name = 'author'", "ar.status = 'confirmed'"]
+    where_clauses = ["1 = 1"]
     params: dict[str, object] = {}
 
     if domain_id not in ("all", "default"):
@@ -46,47 +109,36 @@ def _load_author_entities(domain_id: str, org_id: int | None = None) -> list[dic
         where_clauses.append("(re.domain = :domain_id OR re.domain IS NULL)")
         params["domain_id"] = domain_id
 
-    # Join via authority_record_links if exists, else match on original_value = primary_label
-    # Use authority_record_links for proper linkage
+    add_org_sql_filter(where_clauses, params, org_id, column_name="re.org_id")
+
     sql = f"""
         SELECT
-            ar.id AS record_id,
-            ar.canonical_label,
-            ar.original_value,
             re.id AS entity_id,
             re.enrichment_citation_count,
             re.attributes_json,
             re.primary_label,
             re.secondary_label
-        FROM authority_records ar
-        JOIN authority_record_links arl ON arl.authority_record_id = ar.id
-        JOIN raw_entities re ON re.id = arl.entity_id
+        FROM raw_entities re
         WHERE {' AND '.join(where_clauses)}
     """
 
-    try:
-        with engine.connect() as conn:
-            rows = conn.execute(text(sql), params).fetchall()
-    except Exception:
-        # Fallback: authority_record_links may not exist — use original_value match
-        sql_fallback = f"""
-            SELECT
-                ar.id AS record_id,
-                ar.canonical_label,
-                ar.original_value,
-                re.id AS entity_id,
-                re.enrichment_citation_count,
-                re.attributes_json,
-                re.primary_label,
-                re.secondary_label
-            FROM authority_records ar
-            JOIN raw_entities re ON re.primary_label = ar.original_value
-            WHERE {' AND '.join(where_clauses)}
-        """
-        with engine.connect() as conn:
-            rows = conn.execute(text(sql_fallback), params).fetchall()
+    with engine.connect() as conn:
+        rows = conn.execute(text(sql), params).fetchall()
 
-    return [dict(row._mapping) for row in rows]
+    expanded: list[dict[str, Any]] = []
+    for row in rows:
+        row_dict = dict(row._mapping)
+        for author_name in _extract_author_names(
+            row_dict.get("attributes_json"),
+            row_dict.get("secondary_label"),
+        ):
+            expanded.append({
+                **row_dict,
+                "record_id": _author_record_id(author_name),
+                "canonical_label": author_name,
+                "original_value": author_name,
+            })
+    return expanded
 
 
 def author_rankings(

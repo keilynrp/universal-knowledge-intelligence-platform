@@ -76,6 +76,44 @@ class TestAuthorRankings:
         assert result["total_analyzed"] == 0
         assert result["authors"] == []
 
+    def test_author_rankings_from_imported_author_attributes(self, db_session):
+        from backend.analyzers.author_metrics import author_rankings
+
+        db_session.add_all([
+            models.RawEntity(
+                primary_label="Knowledge graphs for science",
+                secondary_label="Ada Rivera, Ben Soto",
+                domain="default",
+                enrichment_citation_count=25,
+                attributes_json=json.dumps({
+                    "author_affiliations": [
+                        {"author_name": "Ada Rivera", "author_orcid": "0000-0001"},
+                        {"author_name": "Ben Soto", "author_orcid": "0000-0002"},
+                    ],
+                    "publication_year": 2024,
+                }),
+            ),
+            models.RawEntity(
+                primary_label="Research intelligence systems",
+                secondary_label="Ada Rivera",
+                domain="default",
+                enrichment_citation_count=10,
+                attributes_json=json.dumps({
+                    "authors": [{"name": "Ada Rivera"}],
+                    "year": 2023,
+                }),
+            ),
+        ])
+        db_session.commit()
+
+        result = author_rankings("default", sort_by="total_publications")
+
+        assert result["total_analyzed"] == 2
+        assert result["authors"][0]["canonical_label"] == "Ada Rivera"
+        assert result["authors"][0]["total_publications"] == 2
+        assert result["authors"][0]["total_citations"] == 35
+        assert result["authors"][0]["publications_per_year"] == {2023: 1, 2024: 1}
+
 
 class TestAuthorEndpoints:
     def test_authors_endpoint_ok(self, client, auth_headers):
