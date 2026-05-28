@@ -73,6 +73,30 @@ if [ ${#PYTHON_CHANGED[@]} -gt 0 ]; then
   echo
 fi
 
+# 3b. Lock-file integrity (BLOCKING in CI: `npm ci` exits non-zero on drift)
+# Always run — even unrelated edits can desync the lockfile if anyone ran
+# `npm install` colaterally. Costs ~2s with cached node_modules.
+echo "▶ npm ci --dry-run (frontend lockfile integrity)…"
+LOCK_LOG="$(mktemp)"
+if ! (cd frontend && npm ci --dry-run --no-audit --no-fund) >"$LOCK_LOG" 2>&1; then
+  echo "  ✗ Lockfile drift detected. Last lines:"
+  tail -15 "$LOCK_LOG"
+  echo ""
+  echo "  Hint: this often happens after \`npm install\` on Windows strips"
+  echo "  Linux-only optional deps (@emnapi/*). Use scripts/refresh-lockfile.py"
+  echo "  to merge platform-specific entries from origin/main."
+  EXIT=1
+fi
+rm -f "$LOCK_LOG"
+echo
+
+# 3c. Frontend unit tests (vitest) — runs the same suite as the CI `frontend-test` job.
+if [ ${#TS_CHANGED[@]} -gt 0 ]; then
+  echo "▶ vitest --run (frontend unit tests)…"
+  (cd frontend && npm test -- --run --reporter=dot) || EXIT=1
+  echo
+fi
+
 # 4. Backend tests — scoped to changed test files when possible, full suite otherwise.
 if [ ${#BACKEND_TESTS_CHANGED[@]} -gt 0 ]; then
   echo "▶ pytest (scoped to changed tests): ${BACKEND_TESTS_CHANGED[*]}"
