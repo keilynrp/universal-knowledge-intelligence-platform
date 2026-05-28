@@ -784,17 +784,22 @@ def analyzer_geographic_country(
 
 @router.get("/analyzers/coauthorship/{domain_id}")
 def analyzer_coauthorship(
+    response: Response,
     domain_id: str,
     min_weight: int = Query(default=1, ge=1),
     limit: int | None = Query(default=None, ge=1, le=500),
+    force_refresh: bool = Query(default=False),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
     """Co-authorship network with degree centrality and community detection."""
+    response.headers["Cache-Control"] = "no-store, max-age=0, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     _validate_domain_id(domain_id)
     org_id = resolve_request_org_id(db, current_user)
     _key = f"coauth_{domain_id}_{scope_tag(org_id)}_{min_weight}_{limit}"
-    cached = _analytics_cache.get(_key)
+    cached = None if force_refresh else _analytics_cache.get(_key)
     if cached is not None:
         return cached
     try:

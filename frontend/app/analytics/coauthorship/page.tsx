@@ -78,11 +78,19 @@ export default function CoauthorshipPage() {
     error: string | null;
   }>({ running: false, result: null, error: null });
 
-  const fetchNetwork = useCallback(async (domainId: string, mw: number) => {
+  const fetchNetwork = useCallback(async (domainId: string, mw: number, forceRefresh = false) => {
     setLoading(true);
     setError(null);
     try {
-      const r = await apiFetch(`/analyzers/coauthorship/${domainId}?min_weight=${mw}&limit=100`);
+      const params = new URLSearchParams({
+        min_weight: String(mw),
+        limit: "100",
+      });
+      if (forceRefresh) {
+        params.set("force_refresh", "true");
+        params.set("_", String(Date.now()));
+      }
+      const r = await apiFetch(`/analyzers/coauthorship/${domainId}?${params.toString()}`);
       if (!r.ok) throw new Error(`Server responded with ${r.status}`);
       setData(await r.json());
     } catch (err) {
@@ -117,7 +125,7 @@ export default function CoauthorshipPage() {
       const result = await r.json();
       setBackfillState({ running: false, result, error: null });
       // Refresh the network with new data
-      fetchNetwork(activeDomainId, minWeight);
+      fetchNetwork(activeDomainId, minWeight, true);
     } catch (err) {
       setBackfillState({
         running: false,
@@ -240,7 +248,7 @@ export default function CoauthorshipPage() {
         <ErrorBanner
           message={t("page.coauthorship.error_load")}
           detail={error}
-          onRetry={() => fetchNetwork(activeDomainId, minWeight)}
+          onRetry={() => fetchNetwork(activeDomainId, minWeight, true)}
         />
       )}
 
