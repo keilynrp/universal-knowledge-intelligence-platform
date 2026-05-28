@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import {
   Area,
   AreaChart,
@@ -15,7 +16,13 @@ import { useDomain } from "../../contexts/DomainContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { apiFetch } from "@/lib/api";
 import { SkeletonList, ErrorBanner, EmptyState as UiEmptyState } from "../../components/ui";
-import { COUNTRY_COORDS, flagEmoji, project } from "./countryMeta";
+import { flagEmoji } from "./countryMeta";
+
+// Lazy-load WorldMap so d3-geo + the atlas (~140 KB gz) only ship to this page.
+const WorldMap = dynamic(
+  () => import("../../components/geo/WorldMap").then((m) => m.WorldMap),
+  { ssr: false, loading: () => <div className="h-[420px] animate-pulse bg-slate-100 dark:bg-slate-900" /> },
+);
 
 interface Country {
   country_code: string;
@@ -65,10 +72,6 @@ const SORT_OPTIONS = [
 
 const MAP_W = 1000;
 const MAP_H = 500;
-const SELECTION_ZOOM = 3;
-const ZOOM_MIN = 1;
-const ZOOM_MAX = 8;
-const ZOOM_STEP = 1.4;
 
 function KpiCard({ label, value, accent }: { label: string; value: string; accent: string }) {
   return (
@@ -107,127 +110,6 @@ export default function GeographicPage() {
   const [detail, setDetail] = useState<CountryDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [hover, setHover] = useState<{ code: string; x: number; y: number } | null>(null);
-
-  // Manual zoom/pan state. `manualOverride` distinguishes user-driven zoom
-  // (which should ignore selection-based auto-zoom) from the default state.
-  const [zoom, setZoom] = useState<number>(1);
-  const [pan, setPan] = useState<{ tx: number; ty: number }>({ tx: 0, ty: 0 });
-  const [manualOverride, setManualOverride] = useState<boolean>(false);
-  const [isPanning, setIsPanning] = useState<boolean>(false);
-
-  const mapRef = useRef<SVGSVGElement | null>(null);
-  const dragRef = useRef<{
-    startX: number;
-    startY: number;
-    startTx: number;
-    startTy: number;
-    moved: boolean;
-  } | null>(null);
-
-  const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
-
-  const zoomAtCenter = useCallback((nextZoom: number) => {
-    const z = clampZoom(nextZoom);
-    if (z === ZOOM_MIN) {
-      setZoom(1);
-      setPan({ tx: 0, ty: 0 });
-      setManualOverride(false);
-      return;
-    }
-    setManualOverride(true);
-    setZoom(z);
-    // Keep the map center invariant: with current pan/zoom, the visible
-    // center maps to ((MAP_W/2 - pan.tx)/zoom, ...). After changing zoom we
-    // recompute pan so that same point remains centered.
-    setPan((prev) => {
-      // We don't have the prior zoom inside the setter, but since the buttons
-      // step symmetrically and the initial pan is (0,0), an anchored center is
-      // already preserved by the SVG viewBox + xMidYMid meet. Pan only drifts
-      // if user combines manual + selection — which we explicitly disallow.
-      return prev;
-    });
-  }, []);
-
-  const handleZoomIn = useCallback(() => zoomAtCenter(zoom * ZOOM_STEP), [zoom, zoomAtCenter]);
-  const handleZoomOut = useCallback(() => zoomAtCenter(zoom / ZOOM_STEP), [zoom, zoomAtCenter]);
-  const handleZoomReset = useCallback(() => {
-    setZoom(1);
-    setPan({ tx: 0, ty: 0 });
-    setManualOverride(false);
-  }, []);
-
-  const handleWheel = useCallback(
-    (e: React.WheelEvent<SVGSVGElement>) => {
-      e.preventDefault();
-      const dir = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
-      zoomAtCenter(zoom * dir);
-    },
-    [zoom, zoomAtCenter],
-  );
-
-  // ── Drag-to-pan ─────────────────────────────────────────────────────────
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent<SVGSVGElement>) => {
-      // Skip pan when the press starts on a marker — let its click fire.
-      const target = e.target as Element;
-      if (target.closest('[data-marker]')) return;
-      // Ignore non-primary buttons.
-      if (e.button !== 0) return;
-      e.preventDefault();
-      try {
-        mapRef.current?.setPointerCapture(e.pointerId);
-      } catch {
-        // setPointerCapture can fail in non-mouse harnesses — ignore.
-      }
-      dragRef.current = {
-        startX: e.clientX,
-        startY: e.clientY,
-        startTx: pan.tx,
-        startTy: pan.ty,
-        moved: false,
-      };
-    },
-    [pan.tx, pan.ty],
-  );
-
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent<SVGSVGElement>) => {
-      const drag = dragRef.current;
-      const svg = mapRef.current;
-      if (!drag || !svg) return;
-      const dx = e.clientX - drag.startX;
-      const dy = e.clientY - drag.startY;
-      if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 3) return;
-      if (!drag.moved) {
-        drag.moved = true;
-        setIsPanning(true);
-        setManualOverride(true);
-      }
-      // Convert client px → viewBox units (the SVG is sized by CSS but
-      // its internal coordinate system is MAP_W × MAP_H).
-      const rect = svg.getBoundingClientRect();
-      const sx = rect.width > 0 ? MAP_W / rect.width : 1;
-      const sy = rect.height > 0 ? MAP_H / rect.height : 1;
-      setPan({
-        tx: drag.startTx + dx * sx,
-        ty: drag.startTy + dy * sy,
-      });
-    },
-    [],
-  );
-
-  const handlePointerUp = useCallback(
-    (e: React.PointerEvent<SVGSVGElement>) => {
-      try {
-        mapRef.current?.releasePointerCapture(e.pointerId);
-      } catch {
-        // ignore
-      }
-      dragRef.current = null;
-      setIsPanning(false);
-    },
-    [],
-  );
 
   const fetchGeo = useCallback(
     async (
@@ -296,28 +178,6 @@ export default function GeographicPage() {
   const maxCitationSum = visibleCountries.length
     ? Math.max(...visibleCountries.map((c) => c.citation_sum), 1)
     : 1;
-
-  // Map pan/zoom: manual user zoom takes precedence over selection-based auto-zoom.
-  const mapTransform = useMemo(() => {
-    if (manualOverride) {
-      return `translate(${pan.tx} ${pan.ty}) scale(${zoom})`;
-    }
-    if (!selected || !COUNTRY_COORDS[selected]) {
-      return "translate(0 0) scale(1)";
-    }
-    const c = COUNTRY_COORDS[selected];
-    const { x, y } = project(c.lat, c.lon, MAP_W, MAP_H);
-    const tx = MAP_W / 2 - x * SELECTION_ZOOM;
-    const ty = MAP_H / 2 - y * SELECTION_ZOOM;
-    return `translate(${tx} ${ty}) scale(${SELECTION_ZOOM})`;
-  }, [manualOverride, pan.tx, pan.ty, zoom, selected]);
-
-  // Effective zoom level shown in the controls (selection auto-zoom or manual).
-  const effectiveZoom = manualOverride
-    ? zoom
-    : selected && COUNTRY_COORDS[selected]
-      ? SELECTION_ZOOM
-      : 1;
 
   const selectedCountry = countries.find((c) => c.country_code === selected) || null;
 
@@ -518,199 +378,50 @@ export default function GeographicPage() {
                   {visibleCountries.length} {t("page.geographic.active_countries") || "active"}
                 </span>
               </div>
-              <div className="relative h-[420px]">
-                {/* Zoom controls overlay */}
-                <div
-                  data-testid="map-zoom-controls"
-                  className="absolute right-3 top-3 z-10 flex flex-col gap-1 rounded-lg border border-gray-200 bg-white/90 p-1 shadow-sm backdrop-blur-sm dark:border-gray-700 dark:bg-gray-900/90"
-                >
-                  <button
-                    type="button"
-                    onClick={handleZoomIn}
-                    disabled={effectiveZoom >= ZOOM_MAX}
-                    aria-label={t("page.geographic.zoom_in") || "Zoom in"}
-                    title={t("page.geographic.zoom_in") || "Zoom in"}
-                    className="flex h-7 w-7 items-center justify-center rounded text-base font-bold text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-gray-200 dark:hover:bg-gray-800"
-                  >
-                    +
-                  </button>
-                  <div
-                    aria-label="zoom level"
-                    className="select-none text-center text-[9px] font-mono text-gray-500 dark:text-gray-400"
-                  >
-                    {effectiveZoom.toFixed(1)}×
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleZoomOut}
-                    disabled={effectiveZoom <= ZOOM_MIN}
-                    aria-label={t("page.geographic.zoom_out") || "Zoom out"}
-                    title={t("page.geographic.zoom_out") || "Zoom out"}
-                    className="flex h-7 w-7 items-center justify-center rounded text-base font-bold text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-gray-200 dark:hover:bg-gray-800"
-                  >
-                    −
-                  </button>
-                  {(manualOverride || selected) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleZoomReset();
-                        setSelected(null);
-                      }}
-                      aria-label={t("page.geographic.zoom_reset") || "Reset zoom"}
-                      title={t("page.geographic.zoom_reset") || "Reset zoom"}
-                      className="flex h-7 w-7 items-center justify-center rounded text-xs font-semibold text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
-                    >
-                      ⟲
-                    </button>
-                  )}
-                </div>
-
-                <svg
-                  ref={mapRef}
-                  viewBox={`0 0 ${MAP_W} ${MAP_H}`}
-                  className={`h-full w-full select-none touch-none ${
-                    isPanning ? "cursor-grabbing" : "cursor-grab"
-                  }`}
-                  preserveAspectRatio="xMidYMid meet"
-                  onWheel={handleWheel}
-                  onPointerDown={handlePointerDown}
-                  onPointerMove={handlePointerMove}
-                  onPointerUp={handlePointerUp}
-                  onPointerCancel={handlePointerUp}
-                >
-                  <defs>
-                    <radialGradient id="markerGlow" cx="50%" cy="50%" r="50%">
-                      <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.55" />
-                      <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
-                    </radialGradient>
-                    <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
-                      <path d="M50 0H0v50" fill="none" stroke="currentColor" strokeOpacity="0.06" strokeWidth="0.5" />
-                    </pattern>
-                  </defs>
-
-                  <g
-                    className="text-slate-400 dark:text-slate-600"
-                    style={{
-                      transition: isPanning
-                        ? "none"
-                        : "transform 700ms cubic-bezier(0.22,1,0.36,1)",
-                    }}
-                    transform={mapTransform}
-                  >
-                    <rect width={MAP_W} height={MAP_H} fill="url(#grid)" />
-                    {/* Graticule */}
-                    {[-60, -30, 0, 30, 60].map((lat) => {
-                      const { y } = project(lat, 0, MAP_W, MAP_H);
-                      return (
-                        <line
-                          key={`lat${lat}`}
-                          x1={0}
-                          x2={MAP_W}
-                          y1={y}
-                          y2={y}
-                          stroke="currentColor"
-                          strokeOpacity={lat === 0 ? 0.18 : 0.08}
-                          strokeWidth={lat === 0 ? 1 : 0.5}
-                          strokeDasharray={lat === 0 ? undefined : "3 6"}
-                        />
-                      );
-                    })}
-                    {[-120, -60, 0, 60, 120].map((lon) => {
-                      const { x } = project(0, lon, MAP_W, MAP_H);
-                      return (
-                        <line
-                          key={`lon${lon}`}
-                          y1={0}
-                          y2={MAP_H}
-                          x1={x}
-                          x2={x}
-                          stroke="currentColor"
-                          strokeOpacity={lon === 0 ? 0.18 : 0.08}
-                          strokeWidth={lon === 0 ? 1 : 0.5}
-                          strokeDasharray={lon === 0 ? undefined : "3 6"}
-                        />
-                      );
-                    })}
-
-                    {/* Markers */}
-                    {visibleCountries.map((c) => {
-                      const coord = COUNTRY_COORDS[c.country_code];
-                      if (!coord) return null;
-                      const { x, y } = project(coord.lat, coord.lon, MAP_W, MAP_H);
-                      const ratio = c.entity_count / maxEntityCount;
-                      const r = 4 + Math.sqrt(ratio) * 22;
-                      const isSel = selected === c.country_code;
-                      return (
-                        <g
-                          key={c.country_code}
-                          data-marker={c.country_code}
-                          transform={`translate(${x} ${y})`}
-                          className="cursor-pointer"
-                          onClick={() => {
-                            // Suppress click that arrives after a drag.
-                            if (dragRef.current === null) {
-                              setSelected(c.country_code);
-                            }
-                          }}
-                          onMouseEnter={() =>
-                            setHover({ code: c.country_code, x, y })
-                          }
-                          onMouseLeave={() => setHover(null)}
-                        >
-                          <circle r={r * 1.6} fill="url(#markerGlow)" opacity={isSel ? 1 : 0.6} />
-                          <circle
-                            r={r}
-                            fill={isSel ? "#2563eb" : "#3b82f6"}
-                            fillOpacity={isSel ? 0.85 : 0.55}
-                            stroke={isSel ? "#1d4ed8" : "#1e40af"}
-                            strokeWidth={isSel ? 2 : 0.8}
-                          />
-                          {(isSel || r > 12) && (
-                            <text
-                              y={-r - 6}
-                              textAnchor="middle"
-                              fontSize={isSel ? 14 : 11}
-                              className="fill-slate-700 dark:fill-slate-200"
-                              fontWeight={600}
-                            >
-                              {flagEmoji(c.country_code)} {c.country_code}
-                            </text>
-                          )}
-                        </g>
-                      );
-                    })}
-                  </g>
-                </svg>
-
-                {/* Hover tooltip overlay */}
-                {hover && (() => {
-                  const hc = visibleCountries.find((c) => c.country_code === hover.code);
-                  if (!hc) return null;
-                  // Project hover marker → map % position. With zoom + pan transform applied,
-                  // anchor tooltip at top-center.
-                  const leftPct = (hover.x / MAP_W) * 100;
-                  const topPct = (hover.y / MAP_H) * 100;
-                  return (
-                    <div
-                      className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-lg border border-gray-200 bg-white/95 px-3 py-2 text-xs shadow-lg backdrop-blur-sm dark:border-gray-700 dark:bg-gray-900/95"
-                      style={{ left: `${leftPct}%`, top: `${topPct}%` }}
-                      role="tooltip"
-                    >
-                      <div className="flex items-center gap-1.5 font-medium text-gray-900 dark:text-white">
-                        <span>{flagEmoji(hc.country_code)}</span>
-                        <span>{hc.country_name}</span>
+              <WorldMap
+                data={visibleCountries}
+                selected={selected}
+                onCountryClick={(code) => setSelected(code)}
+                onCountryHover={setHover}
+                labels={{
+                  zoomIn: t("page.geographic.zoom_in") || "Zoom in",
+                  zoomOut: t("page.geographic.zoom_out") || "Zoom out",
+                  zoomReset: t("page.geographic.zoom_reset") || "Reset zoom",
+                }}
+                screenOverlay={
+                  hover &&
+                  (() => {
+                    const hc = visibleCountries.find(
+                      (c) => c.country_code === hover.code,
+                    );
+                    if (!hc) return null;
+                    const leftPct = (hover.x / MAP_W) * 100;
+                    const topPct = (hover.y / MAP_H) * 100;
+                    return (
+                      <div
+                        className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-lg border border-gray-200 bg-white/95 px-3 py-2 text-xs shadow-lg backdrop-blur-sm dark:border-gray-700 dark:bg-gray-900/95"
+                        style={{ left: `${leftPct}%`, top: `${topPct}%` }}
+                        role="tooltip"
+                      >
+                        <div className="flex items-center gap-1.5 font-medium text-gray-900 dark:text-white">
+                          <span>{flagEmoji(hc.country_code)}</span>
+                          <span>{hc.country_name}</span>
+                        </div>
+                        <div className="mt-1 text-gray-600 dark:text-gray-300">
+                          <span className="tabular-nums">
+                            {hc.entity_count.toLocaleString()}
+                          </span>{" "}
+                          {t("page.geographic.entities").toLowerCase()} ·{" "}
+                          <span className="tabular-nums">
+                            {hc.citation_sum.toLocaleString()}
+                          </span>{" "}
+                          {t("page.geographic.citations").toLowerCase()}
+                        </div>
                       </div>
-                      <div className="mt-1 text-gray-600 dark:text-gray-300">
-                        <span className="tabular-nums">{hc.entity_count.toLocaleString()}</span>{" "}
-                        {t("page.geographic.entities").toLowerCase()} ·{" "}
-                        <span className="tabular-nums">{hc.citation_sum.toLocaleString()}</span>{" "}
-                        {t("page.geographic.citations").toLowerCase()}
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
+                    );
+                  })()
+                }
+              />
             </div>
 
             {/* Detail / inspection panel */}
