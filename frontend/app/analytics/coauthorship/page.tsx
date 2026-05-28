@@ -66,10 +66,12 @@ export default function CoauthorshipPage() {
   const { t } = useLanguage();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+  const backfillDomain = activeDomainId === "all" ? null : activeDomainId;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<NetworkResult | null>(null);
   const [minWeight, setMinWeight] = useState(1);
+  const [selected, setSelected] = useState<string | null>(null);
   const [backfillState, setBackfillState] = useState<{
     running: boolean;
     result: { mode: string; scanned: number; with_authors: number; edges_generated: number } | null;
@@ -99,7 +101,7 @@ export default function CoauthorshipPage() {
     try {
       const r = await apiFetch("/admin/data-fixes/coauthor-edges", {
         method: "POST",
-        body: JSON.stringify({ dry_run: false, domain: activeDomainId }),
+        body: JSON.stringify({ dry_run: false, domain: backfillDomain }),
       });
       if (!r.ok) {
         // Surface the FastAPI `detail` so the admin can see the real cause.
@@ -123,11 +125,22 @@ export default function CoauthorshipPage() {
         error: err instanceof Error ? err.message : "Backfill failed",
       });
     }
-  }, [activeDomainId, minWeight, fetchNetwork]);
+  }, [activeDomainId, backfillDomain, minWeight, fetchNetwork]);
 
   const communityCount = data ? new Set(data.nodes.map((n) => n.community_id)).size : 0;
 
-  const [selected, setSelected] = useState<string | null>(null);
+  useEffect(() => {
+    if (!data || data.nodes.length === 0) {
+      setSelected(null);
+      return;
+    }
+    setSelected((current) =>
+      current && data.nodes.some((node) => node.id === current)
+        ? current
+        : data.nodes[0].id,
+    );
+  }, [data]);
+
   const selectedNode = useMemo(
     () => (data && selected ? data.nodes.find((n) => n.id === selected) || null : null),
     [data, selected],
@@ -187,7 +200,11 @@ export default function CoauthorshipPage() {
                 <span className="font-mono">
                   {backfillState.result.with_authors}
                 </span>{" "}
-                {t("page.coauthorship.backfill_entities") || "entities"}
+                {t("page.coauthorship.backfill_entities") || "entities"},{" "}
+                <span className="font-mono">
+                  {backfillState.result.edges_generated}
+                </span>{" "}
+                {t("page.coauthorship.edges").toLowerCase()}
               </span>
             )}
             {backfillState.error && (
