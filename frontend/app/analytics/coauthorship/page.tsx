@@ -5,6 +5,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useDomain } from "../../contexts/DomainContext";
 import { useLanguage } from "../../contexts/LanguageContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { SkeletonList, ErrorBanner, EmptyState as UiEmptyState } from "../../components/ui";
 
@@ -63,10 +64,17 @@ const COMMUNITY_TEXT_COLORS = [
 export default function CoauthorshipPage() {
   const { activeDomainId } = useDomain();
   const { t } = useLanguage();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<NetworkResult | null>(null);
   const [minWeight, setMinWeight] = useState(1);
+  const [backfillState, setBackfillState] = useState<{
+    running: boolean;
+    result: { mode: string; scanned: number; with_authors: number; edges_generated: number } | null;
+    error: string | null;
+  }>({ running: false, result: null, error: null });
 
   const fetchNetwork = useCallback(async (domainId: string, mw: number) => {
     setLoading(true);
@@ -84,6 +92,29 @@ export default function CoauthorshipPage() {
 
   useEffect(() => {
     fetchNetwork(activeDomainId, minWeight);
+  }, [activeDomainId, minWeight, fetchNetwork]);
+
+  const runBackfill = useCallback(async () => {
+    setBackfillState({ running: true, result: null, error: null });
+    try {
+      const r = await apiFetch("/admin/data-fixes/coauthor-edges", {
+        method: "POST",
+        body: JSON.stringify({ dry_run: false }),
+      });
+      if (!r.ok) {
+        throw new Error(`Backfill failed: ${r.status}`);
+      }
+      const result = await r.json();
+      setBackfillState({ running: false, result, error: null });
+      // Refresh the network with new data
+      fetchNetwork(activeDomainId, minWeight);
+    } catch (err) {
+      setBackfillState({
+        running: false,
+        result: null,
+        error: err instanceof Error ? err.message : "Backfill failed",
+      });
+    }
   }, [activeDomainId, minWeight, fetchNetwork]);
 
   const communityCount = data ? new Set(data.nodes.map((n) => n.community_id)).size : 0;
@@ -124,7 +155,7 @@ export default function CoauthorshipPage() {
       </div>
 
       {/* Controls */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <label className="text-sm text-gray-600 dark:text-gray-400">
           {t("page.coauthorship.min_weight")}:
         </label>
@@ -139,6 +170,39 @@ export default function CoauthorshipPage() {
         <span className="rounded bg-gray-100 px-2 py-0.5 text-sm font-mono dark:bg-gray-800">
           {minWeight}
         </span>
+
+        {isAdmin && (
+          <div className="ml-auto flex items-center gap-3">
+            {backfillState.result && (
+              <span className="text-xs text-emerald-700 dark:text-emerald-300">
+                {t("page.coauthorship.backfill_done") || "Backfill done"}:{" "}
+                <span className="font-mono">
+                  {backfillState.result.with_authors}
+                </span>{" "}
+                {t("page.coauthorship.backfill_entities") || "entities"}
+              </span>
+            )}
+            {backfillState.error && (
+              <span className="text-xs text-rose-700 dark:text-rose-300">
+                {backfillState.error}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={runBackfill}
+              disabled={backfillState.running}
+              className="rounded-md border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-200 dark:hover:bg-violet-900/50"
+              title={
+                t("page.coauthorship.backfill_tooltip") ||
+                "Materialize co-author edges for entities that were enriched before the extraction hook landed."
+              }
+            >
+              {backfillState.running
+                ? t("page.coauthorship.backfill_running") || "Running…"
+                : t("page.coauthorship.backfill_button") || "Backfill co-author edges"}
+            </button>
+          </div>
+        )}
       </div>
 
       {loading && (

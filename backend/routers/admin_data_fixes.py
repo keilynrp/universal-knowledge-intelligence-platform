@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from backend.auth import require_role
 from backend.scripts.fix_legacy_affiliations import run as run_legacy_affiliation_fix
 from backend.scripts.backfill_canonical_id_entity_type import run as run_canonical_identity_fix
+from backend.scripts.backfill_coauthor_edges import backfill as run_coauthor_backfill
 
 logger = logging.getLogger(__name__)
 
@@ -198,4 +199,82 @@ def fix_canonical_identity(
         fixed_canonical_id=int(result.get("fixed_canonical_id", 0)),
         fixed_entity_type=int(result.get("fixed_entity_type", 0)),
         skipped_duplicates=int(result.get("skipped_duplicates", 0)),
+    )
+
+
+class CoauthorBackfillRequest(BaseModel):
+    """Inputs for the CO_AUTHOR edge backfill."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    dry_run: bool = Field(
+        default=False,
+        description=(
+            "If true, count entities + estimated edges without writing. "
+            "Defaults to false because this fix is the only way to populate "
+            "the coauthorship graph for legacy data."
+        ),
+    )
+    reset: bool = Field(
+        default=False,
+        description=(
+            "Delete existing CO_AUTHOR rows before backfilling. Use only "
+            "when you want a clean audit; the script is otherwise idempotent."
+        ),
+    )
+    domain: Optional[str] = Field(
+        default=None,
+        description="Restrict to a single domain_id. None = all domains.",
+        max_length=64,
+    )
+
+
+class CoauthorBackfillResponse(BaseModel):
+    """Counters returned by the CO_AUTHOR edge backfill."""
+
+    mode: str = Field(description="'dry-run' or 'applied'")
+    reset: bool = Field(description="Whether existing CO_AUTHOR rows were wiped.")
+    scanned: int = Field(description="Total entities visited under the filter.")
+    with_authors: int = Field(description="Entities with at least 2 authors.")
+    edges_generated: int = Field(description="Edges created (or estimated in dry-run).")
+    errors: int = Field(description="Per-entity failures (rolled back individually).")
+
+
+@router.post(
+    "/coauthor-edges",
+    response_model=CoauthorBackfillResponse,
+    status_code=200,
+    summary="Backfill CO_AUTHOR edges from enrichment_authors lists",
+)
+def fix_coauthor_edges(
+    payload: CoauthorBackfillRequest,
+    _user=Depends(require_role("super_admin", "admin")),
+) -> CoauthorBackfillResponse:
+    """Materializes the coauthorship graph for entities enriched before the
+    extraction hook landed in enrichment_worker. Idempotent (upserts on
+    ``relation_type='CO_AUTHOR'`` + ``notes='A||B'``); pass ``reset=True``
+    when you want a fresh start."""
+    logger.info(
+        "admin/data-fixes/coauthor-edges dispatched dry_run=%s reset=%s domain=%s",
+        payload.dry_run,
+        payload.reset,
+        payload.domain,
+    )
+    try:
+        result = run_coauthor_backfill(
+            domain=payload.domain,
+            dry_run=payload.dry_run,
+            reset=payload.reset,
+        )
+    except Exception:
+        logger.exception("coauthor edge backfill failed")
+        raise HTTPException(status_code=500, detail="coauthor edge backfill failed")
+
+    return CoauthorBackfillResponse(
+        mode="dry-run" if payload.dry_run else "applied",
+        reset=payload.reset and not payload.dry_run,
+        scanned=int(result.get("scanned", 0)),
+        with_authors=int(result.get("with_authors", 0)),
+        edges_generated=int(result.get("edges_generated", 0)),
+        errors=int(result.get("errors", 0)),
     )

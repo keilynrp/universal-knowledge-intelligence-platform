@@ -268,6 +268,17 @@ class TestEnrichmentHook:
 
 
 class TestBackfillScript:
+    @pytest.fixture(autouse=True)
+    def _bind_script_sessionlocal(self, monkeypatch):
+        """The script does `from backend.database import SessionLocal` at
+        import time, which captures the pre-patched factory. Re-bind it on
+        the script module so the script writes to the test DB."""
+        import backend.scripts.backfill_coauthor_edges as coauthor_script
+        from backend.database import SessionLocal as PatchedSessionLocal
+
+        monkeypatch.setattr(coauthor_script, "SessionLocal", PatchedSessionLocal)
+
+
     def test_backfill_populates_existing_entities(self):
         import json
         from backend.scripts.backfill_coauthor_edges import backfill

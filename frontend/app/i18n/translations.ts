@@ -3154,6 +3154,11 @@ export const translations = {
         'page.coauthorship.pick_node': 'Pick an author',
         'page.coauthorship.pick_hint': 'Click a node in the graph to inspect their collaborators.',
         'page.coauthorship.no_collaborators': 'No collaborators in current view.',
+        'page.coauthorship.backfill_button': 'Backfill co-author edges',
+        'page.coauthorship.backfill_running': 'Running…',
+        'page.coauthorship.backfill_done': 'Backfill done',
+        'page.coauthorship.backfill_entities': 'entities',
+        'page.coauthorship.backfill_tooltip': 'Materialize co-author edges for entities enriched before the extraction hook landed. Admin-only, idempotent.',
 
         // Geographic Analysis page
         'page.geographic.title': 'Geographic Analysis',
@@ -6547,6 +6552,11 @@ export const translations = {
         'page.coauthorship.pick_node': 'Selecciona un autor',
         'page.coauthorship.pick_hint': 'Haz clic en un nodo del grafo para inspeccionar sus colaboradores.',
         'page.coauthorship.no_collaborators': 'Sin colaboradores en la vista actual.',
+        'page.coauthorship.backfill_button': 'Regenerar aristas de coautoría',
+        'page.coauthorship.backfill_running': 'Ejecutando…',
+        'page.coauthorship.backfill_done': 'Backfill completo',
+        'page.coauthorship.backfill_entities': 'entidades',
+        'page.coauthorship.backfill_tooltip': 'Materializa aristas de coautoría para entidades enriquecidas antes del hook. Solo admin, idempotente.',
 
         // Geographic Analysis page
         'page.geographic.title': 'Análisis Geográfico',

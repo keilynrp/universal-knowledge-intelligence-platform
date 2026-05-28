@@ -23,9 +23,11 @@ def _patch_session_local(monkeypatch, session_factory):
     to the test factory so the work happens on the in-memory test DB."""
     import backend.scripts.fix_legacy_affiliations as script
     import backend.scripts.backfill_canonical_id_entity_type as canonical_script
+    import backend.scripts.backfill_coauthor_edges as coauthor_script
 
     monkeypatch.setattr(script, "SessionLocal", session_factory)
     monkeypatch.setattr(canonical_script, "SessionLocal", session_factory)
+    monkeypatch.setattr(coauthor_script, "SessionLocal", session_factory)
     yield
 
 
@@ -289,3 +291,115 @@ class TestBehavior:
                 assert attrs["_canonical_backfill"]["entity_type"].startswith("normalized_json.")
         finally:
             _cleanup(session_factory, [eid])
+
+
+# ── Coauthor edge backfill ──────────────────────────────────────────────────
+
+
+class TestCoauthorBackfillRBAC:
+    def test_unauthenticated_returns_401(self, client):
+        resp = client.post("/admin/data-fixes/coauthor-edges", json={})
+        assert resp.status_code == 401
+
+    def test_viewer_is_forbidden(self, client, viewer_headers):
+        resp = client.post(
+            "/admin/data-fixes/coauthor-edges",
+            json={"dry_run": True},
+            headers=viewer_headers,
+        )
+        assert resp.status_code == 403
+
+    def test_editor_is_forbidden(self, client, editor_headers):
+        resp = client.post(
+            "/admin/data-fixes/coauthor-edges",
+            json={"dry_run": True},
+            headers=editor_headers,
+        )
+        assert resp.status_code == 403
+
+
+class TestCoauthorBackfillBehavior:
+    def test_empty_db_returns_zero_counters(self, client, auth_headers):
+        resp = client.post(
+            "/admin/data-fixes/coauthor-edges",
+            json={"dry_run": False, "domain": "__coauth_admin_empty__"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["mode"] == "applied"
+        assert body["scanned"] == 0
+        assert body["with_authors"] == 0
+        assert body["edges_generated"] == 0
+        assert body["errors"] == 0
+
+    def test_apply_populates_edges(self, client, auth_headers, session_factory):
+        # Seed two multi-author entities in a unique domain.
+        with session_factory() as db:
+            for authors in [["Alice", "Bob", "Carol"], ["Alice", "Bob"]]:
+                db.add(models.RawEntity(
+                    primary_label="Co-author seed",
+                    domain="__coauth_admin_apply__",
+                    enrichment_status="completed",
+                    attributes_json=json.dumps({"enrichment_authors": authors}),
+                ))
+            db.commit()
+
+        resp = client.post(
+            "/admin/data-fixes/coauthor-edges",
+            json={"dry_run": False, "domain": "__coauth_admin_apply__"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["mode"] == "applied"
+        assert body["scanned"] == 2
+        assert body["with_authors"] == 2
+        assert body["edges_generated"] >= 2
+
+        # Verify rows were actually persisted.
+        with session_factory() as db:
+            count = (
+                db.query(models.EntityRelationship)
+                .filter(models.EntityRelationship.relation_type == "CO_AUTHOR")
+                .count()
+            )
+            assert count >= 3  # ≥ 3 pairs from one 3-author + one 2-author paper
+
+    def test_dry_run_does_not_write(self, client, auth_headers, session_factory):
+        with session_factory() as db:
+            db.add(models.RawEntity(
+                primary_label="Dry-run seed",
+                domain="__coauth_admin_dryrun__",
+                enrichment_status="completed",
+                attributes_json=json.dumps(
+                    {"enrichment_authors": ["X", "Y", "Z"]},
+                ),
+            ))
+            db.commit()
+
+        resp = client.post(
+            "/admin/data-fixes/coauthor-edges",
+            json={"dry_run": True, "domain": "__coauth_admin_dryrun__"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["mode"] == "dry-run"
+
+        with session_factory() as db:
+            count = (
+                db.query(models.EntityRelationship)
+                .filter(models.EntityRelationship.relation_type == "CO_AUTHOR")
+                .filter(models.EntityRelationship.notes.like("X%||%"))
+                .count()
+            )
+            assert count == 0
+
+    def test_unknown_field_rejected(self, client, auth_headers):
+        resp = client.post(
+            "/admin/data-fixes/coauthor-edges",
+            json={"dry_run": True, "garbage": 1},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
+
