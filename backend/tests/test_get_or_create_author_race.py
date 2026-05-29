@@ -1,11 +1,15 @@
 """get_or_create_author upsert semantics + merge_authors + the race code path.
 
 Identity model = Plan B (optimistic collapse): same name_key => same author.
-The concurrency test exercises the IntegrityError->refetch path; under UKIP's
-StaticPool test engine all sessions share one SQLite connection, so this proves
-the recovery code path, not true multi-process contention (see conftest).
+
+The "lost race" recovery (IntegrityError -> rollback -> refetch) is verified
+DETERMINISTICALLY by forcing the pre-insert existence check to miss exactly
+once. A real-thread test was rejected: UKIP's StaticPool test engine shares one
+SQLite connection across sessions, so concurrent commits are non-deterministic
+and produce flaky results under full-suite load — the recovery *code path* is
+what matters, and this proves it without flakiness.
 """
-import threading
+from sqlalchemy.orm import Query
 
 from backend import models
 from backend.coauthorship.identity import get_or_create_author, merge_authors
@@ -63,37 +67,30 @@ def test_merge_authors_moves_publications_and_writes_audit(db):
     assert loser.display_name in winner.aliases_list
 
 
-def test_concurrent_get_or_create_one_row(db_factory):
-    """5 threads insert 'New Author' simultaneously.
+def test_get_or_create_recovers_from_lost_race(db, monkeypatch):
+    """A concurrent writer can insert the same name_key between our existence
+    check and our INSERT. Simulate that 'lost race' by forcing the existence
+    check to miss exactly once: get_or_create then attempts an INSERT that
+    collides on the UNIQUE name_key, raises IntegrityError, rolls back, and
+    refetches the canonical row. Result must converge to one id, one row."""
+    canonical = get_or_create_author(db, "New Author")  # creates the real row
+    key = canonical.name_key
 
-    The durable invariant — guaranteed by the UNIQUE name_key constraint and
-    the IntegrityError->refetch recovery — is that EXACTLY ONE row exists
-    afterward, and every successful caller resolves to that same id. Per-thread
-    StaticPool artifacts are tolerated (UKIP shares one SQLite connection across
-    sessions; see conftest db_factory caveat)."""
-    results = []
-    errors = []
-    barrier = threading.Barrier(5)
+    real_first = Query.first
+    state = {"missed": False}
 
-    def worker():
-        s = db_factory()
-        try:
-            barrier.wait()
-            a = get_or_create_author(s, "New Author")
-            results.append(a.id)
-        except Exception as exc:  # StaticPool cross-thread artifact, not a logic error
-            errors.append(exc)
-        finally:
-            s.close()
+    def flaky_first(self):
+        # Miss only the very next existence check (the one inside the second
+        # get_or_create_author call), then behave normally.
+        if not state["missed"]:
+            state["missed"] = True
+            return None
+        return real_first(self)
 
-    threads = [threading.Thread(target=worker) for _ in range(5)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    monkeypatch.setattr(Query, "first", flaky_first, raising=True)
 
-    assert results, f"no worker produced an author; errors={errors}"
-    assert len(set(results)) == 1, "successful callers must converge to one id"
-    rows = db_factory().query(models.Author).filter_by(name_key="author_new").all()
-    assert len(rows) == 1, "exactly one canonical row must exist"
-    assert rows[0].id == results[0]
+    again = get_or_create_author(db, "New Author")
+    monkeypatch.undo()
+
+    assert again.id == canonical.id, "lost-race recovery must return the canonical row"
+    assert db.query(models.Author).filter_by(name_key=key).count() == 1
