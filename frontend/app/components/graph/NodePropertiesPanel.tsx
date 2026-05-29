@@ -42,26 +42,29 @@ export function NodePropertiesPanel({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!authorId) {
-      setDetail(null);
-      setError(null);
-      return;
-    }
+    // When nothing is selected the component renders the empty-panel branch
+    // below, so we skip the fetch entirely. All setState lives inside the async
+    // `load()` (not the effect body) to satisfy react-hooks/set-state-in-effect.
+    // Stale `detail` stays hidden behind the `if (!authorId)` render guard.
+    if (!authorId) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    apiFetch(`/analyzers/coauthorship/${domainId}/author/${authorId}`)
-      .then(async (r) => {
+
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const r = await apiFetch(`/analyzers/coauthorship/${domainId}/author/${authorId}`);
         if (!r.ok) throw new Error(`Server responded with ${r.status}`);
         const body = (await r.json()) as AuthorDetail;
         if (!cancelled) setDetail(body);
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load author");
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    };
+
+    void load();
     return () => {
       cancelled = true;
     };

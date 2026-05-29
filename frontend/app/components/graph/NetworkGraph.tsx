@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { GraphEdge, GraphNode } from "../../types/graph";
 import { useForceLayout, type PositionedNode } from "./useForceLayout";
