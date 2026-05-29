@@ -215,3 +215,17 @@ def test_network_auto_materializes_stats_when_edges_exist(client, auth_headers, 
     assert {n["label"] for n in body["nodes"]} == {"Auto Anna", "Auto Ben"}
     assert body["edges"] == [{"source": str(a.id), "target": str(b.id), "weight": 4}]
     assert db_session.query(models.AuthorStats).filter_by(domain_id="science").count() == 2
+
+
+def test_network_falls_back_to_populated_coauthor_domain(client, auth_headers, read_on, db_session):
+    a = _author(db_session, "fallback_a", "Fallback Anna")
+    b = _author(db_session, "fallback_b", "Fallback Ben")
+    _edge(db_session, a, b, domain="science", org_id=0, weight=2)
+    db_session.commit()
+
+    r = client.get("/analyzers/coauthorship/all", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["requested_domain_id"] == "all"
+    assert body["domain_id"] == "science"
+    assert {n["label"] for n in body["nodes"]} == {"Fallback Anna", "Fallback Ben"}
