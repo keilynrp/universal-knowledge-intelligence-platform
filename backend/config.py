@@ -19,14 +19,16 @@ def _flag(name: str, default: str = "false") -> bool:
 # COAUTHOR_V2_SHADOW — V2 artifacts computed alongside legacy (no read impact).
 # COAUTHOR_V2_READ   — network/author endpoints serve from V2 tables.
 #
-# F5 cutover (2026-05-29): WRITE + READ now default ON — V2 is the live path.
-# The legacy code + these flags are KEPT one release as a safety net: set
-# COAUTHOR_V2_READ=false (and/or WRITE=false) in the environment to fall back.
-# REQUIRED at deploy: run `python -m backend.scripts.migrate_coauthor_graph`
-# once to backfill V2 tables, or the graph reads empty until the worker
-# re-materializes on the next enrichment pass.
-# Tests pin these OFF (see conftest) so suites stay deterministic and opt in
-# per-case via the write_on / read_on fixtures.
-COAUTHOR_V2_WRITE = _flag("COAUTHOR_V2_WRITE", "true")
-COAUTHOR_V2_SHADOW = _flag("COAUTHOR_V2_SHADOW", "true")
-COAUTHOR_V2_READ = _flag("COAUTHOR_V2_READ", "true")
+# Defaults OFF for a safe inert deploy: shipping this code does NOT change
+# production behavior (legacy coauthorship path keeps serving). Cutover is a
+# deliberate, ops-controlled opt-in:
+#   1. Deploy (flags off → no behavior change; V2 tables created empty).
+#   2. Run `python -m backend.scripts.migrate_coauthor_graph` against prod
+#      (or POST /admin/data-fixes/migrate-coauthor-graph as admin) to backfill.
+#   3. Verify /diagnostics shows edges_after_scope == edges_in_storage.
+#   4. Set COAUTHOR_V2_WRITE=true and COAUTHOR_V2_READ=true in the prod env and
+#      restart — V2 becomes the live write + read path. Flip back to false to
+#      roll back instantly, no redeploy.
+COAUTHOR_V2_WRITE = _flag("COAUTHOR_V2_WRITE", "false")
+COAUTHOR_V2_SHADOW = _flag("COAUTHOR_V2_SHADOW", "false")
+COAUTHOR_V2_READ = _flag("COAUTHOR_V2_READ", "false")
