@@ -10,6 +10,8 @@ export interface GraphNode {
   centrality: number;
   /** Cluster / community membership index. */
   community_id: number;
+  /** Publication count — drives node radius in the coauthorship graph. */
+  total_publications?: number;
   /** Optional secondary scalar (publication count, citation impact, …). */
   weight?: number;
 }

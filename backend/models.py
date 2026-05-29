@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, DateTime, Text, Float, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, DateTime, Text, Float, UniqueConstraint, Index
 from .database import Base
 
 
@@ -952,3 +952,112 @@ class EnrichmentSchedulerRun(Base):
     started_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     finished_at  = Column(DateTime, nullable=True)
     notes        = Column(Text, nullable=True)
+
+
+# ── V2 Coauthorship tables (Sprint 2026-05-28 refactor) ────────────────────
+
+class Author(Base):
+    __tablename__ = "authors"
+    id = Column(Integer, primary_key=True, index=True)
+    name_key = Column(String, unique=True, nullable=False, index=True)
+    display_name = Column(String, nullable=False)
+    aliases = Column(Text, default="[]")  # JSON list, capped 50 entries in worker
+    orcid = Column(String, unique=True, nullable=True, index=True)
+    authority_record_id = Column(Integer, ForeignKey("authority_records.id"), nullable=True)
+    first_seen_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    last_seen_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    @property
+    def aliases_list(self) -> list[str]:
+        import json
+        try:
+            return json.loads(self.aliases or "[]")
+        except (ValueError, TypeError):
+            return []
+
+
+class AuthorPublication(Base):
+    __tablename__ = "author_publications"
+    author_id = Column(Integer, ForeignKey("authors.id", ondelete="CASCADE"), primary_key=True)
+    entity_id = Column(Integer, ForeignKey("raw_entities.id", ondelete="CASCADE"), primary_key=True)
+    org_id = Column(Integer, nullable=False, default=0, index=True)
+    domain_id = Column(String, nullable=False, index=True)
+    position = Column(Integer, nullable=True)
+    __table_args__ = (
+        Index("ix_author_pub_scope", "author_id", "org_id", "domain_id"),
+        Index("ix_author_pub_entity", "entity_id"),
+    )
+
+
+class CoauthorEdge(Base):
+    __tablename__ = "coauthor_edges"
+    author_a_id = Column(Integer, ForeignKey("authors.id", ondelete="CASCADE"), primary_key=True)
+    author_b_id = Column(Integer, ForeignKey("authors.id", ondelete="CASCADE"), primary_key=True)
+    org_id = Column(Integer, primary_key=True, nullable=False, default=0)
+    domain_id = Column(String, primary_key=True, nullable=False)
+    weight = Column(Integer, nullable=False, default=1)
+    last_seen_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    __table_args__ = (
+        Index("ix_coauthor_edge_scope_weight", "org_id", "domain_id", "weight"),
+    )
+
+
+class AuthorStats(Base):
+    __tablename__ = "author_stats"
+    author_id = Column(Integer, ForeignKey("authors.id", ondelete="CASCADE"), primary_key=True)
+    org_id = Column(Integer, primary_key=True, nullable=False, default=0)
+    domain_id = Column(String, primary_key=True, nullable=False)
+    degree = Column(Integer, default=0)
+    centrality = Column(Float, default=0.0)
+    community_id = Column(Integer, default=0)
+    publication_count = Column(Integer, default=0)
+    computed_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    __table_args__ = (
+        Index("ix_author_stats_centrality", "org_id", "domain_id", "centrality"),
+        Index("ix_author_stats_community", "org_id", "domain_id", "community_id"),
+    )
+
+
+class AuthorMergeSuggestion(Base):
+    __tablename__ = "author_merge_suggestions"
+    id = Column(Integer, primary_key=True, index=True)
+    author_a_id = Column(Integer, ForeignKey("authors.id", ondelete="CASCADE"), nullable=False)
+    author_b_id = Column(Integer, ForeignKey("authors.id", ondelete="CASCADE"), nullable=False)
+    reason = Column(String)
+    evidence = Column(Text)  # JSON
+    status = Column(String, default="pending", index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+
+class AuthorMergeAudit(Base):
+    __tablename__ = "author_merge_audit"
+    id = Column(Integer, primary_key=True, index=True)
+    winner_author_id = Column(Integer, nullable=False)
+    loser_author_id = Column(Integer, nullable=False)
+    tier = Column(String, nullable=False)  # strong | probable | manual
+    reason = Column(String)
+    evidence = Column(Text)  # JSON
+    performed_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    performed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+
+class CoauthorDirtyScope(Base):
+    __tablename__ = "coauthor_dirty_scopes"
+    org_id = Column(Integer, primary_key=True, nullable=False)
+    domain_id = Column(String, primary_key=True, nullable=False)
+    enqueued_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    reason = Column(String, nullable=False)
+
+
+class CoauthorContribution(Base):
+    """Idempotency log: ensures one (entity, author_a, author_b) triple
+    contributes exactly +1 to a coauthor_edges.weight, regardless of how
+    many times the worker or migration script processes that entity."""
+    __tablename__ = "coauthor_contributions"
+    entity_id = Column(Integer, ForeignKey("raw_entities.id", ondelete="CASCADE"), primary_key=True)
+    author_a_id = Column(Integer, ForeignKey("authors.id", ondelete="CASCADE"), primary_key=True)
+    author_b_id = Column(Integer, ForeignKey("authors.id", ondelete="CASCADE"), primary_key=True)
+    org_id = Column(Integer, nullable=False, default=0)
+    domain_id = Column(String, nullable=False)

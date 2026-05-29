@@ -327,6 +327,113 @@ def _extract_and_persist_coauthor_edges(db: Session, entity: models.RawEntity) -
         )
 
 
+def write_coauthor_artifacts(db: Session, entity: models.RawEntity, *, force: bool = False) -> None:
+    """Write V2 coauthorship rows for one entity. Idempotent.
+
+    Gated by ``config.COAUTHOR_V2_WRITE`` unless ``force=True`` (the migration
+    script orchestrates writes regardless of the runtime flag — safer than
+    mutating the global flag).
+
+    **Transaction ownership: the caller owns the outer commit.** This helper
+    resolves authors via ``get_or_create_author`` (which commits author rows on
+    its own) and then stages publications / edges / contributions plus the
+    dirty-scope marker WITHOUT committing them. The caller commits so the
+    coauthor write lands as one unit with — or right after — the enrichment.
+
+    Does NOT touch legacy ``entity_relationships`` (spec Appendix B item 2).
+    The V2 legacy/global scope sentinel is ``org_id = 0`` (distinct from
+    tenant_access's ``LEGACY_GLOBAL_ORG_ID = -1``); a NULL entity org maps to 0.
+    """
+    from itertools import combinations
+
+    from sqlalchemy.exc import IntegrityError
+
+    from backend import config
+    from backend.analyzers.coauthorship import authors_from_attrs, MAX_AUTHORS_FOR_COAUTH
+    from backend.coauthorship.identity import get_or_create_author
+
+    if not force and not config.COAUTHOR_V2_WRITE:
+        return
+
+    authors = authors_from_attrs(entity.attributes_json)
+    if len(authors) < 2:
+        return
+
+    org_id = entity.org_id if entity.org_id is not None else 0
+    domain_id = entity.domain or "default"
+
+    # 1. Resolve authors (get_or_create commits author rows individually).
+    author_ids: list[tuple[int, int]] = []
+    for pos, name in enumerate(authors[:MAX_AUTHORS_FOR_COAUTH], start=1):
+        a = get_or_create_author(db, name)
+        author_ids.append((a.id, pos))
+
+    # 2. Tenancy reassignment: if this entity's publications were previously
+    #    recorded under a different scope, move them and enqueue the old scope
+    #    for recompute (its edges lose this entity's contributions).
+    prior_scopes = {
+        (p.org_id, p.domain_id)
+        for p in db.query(models.AuthorPublication).filter_by(entity_id=entity.id).all()
+    }
+    if prior_scopes and (org_id, domain_id) not in prior_scopes:
+        for prior_org, prior_dom in prior_scopes:
+            db.merge(models.CoauthorDirtyScope(
+                org_id=prior_org, domain_id=prior_dom, reason="reassign"))
+        db.query(models.AuthorPublication).filter_by(entity_id=entity.id).update(
+            {"org_id": org_id, "domain_id": domain_id}, synchronize_session=False)
+        db.query(models.CoauthorContribution).filter_by(entity_id=entity.id).delete(
+            synchronize_session=False)
+
+    # 3. Upsert publications (idempotent via PK on author_id + entity_id).
+    existing_pubs = {
+        p.author_id
+        for p in db.query(models.AuthorPublication.author_id)
+        .filter_by(entity_id=entity.id)
+        .all()
+    }
+    for aid, pos in author_ids:
+        if aid not in existing_pubs:
+            db.add(models.AuthorPublication(
+                author_id=aid, entity_id=entity.id,
+                org_id=org_id, domain_id=domain_id, position=pos))
+
+    # 4. Flush publications BEFORE the contribution loop. A contribution
+    #    SAVEPOINT rollback must not discard the publications added above.
+    db.flush()
+
+    # 5. One contribution per (entity, author_a, author_b) triple; each triple
+    #    increments the edge weight exactly once. SAVEPOINT per pair so a
+    #    duplicate contribution rolls back only itself.
+    for (a_id, _), (b_id, _) in combinations(author_ids, 2):
+        if a_id == b_id:
+            continue  # same author resolved twice (e.g. name collision) -> no self-edge
+        lo, hi = sorted([a_id, b_id])
+        try:
+            with db.begin_nested():
+                db.add(models.CoauthorContribution(
+                    entity_id=entity.id, author_a_id=lo, author_b_id=hi,
+                    org_id=org_id, domain_id=domain_id))
+                db.flush()
+        except IntegrityError:
+            continue  # already counted — skip the edge increment
+
+        edge = (
+            db.query(models.CoauthorEdge)
+            .filter_by(author_a_id=lo, author_b_id=hi, org_id=org_id, domain_id=domain_id)
+            .first()
+        )
+        if edge:
+            edge.weight += 1
+            edge.last_seen_at = datetime.now(timezone.utc)
+        else:
+            db.add(models.CoauthorEdge(
+                author_a_id=lo, author_b_id=hi,
+                org_id=org_id, domain_id=domain_id, weight=1))
+
+    # 6. Enqueue the current scope for recompute. Caller commits.
+    db.merge(models.CoauthorDirtyScope(org_id=org_id, domain_id=domain_id, reason="enrichment"))
+
+
 def _try_epistemic_classify(db: Session, entity: models.RawEntity) -> None:
     """Auto-classify entity if its domain has epistemology configuration."""
     try:
@@ -368,6 +475,18 @@ def _after_enrichment_commit(
         invalidate_derived_status_cache(domain_id)
     except Exception as exc:
         logger.warning("Failed to invalidate derived-status cache for entity %s: %s", entity.id, exc)
+
+    # V2 coauthorship materialization (flag-gated; no-op unless COAUTHOR_V2_WRITE).
+    # Runs AFTER the enrichment commit, in its own unit of work, so a coauthor
+    # failure can never roll back the already-committed enrichment.
+    try:
+        write_coauthor_artifacts(db, entity)
+        db.commit()
+    except Exception:
+        logger.exception(
+            "V2 coauthor write failed for entity %s; enrichment already committed", entity.id
+        )
+        db.rollback()
 
     if entity.enrichment_status != EnrichmentStatus.completed:
         return
@@ -600,6 +719,49 @@ async def background_enrichment_worker(db_generator):
         except Exception as e:
             logger.error(f"Background worker loop error: {type(e).__name__}: {e}")
             await asyncio.sleep(10)
+
+
+_COAUTHOR_RECOMPUTE_INTERVAL_S = 30
+_COAUTHOR_RECOMPUTE_DEBOUNCE_S = 30
+
+
+async def coauthor_recompute_loop():
+    """Periodically materialize author_stats for scopes marked dirty by the
+    write hook. Polls coauthor_dirty_scopes every 30s and recomputes each scope
+    whose marker is older than the 30s debounce window (so a burst of writes to
+    one scope collapses into a single recompute)."""
+    from datetime import timedelta
+
+    from backend.database import SessionLocal
+    from backend.coauthorship.recompute import recompute_coauthor_stats
+
+    while True:
+        try:
+            await asyncio.sleep(_COAUTHOR_RECOMPUTE_INTERVAL_S)
+            db = SessionLocal()
+            try:
+                cutoff = datetime.now(timezone.utc) - timedelta(
+                    seconds=_COAUTHOR_RECOMPUTE_DEBOUNCE_S
+                )
+                scopes = (
+                    db.query(models.CoauthorDirtyScope)
+                    .filter(models.CoauthorDirtyScope.enqueued_at < cutoff)
+                    .all()
+                )
+                for scope in scopes:
+                    try:
+                        recompute_coauthor_stats(
+                            db, org_id=scope.org_id, domain_id=scope.domain_id
+                        )
+                    except Exception:
+                        logger.exception(
+                            "coauthor recompute failed for scope=(%s,%s)",
+                            scope.org_id, scope.domain_id,
+                        )
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("coauthor recompute loop iteration failed")
 
 
 def enrich_with_web_scrapers(db: Session, entity: models.RawEntity) -> bool:

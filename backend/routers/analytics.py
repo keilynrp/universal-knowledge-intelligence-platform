@@ -782,17 +782,20 @@ def analyzer_geographic_country(
 
 # ── Co-authorship Network ────────────────────────────────────────────────────
 
-@router.get("/analyzers/coauthorship/{domain_id}")
-def analyzer_coauthorship(
+# NOTE: The route decorator was removed in F4b.1. The V2 reader in
+# backend/routers/coauthorship.py now owns GET /analyzers/coauthorship/{domain_id}
+# and calls this function as the legacy fall-through when COAUTHOR_V2_READ is off.
+# F5 removes this entirely once the flag is permanently on.
+def _legacy_coauthorship_network(
     response: Response,
     domain_id: str,
-    min_weight: int = Query(default=1, ge=1),
-    limit: int | None = Query(default=None, ge=1, le=500),
-    force_refresh: bool = Query(default=False),
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    min_weight: int = 1,
+    limit: int | None = None,
+    force_refresh: bool = False,
+    db: Session = None,
+    current_user: models.User = None,
 ):
-    """Co-authorship network with degree centrality and community detection."""
+    """Legacy co-authorship network (entity_relationships CO_AUTHOR edges)."""
     response.headers["Cache-Control"] = "no-store, max-age=0, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"

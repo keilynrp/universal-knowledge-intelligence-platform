@@ -55,7 +55,9 @@ export function useForceLayout(
   const { positionedNodes, positionedEdges } = useMemo(() => {
     const map = new Map<string, PositionedNode>();
     const nodes = rawNodes.map<PositionedNode>((n) => {
-      const radius = 5 + Math.sqrt(Math.max(1, n.degree)) * 4;
+      // Radius reflects publication count (GraphDB look); fall back to degree.
+      const scalar = n.total_publications ?? n.degree;
+      const radius = Math.min(28, 6 + Math.sqrt(Math.max(0, scalar)) * 2);
       // Seed positions in a circle around the center so the simulation
       // doesn't start from (0,0) and collapse on itself.
       const angle =

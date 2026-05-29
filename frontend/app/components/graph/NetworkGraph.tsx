@@ -4,37 +4,26 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { GraphEdge, GraphNode } from "../../types/graph";
 import { useForceLayout, type PositionedNode } from "./useForceLayout";
+import { communityColor } from "./palette";
 
 /**
- * Reusable force-directed network visualisation for UKIP analytics.
+ * GraphDB/Neo4j-style force-directed network for UKIP coauthorship.
  *
- * Features:
- * - d3-force layout (memoized, only re-runs when nodes/edges identity changes)
- * - drag-to-pan on the background, drag-to-reposition on a node
- * - mouse-wheel zoom + +/− buttons + reset
- * - click → selection; hover → tooltip
- * - configurable color resolver (defaults to a 10-community palette)
- *
- * Future modules (citations, concept maps, researcher graphs) can reuse this
- * via the same data contract.
+ * - d3-force layout (memoized; reduced-motion settles instantly)
+ * - cubic-Bézier edges, thickness log(weight+1)·1.5, weight labels when zoomed
+ * - nodes colored by community (OKLCH palette), radius by publication count
+ * - hover highlights neighbors + dims the rest
+ * - click selects; arrow keys cycle a focused node's neighbors
+ * - drag-to-pan background, drag-to-reposition nodes, wheel + button zoom
  */
 export interface NetworkGraphProps {
   nodes: GraphNode[];
   edges: GraphEdge[];
   selected?: string | null;
   onNodeClick?: (id: string) => void;
-  onNodeHover?: (info: { id: string; x: number; y: number } | null) => void;
   width?: number;
   height?: number;
-  /** Custom color resolver. Default: indexed community palette. */
-  colorForNode?: (node: GraphNode) => string;
-  /** Optional overlay (e.g. legend) rendered above the SVG. */
   screenOverlay?: ReactNode;
-  labels?: {
-    zoomIn?: string;
-    zoomOut?: string;
-    zoomReset?: string;
-  };
   className?: string;
 }
 
@@ -43,36 +32,45 @@ const DEFAULT_H = 600;
 const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 6;
 const ZOOM_STEP = 1.4;
-const LABEL_TOP_N = 10;
+const LABEL_TOP_N = 12;
+const WEIGHT_LABEL_ZOOM = 0.7;
 
-// 10-color community palette (matches the table chip colors)
-const COMMUNITY_PALETTE = [
-  "#3b82f6", "#8b5cf6", "#f59e0b", "#10b981", "#f43f5e",
-  "#06b6d4", "#f97316", "#84cc16", "#ec4899", "#14b8a6",
-];
-
-const DEFAULT_COLOR = (node: GraphNode) =>
-  COMMUNITY_PALETTE[node.community_id % COMMUNITY_PALETTE.length];
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
 
 export function NetworkGraph({
   nodes: rawNodes,
   edges: rawEdges,
   selected,
   onNodeClick,
-  onNodeHover,
   width = DEFAULT_W,
   height = DEFAULT_H,
-  colorForNode = DEFAULT_COLOR,
   screenOverlay,
-  labels,
   className,
 }: NetworkGraphProps) {
   const { nodes, edges, stable } = useForceLayout(rawNodes, rawEdges, width, height);
 
-  const maxWeight = useMemo(
-    () => Math.max(1, ...rawEdges.map((e) => e.weight)),
-    [rawEdges],
-  );
+  // Adjacency for hover-dim + keyboard neighbor cycling.
+  const neighbors = useMemo(() => {
+    const map = new Map<string, string[]>();
+    const add = (a: string, b: string) => {
+      const list = map.get(a);
+      if (list) list.push(b);
+      else map.set(a, [b]);
+    };
+    for (const e of rawEdges) {
+      add(e.source, e.target);
+      add(e.target, e.source);
+    }
+    return map;
+  }, [rawEdges]);
+
+  const maxWeight = useMemo(() => Math.max(1, ...rawEdges.map((e) => e.weight)), [rawEdges]);
 
   const labelIds = useMemo(() => {
     const top = [...rawNodes]
@@ -82,33 +80,17 @@ export function NetworkGraph({
     return new Set(top);
   }, [rawNodes]);
 
-  // ── zoom + pan state
+  const [hovered, setHovered] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ tx: 0, ty: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const dragRef = useRef<{
-    startX: number;
-    startY: number;
-    startTx: number;
-    startTy: number;
-    moved: boolean;
-  } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; startTx: number; startTy: number; moved: boolean } | null>(null);
   const nodeDragRef = useRef<{ node: PositionedNode } | null>(null);
   const justDraggedRef = useRef(false);
 
   const clamp = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
-  const zoomBy = useCallback((factor: number) => {
-    setZoom((prev) => {
-      const next = clamp(prev * factor);
-      if (next === 1 && Math.abs(pan.tx) < 1 && Math.abs(pan.ty) < 1) {
-        setPan({ tx: 0, ty: 0 });
-      }
-      return next;
-    });
-  }, [pan.tx, pan.ty]);
-  const handleZoomIn = useCallback(() => zoomBy(ZOOM_STEP), [zoomBy]);
-  const handleZoomOut = useCallback(() => zoomBy(1 / ZOOM_STEP), [zoomBy]);
+  const zoomBy = useCallback((factor: number) => setZoom((p) => clamp(p * factor)), []);
   const handleZoomReset = useCallback(() => {
     setZoom(1);
     setPan({ tx: 0, ty: 0 });
@@ -122,20 +104,11 @@ export function NetworkGraph({
     [zoomBy],
   );
 
-  // ── background pan
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
-      const target = e.target as Element;
-      // Node drags are handled by the node's own pointerdown.
-      if (target.closest("[data-node]")) return;
+      if ((e.target as Element).closest("[data-node]")) return;
       if (e.button !== 0) return;
-      dragRef.current = {
-        startX: e.clientX,
-        startY: e.clientY,
-        startTx: pan.tx,
-        startTy: pan.ty,
-        moved: false,
-      };
+      dragRef.current = { startX: e.clientX, startY: e.clientY, startTx: pan.tx, startTy: pan.ty, moved: false };
     },
     [pan.tx, pan.ty],
   );
@@ -144,22 +117,13 @@ export function NetworkGraph({
     (e: React.PointerEvent<SVGSVGElement>) => {
       const svg = svgRef.current;
       if (!svg) return;
-      // Node drag in progress?
+      const rect = svg.getBoundingClientRect();
+      const sx = rect.width > 0 ? width / rect.width : 1;
+      const sy = rect.height > 0 ? height / rect.height : 1;
       const nd = nodeDragRef.current;
       if (nd) {
-        const rect = svg.getBoundingClientRect();
-        const sx = rect.width > 0 ? width / rect.width : 1;
-        const sy = rect.height > 0 ? height / rect.height : 1;
-        // Map client px → graph coords accounting for current pan/zoom.
-        const gx = ((e.clientX - rect.left) * sx - pan.tx) / zoom;
-        const gy = ((e.clientY - rect.top) * sy - pan.ty) / zoom;
-        // Pin the node by setting fx/fy (d3-force convention).
-        nd.node.fx = gx;
-        nd.node.fy = gy;
-        // Mutate visible coords too so the SVG re-render reflects the drag
-        // even while the simulation has settled.
-        nd.node.x = gx;
-        nd.node.y = gy;
+        nd.node.fx = nd.node.x = ((e.clientX - rect.left) * sx - pan.tx) / zoom;
+        nd.node.fy = nd.node.y = ((e.clientY - rect.top) * sy - pan.ty) / zoom;
         return;
       }
       const drag = dragRef.current;
@@ -177,96 +141,87 @@ export function NetworkGraph({
         }
       }
       e.preventDefault();
-      const rect = svg.getBoundingClientRect();
-      const sx = rect.width > 0 ? width / rect.width : 1;
-      const sy = rect.height > 0 ? height / rect.height : 1;
-      setPan({
-        tx: drag.startTx + dx * sx,
-        ty: drag.startTy + dy * sy,
-      });
+      setPan({ tx: drag.startTx + dx * sx, ty: drag.startTy + dy * sy });
     },
     [pan.tx, pan.ty, zoom, width, height],
   );
 
-  const handlePointerUp = useCallback(
-    (e: React.PointerEvent<SVGSVGElement>) => {
-      const nd = nodeDragRef.current;
-      if (nd) {
-        nodeDragRef.current = null;
-        // Release the pin so the simulation can pick it up again.
-        nd.node.fx = null;
-        nd.node.fy = null;
+  const handlePointerUp = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
+    const nd = nodeDragRef.current;
+    if (nd) {
+      nodeDragRef.current = null;
+      nd.node.fx = null;
+      nd.node.fy = null;
+    }
+    if (dragRef.current?.moved) {
+      try {
+        svgRef.current?.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
       }
-      const wasDragging = !!dragRef.current?.moved;
-      if (wasDragging) {
-        try {
-          svgRef.current?.releasePointerCapture(e.pointerId);
-        } catch {
-          /* ignore */
-        }
-        justDraggedRef.current = true;
-        queueMicrotask(() => {
-          justDraggedRef.current = false;
-        });
-      }
-      dragRef.current = null;
-      setIsPanning(false);
-    },
-    [],
-  );
+      justDraggedRef.current = true;
+      queueMicrotask(() => {
+        justDraggedRef.current = false;
+      });
+    }
+    dragRef.current = null;
+    setIsPanning(false);
+  }, []);
 
-  // ── per-node drag start
-  const onNodePointerDown = useCallback(
-    (e: React.PointerEvent<SVGCircleElement>, node: PositionedNode) => {
-      e.stopPropagation();
-      if (e.button !== 0) return;
-      nodeDragRef.current = { node };
+  const onNodePointerDown = useCallback((e: React.PointerEvent<SVGCircleElement>, node: PositionedNode) => {
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    nodeDragRef.current = { node };
+  }, []);
+
+  // Keyboard: arrow keys move selection to the next/previous neighbor.
+  const onNodeKeyDown = useCallback(
+    (e: React.KeyboardEvent<SVGCircleElement>, nodeId: string) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onNodeClick?.(nodeId);
+        return;
+      }
+      const nbrs = neighbors.get(nodeId);
+      if (!nbrs || nbrs.length === 0) return;
+      if (["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"].includes(e.key)) {
+        e.preventDefault();
+        const anchor = selected && nbrs.includes(selected) ? selected : nbrs[0];
+        const idx = nbrs.indexOf(anchor);
+        const delta = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : -1;
+        const next = nbrs[(idx + delta + nbrs.length) % nbrs.length];
+        onNodeClick?.(next);
+      }
     },
-    [],
+    [neighbors, selected, onNodeClick],
   );
 
   const transform = `translate(${pan.tx} ${pan.ty}) scale(${zoom})`;
+  const focusId = hovered ?? selected ?? null;
+  const focusNeighbors = focusId ? new Set([focusId, ...(neighbors.get(focusId) ?? [])]) : null;
+
+  const isDimmed = (id: string) => focusNeighbors != null && !focusNeighbors.has(id);
 
   return (
-    <div className={`relative ${className ?? "h-[520px]"}`}>
+    <div className={`relative ${className ?? "h-[560px]"}`}>
       <div
         data-testid="graph-zoom-controls"
         className="absolute right-3 top-3 z-10 flex flex-col gap-1 rounded-lg border border-gray-200 bg-white/90 p-1 shadow-sm backdrop-blur-sm dark:border-gray-700 dark:bg-gray-900/90"
       >
-        <button
-          type="button"
-          onClick={handleZoomIn}
-          disabled={zoom >= ZOOM_MAX}
-          aria-label={labels?.zoomIn ?? "Zoom in"}
-          className="flex h-7 w-7 items-center justify-center rounded text-base font-bold text-gray-700 hover:bg-gray-100 disabled:opacity-40 dark:text-gray-200 dark:hover:bg-gray-800"
-        >
-          +
-        </button>
-        <div className="select-none text-center text-[9px] font-mono text-gray-500 dark:text-gray-400">
-          {zoom.toFixed(1)}×
-        </div>
-        <button
-          type="button"
-          onClick={handleZoomOut}
-          disabled={zoom <= ZOOM_MIN}
-          aria-label={labels?.zoomOut ?? "Zoom out"}
-          className="flex h-7 w-7 items-center justify-center rounded text-base font-bold text-gray-700 hover:bg-gray-100 disabled:opacity-40 dark:text-gray-200 dark:hover:bg-gray-800"
-        >
-          −
-        </button>
+        <button type="button" onClick={() => zoomBy(ZOOM_STEP)} disabled={zoom >= ZOOM_MAX}
+          aria-label="Zoom in"
+          className="flex h-7 w-7 items-center justify-center rounded text-base font-bold text-gray-700 hover:bg-gray-100 disabled:opacity-40 dark:text-gray-200 dark:hover:bg-gray-800">+</button>
+        <div className="select-none text-center text-[9px] font-mono text-gray-500 dark:text-gray-400">{zoom.toFixed(1)}×</div>
+        <button type="button" onClick={() => zoomBy(1 / ZOOM_STEP)} disabled={zoom <= ZOOM_MIN}
+          aria-label="Zoom out"
+          className="flex h-7 w-7 items-center justify-center rounded text-base font-bold text-gray-700 hover:bg-gray-100 disabled:opacity-40 dark:text-gray-200 dark:hover:bg-gray-800">−</button>
         {(zoom !== 1 || pan.tx !== 0 || pan.ty !== 0) && (
-          <button
-            type="button"
-            onClick={handleZoomReset}
-            aria-label={labels?.zoomReset ?? "Reset zoom"}
-            className="flex h-7 w-7 items-center justify-center rounded text-xs font-semibold text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
-          >
-            ⟲
-          </button>
+          <button type="button" onClick={handleZoomReset} aria-label="Reset zoom"
+            className="flex h-7 w-7 items-center justify-center rounded text-xs font-semibold text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800">⟲</button>
         )}
       </div>
 
-      {!stable && nodes.length > 0 && (
+      {!stable && nodes.length > 0 && !prefersReducedMotion() && (
         <div className="absolute left-3 top-3 z-10 rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-mono text-gray-500 shadow-sm backdrop-blur-sm dark:bg-gray-900/80 dark:text-gray-400">
           relaxing…
         </div>
@@ -275,9 +230,7 @@ export function NetworkGraph({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
-        className={`h-full w-full select-none touch-none rounded-lg border border-gray-100 bg-slate-50 dark:border-gray-800 dark:bg-slate-950 ${
-          isPanning ? "cursor-grabbing" : "cursor-grab"
-        }`}
+        className={`h-full w-full touch-none rounded-lg border border-gray-100 bg-slate-50 dark:border-gray-800 dark:bg-slate-950 ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
         preserveAspectRatio="xMidYMid meet"
         onWheel={handleWheel}
         onPointerDown={handlePointerDown}
@@ -286,78 +239,72 @@ export function NetworkGraph({
         onPointerCancel={handlePointerUp}
       >
         <g transform={transform}>
-          {/* Edges */}
           {edges.map((e, i) => {
             const sx = e.source.x ?? 0;
             const sy = e.source.y ?? 0;
             const tx = e.target.x ?? 0;
             const ty = e.target.y ?? 0;
-            const w = Math.max(0.6, (e.weight / maxWeight) * 3);
-            const isSel =
-              selected != null &&
-              (e.source.id === selected || e.target.id === selected);
+            // Control point: perpendicular offset at the midpoint -> gentle arc.
+            const mx = (sx + tx) / 2;
+            const my = (sy + ty) / 2;
+            const dx = tx - sx;
+            const dy = ty - sy;
+            const len = Math.hypot(dx, dy) || 1;
+            const off = Math.min(40, len * 0.12);
+            const cx = mx + (-dy / len) * off;
+            const cy = my + (dx / len) * off;
+            const w = Math.log(e.weight + 1) * 1.5 + 0.4;
+            const dim = isDimmed(e.source.id) || isDimmed(e.target.id);
+            const showLabel = zoom > WEIGHT_LABEL_ZOOM && e.weight >= maxWeight * 0.4;
             return (
-              <line
-                key={`e-${i}`}
-                x1={sx}
-                y1={sy}
-                x2={tx}
-                y2={ty}
-                stroke={isSel ? "rgba(37, 99, 235, 0.8)" : "rgba(100, 116, 139, 0.35)"}
-                strokeWidth={isSel ? w + 0.6 : w}
-              />
+              <g key={`e-${i}`} opacity={dim ? 0.08 : 1}>
+                <path
+                  d={`M ${sx} ${sy} Q ${cx} ${cy} ${tx} ${ty}`}
+                  fill="none"
+                  stroke="oklch(60% 0.02 260)"
+                  strokeOpacity={0.45}
+                  strokeWidth={w}
+                />
+                {showLabel && (
+                  <text x={cx} y={cy} textAnchor="middle" fontSize={9}
+                    className="pointer-events-none fill-slate-500 dark:fill-slate-400"
+                    paintOrder="stroke" stroke="rgba(255,255,255,0.8)" strokeWidth={2.5} strokeLinejoin="round">
+                    {e.weight}
+                  </text>
+                )}
+              </g>
             );
           })}
 
-          {/* Nodes */}
           {nodes.map((n) => {
             const isSel = selected === n.id;
-            const fill = colorForNode(n);
+            const dim = isDimmed(n.id);
+            const fill = communityColor(n.community_id);
             return (
-              <g
-                key={n.id}
-                data-node={n.id}
-                transform={`translate(${n.x ?? 0} ${n.y ?? 0})`}
-              >
-                {isSel && (
-                  <circle
-                    r={n.radius + 5}
-                    fill="none"
-                    stroke="#2563eb"
-                    strokeWidth={2}
-                  />
-                )}
+              <g key={n.id} data-node={n.id} transform={`translate(${n.x ?? 0} ${n.y ?? 0})`} opacity={dim ? 0.22 : 1}>
+                {isSel && <circle r={n.radius + 5} fill="none" stroke="oklch(55% 0.20 264)" strokeWidth={2} />}
                 <circle
                   r={n.radius}
                   fill={fill}
-                  fillOpacity={isSel ? 1 : 0.85}
+                  fillOpacity={isSel ? 1 : 0.9}
                   stroke="#fff"
                   strokeWidth={1.2}
-                  className="cursor-pointer"
+                  tabIndex={0}
+                  role="button"
+                  aria-label={n.label}
+                  className="cursor-pointer outline-none focus-visible:stroke-indigo-600"
                   onPointerDown={(e) => onNodePointerDown(e, n)}
                   onClick={() => {
-                    if (justDraggedRef.current) return;
-                    if (nodeDragRef.current) return;
-                    if (onNodeClick) onNodeClick(n.id);
+                    if (justDraggedRef.current || nodeDragRef.current) return;
+                    onNodeClick?.(n.id);
                   }}
-                  onMouseEnter={(e) => {
-                    if (!onNodeHover) return;
-                    const svg = svgRef.current;
-                    if (!svg) return;
-                    const rect = svg.getBoundingClientRect();
-                    const x =
-                      rect.width > 0
-                        ? ((e.clientX - rect.left) / rect.width) * width
-                        : 0;
-                    const y =
-                      rect.height > 0
-                        ? ((e.clientY - rect.top) / rect.height) * height
-                        : 0;
-                    onNodeHover({ id: n.id, x, y });
-                  }}
-                  onMouseLeave={() => onNodeHover?.(null)}
+                  onKeyDown={(e) => onNodeKeyDown(e, n.id)}
+                  onMouseEnter={() => setHovered(n.id)}
+                  onMouseLeave={() => setHovered(null)}
+                  onFocus={() => setHovered(n.id)}
+                  onBlur={() => setHovered(null)}
                 />
-                {(isSel || labelIds.has(n.id)) && (
+                {(isSel || hovered === n.id || labelIds.has(n.id)) && (
                   <text
                     y={-n.radius - 4}
                     textAnchor="middle"
@@ -369,9 +316,7 @@ export function NetworkGraph({
                     strokeWidth={3}
                     strokeLinejoin="round"
                   >
-                    {n.label.length > 28
-                      ? `${n.label.slice(0, 28)}…`
-                      : n.label}
+                    {n.label.length > 28 ? `${n.label.slice(0, 28)}…` : n.label}
                   </text>
                 )}
               </g>

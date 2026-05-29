@@ -19,9 +19,22 @@ os.environ.setdefault("ENCRYPTION_KEY", "vRHc0zVcTXbRfUBZEsKNal2lMCfINwDh90EXE8v
 os.environ.setdefault("UKIP_DB_MODE", "sqlite")
 os.environ.setdefault("UKIP_SKIP_STARTUP_SIDE_EFFECTS", "1")
 os.environ.setdefault("SENTRY_ENABLED", "0")
+# Coauthorship V2 flags default ON in production (F5 cutover); pin them OFF for
+# tests so suites are deterministic and opt in per-case via write_on/read_on.
+os.environ.setdefault("COAUTHOR_V2_WRITE", "false")
+os.environ.setdefault("COAUTHOR_V2_READ", "false")
+os.environ.setdefault("COAUTHOR_V2_SHADOW", "false")
 
 _DB_MODE = os.environ.get("UKIP_DB_MODE", "sqlite").lower()
 _IS_POSTGRES = _DB_MODE == "postgres"
+
+
+def pytest_configure(config):
+    """Register custom markers (no pytest.ini in this repo)."""
+    config.addinivalue_line(
+        "markers",
+        "slow: long-running performance gates; deselect with -m 'not slow'",
+    )
 
 if _IS_POSTGRES:
     _TEST_DB_URL = os.environ.get(
@@ -244,6 +257,15 @@ def viewer_headers():
 # ── DB cleanup (function-scoped) ────────────────────────────────────────────
 
 _TABLES_TO_CLEAN = [
+    # V2 coauthorship tables — must be cleaned before raw_entities / authors
+    "coauthor_contributions",
+    "coauthor_edges",
+    "author_publications",
+    "author_stats",
+    "author_merge_suggestions",
+    "author_merge_audit",
+    "coauthor_dirty_scopes",
+    "authors",
     "raw_entities",
     "store_connections",
     "store_sync_mappings",
@@ -364,3 +386,46 @@ def db_session():
             _reset_test_state(cleanup_db)
         finally:
             cleanup_db.close()
+
+
+@pytest.fixture()
+def db():
+    """Session fixture for the coauthorship V2 engine tests (plan F2.x).
+
+    Same semantics as ``db_session`` (StaticPool in-memory SQLite, pre-cleaned
+    by the autouse ``isolate_test_state``) but exposed under the shorter name
+    the V2 plan's tests request.
+    """
+    pre = TestingSessionLocal()
+    try:
+        _reset_test_state(pre)
+    finally:
+        pre.close()
+
+    s = TestingSessionLocal()
+    try:
+        yield s
+    finally:
+        s.close()
+
+
+@pytest.fixture()
+def db_factory():
+    """Return a factory producing fresh Sessions on the same engine.
+
+    Caveat: UKIP's test engine uses StaticPool, so every session multiplexes a
+    single SQLite connection — real OS-level concurrency is NOT exercised. This
+    fixture is sufficient to verify the ``IntegrityError`` -> refetch code path
+    of ``get_or_create_author`` (F2.3) but cannot prove behavior under true
+    multi-process contention.
+    """
+    sessions = []
+
+    def factory():
+        s = TestingSessionLocal()
+        sessions.append(s)
+        return s
+
+    yield factory
+    for s in sessions:
+        s.close()

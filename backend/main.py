@@ -44,6 +44,7 @@ from backend.routers import (
     authority,
     branding,
     catalogs,
+    coauthorship,
     context,
     dashboards,
     demo,
@@ -182,10 +183,22 @@ async def lifespan(app: FastAPI):
             tables=[
                 models.DomainEnrichmentPolicy.__table__,
                 models.EnrichmentSchedulerRun.__table__,
+                # V2 coauthorship tables (Sprint 2026-05-28 refactor). These are
+                # empty on first boot — no org_id backfill needed because the
+                # NOT NULL DEFAULT 0 sentinel only applies to brand-new rows.
+                # checkfirst=True makes this idempotent across restarts.
+                models.Author.__table__,
+                models.AuthorPublication.__table__,
+                models.CoauthorEdge.__table__,
+                models.AuthorStats.__table__,
+                models.AuthorMergeSuggestion.__table__,
+                models.AuthorMergeAudit.__table__,
+                models.CoauthorDirtyScope.__table__,
+                models.CoauthorContribution.__table__,
             ],
             checkfirst=True,
         )
-        logger.info("Startup migration: enrichment scheduler tables ensured")
+        logger.info("Startup migration: enrichment scheduler + V2 coauthorship tables ensured")
 
         # Seed built-in artifact templates (only on first run)
         if db.query(models.ArtifactTemplate).count() == 0:
@@ -210,6 +223,9 @@ async def lifespan(app: FastAPI):
                 db.close()
 
     asyncio.create_task(enrichment_worker.background_enrichment_worker(get_db_gen()))
+
+    # V2 coauthorship: periodic recompute of author_stats for dirty scopes.
+    asyncio.create_task(enrichment_worker.coauthor_recompute_loop())
 
     # Start the enrichment domain scheduler
     asyncio.create_task(_enrichment_scheduler_instance.start_loop())
@@ -384,6 +400,7 @@ app.include_router(annotations.router)
 app.include_router(notifications.router)
 app.include_router(branding.router)
 app.include_router(catalogs.router)
+app.include_router(coauthorship.router)
 app.include_router(artifacts.router)
 app.include_router(context.router)
 app.include_router(audit_log.router)
