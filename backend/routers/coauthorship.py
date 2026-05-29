@@ -358,6 +358,82 @@ def list_merge_suggestions(
     ]
 
 
+# ── F4b.3: merge-suggestions confirm / reject ───────────────────────────────
+
+
+def _enqueue_author_scopes(db, author_id: int, reason: str) -> None:
+    """Mark every (org, domain) scope the author has publications in as dirty."""
+    scopes = (
+        db.query(models.AuthorPublication.org_id, models.AuthorPublication.domain_id)
+        .filter(models.AuthorPublication.author_id == author_id)
+        .distinct()
+        .all()
+    )
+    for org_id, domain_id in scopes:
+        db.merge(models.CoauthorDirtyScope(org_id=org_id, domain_id=domain_id, reason=reason))
+
+
+@router.post("/coauthorship/merge-suggestions/{suggestion_id}/confirm")
+def confirm_merge_suggestion(
+    suggestion_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin")),
+) -> dict:
+    """Confirm an ambiguous pair as the same person: merge author_b into
+    author_a (manual tier), repoint rows, write the audit, and enqueue the
+    surviving author's scopes for recompute."""
+    from backend.coauthorship.identity import merge_authors
+
+    s = db.query(models.AuthorMergeSuggestion).filter_by(id=suggestion_id).first()
+    if s is None:
+        raise HTTPException(status_code=404, detail="merge suggestion not found")
+    if s.status != "pending":
+        raise HTTPException(status_code=409, detail=f"suggestion already {s.status}")
+
+    winner = db.query(models.Author).filter_by(id=s.author_a_id).first()
+    loser = db.query(models.Author).filter_by(id=s.author_b_id).first()
+    if winner is None or loser is None:
+        raise HTTPException(status_code=409, detail="one of the authors no longer exists")
+
+    merge_authors(
+        db, winner, loser,
+        tier="manual",
+        reason=s.reason or "manual merge",
+        performed_by=current_user.id,
+        evidence={"suggestion_id": s.id},
+    )
+    _enqueue_author_scopes(db, winner.id, reason="merge")
+
+    s.status = "merged"
+    s.resolved_at = datetime.now(timezone.utc)
+    s.resolved_by = current_user.id
+    db.commit()
+    return {
+        "status": "merged",
+        "winner_author_id": winner.id,
+        "loser_author_id": s.author_b_id,
+    }
+
+
+@router.post("/coauthorship/merge-suggestions/{suggestion_id}/reject")
+def reject_merge_suggestion(
+    suggestion_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin")),
+) -> dict:
+    """Mark an ambiguous pair as distinct people — they stay separate."""
+    s = db.query(models.AuthorMergeSuggestion).filter_by(id=suggestion_id).first()
+    if s is None:
+        raise HTTPException(status_code=404, detail="merge suggestion not found")
+    if s.status != "pending":
+        raise HTTPException(status_code=409, detail=f"suggestion already {s.status}")
+    s.status = "rejected"
+    s.resolved_at = datetime.now(timezone.utc)
+    s.resolved_by = current_user.id
+    db.commit()
+    return {"status": "rejected"}
+
+
 # ── F4a.3: admin one-shot migration trigger ─────────────────────────────────
 
 
