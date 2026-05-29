@@ -373,3 +373,46 @@ def db_session():
             _reset_test_state(cleanup_db)
         finally:
             cleanup_db.close()
+
+
+@pytest.fixture()
+def db():
+    """Session fixture for the coauthorship V2 engine tests (plan F2.x).
+
+    Same semantics as ``db_session`` (StaticPool in-memory SQLite, pre-cleaned
+    by the autouse ``isolate_test_state``) but exposed under the shorter name
+    the V2 plan's tests request.
+    """
+    pre = TestingSessionLocal()
+    try:
+        _reset_test_state(pre)
+    finally:
+        pre.close()
+
+    s = TestingSessionLocal()
+    try:
+        yield s
+    finally:
+        s.close()
+
+
+@pytest.fixture()
+def db_factory():
+    """Return a factory producing fresh Sessions on the same engine.
+
+    Caveat: UKIP's test engine uses StaticPool, so every session multiplexes a
+    single SQLite connection — real OS-level concurrency is NOT exercised. This
+    fixture is sufficient to verify the ``IntegrityError`` -> refetch code path
+    of ``get_or_create_author`` (F2.3) but cannot prove behavior under true
+    multi-process contention.
+    """
+    sessions = []
+
+    def factory():
+        s = TestingSessionLocal()
+        sessions.append(s)
+        return s
+
+    yield factory
+    for s in sessions:
+        s.close()

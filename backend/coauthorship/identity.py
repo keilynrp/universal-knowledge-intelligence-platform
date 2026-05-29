@@ -2,11 +2,15 @@
 
 Public API:
 - name_key(surface_form: str) -> str
+- classify_merge(db, a, b) -> MergeDecision
 """
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
+from dataclasses import dataclass
+from typing import Literal
 
 _STRIP_PARTS = {
     "dr", "dr.", "prof", "prof.", "mr", "mr.", "mrs", "mrs.", "ms", "ms.",
@@ -107,3 +111,117 @@ def name_key(surface_form: str) -> str:
         first = cleaned[:1] if cleaned else ""
 
     return f"{last}_{first}"
+
+
+# ── Merge classifier (F2.2) ─────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class MergeDecision:
+    tier: Literal["strong", "probable", "ambiguous", "distinct"]
+    reason: str
+    evidence: dict
+
+
+def _last_initial_pair(a_key: str, b_key: str) -> bool:
+    """True when keys share a last name and exactly one has only an initial
+    that is a prefix of the other's first name (e.g. smith_j vs smith_john)."""
+    if "_" not in a_key or "_" not in b_key:
+        return False
+    la, fa = a_key.split("_", 1)
+    lb, fb = b_key.split("_", 1)
+    if la != lb or not fa or not fb:
+        return False
+    one_initial = (len(fa) == 1) != (len(fb) == 1)
+    return one_initial and (fa.startswith(fb[:1]) or fb.startswith(fa[:1]))
+
+
+def _publication_entity_ids(db, author_id: int) -> set[int]:
+    from backend import models
+    rows = (
+        db.query(models.AuthorPublication.entity_id)
+        .filter(models.AuthorPublication.author_id == author_id)
+        .all()
+    )
+    return {r[0] for r in rows}
+
+
+def _shared_publication_ids(db, a_id: int, b_id: int) -> list[int]:
+    return sorted(_publication_entity_ids(db, a_id) & _publication_entity_ids(db, b_id))
+
+
+def _affiliations_for_entities(db, entity_ids: set[int]) -> set[str]:
+    """Normalized (lower-cased, stripped) affiliation strings for the given
+    entities, read from attributes_json.affiliation / enrichment_affiliation."""
+    from backend import models
+    if not entity_ids:
+        return set()
+    affs: set[str] = set()
+    for ent in (
+        db.query(models.RawEntity)
+        .filter(models.RawEntity.id.in_(entity_ids))
+        .all()
+    ):
+        try:
+            attrs = json.loads(ent.attributes_json or "{}")
+        except (ValueError, TypeError):
+            continue
+        aff = attrs.get("affiliation") or attrs.get("enrichment_affiliation")
+        if isinstance(aff, str) and aff.strip():
+            affs.add(aff.strip().lower())
+    return affs
+
+
+def _shared_affiliations(db, a_id: int, b_id: int) -> list[str]:
+    """Affiliations common to A's publications and B's publications.
+
+    Returns [] when no affiliation metadata exists, letting the classifier
+    fall through to the ambiguous tier.
+    """
+    a_ents = _publication_entity_ids(db, a_id)
+    b_ents = _publication_entity_ids(db, b_id)
+    if not a_ents or not b_ents:
+        return []
+    affs_a = _affiliations_for_entities(db, a_ents)
+    affs_b = _affiliations_for_entities(db, b_ents)
+    return sorted(affs_a & affs_b)
+
+
+def classify_merge(db, a, b) -> MergeDecision:
+    """Classify whether two Author rows refer to the same person.
+
+    Deterministic — no randomness, no global state. ORCID is authoritative:
+    a match forces 'strong', a conflict forces 'distinct' even when name_keys
+    are identical (different ORCIDs => different people).
+    """
+    if a.orcid and b.orcid and a.orcid == b.orcid:
+        return MergeDecision("strong", "orcid match", {"orcid": a.orcid})
+    if a.orcid and b.orcid and a.orcid != b.orcid:
+        return MergeDecision("distinct", "orcid conflict", {"a": a.orcid, "b": b.orcid})
+
+    # Identity model = "optimistic collapse + ORCID override": name_key is
+    # UNIQUE, so two PERSISTED authors never share a key. This branch is
+    # therefore reachable only with a transient candidate (e.g. dedup/migration
+    # comparing a not-yet-inserted author against a stored one). Kept so the
+    # logic is correct if Plan A (non-unique name_key) is ever adopted.
+    if a.name_key == b.name_key:
+        shared = _shared_publication_ids(db, a.id, b.id)
+        if shared:
+            return MergeDecision(
+                "strong",
+                "name_key + shared publications",
+                {"shared_entity_ids": shared[:10]},
+            )
+        shared_aff = _shared_affiliations(db, a.id, b.id)
+        if shared_aff:
+            return MergeDecision(
+                "probable",
+                "name_key + shared affiliation",
+                {"affiliations": shared_aff[:5]},
+            )
+        return MergeDecision("ambiguous", "name_key collision without disambiguator", {})
+
+    if _last_initial_pair(a.name_key, b.name_key):
+        return MergeDecision("ambiguous", "last+initial match across name forms", {})
+
+    return MergeDecision("distinct", "no overlap", {})
