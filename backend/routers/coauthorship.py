@@ -128,11 +128,21 @@ def coauthorship_network_v2(
     legacy analyzer so behaviour is unchanged until cutover."""
     from backend import config
 
-    if not config.COAUTHOR_V2_READ:
+    response.headers["Cache-Control"] = "no-store"
+    org_id = _scope_org_id(resolve_request_org_id(db, current_user))
+    requested_domain_id = domain_id
+    domain_id = _resolve_coauthor_domain(db, org_id=org_id, requested_domain_id=domain_id)
+
+    # Production cutover guard: if V2 data exists, serve it even when the read
+    # flag was left off in the environment. Fall back to legacy only when there
+    # is no materialized V2 graph available for the requested/effective domain.
+    if not config.COAUTHOR_V2_READ and _coauthor_edge_count(
+        db, org_id=org_id, domain_id=domain_id
+    ) == 0:
         from backend.routers.analytics import _legacy_coauthorship_network
         return _legacy_coauthorship_network(
             response=response,
-            domain_id=domain_id,
+            domain_id=requested_domain_id,
             min_weight=min_weight,
             limit=limit,
             force_refresh=force_refresh,
@@ -140,10 +150,6 @@ def coauthorship_network_v2(
             current_user=current_user,
         )
 
-    response.headers["Cache-Control"] = "no-store"
-    org_id = _scope_org_id(resolve_request_org_id(db, current_user))
-    requested_domain_id = domain_id
-    domain_id = _resolve_coauthor_domain(db, org_id=org_id, requested_domain_id=domain_id)
     _ensure_coauthor_stats_ready(db, org_id=org_id, domain_id=domain_id)
 
     q = (

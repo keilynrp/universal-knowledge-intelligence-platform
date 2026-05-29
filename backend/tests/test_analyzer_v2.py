@@ -229,3 +229,18 @@ def test_network_falls_back_to_populated_coauthor_domain(client, auth_headers, r
     assert body["requested_domain_id"] == "all"
     assert body["domain_id"] == "science"
     assert {n["label"] for n in body["nodes"]} == {"Fallback Anna", "Fallback Ben"}
+
+
+def test_network_serves_v2_edges_even_when_read_flag_off(client, auth_headers, monkeypatch, db_session):
+    monkeypatch.setattr(config, "COAUTHOR_V2_READ", False)
+    a = _author(db_session, "flag_off_a", "Flag Off Anna")
+    b = _author(db_session, "flag_off_b", "Flag Off Ben")
+    _edge(db_session, a, b, domain="science", org_id=0, weight=3)
+    db_session.commit()
+
+    r = client.get("/analyzers/coauthorship/all", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["requested_domain_id"] == "all"
+    assert body["domain_id"] == "science"
+    assert {n["label"] for n in body["nodes"]} == {"Flag Off Anna", "Flag Off Ben"}
