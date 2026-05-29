@@ -50,6 +50,38 @@ def _scope_org_id(resolved: int | None) -> int | None:
     return resolved
 
 
+def _ensure_coauthor_stats_ready(db: Session, *, org_id: int | None, domain_id: str) -> None:
+    """Synchronously materialize stats when V2 edges exist but stats do not.
+
+    This is intentionally defensive for production cutover: a Dokploy restart,
+    missed worker loop, or manual migration can leave coauthor_edges populated
+    while author_stats is empty, which makes the graph look blank. The endpoint
+    can repair that state cheaply for the current domain/scope before reading.
+    """
+    stats_q = db.query(models.AuthorStats).filter_by(domain_id=domain_id)
+    edges_q = db.query(models.CoauthorEdge).filter_by(domain_id=domain_id)
+    if org_id is not None:
+        stats_q = stats_q.filter_by(org_id=org_id)
+        edges_q = edges_q.filter_by(org_id=org_id)
+
+    stats_count = stats_q.count()
+    edges_count = edges_q.count()
+    if stats_count > 0 or edges_count == 0:
+        return
+    if org_id is not None:
+        recompute_coauthor_stats(db, org_id=org_id, domain_id=domain_id)
+        return
+
+    scopes = (
+        db.query(models.CoauthorEdge.org_id)
+        .filter_by(domain_id=domain_id)
+        .distinct()
+        .all()
+    )
+    for (scope_org_id,) in scopes:
+        recompute_coauthor_stats(db, org_id=scope_org_id, domain_id=domain_id)
+
+
 @router.get("/analyzers/coauthorship/{domain_id}")
 def coauthorship_network_v2(
     response: Response,
@@ -81,6 +113,7 @@ def coauthorship_network_v2(
 
     response.headers["Cache-Control"] = "no-store"
     org_id = _scope_org_id(resolve_request_org_id(db, current_user))
+    _ensure_coauthor_stats_ready(db, org_id=org_id, domain_id=domain_id)
 
     q = (
         db.query(models.AuthorStats, models.Author)

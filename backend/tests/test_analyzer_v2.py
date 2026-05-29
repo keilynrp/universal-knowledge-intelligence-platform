@@ -196,3 +196,22 @@ def test_backfill_visibility_after_recompute(client, auth_headers, read_on, db_s
     assert body["computed_at"] is not None
     labels = {n["label"] for n in body["nodes"]}
     assert labels == {"Anna", "Ben"}
+
+
+def test_network_auto_materializes_stats_when_edges_exist(client, auth_headers, read_on, db_session):
+    """Production cutover guard: if migration wrote edges but the recompute
+    worker/script did not materialize author_stats, the first graph request
+    should repair the scope and return data instead of a blank graph."""
+    a = _author(db_session, "auto_a", "Auto Anna")
+    b = _author(db_session, "auto_b", "Auto Ben")
+    _edge(db_session, a, b, domain="science", org_id=0, weight=4)
+    db_session.commit()
+
+    assert db_session.query(models.AuthorStats).filter_by(domain_id="science").count() == 0
+
+    r = client.get("/analyzers/coauthorship/science", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert {n["label"] for n in body["nodes"]} == {"Auto Anna", "Auto Ben"}
+    assert body["edges"] == [{"source": str(a.id), "target": str(b.id), "weight": 4}]
+    assert db_session.query(models.AuthorStats).filter_by(domain_id="science").count() == 2
