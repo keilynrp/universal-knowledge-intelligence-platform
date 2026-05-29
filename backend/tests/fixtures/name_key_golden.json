@@ -1,0 +1,654 @@
+[
+ {
+  "input": "Dr. John A. Smith Jr.",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "Smith, John A.",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "J. A. Smith",
+  "name_key": "smith_j"
+ },
+ {
+  "input": "J. Smith",
+  "name_key": "smith_j"
+ },
+ {
+  "input": "John Smith",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "John Smith PhD",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "Smith III, John",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "John Smith, PhD",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "John Smith, Jr.",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "John Smith, III",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "Prof. John Smith",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "Mr. John Smith",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "Mrs. Jane Doe",
+  "name_key": "doe_jane"
+ },
+ {
+  "input": "Ms. Jane Doe",
+  "name_key": "doe_jane"
+ },
+ {
+  "input": "John Smith M.D.",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "John Smith Sr.",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "John Smith II",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "John Smith IV",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "Dr. Jane A. Doe",
+  "name_key": "doe_jane"
+ },
+ {
+  "input": "Doe, Jane",
+  "name_key": "doe_jane"
+ },
+ {
+  "input": "Prof. Dr. Hans Mueller",
+  "name_key": "mueller_hans"
+ },
+ {
+  "input": "Smith Jr., John",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "Smith Sr., Jane",
+  "name_key": "smith_jane"
+ },
+ {
+  "input": "Smith III, Robert",
+  "name_key": "smith_robert"
+ },
+ {
+  "input": "Jose Garcia",
+  "name_key": "garcia_jose"
+ },
+ {
+  "input": "Vincent van der Berg",
+  "name_key": "vanderberg_vincent"
+ },
+ {
+  "input": "van der Berg, Vincent",
+  "name_key": "vanderberg_vincent"
+ },
+ {
+  "input": "Ludwig van Beethoven",
+  "name_key": "vanbeethoven_ludwig"
+ },
+ {
+  "input": "von Neumann, John",
+  "name_key": "vonneumann_john"
+ },
+ {
+  "input": "John von Neumann",
+  "name_key": "vonneumann_john"
+ },
+ {
+  "input": "Charles de Gaulle",
+  "name_key": "degaulle_charles"
+ },
+ {
+  "input": "de Gaulle, Charles",
+  "name_key": "degaulle_charles"
+ },
+ {
+  "input": "Leonardo da Vinci",
+  "name_key": "davinci_leonardo"
+ },
+ {
+  "input": "Oscar de la Renta",
+  "name_key": "delarenta_oscar"
+ },
+ {
+  "input": "Vincent van Gogh",
+  "name_key": "vangogh_vincent"
+ },
+ {
+  "input": "van Gogh, Vincent",
+  "name_key": "vangogh_vincent"
+ },
+ {
+  "input": "Guillermo del Toro",
+  "name_key": "deltoro_guillermo"
+ },
+ {
+  "input": "del Toro, Guillermo",
+  "name_key": "deltoro_guillermo"
+ },
+ {
+  "input": "Maria dos Santos",
+  "name_key": "dossantos_maria"
+ },
+ {
+  "input": "dos Santos, Maria",
+  "name_key": "dossantos_maria"
+ },
+ {
+  "input": "Leonardo di Caprio",
+  "name_key": "dicaprio_leonardo"
+ },
+ {
+  "input": "di Caprio, Leonardo",
+  "name_key": "dicaprio_leonardo"
+ },
+ {
+  "input": "Jan van den Berg",
+  "name_key": "vandenberg_jan"
+ },
+ {
+  "input": "van den Berg, Jan",
+  "name_key": "vandenberg_jan"
+ },
+ {
+  "input": "Ursula von der Leyen",
+  "name_key": "vonderleyen_ursula"
+ },
+ {
+  "input": "von der Leyen, Ursula",
+  "name_key": "vonderleyen_ursula"
+ },
+ {
+  "input": "Jean de La Fontaine",
+  "name_key": "delafontaine_jean"
+ },
+ {
+  "input": "Marie-Claire Lefebvre",
+  "name_key": "lefebvre_marie-claire"
+ },
+ {
+  "input": "Jean-Paul Sartre",
+  "name_key": "sartre_jean-paul"
+ },
+ {
+  "input": "Anne-Marie Smith",
+  "name_key": "smith_anne-marie"
+ },
+ {
+  "input": "Garcia-Marquez, Gabriel",
+  "name_key": "garcia-marquez_gabriel"
+ },
+ {
+  "input": "Daniel Day-Lewis",
+  "name_key": "day-lewis_daniel"
+ },
+ {
+  "input": "Day-Lewis, Daniel",
+  "name_key": "day-lewis_daniel"
+ },
+ {
+  "input": "Mary-Kate Olsen",
+  "name_key": "olsen_mary-kate"
+ },
+ {
+  "input": "Olsen, Mary-Kate",
+  "name_key": "olsen_mary-kate"
+ },
+ {
+  "input": "Madonna",
+  "name_key": "madonna_"
+ },
+ {
+  "input": "Cher",
+  "name_key": "cher_"
+ },
+ {
+  "input": "Prince",
+  "name_key": "prince_"
+ },
+ {
+  "input": "Sting",
+  "name_key": "sting_"
+ },
+ {
+  "input": "Plato",
+  "name_key": "plato_"
+ },
+ {
+  "input": "Aristotle",
+  "name_key": "aristotle_"
+ },
+ {
+  "input": "Voltaire",
+  "name_key": "voltaire_"
+ },
+ {
+  "input": "Beyonce",
+  "name_key": "beyonce_"
+ },
+ {
+  "input": "Mary Jane Watson",
+  "name_key": "watson_mary"
+ },
+ {
+  "input": "Sarah Jessica Parker",
+  "name_key": "parker_sarah"
+ },
+ {
+  "input": "Hillary Rodham Clinton",
+  "name_key": "clinton_hillary"
+ },
+ {
+  "input": "John Fitzgerald Kennedy",
+  "name_key": "kennedy_john"
+ },
+ {
+  "input": "John Michael Smith",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "Smith, John Michael",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "John M. Smith",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "J M Smith",
+  "name_key": "smith_j"
+ },
+ {
+  "input": "John A B Smith",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "Smith, John A B",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "George R. R. Martin",
+  "name_key": "martin_george"
+ },
+ {
+  "input": "J.R.R. Tolkien",
+  "name_key": "tolkien_jrr"
+ },
+ {
+  "input": "J. K. Rowling",
+  "name_key": "rowling_j"
+ },
+ {
+  "input": "Rowling, J. K.",
+  "name_key": "rowling_j"
+ },
+ {
+  "input": "A. B. C. Smith",
+  "name_key": "smith_a"
+ },
+ {
+  "input": "SMITH, JOHN",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "smith, john",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "JOHN SMITH",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "john smith",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "JoHn SmItH",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "Francois Hollande",
+  "name_key": "hollande_francois"
+ },
+ {
+  "input": "Renee Fleming",
+  "name_key": "fleming_renee"
+ },
+ {
+  "input": "Zoe Kravitz",
+  "name_key": "kravitz_zoe"
+ },
+ {
+  "input": "Jose Maria Aznar",
+  "name_key": "aznar_jose"
+ },
+ {
+  "input": "Nunez, Jose",
+  "name_key": "nunez_jose"
+ },
+ {
+  "input": "Jose Nunez",
+  "name_key": "nunez_jose"
+ },
+ {
+  "input": "Pena, Carlos",
+  "name_key": "pena_carlos"
+ },
+ {
+  "input": "Carlos Pena",
+  "name_key": "pena_carlos"
+ },
+ {
+  "input": "Antonin Dvorak",
+  "name_key": "dvorak_antonin"
+ },
+ {
+  "input": "Hans Mueller",
+  "name_key": "mueller_hans"
+ },
+ {
+  "input": "Mueller, Hans",
+  "name_key": "mueller_hans"
+ },
+ {
+  "input": "李 明",
+  "name_key": "李_明"
+ },
+ {
+  "input": "王 伟",
+  "name_key": "王_伟"
+ },
+ {
+  "input": "张 三",
+  "name_key": "张_三"
+ },
+ {
+  "input": "陈 小明",
+  "name_key": "陈_小明"
+ },
+ {
+  "input": "김 민준",
+  "name_key": "김_민준"
+ },
+ {
+  "input": "박 지성",
+  "name_key": "박_지성"
+ },
+ {
+  "input": "李明",
+  "name_key": "李明_"
+ },
+ {
+  "input": "王伟",
+  "name_key": "王伟_"
+ },
+ {
+  "input": "Albert Einstein",
+  "name_key": "einstein_albert"
+ },
+ {
+  "input": "Marie Curie",
+  "name_key": "curie_marie"
+ },
+ {
+  "input": "Curie, Marie",
+  "name_key": "curie_marie"
+ },
+ {
+  "input": "Isaac Newton",
+  "name_key": "newton_isaac"
+ },
+ {
+  "input": "Newton, Isaac",
+  "name_key": "newton_isaac"
+ },
+ {
+  "input": "Niels Bohr",
+  "name_key": "bohr_niels"
+ },
+ {
+  "input": "Bohr, Niels",
+  "name_key": "bohr_niels"
+ },
+ {
+  "input": "Andrew Ng",
+  "name_key": "ng_andrew"
+ },
+ {
+  "input": "Ng, Andrew",
+  "name_key": "ng_andrew"
+ },
+ {
+  "input": "Yann LeCun",
+  "name_key": "lecun_yann"
+ },
+ {
+  "input": "LeCun, Yann",
+  "name_key": "lecun_yann"
+ },
+ {
+  "input": "Geoffrey Hinton",
+  "name_key": "hinton_geoffrey"
+ },
+ {
+  "input": "Hinton, Geoffrey",
+  "name_key": "hinton_geoffrey"
+ },
+ {
+  "input": "Yoshua Bengio",
+  "name_key": "bengio_yoshua"
+ },
+ {
+  "input": "T. S. Eliot",
+  "name_key": "eliot_t"
+ },
+ {
+  "input": "C. S. Lewis",
+  "name_key": "lewis_c"
+ },
+ {
+  "input": "H. G. Wells",
+  "name_key": "wells_h"
+ },
+ {
+  "input": "W. E. B. Du Bois",
+  "name_key": "dubois_w"
+ },
+ {
+  "input": "Du Bois, W. E. B.",
+  "name_key": "dubois_w"
+ },
+ {
+  "input": "O. Henry",
+  "name_key": "henry_o"
+ },
+ {
+  "input": "O'Brien, Patrick",
+  "name_key": "obrien_patrick"
+ },
+ {
+  "input": "MacDonald, Ronald",
+  "name_key": "macdonald_ronald"
+ },
+ {
+  "input": "Ronald McDonald",
+  "name_key": "mcdonald_ronald"
+ },
+ {
+  "input": "  J Smith  ",
+  "name_key": "smith_j"
+ },
+ {
+  "input": "John   Smith",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "  John  Michael  Smith  ",
+  "name_key": "smith_john"
+ },
+ {
+  "input": "J",
+  "name_key": "j_"
+ },
+ {
+  "input": "X Y",
+  "name_key": "y_x"
+ },
+ {
+  "input": "A B",
+  "name_key": "b_a"
+ },
+ {
+  "input": "Smith,",
+  "name_key": "smith_"
+ },
+ {
+  "input": "John,",
+  "name_key": "john_"
+ },
+ {
+  "input": "Smith, ",
+  "name_key": "smith_"
+ },
+ {
+  "input": "",
+  "name_key": ""
+ },
+ {
+  "input": "   ",
+  "name_key": ""
+ },
+ {
+  "input": "Dr.",
+  "name_key": ""
+ },
+ {
+  "input": "PhD",
+  "name_key": ""
+ },
+ {
+  "input": "  ,  John",
+  "name_key": ""
+ },
+ {
+  "input": "Stephen Hawking",
+  "name_key": "hawking_stephen"
+ },
+ {
+  "input": "Hawking, Stephen",
+  "name_key": "hawking_stephen"
+ },
+ {
+  "input": "Richard Feynman",
+  "name_key": "feynman_richard"
+ },
+ {
+  "input": "Feynman, Richard",
+  "name_key": "feynman_richard"
+ },
+ {
+  "input": "Alan Turing",
+  "name_key": "turing_alan"
+ },
+ {
+  "input": "Turing, Alan",
+  "name_key": "turing_alan"
+ },
+ {
+  "input": "Ada Lovelace",
+  "name_key": "lovelace_ada"
+ },
+ {
+  "input": "Lovelace, Ada",
+  "name_key": "lovelace_ada"
+ },
+ {
+  "input": "Grace Hopper",
+  "name_key": "hopper_grace"
+ },
+ {
+  "input": "Hopper, Grace",
+  "name_key": "hopper_grace"
+ },
+ {
+  "input": "Donald Knuth",
+  "name_key": "knuth_donald"
+ },
+ {
+  "input": "Knuth, Donald",
+  "name_key": "knuth_donald"
+ },
+ {
+  "input": "Tim Berners-Lee",
+  "name_key": "berners-lee_tim"
+ },
+ {
+  "input": "Berners-Lee, Tim",
+  "name_key": "berners-lee_tim"
+ },
+ {
+  "input": "Edsger W. Dijkstra",
+  "name_key": "dijkstra_edsger"
+ },
+ {
+  "input": "Dijkstra, Edsger W.",
+  "name_key": "dijkstra_edsger"
+ },
+ {
+  "input": "Linus Torvalds",
+  "name_key": "torvalds_linus"
+ },
+ {
+  "input": "Torvalds, Linus",
+  "name_key": "torvalds_linus"
+ },
+ {
+  "input": "Barbara Liskov",
+  "name_key": "liskov_barbara"
+ },
+ {
+  "input": "Liskov, Barbara",
+  "name_key": "liskov_barbara"
+ },
+ {
+  "input": "Vint Cerf",
+  "name_key": "cerf_vint"
+ },
+ {
+  "input": "Cerf, Vint",
+  "name_key": "cerf_vint"
+ },
+ {
+  "input": "Ken Thompson",
+  "name_key": "thompson_ken"
+ },
+ {
+  "input": "Dennis Ritchie",
+  "name_key": "ritchie_dennis"
+ }
+]
