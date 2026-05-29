@@ -94,6 +94,12 @@ def migrate_coauthor_graph(db, *, dry_run: bool = True, domain: str | None = Non
         stats["authors_created"] = db.query(models.Author).count() - initial_author_count
         stats["publications_created"] = db.query(models.AuthorPublication).count()
         stats["edges_created"] = db.query(models.CoauthorEdge).count()
+        # Populate the review queue with ambiguous (last+initial) pairs so the
+        # hybrid-identity workflow is live immediately after migration.
+        from backend.coauthorship.suggestions import generate_merge_suggestions
+
+        sug = generate_merge_suggestions(db)
+        stats["suggestions_created"] = sug["suggestions_created"]
 
     logger.info(
         "migrate_coauthor_graph dry_run=%s domain=%s stats=%s", dry_run, domain, stats

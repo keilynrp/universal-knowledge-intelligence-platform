@@ -373,6 +373,18 @@ def _enqueue_author_scopes(db, author_id: int, reason: str) -> None:
         db.merge(models.CoauthorDirtyScope(org_id=org_id, domain_id=domain_id, reason=reason))
 
 
+@router.post("/coauthorship/merge-suggestions/generate")
+def generate_merge_suggestions_endpoint(
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(require_role("super_admin", "admin")),
+) -> dict:
+    """Scan authors and enqueue ambiguous (last+initial) pairs for review.
+    Idempotent — safe to re-run; existing pairs are skipped."""
+    from backend.coauthorship.suggestions import generate_merge_suggestions
+
+    return generate_merge_suggestions(db)
+
+
 @router.post("/coauthorship/merge-suggestions/{suggestion_id}/confirm")
 def confirm_merge_suggestion(
     suggestion_id: int,
