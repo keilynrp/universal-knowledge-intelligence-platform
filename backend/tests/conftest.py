@@ -23,6 +23,14 @@ os.environ.setdefault("SENTRY_ENABLED", "0")
 _DB_MODE = os.environ.get("UKIP_DB_MODE", "sqlite").lower()
 _IS_POSTGRES = _DB_MODE == "postgres"
 
+
+def pytest_configure(config):
+    """Register custom markers (no pytest.ini in this repo)."""
+    config.addinivalue_line(
+        "markers",
+        "slow: long-running performance gates; deselect with -m 'not slow'",
+    )
+
 if _IS_POSTGRES:
     _TEST_DB_URL = os.environ.get(
         "DATABASE_URL",
