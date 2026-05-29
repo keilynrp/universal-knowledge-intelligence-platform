@@ -477,6 +477,7 @@ def confirm_merge_suggestion(
     loser = db.query(models.Author).filter_by(id=s.author_b_id).first()
     if winner is None or loser is None:
         raise HTTPException(status_code=409, detail="one of the authors no longer exists")
+    loser_id = loser.id
 
     merge_authors(
         db, winner, loser,
@@ -494,7 +495,7 @@ def confirm_merge_suggestion(
     return {
         "status": "merged",
         "winner_author_id": winner.id,
-        "loser_author_id": s.author_b_id,
+        "loser_author_id": loser_id,
     }
 
 

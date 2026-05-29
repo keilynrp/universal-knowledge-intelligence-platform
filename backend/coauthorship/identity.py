@@ -332,8 +332,28 @@ def merge_authors(
         performed_by=performed_by,
     ))
 
+    winner_entity_ids = {
+        row[0]
+        for row in db.query(models.AuthorPublication.entity_id)
+        .filter_by(author_id=winner.id)
+        .all()
+    }
+    if winner_entity_ids:
+        db.query(models.AuthorPublication).filter(
+            models.AuthorPublication.author_id == loser.id,
+            models.AuthorPublication.entity_id.in_(winner_entity_ids),
+        ).delete(synchronize_session=False)
     db.query(models.AuthorPublication).filter_by(author_id=loser.id).update(
         {"author_id": winner.id}, synchronize_session=False
+    )
+    db.query(models.AuthorStats).filter_by(author_id=loser.id).delete(
+        synchronize_session=False
+    )
+    db.query(models.AuthorMergeSuggestion).filter_by(author_a_id=loser.id).update(
+        {"author_a_id": winner.id}, synchronize_session=False
+    )
+    db.query(models.AuthorMergeSuggestion).filter_by(author_b_id=loser.id).update(
+        {"author_b_id": winner.id}, synchronize_session=False
     )
     db.query(models.CoauthorContribution).filter(
         (models.CoauthorContribution.author_a_id == loser.id)

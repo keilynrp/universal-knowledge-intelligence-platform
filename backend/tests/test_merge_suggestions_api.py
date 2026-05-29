@@ -53,8 +53,31 @@ def test_confirm_merges_and_audits(client, auth_headers, db_session):
     assert audit.tier == "manual"
     refreshed = db_session.query(models.AuthorMergeSuggestion).filter_by(id=s_id).one()
     assert refreshed.status == "merged"
+    assert refreshed.author_a_id == a_id
+    assert refreshed.author_b_id == a_id
     # Winner's scope enqueued for recompute.
     assert db_session.query(models.CoauthorDirtyScope).filter_by(org_id=0, domain_id="default").count() == 1
+
+
+def test_confirm_handles_duplicate_publication_rows(client, auth_headers, db_session):
+    s, a, b = _suggestion(db_session, with_pub_on_loser=False)
+    e = models.RawEntity(primary_label="shared paper", domain="default", org_id=None,
+                         attributes_json="{}")
+    db_session.add(e)
+    db_session.commit()
+    db_session.add_all([
+        models.AuthorPublication(author_id=a.id, entity_id=e.id, org_id=0,
+                                 domain_id="default", position=1),
+        models.AuthorPublication(author_id=b.id, entity_id=e.id, org_id=0,
+                                 domain_id="default", position=2),
+    ])
+    db_session.commit()
+
+    r = client.post(f"/coauthorship/merge-suggestions/{s.id}/confirm", headers=auth_headers)
+    assert r.status_code == 200, r.text
+    pubs = db_session.query(models.AuthorPublication).all()
+    assert len(pubs) == 1
+    assert pubs[0].author_id == a.id
 
 
 def test_confirm_already_resolved_conflicts(client, auth_headers, db_session):
