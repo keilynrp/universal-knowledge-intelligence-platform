@@ -547,6 +547,10 @@ export default function ExecutiveDashboardPage() {
     const value = t(key);
     return value === key ? fallback : value;
   }, [t]);
+  const semanticKeywordTooltip = tr(
+    "page.exec_dashboard.semantic_keywords_tooltip",
+    "Semantic Keyword Signals transform extracted keywords and concepts into explainable evidence: internal frequency, external support, opportunity score, and recommendations for review in the graph.",
+  );
   const formatObservedValue = (value: number) => (
     Number.isInteger(value)
       ? value.toLocaleString()
@@ -1518,8 +1522,17 @@ export default function ExecutiveDashboardPage() {
           <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className={showcaseBlueLabelClass}>{tr("page.exec_dashboard.semantic_keywords_eyebrow", "Semantic signal")}</p>
-              <h3 className="mt-1 text-base font-semibold text-slate-950">
+              <h3 className="mt-1 flex items-center gap-2 text-base font-semibold text-slate-950">
                 {tr("page.exec_dashboard.semantic_keywords_title", "Keyword opportunity map")}
+                <span
+                  aria-label={semanticKeywordTooltip}
+                  className="inline-flex h-5 w-5 cursor-help items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-[11px] font-bold leading-none text-blue-700"
+                  role="img"
+                  tabIndex={0}
+                  title={semanticKeywordTooltip}
+                >
+                  i
+                </span>
               </h3>
             </div>
             <div className="grid grid-cols-3 gap-2 text-right">
