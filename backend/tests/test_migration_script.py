@@ -42,9 +42,11 @@ def test_full_run_creates_authors_and_edges(db):
     stats = migrate_coauthor_graph(db, dry_run=False)
     assert stats["authors_created"] == 3
     assert stats["edges_created"] == 3
+    assert stats["scopes_recomputed"] == 1
     assert db.query(models.Author).count() == 3
     assert db.query(models.CoauthorEdge).count() == 3
     assert db.query(models.AuthorPublication).count() == 3
+    assert db.query(models.AuthorStats).count() == 3
 
 
 def test_full_run_idempotent(db):
@@ -65,6 +67,7 @@ def test_full_run_idempotent(db):
     assert before == after
     # Idempotent weight: the single shared publication contributes exactly 1.
     assert db.query(models.CoauthorEdge).one().weight == edge_weight_before == 1
+    assert db.query(models.AuthorStats).count() == 2
 
 
 def test_namekey_collapses_legacy_surface_forms(db):

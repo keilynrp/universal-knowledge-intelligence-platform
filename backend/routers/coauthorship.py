@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend import models
@@ -48,6 +49,66 @@ def _scope_org_id(resolved: int | None) -> int | None:
     if is_legacy_global_scope(resolved):
         return _LEGACY_GLOBAL_V2_SENTINEL
     return resolved
+
+
+def _ensure_coauthor_stats_ready(db: Session, *, org_id: int | None, domain_id: str) -> None:
+    """Synchronously materialize stats when V2 edges exist but stats do not.
+
+    This is intentionally defensive for production cutover: a Dokploy restart,
+    missed worker loop, or manual migration can leave coauthor_edges populated
+    while author_stats is empty, which makes the graph look blank. The endpoint
+    can repair that state cheaply for the current domain/scope before reading.
+    """
+    stats_q = db.query(models.AuthorStats).filter_by(domain_id=domain_id)
+    edges_q = db.query(models.CoauthorEdge).filter_by(domain_id=domain_id)
+    if org_id is not None:
+        stats_q = stats_q.filter_by(org_id=org_id)
+        edges_q = edges_q.filter_by(org_id=org_id)
+
+    stats_count = stats_q.count()
+    edges_count = edges_q.count()
+    if stats_count > 0 or edges_count == 0:
+        return
+    if org_id is not None:
+        recompute_coauthor_stats(db, org_id=org_id, domain_id=domain_id)
+        return
+
+    scopes = (
+        db.query(models.CoauthorEdge.org_id)
+        .filter_by(domain_id=domain_id)
+        .distinct()
+        .all()
+    )
+    for (scope_org_id,) in scopes:
+        recompute_coauthor_stats(db, org_id=scope_org_id, domain_id=domain_id)
+
+
+def _coauthor_edge_count(db: Session, *, org_id: int | None, domain_id: str) -> int:
+    q = db.query(models.CoauthorEdge).filter_by(domain_id=domain_id)
+    if org_id is not None:
+        q = q.filter_by(org_id=org_id)
+    return q.count()
+
+
+def _resolve_coauthor_domain(db: Session, *, org_id: int | None, requested_domain_id: str) -> str:
+    """Pick a domain that actually has coauthorship data for this scope.
+
+    The UI domain selector can legitimately send aggregate/all or a domain label
+    that has no V2 coauthor rows yet. In that case, prefer the populated
+    coauthorship domain instead of returning a blank graph.
+    """
+    if _coauthor_edge_count(db, org_id=org_id, domain_id=requested_domain_id) > 0:
+        return requested_domain_id
+
+    q = (
+        db.query(models.CoauthorEdge.domain_id, func.count().label("edge_count"))
+        .group_by(models.CoauthorEdge.domain_id)
+        .order_by(func.count().desc())
+    )
+    if org_id is not None:
+        q = q.filter(models.CoauthorEdge.org_id == org_id)
+    row = q.first()
+    return row[0] if row else requested_domain_id
 
 
 @router.get("/analyzers/coauthorship/{domain_id}")
@@ -81,6 +142,9 @@ def coauthorship_network_v2(
 
     response.headers["Cache-Control"] = "no-store"
     org_id = _scope_org_id(resolve_request_org_id(db, current_user))
+    requested_domain_id = domain_id
+    domain_id = _resolve_coauthor_domain(db, org_id=org_id, requested_domain_id=domain_id)
+    _ensure_coauthor_stats_ready(db, org_id=org_id, domain_id=domain_id)
 
     q = (
         db.query(models.AuthorStats, models.Author)
@@ -146,6 +210,7 @@ def coauthorship_network_v2(
 
     return {
         "domain_id": domain_id,
+        "requested_domain_id": requested_domain_id,
         "nodes": nodes,
         "edges": edges,
         "computed_at": latest.isoformat() if latest else None,
