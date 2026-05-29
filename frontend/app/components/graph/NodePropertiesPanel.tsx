@@ -89,18 +89,18 @@ export function NodePropertiesPanel({
 
   return (
     <div
-      className="flex h-full min-h-[420px] flex-col"
+      className="flex h-full min-h-[420px] min-w-0 flex-col"
       aria-live="polite"
       data-testid="node-panel"
     >
-      <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+      <div className="flex min-w-0 items-start justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-gray-800">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <span
               className="inline-block h-3 w-3 shrink-0 rounded-full"
               style={{ background: color }}
             />
-            <h3 className="truncate text-base font-semibold text-gray-900 dark:text-white">
+            <h3 className="min-w-0 break-words text-base font-semibold text-gray-900 dark:text-white">
               {detail?.display_name ?? "…"}
             </h3>
           </div>
@@ -109,7 +109,7 @@ export function NodePropertiesPanel({
               href={`https://orcid.org/${detail.orcid}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-1 inline-flex items-center gap-1 rounded bg-lime-100 px-1.5 py-0.5 text-[10px] font-medium text-lime-700 hover:underline dark:bg-lime-900/30 dark:text-lime-300"
+              className="mt-1 inline-flex max-w-full items-center gap-1 break-all rounded bg-lime-100 px-1.5 py-0.5 text-[10px] font-medium text-lime-700 hover:underline dark:bg-lime-900/30 dark:text-lime-300"
             >
               ORCID {detail.orcid}
             </a>
@@ -118,7 +118,7 @@ export function NodePropertiesPanel({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-full p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+          className="shrink-0 rounded-full p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
           aria-label="Close panel"
         >
           ✕
@@ -138,7 +138,7 @@ export function NodePropertiesPanel({
       )}
 
       {!loading && !error && detail && (
-        <div className="flex-1 overflow-y-auto">
+        <div className="min-w-0 flex-1 overflow-y-auto">
           <div className="grid grid-cols-2 gap-3 px-5 py-4">
             <Metric label="Publications" value={detail.metrics.publication_count} />
             <Metric label="Degree" value={detail.metrics.degree} />
@@ -158,7 +158,7 @@ export function NodePropertiesPanel({
                 {detail.aliases.map((a) => (
                   <li
                     key={a}
-                    className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                    className="max-w-full break-words rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-700 dark:bg-gray-800 dark:text-gray-300"
                   >
                     {a}
                   </li>
@@ -175,16 +175,16 @@ export function NodePropertiesPanel({
                 {detail.collaborators.map((c) => (
                   <li
                     key={c.author_id}
-                    className="flex items-center justify-between rounded px-2 py-1.5 text-sm text-gray-800 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800/40"
+                    className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded px-2 py-1.5 text-sm text-gray-800 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800/40"
                   >
                     <button
                       type="button"
                       onClick={() => onSelectCollaborator?.(String(c.author_id))}
-                      className="truncate text-left hover:underline"
+                      className="min-w-0 break-words text-left hover:underline"
                     >
                       {c.name ?? `Author ${c.author_id}`}
                     </button>
-                    <span className="ml-2 shrink-0 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                    <span className="shrink-0 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
                       {c.weight}
                     </span>
                   </li>
@@ -199,8 +199,8 @@ export function NodePropertiesPanel({
             ) : (
               <ul className="space-y-1">
                 {detail.publications.map((p) => (
-                  <li key={p.entity_id} className="flex items-baseline justify-between gap-2 px-2 py-1 text-sm">
-                    <span className="truncate text-gray-800 dark:text-gray-200">{p.title}</span>
+                  <li key={p.entity_id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2 px-2 py-1 text-sm">
+                    <span className="min-w-0 break-words text-gray-800 dark:text-gray-200">{p.title}</span>
                     {p.year != null && (
                       <span className="shrink-0 font-mono text-[11px] text-gray-500 dark:text-gray-400">
                         {p.year}
@@ -219,17 +219,17 @@ export function NodePropertiesPanel({
 
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
-    <div>
-      <p className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">{label}</p>
-      <p className="mt-1 text-xl font-semibold tabular-nums text-gray-900 dark:text-white">{value}</p>
+    <div className="min-w-0">
+      <p className="break-words text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">{label}</p>
+      <p className="mt-1 break-words text-xl font-semibold tabular-nums text-gray-900 dark:text-white">{value}</p>
     </div>
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="px-5 pb-5">
-      <p className="mb-2 text-[11px] uppercase tracking-wider text-gray-500 dark:text-gray-400">{title}</p>
+    <div className="min-w-0 px-5 pb-5">
+      <p className="mb-2 break-words text-[11px] uppercase tracking-wider text-gray-500 dark:text-gray-400">{title}</p>
       {children}
     </div>
   );

@@ -112,17 +112,17 @@ export default function CoauthorshipPage() {
   const updatedLabel = relativeTime(data?.computed_at);
 
   return (
-    <div className="space-y-5 p-6">
-      <div className="flex items-center justify-between">
-        <div>
+    <div className="min-w-0 space-y-5 p-4 sm:p-6">
+      <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+        <div className="min-w-0">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
             {t("page.coauthorship.title")}
           </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="max-w-full break-words text-sm text-gray-500 dark:text-gray-400">
             {t("page.coauthorship.subtitle")}
           </p>
         </div>
-        <Link href="/analytics" className="text-sm text-blue-600 hover:underline dark:text-blue-400">
+        <Link href="/analytics" className="text-sm text-blue-600 hover:underline dark:text-blue-400 sm:pt-1">
           &larr; {t("nav.analytics")}
         </Link>
       </div>
@@ -174,16 +174,16 @@ export default function CoauthorshipPage() {
 
       {!loading && !error && data && (
         <>
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
             {[
               { label: t("page.coauthorship.nodes"), value: data.nodes.length },
               { label: t("page.coauthorship.edges"), value: data.edges.length },
               { label: t("page.coauthorship.communities"), value: communityCount },
               { label: "Coverage", value: `${(data.coverage_pct ?? 0).toFixed(0)}%` },
             ].map((kpi) => (
-              <div key={kpi.label} className="rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900">
-                <p className="text-xs text-gray-500 dark:text-gray-400">{kpi.label}</p>
-                <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{kpi.value}</p>
+              <div key={kpi.label} className="min-w-0 rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900">
+                <p className="break-words text-xs text-gray-500 dark:text-gray-400">{kpi.label}</p>
+                <p className="mt-1 break-words text-2xl font-bold text-gray-900 dark:text-white">{kpi.value}</p>
               </div>
             ))}
           </div>
@@ -199,8 +199,8 @@ export default function CoauthorshipPage() {
               />
             </div>
           ) : (
-            <div className="grid gap-4 lg:grid-cols-3">
-              <div className="col-span-1 rounded-xl border border-gray-200 bg-white p-3 lg:col-span-2 dark:border-gray-800 dark:bg-gray-900">
+            <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)]">
+              <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
                 <NetworkGraph
                   nodes={data.nodes}
                   edges={data.edges}
@@ -208,7 +208,7 @@ export default function CoauthorshipPage() {
                   onNodeClick={setSelected}
                 />
               </div>
-              <div className="col-span-1 rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+              <div className="min-w-0 rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
                 <NodePropertiesPanel
                   domainId={activeDomainId}
                   authorId={selected}

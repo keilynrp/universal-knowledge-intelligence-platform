@@ -70,20 +70,22 @@ export function MergeSuggestionsPanel({ isAdmin, onResolved }: MergeSuggestionsP
 
   return (
     <div
-      className="rounded-xl border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30"
+      className="overflow-hidden rounded-xl border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30"
       data-testid="merge-suggestions"
     >
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left"
+        className="flex w-full min-w-0 items-center justify-between gap-3 px-4 py-3 text-left"
         aria-expanded={open}
       >
-        <span className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-200">
-          <span aria-hidden>⚠️</span>
-          {items.length} ambiguous author{items.length === 1 ? "" : "s"} to review
+        <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-200">
+          <span className="shrink-0" aria-hidden>⚠️</span>
+          <span className="min-w-0 break-words">
+            {items.length} ambiguous author{items.length === 1 ? "" : "s"} to review
+          </span>
         </span>
-        <span className="text-amber-600 dark:text-amber-400">{open ? "▾" : "▸"}</span>
+        <span className="shrink-0 text-amber-600 dark:text-amber-400">{open ? "▾" : "▸"}</span>
       </button>
 
       {open && (
@@ -92,26 +94,26 @@ export function MergeSuggestionsPanel({ isAdmin, onResolved }: MergeSuggestionsP
           {items.map((s) => (
             <div
               key={s.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2 dark:border-amber-900 dark:bg-gray-900"
+              className="grid min-w-0 gap-3 rounded-lg border border-amber-200 bg-white px-3 py-2 dark:border-amber-900 dark:bg-gray-900 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
             >
-              <div className="min-w-0 text-sm">
-                <span className="font-medium text-gray-900 dark:text-white">
+              <div className="min-w-0 text-sm leading-6">
+                <span className="break-words font-medium text-gray-900 dark:text-white">
                   {s.author_a_name ?? `Author ${s.author_a_id}`}
                 </span>
                 <span className="mx-2 text-gray-400">↔</span>
-                <span className="font-medium text-gray-900 dark:text-white">
+                <span className="break-words font-medium text-gray-900 dark:text-white">
                   {s.author_b_name ?? `Author ${s.author_b_id}`}
                 </span>
                 {s.reason && (
-                  <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">({s.reason})</span>
+                  <span className="ml-2 inline break-words text-xs text-gray-500 dark:text-gray-400">({s.reason})</span>
                 )}
               </div>
-              <div className="flex shrink-0 gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
                 <button
                   type="button"
                   disabled={busyId === s.id}
                   onClick={() => act(s.id, "confirm")}
-                  className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                  className="min-w-0 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
                   Merge
                 </button>
@@ -119,7 +121,7 @@ export function MergeSuggestionsPanel({ isAdmin, onResolved }: MergeSuggestionsP
                   type="button"
                   disabled={busyId === s.id}
                   onClick={() => act(s.id, "reject")}
-                  className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                  className="min-w-0 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
                 >
                   Keep separate
                 </button>
