@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { useLanguage } from "../contexts/LanguageContext";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,6 +49,10 @@ const RESOURCE_LABELS: Record<string, string> = {
   rag_index:                    "RAG Index",
   executive_dashboard_snapshot: "Dashboard Snapshot",
   report_readiness:             "Report Readiness",
+};
+
+const RESOURCE_TOOLTIP_KEYS: Record<string, string> = {
+  semantic_keyword_signals: "derived_status.semantic_keyword_signals.tooltip",
 };
 
 const RESOURCE_ORDER = [
@@ -117,9 +122,10 @@ interface ResourceRowProps {
   entry: ResourceEntry;
   onRebuild: (endpoint: string, resourceKey: string) => Promise<void>;
   rebuilding: boolean;
+  tooltip?: string;
 }
 
-function ResourceRow({ resourceKey, entry, onRebuild, rebuilding }: ResourceRowProps) {
+function ResourceRow({ resourceKey, entry, onRebuild, rebuilding, tooltip }: ResourceRowProps) {
   const label = RESOURCE_LABELS[resourceKey] ?? resourceKey;
   const isActive = ACTIVE_STATUSES.has(entry.status);
 
@@ -129,8 +135,19 @@ function ResourceRow({ resourceKey, entry, onRebuild, rebuilding }: ResourceRowP
       <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${statusDot(entry.status)}`} />
 
       {/* Label */}
-      <span className="w-44 flex-shrink-0 text-sm font-medium text-gray-700 dark:text-gray-200">
+      <span className="flex w-44 flex-shrink-0 items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-200">
         {label}
+        {tooltip && (
+          <span
+            aria-label={tooltip}
+            className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-[10px] font-bold leading-none text-blue-700 dark:border-blue-700/60 dark:bg-blue-900/30 dark:text-blue-200"
+            role="img"
+            tabIndex={0}
+            title={tooltip}
+          >
+            i
+          </span>
+        )}
       </span>
 
       {/* Badge */}
@@ -184,6 +201,7 @@ interface DerivedStatusPanelProps {
 }
 
 export default function DerivedStatusPanel({ domainId }: DerivedStatusPanelProps) {
+  const { t } = useLanguage();
   const [bundle, setBundle]   = useState<DerivedStatusBundle | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -291,6 +309,7 @@ export default function DerivedStatusPanel({ domainId }: DerivedStatusPanelProps
               entry={entry}
               onRebuild={handleRebuild}
               rebuilding={!!rebuilding[key]}
+              tooltip={RESOURCE_TOOLTIP_KEYS[key] ? t(RESOURCE_TOOLTIP_KEYS[key]) : undefined}
             />
           );
         })}
