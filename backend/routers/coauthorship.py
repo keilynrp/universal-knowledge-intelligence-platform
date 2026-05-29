@@ -154,6 +154,109 @@ def coauthorship_network_v2(
     }
 
 
+def _entity_title_year(entity) -> tuple[str, int | None]:
+    """Best-effort (title, year) from a RawEntity's attributes_json, falling
+    back to primary_label for the title."""
+    import json as _json
+
+    title = entity.primary_label or f"entity {entity.id}"
+    year = None
+    try:
+        attrs = _json.loads(entity.attributes_json or "{}")
+    except (ValueError, TypeError):
+        attrs = {}
+    title = attrs.get("title") or title
+    for key in ("publication_year", "year", "enrichment_year"):
+        val = attrs.get(key)
+        if val:
+            try:
+                year = int(str(val)[:4])
+                break
+            except (ValueError, TypeError):
+                continue
+    return title, year
+
+
+@router.get("/analyzers/coauthorship/{domain_id}/author/{author_id}")
+def coauthorship_author_detail(
+    domain_id: str,
+    author_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+) -> dict:
+    """Detail for one author within a scope: identity header, stats, top
+    publications (by year desc), and top collaborators (by edge weight desc).
+    Served from the V2 tables; no legacy equivalent."""
+    org_id = _scope_org_id(resolve_request_org_id(db, current_user))
+
+    author = db.query(models.Author).filter_by(id=author_id).first()
+    if author is None:
+        raise HTTPException(status_code=404, detail="author not found")
+
+    stats_q = db.query(models.AuthorStats).filter_by(
+        author_id=author_id, domain_id=domain_id
+    )
+    if org_id is not None:
+        stats_q = stats_q.filter_by(org_id=org_id)
+    stats = stats_q.first()
+
+    # Publications in this scope.
+    pub_q = db.query(models.AuthorPublication).filter_by(
+        author_id=author_id, domain_id=domain_id
+    )
+    if org_id is not None:
+        pub_q = pub_q.filter_by(org_id=org_id)
+    pub_rows = pub_q.all()
+    entity_ids = [p.entity_id for p in pub_rows]
+    publications = []
+    if entity_ids:
+        for ent in db.query(models.RawEntity).filter(models.RawEntity.id.in_(entity_ids)).all():
+            title, year = _entity_title_year(ent)
+            publications.append({"entity_id": ent.id, "title": title, "year": year})
+        publications.sort(key=lambda p: (p["year"] is not None, p["year"] or 0), reverse=True)
+        publications = publications[:20]
+
+    # Collaborators: edges incident to this author in scope, by weight desc.
+    edge_q = db.query(models.CoauthorEdge).filter(
+        models.CoauthorEdge.domain_id == domain_id,
+        (models.CoauthorEdge.author_a_id == author_id)
+        | (models.CoauthorEdge.author_b_id == author_id),
+    )
+    if org_id is not None:
+        edge_q = edge_q.filter(models.CoauthorEdge.org_id == org_id)
+    edges = sorted(edge_q.all(), key=lambda e: e.weight, reverse=True)[:50]
+    other_ids = [
+        (e.author_b_id if e.author_a_id == author_id else e.author_a_id) for e in edges
+    ]
+    other_names = {
+        a.id: a.display_name
+        for a in db.query(models.Author).filter(models.Author.id.in_(other_ids)).all()
+    } if other_ids else {}
+    collaborators = [
+        {
+            "author_id": oid,
+            "name": other_names.get(oid),
+            "weight": e.weight,
+        }
+        for e, oid in zip(edges, other_ids)
+    ]
+
+    return {
+        "author_id": author.id,
+        "display_name": author.display_name,
+        "orcid": author.orcid,
+        "aliases": author.aliases_list,
+        "metrics": {
+            "degree": stats.degree if stats else 0,
+            "centrality": stats.centrality if stats else 0.0,
+            "community_id": stats.community_id if stats else None,
+            "publication_count": stats.publication_count if stats else len(pub_rows),
+        },
+        "publications": publications,
+        "collaborators": collaborators,
+    }
+
+
 @router.get("/analyzers/coauthorship/{domain_id}/diagnostics")
 def coauthorship_diagnostics(
     domain_id: str,

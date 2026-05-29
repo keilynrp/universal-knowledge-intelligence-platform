@@ -123,6 +123,63 @@ def test_scope_isolation_viewer_vs_super_admin(client, auth_headers, viewer_head
     assert len(viewer_nodes) == 5
 
 
+# ── F4b.2: author detail ─────────────────────────────────────────────────────
+
+
+def _seed_author_detail(db, *, domain="default", org_id=0):
+    import json
+    hub = _author(db, "det_hub", "Hub")
+    c1 = _author(db, "det_c1", "Collab One")
+    c2 = _author(db, "det_c2", "Collab Two")
+    _edge(db, hub, c1, domain=domain, org_id=org_id, weight=5)
+    _edge(db, hub, c2, domain=domain, org_id=org_id, weight=2)
+    _stat(db, hub, domain=domain, org_id=org_id, degree=2, centrality=0.8, community=3)
+    e1 = models.RawEntity(primary_label="Old Paper", domain=domain, org_id=None,
+                          attributes_json=json.dumps({"year": 2010}))
+    e2 = models.RawEntity(primary_label="New Paper", domain=domain, org_id=None,
+                          attributes_json=json.dumps({"title": "Newer", "publication_year": 2022}))
+    db.add_all([e1, e2])
+    db.commit()
+    db.add_all([
+        models.AuthorPublication(author_id=hub.id, entity_id=e1.id, org_id=org_id,
+                                 domain_id=domain, position=1),
+        models.AuthorPublication(author_id=hub.id, entity_id=e2.id, org_id=org_id,
+                                 domain_id=domain, position=1),
+    ])
+    db.commit()
+    return hub, c1, c2
+
+
+def test_author_detail_404_for_missing(client, auth_headers):
+    r = client.get("/analyzers/coauthorship/default/author/999999", headers=auth_headers)
+    assert r.status_code == 404
+
+
+def test_author_detail_header_and_metrics(client, auth_headers, db_session):
+    hub, _c1, _c2 = _seed_author_detail(db_session)
+    r = client.get(f"/analyzers/coauthorship/default/author/{hub.id}", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["display_name"] == "Hub"
+    assert body["metrics"]["community_id"] == 3
+    assert body["metrics"]["centrality"] == 0.8
+
+
+def test_author_detail_collaborators_sorted_by_weight(client, auth_headers, db_session):
+    hub, _c1, _c2 = _seed_author_detail(db_session)
+    r = client.get(f"/analyzers/coauthorship/default/author/{hub.id}", headers=auth_headers)
+    collabs = r.json()["collaborators"]
+    assert [(c["name"], c["weight"]) for c in collabs] == [("Collab One", 5), ("Collab Two", 2)]
+
+
+def test_author_detail_publications_sorted_by_year_desc(client, auth_headers, db_session):
+    hub, _c1, _c2 = _seed_author_detail(db_session)
+    r = client.get(f"/analyzers/coauthorship/default/author/{hub.id}", headers=auth_headers)
+    pubs = r.json()["publications"]
+    assert [p["title"] for p in pubs] == ["Newer", "Old Paper"]
+    assert [p["year"] for p in pubs] == [2022, 2010]
+
+
 def test_backfill_visibility_after_recompute(client, auth_headers, read_on, db_session):
     """Regression for the original bug: edges written under org 0 must be VISIBLE
     after recompute materializes stats — no tenancy-scope mismatch."""
