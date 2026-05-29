@@ -54,6 +54,12 @@ services:
       ENGINE_FALLBACK_PYTHON: ${ENGINE_FALLBACK_PYTHON:-true}
       DB_CONNECT_RETRIES: ${DB_CONNECT_RETRIES:-45}
       DB_CONNECT_SLEEP_SECONDS: ${DB_CONNECT_SLEEP_SECONDS:-2}
+      # Coauthorship V2 rollout flags. Must be referenced here or the container
+      # never receives them (compose only passes vars it declares). Set the
+      # values in Dokploy's Environment tab; they interpolate in below.
+      COAUTHOR_V2_READ: ${COAUTHOR_V2_READ:-false}
+      COAUTHOR_V2_WRITE: ${COAUTHOR_V2_WRITE:-false}
+      COAUTHOR_V2_SHADOW: ${COAUTHOR_V2_SHADOW:-false}
     volumes:
       - ukip_static_data:/app/static
     healthcheck:
