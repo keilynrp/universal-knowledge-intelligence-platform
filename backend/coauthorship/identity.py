@@ -3,6 +3,8 @@
 Public API:
 - name_key(surface_form: str) -> str
 - classify_merge(db, a, b) -> MergeDecision
+- get_or_create_author(db, surface_form, *, orcid=None) -> Author
+- merge_authors(db, winner, loser, *, tier, reason, performed_by=None, evidence=None)
 """
 from __future__ import annotations
 
@@ -10,7 +12,12 @@ import json
 import re
 import unicodedata
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Literal
+
+from sqlalchemy.exc import IntegrityError
+
+_ALIAS_CAP = 50
 
 _STRIP_PARTS = {
     "dr", "dr.", "prof", "prof.", "mr", "mr.", "mrs", "mrs.", "ms", "ms.",
@@ -225,3 +232,122 @@ def classify_merge(db, a, b) -> MergeDecision:
         return MergeDecision("ambiguous", "last+initial match across name forms", {})
 
     return MergeDecision("distinct", "no overlap", {})
+
+
+# ── Author upsert + merge (F2.3) ────────────────────────────────────────────
+
+
+def _aliases_list(a) -> list[str]:
+    try:
+        return json.loads(a.aliases or "[]")
+    except (ValueError, TypeError):
+        return []
+
+
+def _set_aliases(a, items: list[str]) -> None:
+    """Dedup preserving order, cap to _ALIAS_CAP."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for x in items:
+        if x and x not in seen:
+            seen.add(x)
+            out.append(x)
+    a.aliases = json.dumps(out[:_ALIAS_CAP], ensure_ascii=False)
+
+
+def get_or_create_author(db, surface_form: str, *, orcid: str | None = None):
+    """Return the Author for ``surface_form``'s canonical name_key, creating it
+    if absent. Optimistic-collapse identity: same name_key => same author.
+
+    New surface forms are appended to the alias list (capped). Adopts an ORCID
+    onto an existing author that lacked one. Race-safe: a concurrent insert on
+    the same name_key surfaces as IntegrityError, which we recover by re-fetch.
+    """
+    from backend import models
+
+    key = name_key(surface_form)
+    if not key:
+        raise ValueError("empty name_key from surface form")
+
+    existing = db.query(models.Author).filter_by(name_key=key).first()
+    if existing:
+        aliases = _aliases_list(existing)
+        if surface_form not in aliases:
+            aliases.insert(0, surface_form)
+            _set_aliases(existing, aliases)
+        existing.last_seen_at = datetime.now(timezone.utc)
+        if orcid and not existing.orcid:
+            existing.orcid = orcid
+        db.commit()
+        return existing
+
+    a = models.Author(name_key=key, display_name=surface_form, orcid=orcid)
+    _set_aliases(a, [surface_form])
+    db.add(a)
+    try:
+        db.commit()
+    except IntegrityError:
+        # Race lost — another writer inserted the same name_key. Re-fetch.
+        db.rollback()
+        return db.query(models.Author).filter_by(name_key=key).one()
+    try:
+        db.refresh(a)
+        return a
+    except Exception:
+        # The row committed, but the instance can't be refreshed (e.g. its
+        # state was expired by a concurrent writer on a shared connection).
+        # The unique name_key guarantees a single canonical row — refetch it.
+        return db.query(models.Author).filter_by(name_key=key).one()
+
+
+def merge_authors(
+    db,
+    winner,
+    loser,
+    *,
+    tier: str,
+    reason: str,
+    performed_by: int | None = None,
+    evidence: dict | None = None,
+) -> None:
+    """Repoint all of ``loser``'s rows onto ``winner``, append aliases, write an
+    audit row, and delete ``loser``.
+
+    Must be called inside a transaction; the caller owns the commit. Edges and
+    contribution-log rows for the loser are deleted (not repointed) — the next
+    recompute regenerates edges from the surviving contributions, which keeps
+    the idempotent weight accounting correct.
+    """
+    from backend import models
+
+    if winner.id == loser.id:
+        return
+
+    db.add(models.AuthorMergeAudit(
+        winner_author_id=winner.id,
+        loser_author_id=loser.id,
+        tier=tier,
+        reason=reason,
+        evidence=json.dumps(evidence or {}, ensure_ascii=False),
+        performed_by=performed_by,
+    ))
+
+    db.query(models.AuthorPublication).filter_by(author_id=loser.id).update(
+        {"author_id": winner.id}, synchronize_session=False
+    )
+    db.query(models.CoauthorContribution).filter(
+        (models.CoauthorContribution.author_a_id == loser.id)
+        | (models.CoauthorContribution.author_b_id == loser.id)
+    ).delete(synchronize_session=False)
+    db.query(models.CoauthorEdge).filter(
+        (models.CoauthorEdge.author_a_id == loser.id)
+        | (models.CoauthorEdge.author_b_id == loser.id)
+    ).delete(synchronize_session=False)
+
+    winner_aliases = _aliases_list(winner) + _aliases_list(loser) + [loser.display_name]
+    _set_aliases(winner, winner_aliases)
+    if loser.orcid and not winner.orcid:
+        winner.orcid = loser.orcid
+
+    db.delete(loser)
+    db.flush()
