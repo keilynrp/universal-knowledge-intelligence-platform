@@ -199,13 +199,14 @@ export default function CoauthorshipPage() {
               />
             </div>
           ) : (
-            <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)]">
+            <div className="grid min-w-0 items-stretch gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)]">
               <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
                 <NetworkGraph
                   nodes={data.nodes}
                   edges={data.edges}
                   selected={selected}
                   onNodeClick={setSelected}
+                  className="h-full min-h-[420px] sm:min-h-[560px]"
                 />
               </div>
               <div className="min-w-0 rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
