@@ -14,7 +14,9 @@ from __future__ import annotations
 import logging
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -46,6 +48,110 @@ def _scope_org_id(resolved: int | None) -> int | None:
     if is_legacy_global_scope(resolved):
         return _LEGACY_GLOBAL_V2_SENTINEL
     return resolved
+
+
+@router.get("/analyzers/coauthorship/{domain_id}")
+def coauthorship_network_v2(
+    response: Response,
+    domain_id: str,
+    min_weight: int = Query(default=1, ge=1),
+    limit: int | None = Query(default=100, ge=1, le=500),
+    community_id: int | None = Query(default=None),
+    search: str | None = Query(default=None, min_length=1, max_length=80),
+    force_refresh: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Co-authorship network served from materialized V2 tables (author_stats +
+    coauthor_edges). Behind COAUTHOR_V2_READ; when off, falls through to the
+    legacy analyzer so behaviour is unchanged until cutover."""
+    from backend import config
+
+    if not config.COAUTHOR_V2_READ:
+        from backend.routers.analytics import _legacy_coauthorship_network
+        return _legacy_coauthorship_network(
+            response=response,
+            domain_id=domain_id,
+            min_weight=min_weight,
+            limit=limit,
+            force_refresh=force_refresh,
+            db=db,
+            current_user=current_user,
+        )
+
+    response.headers["Cache-Control"] = "no-store"
+    org_id = _scope_org_id(resolve_request_org_id(db, current_user))
+
+    q = (
+        db.query(models.AuthorStats, models.Author)
+        .join(models.Author, models.Author.id == models.AuthorStats.author_id)
+        .filter(models.AuthorStats.domain_id == domain_id)
+    )
+    if org_id is not None:
+        q = q.filter(models.AuthorStats.org_id == org_id)
+    if community_id is not None:
+        q = q.filter(models.AuthorStats.community_id == community_id)
+    if search:
+        q = q.filter(models.Author.display_name.ilike(f"%{search}%"))
+    q = q.order_by(models.AuthorStats.centrality.desc())
+    if limit:
+        q = q.limit(limit)
+    rows = q.all()
+
+    node_ids = [a.id for _s, a in rows]
+    nodes = [
+        {
+            "id": str(a.id),
+            "label": a.display_name,
+            "degree": s.degree,
+            "centrality": s.centrality,
+            "community_id": s.community_id,
+            "total_publications": s.publication_count,
+        }
+        for s, a in rows
+    ]
+
+    if not node_ids:
+        edge_rows = []
+    else:
+        node_id_set = set(node_ids)
+        edge_q = (
+            db.query(models.CoauthorEdge)
+            .filter(models.CoauthorEdge.domain_id == domain_id)
+            .filter(models.CoauthorEdge.author_a_id.in_(node_ids))
+            .filter(models.CoauthorEdge.author_b_id.in_(node_ids))
+            .filter(models.CoauthorEdge.weight >= min_weight)
+        )
+        if org_id is not None:
+            edge_q = edge_q.filter(models.CoauthorEdge.org_id == org_id)
+        # Both endpoints must be in the surviving node set (the .in_ filters
+        # already guarantee this, but keep the guard explicit for limit pruning).
+        edge_rows = [
+            e for e in edge_q.all()
+            if e.author_a_id in node_id_set and e.author_b_id in node_id_set
+        ]
+
+    edges = [
+        {"source": str(e.author_a_id), "target": str(e.author_b_id), "weight": e.weight}
+        for e in edge_rows
+    ]
+
+    latest = max((s.computed_at for s, _ in rows), default=None)
+    stale = False
+    if latest is not None:
+        # SQLite can return naive datetimes; normalize before comparing.
+        latest_aware = latest if latest.tzinfo else latest.replace(tzinfo=timezone.utc)
+        stale = latest_aware < datetime.now(timezone.utc) - timedelta(minutes=5)
+    coverage = _diagnostics(db, org_id=org_id, domain_id=domain_id)["coverage_pct"]
+
+    return {
+        "domain_id": domain_id,
+        "nodes": nodes,
+        "edges": edges,
+        "computed_at": latest.isoformat() if latest else None,
+        "stale": stale,
+        "coverage_pct": coverage,
+    }
 
 
 @router.get("/analyzers/coauthorship/{domain_id}/diagnostics")
