@@ -223,6 +223,9 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(enrichment_worker.background_enrichment_worker(get_db_gen()))
 
+    # V2 coauthorship: periodic recompute of author_stats for dirty scopes.
+    asyncio.create_task(enrichment_worker.coauthor_recompute_loop())
+
     # Start the enrichment domain scheduler
     asyncio.create_task(_enrichment_scheduler_instance.start_loop())
 
