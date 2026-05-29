@@ -224,8 +224,11 @@ Expected wall time at current corpus: <2s. **Target for 10× corpus (100k edges)
 > low-thousands of edges (the whole corpus is 351 entities / ~7.8k legacy
 > collaborations), which recompute clears in <2s. Two mitigations shipped in
 > `recompute.py`:
-> 1. **Realistic hard gate** — a clustered 2,000-node / ~14k-edge graph (50
->    research groups) must recompute < 5s. Measured **1.7s**.
+> 1. **Realistic gate** — a clustered 2,000-node / ~14k-edge graph (50 research
+>    groups). Target < 5s (logged; measured **1.7s** idle), HARD assertion < 10s.
+>    The hard bound (not 5s) is asserted because the pre-push hook runs this
+>    under variable load (~6.4s observed under contention) and a 5s assert
+>    flakes; a real regression still blows past 10s.
 > 2. **Safety cap** — above `_LOUVAIN_MAX_NODES=3000` or `_LOUVAIN_MAX_EDGES=25000`
 >    the job falls back to connected components (instant) instead of Louvain, so
 >    a pathological scope can never stall the worker loop. A WARNING is logged.
