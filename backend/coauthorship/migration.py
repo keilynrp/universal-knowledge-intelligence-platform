@@ -34,6 +34,7 @@ def migrate_coauthor_graph(db, *, dry_run: bool = True, domain: str | None = Non
         "publications_created": 0,
         "edges_created": 0,
         "self_pairs_skipped": 0,
+        "scopes_recomputed": 0,
     }
 
     # 1. Count legacy CO_AUTHOR edges for the audit trail.
@@ -100,6 +101,18 @@ def migrate_coauthor_graph(db, *, dry_run: bool = True, domain: str | None = Non
 
         sug = generate_merge_suggestions(db)
         stats["suggestions_created"] = sug["suggestions_created"]
+        from backend.coauthorship.recompute import recompute_coauthor_stats
+
+        scope_q = db.query(
+            models.CoauthorEdge.org_id,
+            models.CoauthorEdge.domain_id,
+        )
+        if domain:
+            scope_q = scope_q.filter(models.CoauthorEdge.domain_id == domain)
+        scopes = scope_q.distinct().all()
+        for org_id, domain_id in scopes:
+            recompute_coauthor_stats(db, org_id=org_id, domain_id=domain_id)
+            stats["scopes_recomputed"] += 1
 
     logger.info(
         "migrate_coauthor_graph dry_run=%s domain=%s stats=%s", dry_run, domain, stats
