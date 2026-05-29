@@ -19,6 +19,11 @@ os.environ.setdefault("ENCRYPTION_KEY", "vRHc0zVcTXbRfUBZEsKNal2lMCfINwDh90EXE8v
 os.environ.setdefault("UKIP_DB_MODE", "sqlite")
 os.environ.setdefault("UKIP_SKIP_STARTUP_SIDE_EFFECTS", "1")
 os.environ.setdefault("SENTRY_ENABLED", "0")
+# Coauthorship V2 flags default ON in production (F5 cutover); pin them OFF for
+# tests so suites are deterministic and opt in per-case via write_on/read_on.
+os.environ.setdefault("COAUTHOR_V2_WRITE", "false")
+os.environ.setdefault("COAUTHOR_V2_READ", "false")
+os.environ.setdefault("COAUTHOR_V2_SHADOW", "false")
 
 _DB_MODE = os.environ.get("UKIP_DB_MODE", "sqlite").lower()
 _IS_POSTGRES = _DB_MODE == "postgres"
