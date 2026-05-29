@@ -1177,6 +1177,7 @@ const DETAIL_FIELD_LABELS: Record<string, string> = {
     provider_record_id: "ID del proveedor",
     publication_type: "Tipo de publicación",
     publisher: "Editorial",
+    semantic_keyword_signals: "Semantic Keyword Signals",
     raw_af: "Autores completos originales",
     raw_au: "Autores originales",
     raw_bp: "Página inicial original",
@@ -1302,6 +1303,7 @@ const FIELD_HINTS: Record<string, string> = {
     _source_name: "Nombre del adaptador o canal que ingestó el registro.",
     _source_version: "Versión del adaptador / esquema en el momento de la ingesta.",
     raw_record: "Estructura completa tal como llegó del proveedor original (snapshot).",
+    semantic_keyword_signals: "Semantic Keyword Signals convierte palabras clave y conceptos extraídos en evidencia explicable para UKIP: frecuencia interna, soporte externo, puntuación de oportunidad y recomendaciones para revisar en el grafo.",
 };
 
 function fieldHintFor(key: string): string | null {
