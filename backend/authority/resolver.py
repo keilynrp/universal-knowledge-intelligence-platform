@@ -20,6 +20,7 @@ from backend.authority.cache import get_resolver_cache
 from backend.authority.normalize import normalize_name
 from backend.authority.resilience import ResilientResolver
 from backend.circuit_breaker import CircuitBreaker
+from backend.authority.coauthorship_signal import candidate_coauthors, compute_candidate_overlap
 from backend.authority.scoring import compute_score
 from backend.authority.resolvers.wikidata import WikidataResolver
 from backend.authority.resolvers.viaf     import ViafResolver
@@ -186,7 +187,13 @@ def resolve_all(
                 logger.warning("Authority resolver '%s' timed out or failed: %s", source, exc)
 
     # Apply weighted scoring engine
+    use_coauth = entity_type == "person" and bool(context.coauthors)
     for c in raw:
+        coauthors_overlap = None
+        if use_coauth:
+            coauthors_overlap = compute_candidate_overlap(
+                context.coauthors, candidate_coauthors(c)
+            )
         score, breakdown, evidence, resolution_status = compute_score(
             value=value,
             authority_source=c.authority_source,
@@ -195,6 +202,7 @@ def resolve_all(
             description=c.description,
             orcid_hint=context.orcid_hint,
             affiliation=context.affiliation,
+            coauthors_overlap=coauthors_overlap,
         )
         c.confidence        = score
         c.score_breakdown   = breakdown

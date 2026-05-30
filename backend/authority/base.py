@@ -19,6 +19,7 @@ class ResolveContext:
     orcid_hint:   Optional[str] = None   # e.g. "0000-0001-XXXX-XXXX" if known
     doi:          Optional[str] = None   # e.g. "10.1038/..."
     year:         Optional[int] = None   # publication year for temporal context
+    coauthors:    Optional[List[str]] = None  # known collaborators of the query author (persons)
 
 
 @dataclass

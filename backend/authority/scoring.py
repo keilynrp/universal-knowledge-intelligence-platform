@@ -127,6 +127,7 @@ def compute_score(
     description: Optional[str],
     orcid_hint: Optional[str] = None,
     affiliation: Optional[str] = None,
+    coauthors_overlap: Optional[float] = None,
 ) -> Tuple[float, dict, List[str], str]:
     """
     Compute the weighted authority score for a single candidate.
@@ -144,7 +145,12 @@ def compute_score(
     s_id    = _score_identifiers(authority_source, authority_id, orcid_hint, evidence)
     s_name  = _score_name(value, canonical_label, evidence)
     s_affil = _score_affiliation(description, affiliation, evidence)
-    s_coauth = 0.0
+    # Coauthorship: Jaccard overlap (0–1) of shared collaborators. Only counts
+    # toward the score when supplied (entity_type == person with a coauthor ctx).
+    has_coauth = coauthors_overlap is not None
+    s_coauth = max(0.0, min(1.0, coauthors_overlap)) if has_coauth else 0.0
+    if has_coauth:
+        evidence.append(f"coauthorship overlap={s_coauth:.2f}")
     s_topic  = 0.0
 
     # Dynamic weight normalization: when a signal is unavailable its weight
@@ -154,7 +160,7 @@ def compute_score(
         "identifiers":  _W_ID,
         "name":         _W_NAME,
         "affiliation":  _W_AFFIL if affiliation else 0.0,
-        "coauthorship": 0.0,   # reserved — not yet implemented
+        "coauthorship": _W_COAUTH if has_coauth else 0.0,
         "topic":        0.0,   # reserved — not yet implemented
     }
     total_w = sum(nominal_weights.values()) or 1.0
