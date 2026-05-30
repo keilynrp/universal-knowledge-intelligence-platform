@@ -18,7 +18,7 @@ import re
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, inspect, text
 from sqlalchemy.orm import Session
@@ -1553,13 +1553,18 @@ def authority_metrics(
 @router.get("/authority/{field}")
 def get_authority_view(
     field: str,
+    response: Response,
     threshold: int = Query(default=80, ge=0, le=100),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
     org_id = resolve_request_org_id(db, current_user)
     try:
-        groups = _build_disambig_groups(field, threshold, db, org_id=org_id)
+        groups, total_groups = _build_disambig_groups(
+            field, threshold, db, org_id=org_id, skip=skip, limit=limit, with_total=True,
+        )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1589,9 +1594,10 @@ def get_authority_view(
         .scalar() or 0
     )
 
+    response.headers["X-Total-Count"] = str(total_groups)
     return {
         "groups":        annotated,
-        "total_groups":  len(annotated),
+        "total_groups":  total_groups,
         "total_rules":   total_rules,
         "pending_groups": sum(1 for g in annotated if not g["has_rules"]),
     }

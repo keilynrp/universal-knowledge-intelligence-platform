@@ -54,10 +54,17 @@ def _build_disambig_groups(
     db: Session,
     algorithm: str = "token_sort",
     org_id: int | None = None,
+    skip: int | None = None,
+    limit: int | None = None,
+    with_total: bool = False,
 ):
     """
     Shared disambiguation logic.
     algorithm: "token_sort" | "fingerprint" | "ngram" | "phonetic"
+
+    When ``with_total`` is True, returns ``(page, total)`` where ``page`` is the
+    ``skip``/``limit`` slice of the full group list and ``total`` is the full
+    count. Otherwise returns the full group list (legacy behavior).
     """
     if not _FIELD_RE.match(field):
         raise ValueError(
@@ -174,6 +181,12 @@ def _build_disambig_groups(
                     "count": len(members),
                     "algorithm_used": "phonetic",
                 })
+
+    if with_total:
+        total = len(groups)
+        start = skip or 0
+        page = groups[start : start + limit] if limit is not None else groups[start:]
+        return page, total
 
     return groups
 
