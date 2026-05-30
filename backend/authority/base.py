@@ -21,6 +21,7 @@ class ResolveContext:
     year:         Optional[int] = None   # publication year for temporal context
     coauthors:    Optional[List[str]] = None  # known collaborators of the query author (persons)
     source_priors: Optional[dict] = None  # {authority_source: ±0.05} learned feedback priors (Task 10)
+    thresholds:    Optional[object] = None  # ResolutionThresholds override for resolution_status (Task 11)
 
 
 @dataclass

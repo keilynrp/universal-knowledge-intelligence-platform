@@ -204,6 +204,8 @@ async def lifespan(app: FastAPI):
                 models.AuthorityResolveJob.__table__,
                 # Feedback-weighted scoring priors (Phase 3, Task 10).
                 models.AuthorityScoringFeedback.__table__,
+                # Adaptive resolution thresholds (Phase 3, Task 11).
+                models.ResolutionThreshold.__table__,
             ],
             checkfirst=True,
         )

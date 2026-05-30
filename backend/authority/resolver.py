@@ -207,6 +207,7 @@ def resolve_all(
             affiliation=context.affiliation,
             coauthors_overlap=coauthors_overlap,
             source_prior=source_prior,
+            thresholds=context.thresholds,
         )
         c.confidence        = score
         c.score_breakdown   = breakdown

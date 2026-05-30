@@ -16,6 +16,7 @@ Resolution thresholds (proposal §9):
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from thefuzz import fuzz
@@ -45,6 +46,29 @@ _SOURCE_QUALITY: dict[str, float] = {
 _T_EXACT    = 0.85
 _T_PROBABLE = 0.65
 _T_AMBIGUOUS = 0.45
+
+
+@dataclass(frozen=True)
+class ResolutionThresholds:
+    """Cut points mapping a numeric score to a resolution_status (Task 11).
+
+    Tunable per (org, domain, field); defaults mirror the module constants.
+    """
+    exact: float = _T_EXACT
+    probable: float = _T_PROBABLE
+    ambiguous: float = _T_AMBIGUOUS
+
+    def classify(self, total: float) -> str:
+        if total >= self.exact:
+            return "exact_match"
+        if total >= self.probable:
+            return "probable_match"
+        if total >= self.ambiguous:
+            return "ambiguous"
+        return "unresolved"
+
+
+_DEFAULT_THRESHOLDS = ResolutionThresholds()
 
 
 def _score_identifiers(
@@ -140,6 +164,7 @@ def compute_score(
     affiliation: Optional[str] = None,
     coauthors_overlap: Optional[float] = None,
     source_prior: float = 0.0,
+    thresholds: Optional[ResolutionThresholds] = None,
 ) -> Tuple[float, dict, List[str], str]:
     """
     Compute the weighted authority score for a single candidate.
@@ -195,13 +220,6 @@ def compute_score(
         "topic":        s_topic,
     }
 
-    if total >= _T_EXACT:
-        resolution_status = "exact_match"
-    elif total >= _T_PROBABLE:
-        resolution_status = "probable_match"
-    elif total >= _T_AMBIGUOUS:
-        resolution_status = "ambiguous"
-    else:
-        resolution_status = "unresolved"
+    resolution_status = (thresholds or _DEFAULT_THRESHOLDS).classify(total)
 
     return total, breakdown, evidence, resolution_status

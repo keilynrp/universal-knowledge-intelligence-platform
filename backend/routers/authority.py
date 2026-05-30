@@ -27,6 +27,7 @@ from backend import database, models, schemas
 from backend.auth import get_current_user, require_role
 from backend.authority.author_resolution import summarize_author_resolution
 from backend.authority import feedback as _authority_feedback
+from backend.authority import thresholds as _authority_thresholds
 from backend.authority.base import ResolveContext as _AuthorityContext
 from backend.authority.batch_resolution import (
     InvalidFieldError,
@@ -513,6 +514,11 @@ def resolve_authority(
         year=payload.context_year,
         source_priors=_authority_feedback.get_source_priors(
             db, payload.field_name, org_id=record_org_id
+        ),
+        thresholds=_authority_thresholds.get_thresholds(
+            db, payload.field_name,
+            domain_id=getattr(payload, "domain_id", None),
+            org_id=record_org_id,
         ),
     )
     # Try engine delegation first, fall back to Python resolvers
@@ -1494,6 +1500,70 @@ def delete_authority_record(
     db.delete(rec)
     db.commit()
     return {"message": "Deleted", "id": record_id}
+
+
+# ── Adaptive resolution thresholds (Phase 3, Task 11) ─────────────────────────
+
+@router.post("/authority/thresholds", tags=["authority"], status_code=201)
+def upsert_resolution_threshold(
+    payload: schemas.ResolutionThresholdCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
+):
+    """Create or update a per-(org, domain, field) resolution-threshold override."""
+    org_id = persisted_org_id(resolve_request_org_id(db, current_user))
+    row = (
+        scope_query_to_org(
+            db.query(models.ResolutionThreshold), models.ResolutionThreshold, org_id
+        )
+        .filter(
+            models.ResolutionThreshold.domain_id == payload.domain_id,
+            models.ResolutionThreshold.field_name == payload.field_name,
+        )
+        .first()
+    )
+    if row is None:
+        row = models.ResolutionThreshold(
+            org_id=org_id, domain_id=payload.domain_id, field_name=payload.field_name,
+        )
+        db.add(row)
+    row.exact = payload.exact
+    row.probable = payload.probable
+    row.ambiguous = payload.ambiguous
+    db.commit()
+    db.refresh(row)
+    _authority_thresholds.clear_cache()
+    return schemas.ResolutionThresholdResponse.model_validate(row)
+
+
+@router.get("/authority/thresholds", tags=["authority"])
+def list_resolution_thresholds(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """List resolution-threshold overrides for the caller's organization."""
+    org_id = persisted_org_id(resolve_request_org_id(db, current_user))
+    rows = scope_query_to_org(
+        db.query(models.ResolutionThreshold), models.ResolutionThreshold, org_id
+    ).all()
+    return [schemas.ResolutionThresholdResponse.model_validate(r) for r in rows]
+
+
+@router.delete("/authority/thresholds/{threshold_id}", tags=["authority"])
+def delete_resolution_threshold(
+    threshold_id: int = Path(ge=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
+):
+    """Delete a resolution-threshold override (falls back to defaults)."""
+    org_id = persisted_org_id(resolve_request_org_id(db, current_user))
+    row = get_scoped_record(db, models.ResolutionThreshold, threshold_id, org_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="ResolutionThreshold not found")
+    db.delete(row)
+    db.commit()
+    _authority_thresholds.clear_cache()
+    return {"message": "Deleted", "id": threshold_id}
 
 
 @router.get("/authority/metrics", tags=["authority"])
