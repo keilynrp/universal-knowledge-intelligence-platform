@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "./ui";
+import ScoreBreakdown from "./ScoreBreakdown";
 import {
     type AuthorityRecord,
     type VariationGroup,
@@ -220,6 +221,20 @@ export default function DisambiguationGroupCard({
                                                 {Math.round(rec.confidence * 100)}%
                                             </span>
                                         </div>
+                                        {(rec.score_breakdown || (rec.evidence && rec.evidence.length > 0)) && (
+                                            <details className="mt-1.5 group/why">
+                                                <summary className="cursor-pointer list-none text-xs font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300">
+                                                    {t('disambiguation.why_label') || '¿Por qué?'}
+                                                </summary>
+                                                <div className="mt-2 rounded-lg border border-gray-100 bg-gray-50 p-2.5 dark:border-gray-800 dark:bg-gray-900/40">
+                                                    <ScoreBreakdown
+                                                        breakdown={rec.score_breakdown}
+                                                        evidence={rec.evidence}
+                                                        compact
+                                                    />
+                                                </div>
+                                            </details>
+                                        )}
                                     </div>
                                     {rec.status === "pending" && (
                                         <div className="shrink-0 flex gap-1.5">
