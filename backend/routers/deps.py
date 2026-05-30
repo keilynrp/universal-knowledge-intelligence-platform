@@ -31,9 +31,15 @@ _FIELD_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 def _blocking_enabled() -> bool:
     """Whether to use blocking + Union-Find clustering (Phase 2, Task 6).
 
-    Off by default until the evaluation harness (Task 9) validates the switch.
+    Default ON since the evaluation harness (Task 9) validated the switch:
+    on the gold fixture, blocking scores F1=0.91 vs the legacy greedy 0.86 at
+    threshold 80 (higher recall, equal precision). Set ``UKIP_USE_BLOCKING=0``
+    to fall back to the legacy greedy path.
     """
-    return os.environ.get("UKIP_USE_BLOCKING", "").strip().lower() in ("1", "true", "yes", "on")
+    val = os.environ.get("UKIP_USE_BLOCKING")
+    if val is None or val.strip() == "":
+        return True
+    return val.strip().lower() in ("1", "true", "yes", "on")
 
 
 # Audit helper

@@ -1,0 +1,34 @@
+{
+  "description": "Small labeled entity-resolution set. `values` are distinct surface forms; `matches` are the gold same-entity pairs. Any pair not listed is a true non-match.",
+  "values": [
+    "John Smith",
+    "Smith John",
+    "John Smith PhD",
+    "Maria Garcia",
+    "Garcia Maria",
+    "Maria Garcia PhD",
+    "University of Texas",
+    "University of Texas Austin",
+    "University of Texas at Austin",
+    "Apple Inc",
+    "Apple Inc.",
+    "Apple Inc Company",
+    "Massachusetts Institute of Technology",
+    "Stanford University",
+    "Google LLC"
+  ],
+  "matches": [
+    ["John Smith", "Smith John"],
+    ["John Smith", "John Smith PhD"],
+    ["Smith John", "John Smith PhD"],
+    ["Maria Garcia", "Garcia Maria"],
+    ["Maria Garcia", "Maria Garcia PhD"],
+    ["Garcia Maria", "Maria Garcia PhD"],
+    ["University of Texas", "University of Texas Austin"],
+    ["University of Texas", "University of Texas at Austin"],
+    ["University of Texas Austin", "University of Texas at Austin"],
+    ["Apple Inc", "Apple Inc."],
+    ["Apple Inc", "Apple Inc Company"],
+    ["Apple Inc.", "Apple Inc Company"]
+  ]
+}
