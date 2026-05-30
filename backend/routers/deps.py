@@ -28,6 +28,14 @@ logger = logging.getLogger(__name__)
 _FIELD_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
 
+def _blocking_enabled() -> bool:
+    """Whether to use blocking + Union-Find clustering (Phase 2, Task 6).
+
+    Off by default until the evaluation harness (Task 9) validates the switch.
+    """
+    return os.environ.get("UKIP_USE_BLOCKING", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 # Audit helper
 def _audit(
     db: Session,
@@ -103,6 +111,28 @@ def _build_disambig_groups(
 
     values.sort(key=len, reverse=True)
     groups = []
+
+    # Blocking + Union-Find path (flagged). Order-independent and transitive;
+    # replaces the greedy O(n²) token_sort/ngram loops when UKIP_USE_BLOCKING is on.
+    if algorithm in ("token_sort", "ngram") and _blocking_enabled():
+        from backend.clustering.blocking import cluster_values
+
+        for component in cluster_values(values, threshold):
+            if len(component) > 1:
+                main = max(component, key=len)
+                groups.append({
+                    "main": main,
+                    "variations": component,
+                    "count": len(component),
+                    "algorithm_used": f"{algorithm}+blocking",
+                })
+        groups.sort(key=lambda g: g["count"], reverse=True)
+        if with_total:
+            total = len(groups)
+            start = skip or 0
+            page = groups[start : start + limit] if limit is not None else groups[start:]
+            return page, total
+        return groups
 
     if algorithm == "token_sort":
         processed = set()
