@@ -27,6 +27,11 @@ from backend import database, models, schemas
 from backend.auth import get_current_user, require_role
 from backend.authority.author_resolution import summarize_author_resolution
 from backend.authority.base import ResolveContext as _AuthorityContext
+from backend.authority.batch_resolution import (
+    InvalidFieldError,
+    execute_batch_resolution,
+    validate_field,
+)
 from backend.authority.hierarchical_fallback import apply_hierarchical_fallback
 from backend.authority.query_reformulation import run_author_query_reformulation
 from backend.authority.resolver import resolve_all as _authority_resolve_all
@@ -724,94 +729,85 @@ def resolve_author_profile(
 @router.post("/authority/resolve/batch", status_code=201, tags=["authority"])
 def resolve_authority_batch(
     payload: schemas.BatchResolveRequest,
+    sync: bool = Query(False, description="Run inline (legacy) instead of enqueuing an async job"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
 ):
     """
     Resolve all distinct values of a field against external authority sources.
+
+    Default mode enqueues an async ``AuthorityResolveJob`` and returns a job id;
+    poll ``GET /authority/jobs/{job_id}`` for progress. Pass ``?sync=true`` to
+    run inline and receive the resolved records in the response (legacy shape).
     """
     org_id = resolve_request_org_id(db, current_user)
     record_org_id = persisted_org_id(org_id)
     field = payload.field_name
     entity_type = payload.entity_type.value
 
-    if not _FIELD_RE.match(field):
-        raise HTTPException(status_code=422, detail=f"Invalid field name: {field!r}")
+    try:
+        validate_field(db, field)
+    except InvalidFieldError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
-    _entity_cols = {col["name"] for col in inspect(db.get_bind()).get_columns("raw_entities")}
-    if field not in _entity_cols:
-        raise HTTPException(status_code=422, detail=f"Field '{field}' not found in entity table")
-
-    query_text = (
-        f'SELECT DISTINCT "{field}" FROM raw_entities '
-        f'WHERE "{field}" IS NOT NULL AND "{field}" != \'\''
-    )
-    params: dict[str, object] = {}
-    where_clauses: list[str] = []
-    add_org_sql_filter(where_clauses, params, org_id)
-    if where_clauses:
-        query_text += " AND " + " AND ".join(where_clauses)
-    rows = db.execute(text(query_text), params).fetchall()
-    all_values = [row[0] for row in rows if row[0]]
-
-    already_existed = 0
-    if payload.skip_existing and all_values:
-        existing_values = {
-            r.original_value
-            for r in scope_query_to_org(
-                db.query(models.AuthorityRecord.original_value), models.AuthorityRecord, org_id
-            ).filter(
-                models.AuthorityRecord.field_name == field,
-                models.AuthorityRecord.status.in_(["pending", "confirmed"]),
-            ).all()
+    if not sync:
+        job = models.AuthorityResolveJob(
+            org_id=record_org_id,
+            field_name=field,
+            entity_type=entity_type,
+            params_json=json.dumps({"limit": payload.limit, "skip_existing": payload.skip_existing}),
+            status="pending",
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+        return {
+            "job_id": job.id,
+            "status": job.status,
+            "field_name": field,
+            "entity_type": entity_type,
         }
-        filtered = [v for v in all_values if v not in existing_values]
-        already_existed = len(all_values) - len(filtered)
-        all_values = filtered
 
-    to_resolve = all_values[: payload.limit]
-    skipped = len(all_values) - len(to_resolve)
-
-    ctx = _AuthorityContext()
-    new_records: list[models.AuthorityRecord] = []
-
-    for value in to_resolve:
-        candidates = _authority_resolve_all(value, entity_type, ctx)
-        candidates = apply_hierarchical_fallback(value, entity_type, candidates)
-        for c in candidates:
-            rec = models.AuthorityRecord(
-                org_id=record_org_id,
-                field_name=field,
-                original_value=value,
-                authority_source=c.authority_source,
-                authority_id=c.authority_id,
-                canonical_label=c.canonical_label,
-                aliases=json.dumps(c.aliases),
-                description=c.description,
-                confidence=c.confidence,
-                uri=c.uri,
-                status="pending",
-                resolution_status=c.resolution_status,
-                score_breakdown=json.dumps(c.score_breakdown),
-                evidence=json.dumps(c.evidence),
-                merged_sources=json.dumps(c.merged_sources),
-                hierarchy_distance=c.hierarchy_distance,
-            )
-            db.add(rec)
-            new_records.append(rec)
-
+    summary, new_records = execute_batch_resolution(
+        db,
+        org_id=org_id,
+        record_org_id=record_org_id,
+        field=field,
+        entity_type=entity_type,
+        limit=payload.limit,
+        skip_existing=payload.skip_existing,
+        resolve_fn=_authority_resolve_all,
+    )
     db.commit()
     for rec in new_records:
         db.refresh(rec)
 
+    summary["records"] = [_serialize_authority_record(r) for r in new_records]
+    return summary
+
+
+@router.get("/authority/jobs/{job_id}", tags=["authority"])
+def get_authority_job(
+    job_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Return status + progress counters for an async batch resolution job."""
+    org_id = resolve_request_org_id(db, current_user)
+    job = get_scoped_record(db, models.AuthorityResolveJob, job_id, org_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
     return {
-        "field_name":          field,
-        "entity_type":         entity_type,
-        "resolved_count":      len(to_resolve),
-        "skipped_count":       skipped,
-        "already_existed_count": already_existed,
-        "records_created":     len(new_records),
-        "records":             [_serialize_authority_record(r) for r in new_records],
+        "job_id": job.id,
+        "status": job.status,
+        "field_name": job.field_name,
+        "entity_type": job.entity_type,
+        "total": job.total or 0,
+        "processed": job.processed or 0,
+        "records_created": job.records_created or 0,
+        "error": job.error,
+        "created_at": job.created_at.isoformat() if job.created_at else None,
+        "finished_at": job.finished_at.isoformat() if job.finished_at else None,
     }
 
 

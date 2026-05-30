@@ -161,6 +161,11 @@ async def lifespan(app: FastAPI):
     # Startup
     with database.SessionLocal() as db:
         enrichment_worker.reset_stale_processing_records(db)
+        from backend.authority import batch_worker as _authority_batch_worker
+        try:
+            _authority_batch_worker.reset_stale_jobs(db)
+        except Exception:  # noqa: BLE001 — table may not exist yet on first migrate
+            logger.debug("authority batch jobs reset skipped (table not ready)")
 
         ensure_bootstrap_super_admin(db)
 
@@ -195,6 +200,8 @@ async def lifespan(app: FastAPI):
                 models.AuthorMergeAudit.__table__,
                 models.CoauthorDirtyScope.__table__,
                 models.CoauthorContribution.__table__,
+                # Async authority batch resolution jobs (Phase 1, Task 3).
+                models.AuthorityResolveJob.__table__,
             ],
             checkfirst=True,
         )
@@ -223,6 +230,9 @@ async def lifespan(app: FastAPI):
                 db.close()
 
     asyncio.create_task(enrichment_worker.background_enrichment_worker(get_db_gen()))
+
+    # Async authority batch resolution worker (Phase 1, Task 3)
+    asyncio.create_task(_authority_batch_worker.run_batch_worker())
 
     # V2 coauthorship: periodic recompute of author_stats for dirty scopes.
     asyncio.create_task(enrichment_worker.coauthor_recompute_loop())

@@ -327,6 +327,29 @@ class AuthorityRecord(Base):
     reformulation_trace = Column(Text, nullable=True)
 
 
+class AuthorityResolveJob(Base):
+    """Async batch authority-resolution job (Phase 1, Task 3).
+
+    Enqueued by POST /authority/resolve/batch (default async mode) and drained
+    by the background batch worker. Tracks progress + outcome counters.
+    status: pending | processing | done | failed
+    """
+    __tablename__ = "authority_resolve_jobs"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    org_id          = Column(Integer, nullable=True, index=True)
+    field_name      = Column(String, nullable=False)
+    entity_type     = Column(String, nullable=False)
+    params_json     = Column(Text, nullable=True)              # limit, skip_existing, ...
+    status          = Column(String, default="pending", index=True)
+    total           = Column(Integer, default=0)
+    processed       = Column(Integer, default=0)
+    records_created = Column(Integer, default=0)
+    error           = Column(Text, nullable=True)
+    created_at      = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    finished_at     = Column(DateTime, nullable=True)
+
+
 class AuthorityRecordLink(Base):
     """
     Auditable links between authority records.
