@@ -350,6 +350,30 @@ class AuthorityResolveJob(Base):
     finished_at     = Column(DateTime, nullable=True)
 
 
+class AuthorityScoringFeedback(Base):
+    """Aggregated confirm/reject counts per (org, field, source) (Phase 3, Task 10).
+
+    Drives a bounded learned prior (±0.05) that nudges the identifier signal of
+    the scoring engine: sources whose candidates users repeatedly confirm get a
+    small boost; sources repeatedly rejected get a small penalty. Stored as
+    running counters so the prior is cheap to recompute and fully auditable.
+    """
+    __tablename__ = "authority_scoring_feedback"
+    __table_args__ = (
+        UniqueConstraint("org_id", "field_name", "authority_source",
+                         name="uq_scoring_feedback_scope"),
+    )
+
+    id               = Column(Integer, primary_key=True, index=True)
+    org_id           = Column(Integer, nullable=True, index=True)
+    field_name       = Column(String, nullable=False, index=True)
+    authority_source = Column(String, nullable=False, index=True)
+    confirmed        = Column(Integer, default=0)
+    rejected         = Column(Integer, default=0)
+    updated_at       = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                              onupdate=lambda: datetime.now(timezone.utc))
+
+
 class AuthorityRecordLink(Base):
     """
     Auditable links between authority records.

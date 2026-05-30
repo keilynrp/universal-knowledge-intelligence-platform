@@ -20,6 +20,7 @@ class ResolveContext:
     doi:          Optional[str] = None   # e.g. "10.1038/..."
     year:         Optional[int] = None   # publication year for temporal context
     coauthors:    Optional[List[str]] = None  # known collaborators of the query author (persons)
+    source_priors: Optional[dict] = None  # {authority_source: ±0.05} learned feedback priors (Task 10)
 
 
 @dataclass

@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from backend import database, models, schemas
 from backend.auth import get_current_user, require_role
 from backend.authority.author_resolution import summarize_author_resolution
+from backend.authority import feedback as _authority_feedback
 from backend.authority.base import ResolveContext as _AuthorityContext
 from backend.authority.batch_resolution import (
     InvalidFieldError,
@@ -510,6 +511,9 @@ def resolve_authority(
         orcid_hint=payload.context_orcid_hint,
         doi=payload.context_doi,
         year=payload.context_year,
+        source_priors=_authority_feedback.get_source_priors(
+            db, payload.field_name, org_id=record_org_id
+        ),
     )
     # Try engine delegation first, fall back to Python resolvers
     engine_client = getattr(request.app.state, "engine_client", None)
@@ -1410,6 +1414,14 @@ def confirm_authority_record(
     rec.status = "confirmed"
     rec.confirmed_at = datetime.now(timezone.utc)
 
+    # Record positive feedback for this (field, source) so the scoring engine
+    # can learn a bounded prior (Task 10).
+    if rec.field_name and rec.authority_source:
+        _authority_feedback.record_outcome(
+            db, rec.field_name, rec.authority_source,
+            confirmed=True, org_id=rec.org_id,
+        )
+
     rule_created = False
     if payload.also_create_rule:
         existing = scope_query_to_org(
@@ -1452,6 +1464,11 @@ def reject_authority_record(
     if rec is None:
         raise HTTPException(status_code=404, detail="AuthorityRecord not found")
     rec.status = "rejected"
+    if rec.field_name and rec.authority_source:
+        _authority_feedback.record_outcome(
+            db, rec.field_name, rec.authority_source,
+            rejected=True, org_id=rec.org_id,
+        )
     _audit(
         db, "authority.reject",
         user_id=current_user.id,

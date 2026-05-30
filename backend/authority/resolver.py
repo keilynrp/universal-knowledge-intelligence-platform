@@ -194,6 +194,9 @@ def resolve_all(
             coauthors_overlap = compute_candidate_overlap(
                 context.coauthors, candidate_coauthors(c)
             )
+        source_prior = 0.0
+        if context.source_priors:
+            source_prior = context.source_priors.get(c.authority_source, 0.0)
         score, breakdown, evidence, resolution_status = compute_score(
             value=value,
             authority_source=c.authority_source,
@@ -203,6 +206,7 @@ def resolve_all(
             orcid_hint=context.orcid_hint,
             affiliation=context.affiliation,
             coauthors_overlap=coauthors_overlap,
+            source_prior=source_prior,
         )
         c.confidence        = score
         c.score_breakdown   = breakdown

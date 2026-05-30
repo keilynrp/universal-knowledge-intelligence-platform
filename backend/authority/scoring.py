@@ -52,11 +52,17 @@ def _score_identifiers(
     authority_id: str,
     orcid_hint: Optional[str],
     evidence: List[str],
+    source_prior: float = 0.0,
 ) -> float:
     """
     Base score from source quality.
     Returns 1.0 when an ORCID hint from the original record matches the
     candidate's ORCID ID — the strongest possible signal.
+
+    ``source_prior`` is a bounded (±0.05) learned adjustment from accumulated
+    confirm/reject feedback (Task 10); it nudges the base source quality and is
+    recorded in the evidence trail. It does not apply to an exact ORCID match,
+    which already represents maximum certainty.
     """
     base = _SOURCE_QUALITY.get(source, 0.30)
     evidence.append(f"source_quality:{source}={base:.2f}")
@@ -66,6 +72,11 @@ def _score_identifiers(
         if hint and hint in authority_id:
             evidence.append("orcid_hint_matched")
             return 1.0
+
+    if source_prior:
+        adjusted = max(0.0, min(1.0, base + source_prior))
+        evidence.append(f"feedback_prior:{source_prior:+.3f}")
+        return adjusted
 
     return base
 
@@ -128,6 +139,7 @@ def compute_score(
     orcid_hint: Optional[str] = None,
     affiliation: Optional[str] = None,
     coauthors_overlap: Optional[float] = None,
+    source_prior: float = 0.0,
 ) -> Tuple[float, dict, List[str], str]:
     """
     Compute the weighted authority score for a single candidate.
@@ -142,7 +154,7 @@ def compute_score(
     """
     evidence: List[str] = []
 
-    s_id    = _score_identifiers(authority_source, authority_id, orcid_hint, evidence)
+    s_id    = _score_identifiers(authority_source, authority_id, orcid_hint, evidence, source_prior)
     s_name  = _score_name(value, canonical_label, evidence)
     s_affil = _score_affiliation(description, affiliation, evidence)
     # Coauthorship: Jaccard overlap (0–1) of shared collaborators. Only counts

@@ -202,6 +202,8 @@ async def lifespan(app: FastAPI):
                 models.CoauthorContribution.__table__,
                 # Async authority batch resolution jobs (Phase 1, Task 3).
                 models.AuthorityResolveJob.__table__,
+                # Feedback-weighted scoring priors (Phase 3, Task 10).
+                models.AuthorityScoringFeedback.__table__,
             ],
             checkfirst=True,
         )
