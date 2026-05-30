@@ -116,15 +116,23 @@ def _build_disambig_groups(
     # replaces the greedy O(n²) token_sort/ngram loops when UKIP_USE_BLOCKING is on.
     if algorithm in ("token_sort", "ngram") and _blocking_enabled():
         from backend.clustering.blocking import cluster_values
+        from backend.clustering.semantic import maybe_build_index
 
-        for component in cluster_values(values, threshold):
+        # Semantic candidates (Task 8) are flag-gated and degrade to None when
+        # no embedder is available, leaving pure lexical blocking unchanged.
+        semantic_index = maybe_build_index(db, values)
+        algo_label = (
+            f"{algorithm}+blocking+semantic" if semantic_index else f"{algorithm}+blocking"
+        )
+
+        for component in cluster_values(values, threshold, semantic_index=semantic_index):
             if len(component) > 1:
                 main = max(component, key=len)
                 groups.append({
                     "main": main,
                     "variations": component,
                     "count": len(component),
-                    "algorithm_used": f"{algorithm}+blocking",
+                    "algorithm_used": algo_label,
                 })
         groups.sort(key=lambda g: g["count"], reverse=True)
         if with_total:

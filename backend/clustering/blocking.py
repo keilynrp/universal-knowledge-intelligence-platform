@@ -46,11 +46,22 @@ def blocking_keys(value: str) -> set[str]:
     return keys
 
 
-def cluster_values(values: list[str], threshold: int) -> list[list[str]]:
+def cluster_values(
+    values: list[str],
+    threshold: int,
+    semantic_index: "SemanticIndex | None" = None,
+    semantic_threshold: float = 0.85,
+) -> list[list[str]]:
     """Cluster ``values`` into transitive groups using blocking + Union-Find.
 
     Returns a list of components (each a list of original values). Singletons are
     included as one-element components so callers can see the full partition.
+
+    When ``semantic_index`` is supplied (Task 8), each value's nearest semantic
+    neighbors above ``semantic_threshold`` are unioned in addition to lexical
+    matches, catching synonymous-but-lexically-distant pairs that share no block
+    key. Passing ``None`` (the default) keeps pure lexical behavior, so callers
+    can leave semantics off until the eval harness validates it.
     """
     if not values:
         return []
@@ -77,5 +88,16 @@ def cluster_values(values: list[str], threshold: int) -> list[list[str]]:
             compared.add(pair)
             if fuzz.token_sort_ratio(a, b) >= threshold:
                 uf.union(a, b)
+
+    # Semantic candidates: union values whose embeddings are close enough that
+    # lexical blocking would otherwise miss them. Neighbors are pre-filtered by
+    # ``semantic_threshold`` inside the index, so a returned neighbor is a match.
+    if semantic_index is not None:
+        for val in unique:
+            for neighbor in semantic_index.neighbors(
+                val, min_similarity=semantic_threshold
+            ):
+                if neighbor in uf:
+                    uf.union(val, neighbor)
 
     return uf.components()

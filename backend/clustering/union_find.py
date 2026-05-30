@@ -17,6 +17,9 @@ class UnionFind:
             for e in elements:
                 self.add(e)
 
+    def __contains__(self, x: Hashable) -> bool:
+        return x in self._parent
+
     def add(self, x: Hashable) -> None:
         if x not in self._parent:
             self._parent[x] = x
