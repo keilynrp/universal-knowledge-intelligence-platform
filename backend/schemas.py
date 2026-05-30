@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 
 import json
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator, model_validator
 from typing import Literal, Optional, List
 from typing_extensions import TypedDict
 
@@ -462,6 +462,32 @@ class BatchResolveRequest(BaseModel):
 class BulkActionRequest(BaseModel):
     ids:              List[int] = Field(min_length=1, max_length=100)
     also_create_rules: bool     = True  # only relevant for bulk-confirm
+
+
+class ResolutionThresholdCreate(BaseModel):
+    """Create/update an adaptive resolution-threshold override (Task 11)."""
+    field_name: str           = Field(min_length=1, max_length=64)
+    domain_id:  Optional[str] = Field(default=None, max_length=64)
+    exact:      float         = Field(ge=0.0, le=1.0)
+    probable:   float         = Field(ge=0.0, le=1.0)
+    ambiguous:  float         = Field(ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _check_ordering(self):
+        if not (self.exact > self.probable > self.ambiguous):
+            raise ValueError("thresholds must satisfy exact > probable > ambiguous")
+        return self
+
+
+class ResolutionThresholdResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id:         int
+    org_id:     Optional[int] = None
+    domain_id:  Optional[str] = None
+    field_name: str
+    exact:      float
+    probable:   float
+    ambiguous:  float
 
 
 # ── Webhooks ─────────────────────────────────────────────────────────────────

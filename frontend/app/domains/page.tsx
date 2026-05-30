@@ -7,6 +7,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { useLanguage } from "../contexts/LanguageContext";
+import ResolutionThresholdsEditor from "./ResolutionThresholdsEditor";
 
 const BUILTIN_IDS = new Set(["default", "science", "healthcare"]);
 const ALL_DOMAINS_ID = "all";
@@ -74,7 +75,7 @@ export default function DomainsPage() {
   const [feedback, setFeedback] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
 
   // Domain detail tabs
-  const [detailTab, setDetailTab] = useState<"attributes" | "epistemic">("attributes");
+  const [detailTab, setDetailTab] = useState<"attributes" | "epistemic" | "thresholds">("attributes");
 
   // Epistemic config state
   const [paradigms, setParadigms] = useState<ParadigmForm[]>([]);
@@ -442,6 +443,18 @@ export default function DomainsPage() {
                     )}
                   </button>
                 )}
+                {isAdmin && (
+                  <button
+                    onClick={() => setDetailTab("thresholds")}
+                    className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+                      detailTab === "thresholds"
+                        ? "border-violet-600 text-violet-600 dark:border-violet-400 dark:text-violet-400"
+                        : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                    }`}
+                  >
+                    Umbrales
+                  </button>
+                )}
               </div>
 
               {/* Tab content */}
@@ -488,6 +501,9 @@ export default function DomainsPage() {
                     </tbody>
                   </table>
                 </div>
+              ) : detailTab === "thresholds" ? (
+                /* ── Adaptive resolution thresholds (Task 11) ── */
+                <ResolutionThresholdsEditor domainId={selectedDomain.id} />
               ) : (
                 /* ── Epistemic configuration panel ── */
                 <div className="flex flex-col flex-1 overflow-hidden">

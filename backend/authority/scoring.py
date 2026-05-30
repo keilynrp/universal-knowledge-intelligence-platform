@@ -16,6 +16,7 @@ Resolution thresholds (proposal §9):
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from thefuzz import fuzz
@@ -47,16 +48,45 @@ _T_PROBABLE = 0.65
 _T_AMBIGUOUS = 0.45
 
 
+@dataclass(frozen=True)
+class ResolutionThresholds:
+    """Cut points mapping a numeric score to a resolution_status (Task 11).
+
+    Tunable per (org, domain, field); defaults mirror the module constants.
+    """
+    exact: float = _T_EXACT
+    probable: float = _T_PROBABLE
+    ambiguous: float = _T_AMBIGUOUS
+
+    def classify(self, total: float) -> str:
+        if total >= self.exact:
+            return "exact_match"
+        if total >= self.probable:
+            return "probable_match"
+        if total >= self.ambiguous:
+            return "ambiguous"
+        return "unresolved"
+
+
+_DEFAULT_THRESHOLDS = ResolutionThresholds()
+
+
 def _score_identifiers(
     source: str,
     authority_id: str,
     orcid_hint: Optional[str],
     evidence: List[str],
+    source_prior: float = 0.0,
 ) -> float:
     """
     Base score from source quality.
     Returns 1.0 when an ORCID hint from the original record matches the
     candidate's ORCID ID — the strongest possible signal.
+
+    ``source_prior`` is a bounded (±0.05) learned adjustment from accumulated
+    confirm/reject feedback (Task 10); it nudges the base source quality and is
+    recorded in the evidence trail. It does not apply to an exact ORCID match,
+    which already represents maximum certainty.
     """
     base = _SOURCE_QUALITY.get(source, 0.30)
     evidence.append(f"source_quality:{source}={base:.2f}")
@@ -66,6 +96,11 @@ def _score_identifiers(
         if hint and hint in authority_id:
             evidence.append("orcid_hint_matched")
             return 1.0
+
+    if source_prior:
+        adjusted = max(0.0, min(1.0, base + source_prior))
+        evidence.append(f"feedback_prior:{source_prior:+.3f}")
+        return adjusted
 
     return base
 
@@ -127,6 +162,9 @@ def compute_score(
     description: Optional[str],
     orcid_hint: Optional[str] = None,
     affiliation: Optional[str] = None,
+    coauthors_overlap: Optional[float] = None,
+    source_prior: float = 0.0,
+    thresholds: Optional[ResolutionThresholds] = None,
 ) -> Tuple[float, dict, List[str], str]:
     """
     Compute the weighted authority score for a single candidate.
@@ -141,10 +179,15 @@ def compute_score(
     """
     evidence: List[str] = []
 
-    s_id    = _score_identifiers(authority_source, authority_id, orcid_hint, evidence)
+    s_id    = _score_identifiers(authority_source, authority_id, orcid_hint, evidence, source_prior)
     s_name  = _score_name(value, canonical_label, evidence)
     s_affil = _score_affiliation(description, affiliation, evidence)
-    s_coauth = 0.0
+    # Coauthorship: Jaccard overlap (0–1) of shared collaborators. Only counts
+    # toward the score when supplied (entity_type == person with a coauthor ctx).
+    has_coauth = coauthors_overlap is not None
+    s_coauth = max(0.0, min(1.0, coauthors_overlap)) if has_coauth else 0.0
+    if has_coauth:
+        evidence.append(f"coauthorship overlap={s_coauth:.2f}")
     s_topic  = 0.0
 
     # Dynamic weight normalization: when a signal is unavailable its weight
@@ -154,7 +197,7 @@ def compute_score(
         "identifiers":  _W_ID,
         "name":         _W_NAME,
         "affiliation":  _W_AFFIL if affiliation else 0.0,
-        "coauthorship": 0.0,   # reserved — not yet implemented
+        "coauthorship": _W_COAUTH if has_coauth else 0.0,
         "topic":        0.0,   # reserved — not yet implemented
     }
     total_w = sum(nominal_weights.values()) or 1.0
@@ -177,13 +220,6 @@ def compute_score(
         "topic":        s_topic,
     }
 
-    if total >= _T_EXACT:
-        resolution_status = "exact_match"
-    elif total >= _T_PROBABLE:
-        resolution_status = "probable_match"
-    elif total >= _T_AMBIGUOUS:
-        resolution_status = "ambiguous"
-    else:
-        resolution_status = "unresolved"
+    resolution_status = (thresholds or _DEFAULT_THRESHOLDS).classify(total)
 
     return total, breakdown, evidence, resolution_status

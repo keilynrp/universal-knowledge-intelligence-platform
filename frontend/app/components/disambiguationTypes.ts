@@ -25,6 +25,9 @@ export interface AuthorityRecord {
     confidence: number;
     uri: string | null;
     status: string;
+    score_breakdown?: Record<string, number> | null;
+    evidence?: string[] | null;
+    resolution_status?: string | null;
 }
 
 export const SOURCE_STYLES: Record<string, { label: string; bg: string; text: string }> = {

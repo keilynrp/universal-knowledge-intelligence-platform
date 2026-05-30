@@ -12,7 +12,7 @@ import logging
 import re
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from pydantic import BaseModel, Field as PydanticField
 from sqlalchemy import update
 from sqlalchemy.orm import Session
@@ -48,9 +48,12 @@ router = APIRouter(tags=["disambiguation"])
 @router.get("/disambiguate/{field}")
 async def disambiguate_field(
     request: Request,
+    response: Response,
     field: str,
     threshold: int = Query(default=80, ge=0, le=100),
     algorithm: str = Query(default="token_sort", pattern="^(token_sort|fingerprint|ngram|phonetic)$"),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -84,10 +87,17 @@ async def disambiguate_field(
                         similarity_threshold=threshold / 100,
                     )
                     if engine_groups is not None:
-                        return {"groups": engine_groups, "total_groups": len(engine_groups), "algorithm": "engine"}
+                        total = len(engine_groups)
+                        page = engine_groups[skip : skip + limit]
+                        response.headers["X-Total-Count"] = str(total)
+                        return {"groups": page, "total_groups": total, "algorithm": "engine"}
 
-        groups = _build_disambig_groups(field, threshold, db, algorithm=algorithm, org_id=org_id)
-        return {"groups": groups, "total_groups": len(groups), "algorithm": algorithm}
+        groups, total = _build_disambig_groups(
+            field, threshold, db, algorithm=algorithm, org_id=org_id,
+            skip=skip, limit=limit, with_total=True,
+        )
+        response.headers["X-Total-Count"] = str(total)
+        return {"groups": groups, "total_groups": total, "algorithm": algorithm}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

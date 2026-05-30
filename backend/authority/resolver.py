@@ -16,7 +16,11 @@ from typing import List, Optional
 from thefuzz import fuzz
 
 from backend.authority.base import AuthorityCandidate, ResolveContext
+from backend.authority.cache import get_resolver_cache
 from backend.authority.normalize import normalize_name
+from backend.authority.resilience import ResilientResolver
+from backend.circuit_breaker import CircuitBreaker
+from backend.authority.coauthorship_signal import candidate_coauthors, compute_candidate_overlap
 from backend.authority.scoring import compute_score
 from backend.authority.resolvers.wikidata import WikidataResolver
 from backend.authority.resolvers.viaf     import ViafResolver
@@ -33,6 +37,14 @@ _RESOLVERS = [
     DbpediaResolver(),
     OpenAlexEntityResolver(),
 ]
+
+# Wrap each source in a circuit breaker + bounded retry. One breaker per source,
+# shared across all resolve_all calls so failures accumulate process-wide.
+_BREAKERS = {
+    r.source_name: CircuitBreaker(r.source_name, failure_threshold=3, recovery_timeout=60.0)
+    for r in _RESOLVERS
+}
+_RESILIENT = [ResilientResolver(r, _BREAKERS[r.source_name]) for r in _RESOLVERS]
 
 _MAX_RESULTS      = 20
 _PARALLEL_TIMEOUT = 12   # seconds to wait for all futures
@@ -155,10 +167,17 @@ def resolve_all(
 
     raw: List[AuthorityCandidate] = []
 
+    cache = get_resolver_cache()
     with ThreadPoolExecutor(max_workers=5) as pool:
         futures = {
-            pool.submit(resolver.resolve, value, entity_type): resolver.source_name
-            for resolver in _RESOLVERS
+            pool.submit(
+                cache.get_or_load,
+                resolver.source_name,
+                value,
+                entity_type,
+                lambda r=resolver: r.resolve(value, entity_type),
+            ): resolver.source_name
+            for resolver in _RESILIENT
         }
         for future in as_completed(futures, timeout=_PARALLEL_TIMEOUT):
             source = futures[future]
@@ -168,7 +187,16 @@ def resolve_all(
                 logger.warning("Authority resolver '%s' timed out or failed: %s", source, exc)
 
     # Apply weighted scoring engine
+    use_coauth = entity_type == "person" and bool(context.coauthors)
     for c in raw:
+        coauthors_overlap = None
+        if use_coauth:
+            coauthors_overlap = compute_candidate_overlap(
+                context.coauthors, candidate_coauthors(c)
+            )
+        source_prior = 0.0
+        if context.source_priors:
+            source_prior = context.source_priors.get(c.authority_source, 0.0)
         score, breakdown, evidence, resolution_status = compute_score(
             value=value,
             authority_source=c.authority_source,
@@ -177,6 +205,9 @@ def resolve_all(
             description=c.description,
             orcid_hint=context.orcid_hint,
             affiliation=context.affiliation,
+            coauthors_overlap=coauthors_overlap,
+            source_prior=source_prior,
+            thresholds=context.thresholds,
         )
         c.confidence        = score
         c.score_breakdown   = breakdown

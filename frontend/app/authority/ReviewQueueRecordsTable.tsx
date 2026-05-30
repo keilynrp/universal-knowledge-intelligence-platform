@@ -3,6 +3,7 @@
 import { Fragment } from "react";
 import { Badge } from "../components/ui";
 import AnnotationThread from "../components/AnnotationThread";
+import ScoreBreakdown from "../components/ScoreBreakdown";
 import { useLanguage } from "../contexts/LanguageContext";
 import AuthorReviewExpandedPanel from "./AuthorReviewExpandedPanel";
 import {
@@ -255,6 +256,19 @@ export default function ReviewQueueRecordsTable({
                                                     linkActionId={linkActionId}
                                                     onReviewAuthorityLink={onReviewAuthorityLink}
                                                 />
+                                            )}
+
+                                            {queueMode !== "authors" &&
+                                                (rec.score_breakdown || (rec.evidence && rec.evidence.length > 0)) && (
+                                                <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900/40">
+                                                    <h4 className="mb-2 text-xs font-semibold text-gray-700 dark:text-gray-300">
+                                                        {t("page.authority.score_breakdown") || "Desglose de puntuación"}
+                                                    </h4>
+                                                    <ScoreBreakdown
+                                                        breakdown={rec.score_breakdown}
+                                                        evidence={rec.evidence}
+                                                    />
+                                                </div>
                                             )}
 
                                             {queueMode !== "authors" && statusFilter === "pending" && (

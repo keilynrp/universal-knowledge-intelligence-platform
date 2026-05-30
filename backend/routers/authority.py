@@ -18,7 +18,7 @@ import re
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, inspect, text
 from sqlalchemy.orm import Session
@@ -26,7 +26,14 @@ from sqlalchemy.orm import Session
 from backend import database, models, schemas
 from backend.auth import get_current_user, require_role
 from backend.authority.author_resolution import summarize_author_resolution
+from backend.authority import feedback as _authority_feedback
+from backend.authority import thresholds as _authority_thresholds
 from backend.authority.base import ResolveContext as _AuthorityContext
+from backend.authority.batch_resolution import (
+    InvalidFieldError,
+    execute_batch_resolution,
+    validate_field,
+)
 from backend.authority.hierarchical_fallback import apply_hierarchical_fallback
 from backend.authority.query_reformulation import run_author_query_reformulation
 from backend.authority.resolver import resolve_all as _authority_resolve_all
@@ -505,6 +512,14 @@ def resolve_authority(
         orcid_hint=payload.context_orcid_hint,
         doi=payload.context_doi,
         year=payload.context_year,
+        source_priors=_authority_feedback.get_source_priors(
+            db, payload.field_name, org_id=record_org_id
+        ),
+        thresholds=_authority_thresholds.get_thresholds(
+            db, payload.field_name,
+            domain_id=getattr(payload, "domain_id", None),
+            org_id=record_org_id,
+        ),
     )
     # Try engine delegation first, fall back to Python resolvers
     engine_client = getattr(request.app.state, "engine_client", None)
@@ -724,94 +739,85 @@ def resolve_author_profile(
 @router.post("/authority/resolve/batch", status_code=201, tags=["authority"])
 def resolve_authority_batch(
     payload: schemas.BatchResolveRequest,
+    sync: bool = Query(False, description="Run inline (legacy) instead of enqueuing an async job"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
 ):
     """
     Resolve all distinct values of a field against external authority sources.
+
+    Default mode enqueues an async ``AuthorityResolveJob`` and returns a job id;
+    poll ``GET /authority/jobs/{job_id}`` for progress. Pass ``?sync=true`` to
+    run inline and receive the resolved records in the response (legacy shape).
     """
     org_id = resolve_request_org_id(db, current_user)
     record_org_id = persisted_org_id(org_id)
     field = payload.field_name
     entity_type = payload.entity_type.value
 
-    if not _FIELD_RE.match(field):
-        raise HTTPException(status_code=422, detail=f"Invalid field name: {field!r}")
+    try:
+        validate_field(db, field)
+    except InvalidFieldError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
-    _entity_cols = {col["name"] for col in inspect(db.get_bind()).get_columns("raw_entities")}
-    if field not in _entity_cols:
-        raise HTTPException(status_code=422, detail=f"Field '{field}' not found in entity table")
-
-    query_text = (
-        f'SELECT DISTINCT "{field}" FROM raw_entities '
-        f'WHERE "{field}" IS NOT NULL AND "{field}" != \'\''
-    )
-    params: dict[str, object] = {}
-    where_clauses: list[str] = []
-    add_org_sql_filter(where_clauses, params, org_id)
-    if where_clauses:
-        query_text += " AND " + " AND ".join(where_clauses)
-    rows = db.execute(text(query_text), params).fetchall()
-    all_values = [row[0] for row in rows if row[0]]
-
-    already_existed = 0
-    if payload.skip_existing and all_values:
-        existing_values = {
-            r.original_value
-            for r in scope_query_to_org(
-                db.query(models.AuthorityRecord.original_value), models.AuthorityRecord, org_id
-            ).filter(
-                models.AuthorityRecord.field_name == field,
-                models.AuthorityRecord.status.in_(["pending", "confirmed"]),
-            ).all()
+    if not sync:
+        job = models.AuthorityResolveJob(
+            org_id=record_org_id,
+            field_name=field,
+            entity_type=entity_type,
+            params_json=json.dumps({"limit": payload.limit, "skip_existing": payload.skip_existing}),
+            status="pending",
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+        return {
+            "job_id": job.id,
+            "status": job.status,
+            "field_name": field,
+            "entity_type": entity_type,
         }
-        filtered = [v for v in all_values if v not in existing_values]
-        already_existed = len(all_values) - len(filtered)
-        all_values = filtered
 
-    to_resolve = all_values[: payload.limit]
-    skipped = len(all_values) - len(to_resolve)
-
-    ctx = _AuthorityContext()
-    new_records: list[models.AuthorityRecord] = []
-
-    for value in to_resolve:
-        candidates = _authority_resolve_all(value, entity_type, ctx)
-        candidates = apply_hierarchical_fallback(value, entity_type, candidates)
-        for c in candidates:
-            rec = models.AuthorityRecord(
-                org_id=record_org_id,
-                field_name=field,
-                original_value=value,
-                authority_source=c.authority_source,
-                authority_id=c.authority_id,
-                canonical_label=c.canonical_label,
-                aliases=json.dumps(c.aliases),
-                description=c.description,
-                confidence=c.confidence,
-                uri=c.uri,
-                status="pending",
-                resolution_status=c.resolution_status,
-                score_breakdown=json.dumps(c.score_breakdown),
-                evidence=json.dumps(c.evidence),
-                merged_sources=json.dumps(c.merged_sources),
-                hierarchy_distance=c.hierarchy_distance,
-            )
-            db.add(rec)
-            new_records.append(rec)
-
+    summary, new_records = execute_batch_resolution(
+        db,
+        org_id=org_id,
+        record_org_id=record_org_id,
+        field=field,
+        entity_type=entity_type,
+        limit=payload.limit,
+        skip_existing=payload.skip_existing,
+        resolve_fn=_authority_resolve_all,
+    )
     db.commit()
     for rec in new_records:
         db.refresh(rec)
 
+    summary["records"] = [_serialize_authority_record(r) for r in new_records]
+    return summary
+
+
+@router.get("/authority/jobs/{job_id}", tags=["authority"])
+def get_authority_job(
+    job_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Return status + progress counters for an async batch resolution job."""
+    org_id = resolve_request_org_id(db, current_user)
+    job = get_scoped_record(db, models.AuthorityResolveJob, job_id, org_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
     return {
-        "field_name":          field,
-        "entity_type":         entity_type,
-        "resolved_count":      len(to_resolve),
-        "skipped_count":       skipped,
-        "already_existed_count": already_existed,
-        "records_created":     len(new_records),
-        "records":             [_serialize_authority_record(r) for r in new_records],
+        "job_id": job.id,
+        "status": job.status,
+        "field_name": job.field_name,
+        "entity_type": job.entity_type,
+        "total": job.total or 0,
+        "processed": job.processed or 0,
+        "records_created": job.records_created or 0,
+        "error": job.error,
+        "created_at": job.created_at.isoformat() if job.created_at else None,
+        "finished_at": job.finished_at.isoformat() if job.finished_at else None,
     }
 
 
@@ -1414,6 +1420,14 @@ def confirm_authority_record(
     rec.status = "confirmed"
     rec.confirmed_at = datetime.now(timezone.utc)
 
+    # Record positive feedback for this (field, source) so the scoring engine
+    # can learn a bounded prior (Task 10).
+    if rec.field_name and rec.authority_source:
+        _authority_feedback.record_outcome(
+            db, rec.field_name, rec.authority_source,
+            confirmed=True, org_id=rec.org_id,
+        )
+
     rule_created = False
     if payload.also_create_rule:
         existing = scope_query_to_org(
@@ -1456,6 +1470,11 @@ def reject_authority_record(
     if rec is None:
         raise HTTPException(status_code=404, detail="AuthorityRecord not found")
     rec.status = "rejected"
+    if rec.field_name and rec.authority_source:
+        _authority_feedback.record_outcome(
+            db, rec.field_name, rec.authority_source,
+            rejected=True, org_id=rec.org_id,
+        )
     _audit(
         db, "authority.reject",
         user_id=current_user.id,
@@ -1481,6 +1500,70 @@ def delete_authority_record(
     db.delete(rec)
     db.commit()
     return {"message": "Deleted", "id": record_id}
+
+
+# ── Adaptive resolution thresholds (Phase 3, Task 11) ─────────────────────────
+
+@router.post("/authority/thresholds", tags=["authority"], status_code=201)
+def upsert_resolution_threshold(
+    payload: schemas.ResolutionThresholdCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
+):
+    """Create or update a per-(org, domain, field) resolution-threshold override."""
+    org_id = persisted_org_id(resolve_request_org_id(db, current_user))
+    row = (
+        scope_query_to_org(
+            db.query(models.ResolutionThreshold), models.ResolutionThreshold, org_id
+        )
+        .filter(
+            models.ResolutionThreshold.domain_id == payload.domain_id,
+            models.ResolutionThreshold.field_name == payload.field_name,
+        )
+        .first()
+    )
+    if row is None:
+        row = models.ResolutionThreshold(
+            org_id=org_id, domain_id=payload.domain_id, field_name=payload.field_name,
+        )
+        db.add(row)
+    row.exact = payload.exact
+    row.probable = payload.probable
+    row.ambiguous = payload.ambiguous
+    db.commit()
+    db.refresh(row)
+    _authority_thresholds.clear_cache()
+    return schemas.ResolutionThresholdResponse.model_validate(row)
+
+
+@router.get("/authority/thresholds", tags=["authority"])
+def list_resolution_thresholds(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """List resolution-threshold overrides for the caller's organization."""
+    org_id = persisted_org_id(resolve_request_org_id(db, current_user))
+    rows = scope_query_to_org(
+        db.query(models.ResolutionThreshold), models.ResolutionThreshold, org_id
+    ).all()
+    return [schemas.ResolutionThresholdResponse.model_validate(r) for r in rows]
+
+
+@router.delete("/authority/thresholds/{threshold_id}", tags=["authority"])
+def delete_resolution_threshold(
+    threshold_id: int = Path(ge=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
+):
+    """Delete a resolution-threshold override (falls back to defaults)."""
+    org_id = persisted_org_id(resolve_request_org_id(db, current_user))
+    row = get_scoped_record(db, models.ResolutionThreshold, threshold_id, org_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="ResolutionThreshold not found")
+    db.delete(row)
+    db.commit()
+    _authority_thresholds.clear_cache()
+    return {"message": "Deleted", "id": threshold_id}
 
 
 @router.get("/authority/metrics", tags=["authority"])
@@ -1557,13 +1640,18 @@ def authority_metrics(
 @router.get("/authority/{field}")
 def get_authority_view(
     field: str,
+    response: Response,
     threshold: int = Query(default=80, ge=0, le=100),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
     org_id = resolve_request_org_id(db, current_user)
     try:
-        groups = _build_disambig_groups(field, threshold, db, org_id=org_id)
+        groups, total_groups = _build_disambig_groups(
+            field, threshold, db, org_id=org_id, skip=skip, limit=limit, with_total=True,
+        )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1593,9 +1681,10 @@ def get_authority_view(
         .scalar() or 0
     )
 
+    response.headers["X-Total-Count"] = str(total_groups)
     return {
         "groups":        annotated,
-        "total_groups":  len(annotated),
+        "total_groups":  total_groups,
         "total_rules":   total_rules,
         "pending_groups": sum(1 for g in annotated if not g["has_rules"]),
     }

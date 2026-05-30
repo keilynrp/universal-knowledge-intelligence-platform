@@ -28,6 +28,20 @@ logger = logging.getLogger(__name__)
 _FIELD_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
 
+def _blocking_enabled() -> bool:
+    """Whether to use blocking + Union-Find clustering (Phase 2, Task 6).
+
+    Default ON since the evaluation harness (Task 9) validated the switch:
+    on the gold fixture, blocking scores F1=0.91 vs the legacy greedy 0.86 at
+    threshold 80 (higher recall, equal precision). Set ``UKIP_USE_BLOCKING=0``
+    to fall back to the legacy greedy path.
+    """
+    val = os.environ.get("UKIP_USE_BLOCKING")
+    if val is None or val.strip() == "":
+        return True
+    return val.strip().lower() in ("1", "true", "yes", "on")
+
+
 # Audit helper
 def _audit(
     db: Session,
@@ -54,10 +68,17 @@ def _build_disambig_groups(
     db: Session,
     algorithm: str = "token_sort",
     org_id: int | None = None,
+    skip: int | None = None,
+    limit: int | None = None,
+    with_total: bool = False,
 ):
     """
     Shared disambiguation logic.
     algorithm: "token_sort" | "fingerprint" | "ngram" | "phonetic"
+
+    When ``with_total`` is True, returns ``(page, total)`` where ``page`` is the
+    ``skip``/``limit`` slice of the full group list and ``total`` is the full
+    count. Otherwise returns the full group list (legacy behavior).
     """
     if not _FIELD_RE.match(field):
         raise ValueError(
@@ -96,6 +117,36 @@ def _build_disambig_groups(
 
     values.sort(key=len, reverse=True)
     groups = []
+
+    # Blocking + Union-Find path (flagged). Order-independent and transitive;
+    # replaces the greedy O(n²) token_sort/ngram loops when UKIP_USE_BLOCKING is on.
+    if algorithm in ("token_sort", "ngram") and _blocking_enabled():
+        from backend.clustering.blocking import cluster_values
+        from backend.clustering.semantic import maybe_build_index
+
+        # Semantic candidates (Task 8) are flag-gated and degrade to None when
+        # no embedder is available, leaving pure lexical blocking unchanged.
+        semantic_index = maybe_build_index(db, values)
+        algo_label = (
+            f"{algorithm}+blocking+semantic" if semantic_index else f"{algorithm}+blocking"
+        )
+
+        for component in cluster_values(values, threshold, semantic_index=semantic_index):
+            if len(component) > 1:
+                main = max(component, key=len)
+                groups.append({
+                    "main": main,
+                    "variations": component,
+                    "count": len(component),
+                    "algorithm_used": algo_label,
+                })
+        groups.sort(key=lambda g: g["count"], reverse=True)
+        if with_total:
+            total = len(groups)
+            start = skip or 0
+            page = groups[start : start + limit] if limit is not None else groups[start:]
+            return page, total
+        return groups
 
     if algorithm == "token_sort":
         processed = set()
@@ -174,6 +225,12 @@ def _build_disambig_groups(
                     "count": len(members),
                     "algorithm_used": "phonetic",
                 })
+
+    if with_total:
+        total = len(groups)
+        start = skip or 0
+        page = groups[start : start + limit] if limit is not None else groups[start:]
+        return page, total
 
     return groups
 

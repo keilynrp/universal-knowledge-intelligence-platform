@@ -327,6 +327,79 @@ class AuthorityRecord(Base):
     reformulation_trace = Column(Text, nullable=True)
 
 
+class AuthorityResolveJob(Base):
+    """Async batch authority-resolution job (Phase 1, Task 3).
+
+    Enqueued by POST /authority/resolve/batch (default async mode) and drained
+    by the background batch worker. Tracks progress + outcome counters.
+    status: pending | processing | done | failed
+    """
+    __tablename__ = "authority_resolve_jobs"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    org_id          = Column(Integer, nullable=True, index=True)
+    field_name      = Column(String, nullable=False)
+    entity_type     = Column(String, nullable=False)
+    params_json     = Column(Text, nullable=True)              # limit, skip_existing, ...
+    status          = Column(String, default="pending", index=True)
+    total           = Column(Integer, default=0)
+    processed       = Column(Integer, default=0)
+    records_created = Column(Integer, default=0)
+    error           = Column(Text, nullable=True)
+    created_at      = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    finished_at     = Column(DateTime, nullable=True)
+
+
+class AuthorityScoringFeedback(Base):
+    """Aggregated confirm/reject counts per (org, field, source) (Phase 3, Task 10).
+
+    Drives a bounded learned prior (±0.05) that nudges the identifier signal of
+    the scoring engine: sources whose candidates users repeatedly confirm get a
+    small boost; sources repeatedly rejected get a small penalty. Stored as
+    running counters so the prior is cheap to recompute and fully auditable.
+    """
+    __tablename__ = "authority_scoring_feedback"
+    __table_args__ = (
+        UniqueConstraint("org_id", "field_name", "authority_source",
+                         name="uq_scoring_feedback_scope"),
+    )
+
+    id               = Column(Integer, primary_key=True, index=True)
+    org_id           = Column(Integer, nullable=True, index=True)
+    field_name       = Column(String, nullable=False, index=True)
+    authority_source = Column(String, nullable=False, index=True)
+    confirmed        = Column(Integer, default=0)
+    rejected         = Column(Integer, default=0)
+    updated_at       = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                              onupdate=lambda: datetime.now(timezone.utc))
+
+
+class ResolutionThreshold(Base):
+    """Per-(org, domain, field) resolution cut points (Phase 3, Task 11).
+
+    Overrides the global exact/probable/ambiguous boundaries used to map a
+    numeric authority score to a resolution_status. A NULL domain_id means the
+    override applies to the field across all domains; lookup prefers the most
+    specific match and falls back to the global defaults when none exists.
+    """
+    __tablename__ = "resolution_thresholds"
+    __table_args__ = (
+        UniqueConstraint("org_id", "domain_id", "field_name",
+                         name="uq_resolution_threshold_scope"),
+    )
+
+    id          = Column(Integer, primary_key=True, index=True)
+    org_id      = Column(Integer, nullable=True, index=True)
+    domain_id   = Column(String, nullable=True, index=True)
+    field_name  = Column(String, nullable=False, index=True)
+    exact       = Column(Float, nullable=False, default=0.85)
+    probable    = Column(Float, nullable=False, default=0.65)
+    ambiguous   = Column(Float, nullable=False, default=0.45)
+    created_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                         onupdate=lambda: datetime.now(timezone.utc))
+
+
 class AuthorityRecordLink(Base):
     """
     Auditable links between authority records.

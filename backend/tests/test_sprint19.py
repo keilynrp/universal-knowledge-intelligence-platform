@@ -68,7 +68,9 @@ def _seed_pending_record(db_session, field="primary_label", value="Acme", source
 # ── POST /authority/resolve/batch ─────────────────────────────────────────────
 
 class TestBatchResolve:
-    _URL = "/authority/resolve/batch"
+    # Phase 1, Task 3: the default endpoint is now async (enqueues a job).
+    # These legacy tests assert the synchronous record shape, so they pin sync=true.
+    _URL = "/authority/resolve/batch?sync=true"
 
     def _payload(self, **kw):
         defaults = {"field_name": "primary_label", "entity_type": "general", "limit": 10}

@@ -40,10 +40,12 @@ export default function DisambiguationTab({ activeDomain }: { activeDomain: Doma
     const [loading, setLoading] = useState(false);
     const [applying, setApplying] = useState(false);
     const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
-    const [groupStates, setGroupStates] = useState<Record<number, GroupState>>({});
-    const [savingGroup, setSavingGroup] = useState<number | null>(null);
+    // State keyed by canonical group "main" so edits survive page navigation.
+    const [groupStates, setGroupStates] = useState<Record<string, GroupState>>({});
+    const [savingGroup, setSavingGroup] = useState<string | null>(null);
     const [page, setPage] = useState(0);
     const [limit, setLimit] = useState(20);
+    const [analyzed, setAnalyzed] = useState(false);
 
     useEffect(() => {
         if (activeDomain && !field) {
@@ -52,27 +54,32 @@ export default function DisambiguationTab({ activeDomain }: { activeDomain: Doma
         }
     }, [activeDomain, field]);
 
+    // Server-side pagination: refetch whenever the page or limit changes once analyzed.
     useEffect(() => {
-        setPage(0);
-    }, [data]);
+        if (!analyzed || !field) return;
+        void fetchPage(page, limit);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [page, limit, analyzed]);
 
-    const visibleGroups = data ? data.groups.slice(page * limit, (page + 1) * limit) : [];
+    const visibleGroups = data ? data.groups : [];
 
-    async function analyze() {
+    async function fetchPage(targetPage: number, pageLimit: number) {
         setLoading(true);
-        setData(null);
-        setGroupStates({});
-        setApplyResult(null);
         try {
-            const res = await apiFetch(`/authority/${field}`);
+            const skip = targetPage * pageLimit;
+            const res = await apiFetch(`/authority/${field}?skip=${skip}&limit=${pageLimit}`);
             if (!res.ok) throw new Error("Failed to fetch");
             const json: AuthorityResponse = await res.json();
             setData(json);
-            const states: Record<number, GroupState> = {};
-            json.groups.forEach((g, idx) => {
-                states[idx] = { canonical: g.resolved_to || g.main, excluded: new Set<string>(), saved: g.has_rules };
+            setGroupStates(prev => {
+                const states = { ...prev };
+                json.groups.forEach(g => {
+                    if (!states[g.main]) {
+                        states[g.main] = { canonical: g.resolved_to || g.main, excluded: new Set<string>(), saved: g.has_rules };
+                    }
+                });
+                return states;
             });
-            setGroupStates(states);
         } catch {
             toast("Error fetching authority data", "error");
         } finally {
@@ -80,24 +87,32 @@ export default function DisambiguationTab({ activeDomain }: { activeDomain: Doma
         }
     }
 
-    function updateCanonical(idx: number, value: string) {
-        setGroupStates(prev => ({ ...prev, [idx]: { ...prev[idx], canonical: value, saved: false } }));
+    async function analyze() {
+        setData(null);
+        setGroupStates({});
+        setApplyResult(null);
+        setPage(0);
+        setAnalyzed(true);
+        await fetchPage(0, limit);
     }
 
-    function toggleExclude(idx: number, variation: string) {
+    function updateCanonical(main: string, value: string) {
+        setGroupStates(prev => ({ ...prev, [main]: { ...prev[main], canonical: value, saved: false } }));
+    }
+
+    function toggleExclude(main: string, variation: string) {
         setGroupStates(prev => {
-            const excluded = new Set(prev[idx].excluded);
+            const excluded = new Set(prev[main].excluded);
             if (excluded.has(variation)) excluded.delete(variation); else excluded.add(variation);
-            return { ...prev, [idx]: { ...prev[idx], excluded, saved: false } };
+            return { ...prev, [main]: { ...prev[main], excluded, saved: false } };
         });
     }
 
-    async function saveGroupRules(idx: number) {
-        if (!data) return;
-        const group = data.groups[idx];
-        const state = groupStates[idx];
+    async function saveGroupRules(group: AuthorityGroup) {
+        const state = groupStates[group.main];
+        if (!state) return;
         const activeVariations = group.variations.filter(v => !state.excluded.has(v));
-        setSavingGroup(idx);
+        setSavingGroup(group.main);
         try {
             const res = await apiFetch("/rules/bulk", {
                 method: "POST",
@@ -105,7 +120,7 @@ export default function DisambiguationTab({ activeDomain }: { activeDomain: Doma
                 body: JSON.stringify({ field_name: field, canonical_value: state.canonical, variations: activeVariations }),
             });
             if (!res.ok) throw new Error("Failed to save rules");
-            setGroupStates(prev => ({ ...prev, [idx]: { ...prev[idx], saved: true } }));
+            setGroupStates(prev => ({ ...prev, [group.main]: { ...prev[group.main], saved: true } }));
         } catch {
             toast("Error saving rules", "error");
         } finally {
@@ -197,12 +212,11 @@ export default function DisambiguationTab({ activeDomain }: { activeDomain: Doma
 
             {data && (
                 <div className="space-y-4">
-                    {visibleGroups.map((group, idx) => {
-                        const originalIdx = page * limit + idx;
-                        const state = groupStates[originalIdx];
+                    {visibleGroups.map((group) => {
+                        const state = groupStates[group.main];
                         if (!state) return null;
                         return (
-                            <div key={originalIdx} className={`rounded-2xl border bg-white p-5 transition-shadow hover:shadow-md dark:bg-gray-900 ${state.saved ? "border-green-200 dark:border-green-800" : "border-gray-200 dark:border-gray-800"}`}>
+                            <div key={group.main} className={`rounded-2xl border bg-white p-5 transition-shadow hover:shadow-md dark:bg-gray-900 ${state.saved ? "border-green-200 dark:border-green-800" : "border-gray-200 dark:border-gray-800"}`}>
                                 <div className="mb-4 flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                         <Badge variant={state.saved ? "success" : "warning"} dot>
@@ -211,11 +225,11 @@ export default function DisambiguationTab({ activeDomain }: { activeDomain: Doma
                                         <span className="text-xs text-gray-400 dark:text-gray-500">{t("page.authority.disambig.n_variations", { count: group.count })}</span>
                                     </div>
                                     <button
-                                        onClick={() => saveGroupRules(originalIdx)}
-                                        disabled={savingGroup === originalIdx}
+                                        onClick={() => saveGroupRules(group)}
+                                        disabled={savingGroup === group.main}
                                         className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                                     >
-                                        {savingGroup === originalIdx ? t("page.authority.disambig.saving") : (
+                                        {savingGroup === group.main ? t("page.authority.disambig.saving") : (
                                             <>
                                                 <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -230,7 +244,7 @@ export default function DisambiguationTab({ activeDomain }: { activeDomain: Doma
                                     <input
                                         type="text"
                                         value={state.canonical}
-                                        onChange={e => updateCanonical(originalIdx, e.target.value)}
+                                        onChange={e => updateCanonical(group.main, e.target.value)}
                                         className="h-9 w-full max-w-md rounded-lg border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-900 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
                                     />
                                 </div>
@@ -243,7 +257,7 @@ export default function DisambiguationTab({ activeDomain }: { activeDomain: Doma
                                             return (
                                                 <button
                                                     key={i}
-                                                    onClick={() => { if (!isCanonical) toggleExclude(originalIdx, v); }}
+                                                    onClick={() => { if (!isCanonical) toggleExclude(group.main, v); }}
                                                     className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-sm transition-colors ${isCanonical
                                                         ? "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-500/10 dark:text-blue-400"
                                                         : isExcluded
@@ -263,7 +277,7 @@ export default function DisambiguationTab({ activeDomain }: { activeDomain: Doma
                         );
                     })}
 
-                    {data.groups.length > 0 && (
+                    {data.total_groups > 0 && (
                         <div className="flex items-center justify-between border-t border-gray-200 pt-4 dark:border-gray-800">
                             <div className="flex items-center gap-2">
                                 <span className="text-sm text-gray-500 dark:text-gray-400">{t("page.authority.disambig.rows_per_page")}</span>
@@ -282,9 +296,9 @@ export default function DisambiguationTab({ activeDomain }: { activeDomain: Doma
                                 </button>
                                 <div className="flex items-center gap-2">
                                     <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-sm font-medium text-white">{page + 1}</span>
-                                    <span className="text-sm text-gray-500">{t("page.authority.disambig.of_pages", { total: Math.ceil(data.groups.length / limit) })}</span>
+                                    <span className="text-sm text-gray-500">{t("page.authority.disambig.of_pages", { total: Math.ceil(data.total_groups / limit) })}</span>
                                 </div>
-                                <button onClick={() => setPage(p => p + 1)} disabled={(page + 1) * limit >= data.groups.length} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+                                <button onClick={() => setPage(p => p + 1)} disabled={(page + 1) * limit >= data.total_groups} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
                                     {t("page.authority.disambig.next")}
                                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                                 </button>
@@ -292,7 +306,7 @@ export default function DisambiguationTab({ activeDomain }: { activeDomain: Doma
                         </div>
                     )}
 
-                    {data.groups.length === 0 && (
+                    {data.total_groups === 0 && (
                         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 py-16 dark:border-gray-700">
                             <svg className="mb-3 h-12 w-12 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
