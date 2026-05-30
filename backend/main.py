@@ -119,49 +119,20 @@ _BUILTIN_TEMPLATES = [
 ]
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    initialize_telemetry(logger)
+def _run_db_bootstrap() -> None:
+    """DB-side startup bootstrap (idempotent).
 
-    # ── Startup env-var guard ────────────────────────────────────────────────
-    # Required vars that must be set in production
-    _required_vars = [
-        "JWT_SECRET_KEY",
-        "ENCRYPTION_KEY",
-        "ADMIN_USERNAME",
-    ]
-    for var in _required_vars:
-        if not os.environ.get(var):
-            logger.warning("⚠ %s is not set. Set it in .env before deploying to production.", var)
-    if not os.environ.get("ADMIN_PASSWORD") and not os.environ.get("ADMIN_PASSWORD_HASH"):
-        logger.warning(
-            "⚠ Neither ADMIN_PASSWORD nor ADMIN_PASSWORD_HASH is set. Bootstrap super_admin provisioning may fail."
-        )
+    Resets stale worker records, provisions the super-admin, applies idempotent
+    data migrations, ensures auxiliary tables exist, and seeds built-in
+    templates. Extracted so the lifespan can run it inside a try/except: a
+    single failing step here must NOT crash the whole service and block the
+    deploy — the container has to keep serving /health so the real error is
+    visible in logs instead of an opaque "container unhealthy".
+    """
+    from backend.authority import batch_worker as _authority_batch_worker
 
-    # Vars that must not keep their insecure defaults
-    _insecure_defaults = {
-        "JWT_SECRET_KEY":     ("changeit", "dev_secret", "fallback", "secret"),
-        "SESSION_SECRET_KEY": ("changeit", "fallback_cookie_secret"),
-        "ADMIN_PASSWORD":     ("changeit", "admin", "password", "123456"),
-    }
-    for var, bad_values in _insecure_defaults.items():
-        val = os.environ.get(var, "")
-        if val and any(val.lower().startswith(b.lower()) for b in bad_values):
-            logger.warning("⚠ %s looks like a placeholder value. Replace it before going to production.", var)
-
-    # Warn if CORS is still open to all origins
-    if os.environ.get("ALLOWED_ORIGINS", "").strip() == "*":
-        logger.warning("⚠ ALLOWED_ORIGINS=* allows all origins. Restrict this in production.")
-
-    if not _startup_side_effects_enabled():
-        logger.info("Startup side effects disabled via UKIP_SKIP_STARTUP_SIDE_EFFECTS=1")
-        yield
-        return
-
-    # Startup
     with database.SessionLocal() as db:
         enrichment_worker.reset_stale_processing_records(db)
-        from backend.authority import batch_worker as _authority_batch_worker
         try:
             _authority_batch_worker.reset_stale_jobs(db)
         except Exception:  # noqa: BLE001 — table may not exist yet on first migrate
@@ -213,7 +184,6 @@ async def lifespan(app: FastAPI):
 
         # Seed built-in artifact templates (only on first run)
         if db.query(models.ArtifactTemplate).count() == 0:
-            import json as _json
             for t in _BUILTIN_TEMPLATES:
                 db.add(models.ArtifactTemplate(
                     name=t["name"],
@@ -225,6 +195,59 @@ async def lifespan(app: FastAPI):
             db.commit()
             logger.info("Bootstrap: %d built-in artifact templates seeded", len(_BUILTIN_TEMPLATES))
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    initialize_telemetry(logger)
+
+    # ── Startup env-var guard ────────────────────────────────────────────────
+    # Required vars that must be set in production
+    _required_vars = [
+        "JWT_SECRET_KEY",
+        "ENCRYPTION_KEY",
+        "ADMIN_USERNAME",
+    ]
+    for var in _required_vars:
+        if not os.environ.get(var):
+            logger.warning("⚠ %s is not set. Set it in .env before deploying to production.", var)
+    if not os.environ.get("ADMIN_PASSWORD") and not os.environ.get("ADMIN_PASSWORD_HASH"):
+        logger.warning(
+            "⚠ Neither ADMIN_PASSWORD nor ADMIN_PASSWORD_HASH is set. Bootstrap super_admin provisioning may fail."
+        )
+
+    # Vars that must not keep their insecure defaults
+    _insecure_defaults = {
+        "JWT_SECRET_KEY":     ("changeit", "dev_secret", "fallback", "secret"),
+        "SESSION_SECRET_KEY": ("changeit", "fallback_cookie_secret"),
+        "ADMIN_PASSWORD":     ("changeit", "admin", "password", "123456"),
+    }
+    for var, bad_values in _insecure_defaults.items():
+        val = os.environ.get(var, "")
+        if val and any(val.lower().startswith(b.lower()) for b in bad_values):
+            logger.warning("⚠ %s looks like a placeholder value. Replace it before going to production.", var)
+
+    # Warn if CORS is still open to all origins
+    if os.environ.get("ALLOWED_ORIGINS", "").strip() == "*":
+        logger.warning("⚠ ALLOWED_ORIGINS=* allows all origins. Restrict this in production.")
+
+    if not _startup_side_effects_enabled():
+        logger.info("Startup side effects disabled via UKIP_SKIP_STARTUP_SIDE_EFFECTS=1")
+        yield
+        return
+
+    # Startup. Bootstrap is guarded: a failure here logs the full traceback but
+    # does NOT abort startup, so uvicorn still serves /health and the deploy's
+    # healthcheck passes instead of failing opaquely as "container unhealthy".
+    from backend.authority import batch_worker as _authority_batch_worker
+    try:
+        _run_db_bootstrap()
+    except Exception:
+        logger.exception(
+            "Startup DB bootstrap FAILED — continuing so the service stays up and "
+            "/health responds. The app may run with an incomplete schema; fix the "
+            "root cause shown in this traceback."
+        )
+
     def get_db_gen():
         while True:
             db = database.SessionLocal()
@@ -233,32 +256,42 @@ async def lifespan(app: FastAPI):
             finally:
                 db.close()
 
-    asyncio.create_task(enrichment_worker.background_enrichment_worker(get_db_gen()))
+    # Background workers + schedulers + engine client. Guarded for the same
+    # reason as the DB bootstrap: a failure spinning these up must not take the
+    # whole service down. engine_client is always set so request handlers and
+    # cleanup can rely on the attribute existing.
+    app.state.engine_client = None
+    try:
+        asyncio.create_task(enrichment_worker.background_enrichment_worker(get_db_gen()))
 
-    # Async authority batch resolution worker (Phase 1, Task 3)
-    asyncio.create_task(_authority_batch_worker.run_batch_worker())
+        # Async authority batch resolution worker (Phase 1, Task 3)
+        asyncio.create_task(_authority_batch_worker.run_batch_worker())
 
-    # V2 coauthorship: periodic recompute of author_stats for dirty scopes.
-    asyncio.create_task(enrichment_worker.coauthor_recompute_loop())
+        # V2 coauthorship: periodic recompute of author_stats for dirty scopes.
+        asyncio.create_task(enrichment_worker.coauthor_recompute_loop())
 
-    # Start the enrichment domain scheduler
-    asyncio.create_task(_enrichment_scheduler_instance.start_loop())
+        # Start the enrichment domain scheduler
+        asyncio.create_task(_enrichment_scheduler_instance.start_loop())
 
-    # Start the scheduled-imports scheduler (Sprint 61)
-    scheduled_imports.start_scheduler()
-    # Start the scheduled-reports scheduler (Sprint 79)
-    scheduled_reports.start_scheduler()
+        # Start the scheduled-imports scheduler (Sprint 61)
+        scheduled_imports.start_scheduler()
+        # Start the scheduled-reports scheduler (Sprint 79)
+        scheduled_reports.start_scheduler()
 
-    # ── Rust engine gRPC client ──────────────────────────────────────────────
-    engine_url = os.environ.get("ENGINE_GRPC_URL", "")
-    engine_token = os.environ.get("ENGINE_AUTH_TOKEN", "")
-    if engine_url:
-        from backend.services.engine_client import EngineClient
-        app.state.engine_client = EngineClient(engine_url, engine_token)
-        logger.info("Engine gRPC client configured: %s", engine_url)
-    else:
-        app.state.engine_client = None
-        logger.info("ENGINE_GRPC_URL not set — engine disabled, using Python fallback")
+        # ── Rust engine gRPC client ──────────────────────────────────────────
+        engine_url = os.environ.get("ENGINE_GRPC_URL", "")
+        engine_token = os.environ.get("ENGINE_AUTH_TOKEN", "")
+        if engine_url:
+            from backend.services.engine_client import EngineClient
+            app.state.engine_client = EngineClient(engine_url, engine_token)
+            logger.info("Engine gRPC client configured: %s", engine_url)
+        else:
+            logger.info("ENGINE_GRPC_URL not set — engine disabled, using Python fallback")
+    except Exception:
+        logger.exception(
+            "Startup worker/scheduler/engine init FAILED — continuing so /health "
+            "stays up; background processing may be degraded until the next restart."
+        )
 
     yield  # Server is running
 

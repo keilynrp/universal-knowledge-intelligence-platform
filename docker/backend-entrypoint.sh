@@ -40,7 +40,22 @@ else:
 PY
 
 if [ "${RUN_DB_MIGRATIONS_ON_START:-1}" = "1" ]; then
-  alembic upgrade head
+  # Run migrations, but do not let a failure silently kill the container before
+  # uvicorn starts (which surfaces only as an opaque "unhealthy" deploy error).
+  # On failure: log loudly and continue so /health comes up and the real error
+  # is visible in the logs. Set MIGRATIONS_FATAL=1 to restore strict aborting.
+  if ! alembic upgrade head; then
+    echo "============================================================" >&2
+    echo "ERROR: 'alembic upgrade head' FAILED." >&2
+    echo "Continuing startup so the service serves /health and this error" >&2
+    echo "is visible in the container logs. The schema may be stale — run the" >&2
+    echo "ukip-migrate ops service to apply migrations deliberately." >&2
+    echo "Set MIGRATIONS_FATAL=1 to make this abort startup instead." >&2
+    echo "============================================================" >&2
+    if [ "${MIGRATIONS_FATAL:-0}" = "1" ]; then
+      exit 1
+    fi
+  fi
 fi
 
 # One-time text normalization (fixes mojibake + inline HTML in existing entities)
