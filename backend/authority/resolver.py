@@ -18,6 +18,8 @@ from thefuzz import fuzz
 from backend.authority.base import AuthorityCandidate, ResolveContext
 from backend.authority.cache import get_resolver_cache
 from backend.authority.normalize import normalize_name
+from backend.authority.resilience import ResilientResolver
+from backend.circuit_breaker import CircuitBreaker
 from backend.authority.scoring import compute_score
 from backend.authority.resolvers.wikidata import WikidataResolver
 from backend.authority.resolvers.viaf     import ViafResolver
@@ -34,6 +36,14 @@ _RESOLVERS = [
     DbpediaResolver(),
     OpenAlexEntityResolver(),
 ]
+
+# Wrap each source in a circuit breaker + bounded retry. One breaker per source,
+# shared across all resolve_all calls so failures accumulate process-wide.
+_BREAKERS = {
+    r.source_name: CircuitBreaker(r.source_name, failure_threshold=3, recovery_timeout=60.0)
+    for r in _RESOLVERS
+}
+_RESILIENT = [ResilientResolver(r, _BREAKERS[r.source_name]) for r in _RESOLVERS]
 
 _MAX_RESULTS      = 20
 _PARALLEL_TIMEOUT = 12   # seconds to wait for all futures
@@ -166,7 +176,7 @@ def resolve_all(
                 entity_type,
                 lambda r=resolver: r.resolve(value, entity_type),
             ): resolver.source_name
-            for resolver in _RESOLVERS
+            for resolver in _RESILIENT
         }
         for future in as_completed(futures, timeout=_PARALLEL_TIMEOUT):
             source = futures[future]
