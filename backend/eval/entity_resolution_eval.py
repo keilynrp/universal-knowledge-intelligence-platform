@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 from itertools import combinations
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional
 
 from thefuzz import fuzz, process
 
@@ -114,13 +114,61 @@ def evaluate_sweep(
     ]
 
 
-if __name__ == "__main__":  # pragma: no cover - manual inspection helper
+def print_sweep(gold_path: str | Path | None = None) -> None:
+    """Print the precision/recall/F1 sweep table for observability."""
     header = f"{'algorithm':<10} {'thr':>4} {'prec':>6} {'rec':>6} {'f1':>6}  tp/fp/fn"
     print(header)
     print("-" * len(header))
-    for row in evaluate_sweep():
+    for row in evaluate_sweep(gold_path=gold_path):
         print(
             f"{row['algorithm']:<10} {row['threshold']:>4} "
             f"{row['precision']:>6} {row['recall']:>6} {row['f1']:>6}  "
             f"{row['tp']}/{row['fp']}/{row['fn']}"
         )
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    """CLI entrypoint. Prints the sweep and, with --gate, enforces an F1 floor.
+
+    Exit code 1 when the gated algorithm's F1 at the gate threshold drops below
+    the floor — the CI quality gate for clustering changes.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Entity-resolution evaluation harness")
+    parser.add_argument("--gate", type=float, default=None,
+                        help="Fail (exit 1) if F1 falls below this floor.")
+    parser.add_argument("--algorithm", default="blocking",
+                        help="Algorithm to gate on (default: blocking).")
+    parser.add_argument("--threshold", type=int, default=80,
+                        help="Similarity threshold for the gated run (default: 80).")
+    parser.add_argument("--gold-path", default=None, help="Override gold fixture path.")
+    args = parser.parse_args(argv)
+
+    print_sweep(gold_path=args.gold_path)
+
+    if args.gate is None:
+        return 0
+
+    metrics = evaluate(
+        algorithm=args.algorithm, threshold=args.threshold, gold_path=args.gold_path
+    )
+    f1 = metrics["f1"]
+    print(
+        f"\nGate: {args.algorithm} @ threshold {args.threshold} "
+        f"-> F1={f1} (floor {args.gate})"
+    )
+    if f1 < args.gate:
+        print(
+            f"::error::Entity-resolution F1 regression: {args.algorithm} F1={f1} "
+            f"< floor {args.gate}"
+        )
+        return 1
+    print("Entity-resolution quality gate passed.")
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI entrypoint
+    import sys
+
+    raise SystemExit(main())

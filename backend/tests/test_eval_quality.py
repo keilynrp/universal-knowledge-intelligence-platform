@@ -6,7 +6,7 @@ blocking must not regress below the recorded F1 baseline.
 """
 from __future__ import annotations
 
-from backend.eval.entity_resolution_eval import evaluate, evaluate_sweep, load_gold
+from backend.eval.entity_resolution_eval import evaluate, evaluate_sweep, load_gold, main
 
 
 def test_gold_fixture_loads():
@@ -46,3 +46,21 @@ def test_sweep_returns_rows_for_each_combo():
     assert len(rows) == 4
     assert {r["algorithm"] for r in rows} == {"legacy", "blocking"}
     assert {r["threshold"] for r in rows} == {75, 85}
+
+
+# ── CLI gate (CI entrypoint) ──────────────────────────────────────────────────
+
+def test_cli_without_gate_exits_zero(capsys):
+    assert main([]) == 0
+    out = capsys.readouterr().out
+    assert "blocking" in out  # sweep table printed
+
+
+def test_cli_gate_passes_at_baseline(capsys):
+    assert main(["--gate", "0.75", "--algorithm", "blocking", "--threshold", "80"]) == 0
+    assert "quality gate passed" in capsys.readouterr().out.lower()
+
+
+def test_cli_gate_fails_on_impossible_floor(capsys):
+    assert main(["--gate", "0.99", "--algorithm", "blocking", "--threshold", "80"]) == 1
+    assert "regression" in capsys.readouterr().out.lower()
