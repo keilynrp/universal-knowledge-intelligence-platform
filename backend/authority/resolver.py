@@ -191,8 +191,14 @@ def resolve_all(
     for c in raw:
         coauthors_overlap = None
         if use_coauth:
+            # Prefer the local-graph provider (keyed by canonical label); fall
+            # back to any collaborators a resolver attached to the candidate.
+            if context.candidate_coauthor_provider is not None:
+                cand_collaborators = context.candidate_coauthor_provider(c.canonical_label)
+            else:
+                cand_collaborators = candidate_coauthors(c)
             coauthors_overlap = compute_candidate_overlap(
-                context.coauthors, candidate_coauthors(c)
+                context.coauthors, cand_collaborators
             )
         source_prior = 0.0
         if context.source_priors:

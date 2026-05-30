@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field as dc_field
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 
 @dataclass
@@ -22,6 +22,9 @@ class ResolveContext:
     coauthors:    Optional[List[str]] = None  # known collaborators of the query author (persons)
     source_priors: Optional[dict] = None  # {authority_source: ±0.05} learned feedback priors (Task 10)
     thresholds:    Optional[object] = None  # ResolutionThresholds override for resolution_status (Task 11)
+    # name -> [collaborator names] lookup from the local coauthorship graph; the
+    # resolver queries it per candidate (by canonical label) for the overlap signal.
+    candidate_coauthor_provider: Optional[Callable[[str], List[str]]] = None
 
 
 @dataclass

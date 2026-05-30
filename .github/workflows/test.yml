@@ -60,6 +60,27 @@ jobs:
           path: coverage.xml
           retention-days: 14
 
+  eval-quality:
+    name: Entity-resolution quality gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -c requirements.lock
+
+      - name: Run entity-resolution eval harness (F1 gate)
+        run: |
+          python -m backend.eval.entity_resolution_eval --gate 0.75 --algorithm blocking --threshold 80
+
   postgres-smoke:
     runs-on: ubuntu-latest
 

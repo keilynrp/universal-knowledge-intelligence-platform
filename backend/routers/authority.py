@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from backend import database, models, schemas
 from backend.auth import get_current_user, require_role
 from backend.authority.author_resolution import summarize_author_resolution
+from backend.authority import coauthorship_signal as _coauthorship_signal
 from backend.authority import feedback as _authority_feedback
 from backend.authority import thresholds as _authority_thresholds
 from backend.authority.base import ResolveContext as _AuthorityContext
@@ -521,6 +522,22 @@ def resolve_authority(
             org_id=record_org_id,
         ),
     )
+
+    # Coauthorship signal (Task 7 wiring): for person resolution, source the
+    # query author's collaborators from the local graph and bind a provider so
+    # the resolver can look up each candidate's collaborators by canonical label.
+    if payload.entity_type == schemas.AuthorityEntityType.person:
+        graph_org_id = record_org_id if record_org_id is not None else 0
+        graph_domain_id = getattr(payload, "domain_id", None)
+        query_coauthors = _coauthorship_signal.local_coauthor_names(
+            db, payload.value, org_id=graph_org_id, domain_id=graph_domain_id
+        )
+        if query_coauthors:
+            ctx.coauthors = query_coauthors
+            ctx.candidate_coauthor_provider = _coauthorship_signal.make_local_coauthor_provider(
+                db, org_id=graph_org_id, domain_id=graph_domain_id
+            )
+
     # Try engine delegation first, fall back to Python resolvers
     engine_client = getattr(request.app.state, "engine_client", None)
     engine_candidates = None
