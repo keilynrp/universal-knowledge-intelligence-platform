@@ -16,6 +16,7 @@ from typing import List, Optional
 from thefuzz import fuzz
 
 from backend.authority.base import AuthorityCandidate, ResolveContext
+from backend.authority.cache import get_resolver_cache
 from backend.authority.normalize import normalize_name
 from backend.authority.scoring import compute_score
 from backend.authority.resolvers.wikidata import WikidataResolver
@@ -155,9 +156,16 @@ def resolve_all(
 
     raw: List[AuthorityCandidate] = []
 
+    cache = get_resolver_cache()
     with ThreadPoolExecutor(max_workers=5) as pool:
         futures = {
-            pool.submit(resolver.resolve, value, entity_type): resolver.source_name
+            pool.submit(
+                cache.get_or_load,
+                resolver.source_name,
+                value,
+                entity_type,
+                lambda r=resolver: r.resolve(value, entity_type),
+            ): resolver.source_name
             for resolver in _RESOLVERS
         }
         for future in as_completed(futures, timeout=_PARALLEL_TIMEOUT):

@@ -53,3 +53,6 @@ protobuf>=4.25.0
 # ── Coauthorship V2: community detection (Sprint 2026-05-28 refactor)
 networkx>=3.0
 python-louvain==0.16
+
+# ── Authority resolver cache (Phase 1 — disambiguation/authority optimization)
+cachetools>=5.3.0
