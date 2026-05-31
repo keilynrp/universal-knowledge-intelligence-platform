@@ -117,3 +117,15 @@ jobs:
           DATABASE_URL: "postgresql+psycopg2://ukip_test:ukip_test_pw@localhost:5432/ukip_test"
           UKIP_DB_MODE: postgres
         run: python -m alembic upgrade head
+
+      - name: Smoke-test real startup against PostgreSQL
+        # Runs the FastAPI lifespan bootstrap (create_all + seed + migrate) and
+        # /health against Postgres — the path unit tests skip via
+        # UKIP_SKIP_STARTUP_SIDE_EFFECTS=1. Catches dialect/schema startup
+        # failures before they reach a production deploy.
+        env:
+          DATABASE_URL: "postgresql+psycopg2://ukip_test:ukip_test_pw@localhost:5432/ukip_test"
+          UKIP_DB_MODE: postgres
+          SESSION_SECRET_KEY: ci-session-secret-not-for-production
+          UKIP_SKIP_STARTUP_SIDE_EFFECTS: "0"
+        run: python scripts/ci_lifespan_smoke.py
