@@ -4,7 +4,12 @@ import type { Researcher } from "../researchersTypes";
 import { DRIVER_LABELS } from "../researchersTypes";
 import { barColor, externalHref, scoreTone } from "../researchersUtils";
 
-export default function ResearcherCard({ researcher, rank }: { researcher: Researcher; rank: number }) {
+export interface ResearcherCardProps {
+  researcher: Researcher;
+  rank: number;
+}
+
+export default function ResearcherCard({ researcher, rank }: ResearcherCardProps) {
   return (
     <article className="rounded-xl bg-white p-5 shadow-xs ring-1 ring-slate-950/5 dark:bg-slate-950 dark:ring-white/10">
       <div className="flex flex-wrap items-start justify-between gap-4">
