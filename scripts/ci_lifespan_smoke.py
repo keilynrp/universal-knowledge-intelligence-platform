@@ -28,6 +28,12 @@ import os
 import sys
 import traceback
 
+# Ensure the repo root is importable when invoked as `python scripts/...`
+# (the runner's CWD is the repo root but it is not on sys.path by default).
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
 # Force the real startup path on regardless of the inherited CI env.
 os.environ["UKIP_SKIP_STARTUP_SIDE_EFFECTS"] = "0"
 # Engine is not present in this job; the Python fallback path is what we test.

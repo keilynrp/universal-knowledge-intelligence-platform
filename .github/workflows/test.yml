@@ -128,4 +128,5 @@ jobs:
           UKIP_DB_MODE: postgres
           SESSION_SECRET_KEY: ci-session-secret-not-for-production
           UKIP_SKIP_STARTUP_SIDE_EFFECTS: "0"
+          PYTHONPATH: .
         run: python scripts/ci_lifespan_smoke.py
