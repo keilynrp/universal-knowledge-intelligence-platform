@@ -131,12 +131,46 @@ def _run_db_bootstrap() -> None:
     """
     from backend.authority import batch_worker as _authority_batch_worker
 
+    # Ensure auxiliary tables exist BEFORE any query touches them. On Postgres a
+    # statement against a missing relation aborts the whole transaction, which
+    # then poisons every following query in the same session
+    # (InFailedSqlTransaction). create_all uses the engine (its own connection)
+    # and is idempotent via checkfirst, so it is safe to run first on every boot.
+    models.Base.metadata.create_all(
+        bind=database.engine,
+        tables=[
+            models.DomainEnrichmentPolicy.__table__,
+            models.EnrichmentSchedulerRun.__table__,
+            # V2 coauthorship tables (Sprint 2026-05-28 refactor). These are
+            # empty on first boot — no org_id backfill needed because the
+            # NOT NULL DEFAULT 0 sentinel only applies to brand-new rows.
+            # checkfirst=True makes this idempotent across restarts.
+            models.Author.__table__,
+            models.AuthorPublication.__table__,
+            models.CoauthorEdge.__table__,
+            models.AuthorStats.__table__,
+            models.AuthorMergeSuggestion.__table__,
+            models.AuthorMergeAudit.__table__,
+            models.CoauthorDirtyScope.__table__,
+            models.CoauthorContribution.__table__,
+            # Async authority batch resolution jobs (Phase 1, Task 3).
+            models.AuthorityResolveJob.__table__,
+            # Feedback-weighted scoring priors (Phase 3, Task 10).
+            models.AuthorityScoringFeedback.__table__,
+            # Adaptive resolution thresholds (Phase 3, Task 11).
+            models.ResolutionThreshold.__table__,
+        ],
+        checkfirst=True,
+    )
+    logger.info("Startup migration: enrichment scheduler + V2 coauthorship tables ensured")
+
     with database.SessionLocal() as db:
         enrichment_worker.reset_stale_processing_records(db)
         try:
             _authority_batch_worker.reset_stale_jobs(db)
-        except Exception:  # noqa: BLE001 — table may not exist yet on first migrate
-            logger.debug("authority batch jobs reset skipped (table not ready)")
+        except Exception:  # noqa: BLE001 — defensive; tables are created above
+            db.rollback()  # clear any aborted transaction before continuing (Postgres)
+            logger.debug("authority batch jobs reset skipped")
 
         ensure_bootstrap_super_admin(db)
 
@@ -153,34 +187,6 @@ def _run_db_bootstrap() -> None:
                 "Startup migration: consolidated %d legacy enrichment_status rows to 'completed'",
                 migrated,
             )
-
-        models.Base.metadata.create_all(
-            bind=database.engine,
-            tables=[
-                models.DomainEnrichmentPolicy.__table__,
-                models.EnrichmentSchedulerRun.__table__,
-                # V2 coauthorship tables (Sprint 2026-05-28 refactor). These are
-                # empty on first boot — no org_id backfill needed because the
-                # NOT NULL DEFAULT 0 sentinel only applies to brand-new rows.
-                # checkfirst=True makes this idempotent across restarts.
-                models.Author.__table__,
-                models.AuthorPublication.__table__,
-                models.CoauthorEdge.__table__,
-                models.AuthorStats.__table__,
-                models.AuthorMergeSuggestion.__table__,
-                models.AuthorMergeAudit.__table__,
-                models.CoauthorDirtyScope.__table__,
-                models.CoauthorContribution.__table__,
-                # Async authority batch resolution jobs (Phase 1, Task 3).
-                models.AuthorityResolveJob.__table__,
-                # Feedback-weighted scoring priors (Phase 3, Task 10).
-                models.AuthorityScoringFeedback.__table__,
-                # Adaptive resolution thresholds (Phase 3, Task 11).
-                models.ResolutionThreshold.__table__,
-            ],
-            checkfirst=True,
-        )
-        logger.info("Startup migration: enrichment scheduler + V2 coauthorship tables ensured")
 
         # Seed built-in artifact templates (only on first run)
         if db.query(models.ArtifactTemplate).count() == 0:
