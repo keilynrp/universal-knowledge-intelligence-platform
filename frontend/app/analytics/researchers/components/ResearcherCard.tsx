@@ -4,7 +4,7 @@ import type { Researcher } from "../researchersTypes";
 import { DRIVER_LABELS } from "../researchersTypes";
 import { barColor, externalHref, scoreTone } from "../researchersUtils";
 
-export interface ResearcherCardProps {
+interface ResearcherCardProps {
   researcher: Researcher;
   rank: number;
 }
