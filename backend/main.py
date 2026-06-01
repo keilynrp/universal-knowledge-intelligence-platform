@@ -44,6 +44,8 @@ from backend.routers import (
     audit_log,
     auth_users,
     authority,
+    authority_institutions,
+    authority_records,
     branding,
     catalogs,
     coauthorship,
@@ -444,6 +446,8 @@ app.include_router(entities.router)
 app.include_router(disambiguation.router)
 app.include_router(harmonization.router)
 app.include_router(authority.router)
+app.include_router(authority_institutions.router)
+app.include_router(authority_records.router)
 app.include_router(governance.router)
 app.include_router(stores.router)
 app.include_router(ai_rag.router)

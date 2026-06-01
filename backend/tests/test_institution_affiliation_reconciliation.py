@@ -172,7 +172,7 @@ def test_preview_and_apply_institution_reconciliation(client, editor_headers, db
         ],
     })
 
-    with patch("backend.routers.authority.RORAdapter.lookup", return_value=_ror_record()):
+    with patch("backend.routers.authority_institutions.RORAdapter.lookup", return_value=_ror_record()):
         preview = client.post(
             "/authority/institutions/reconcile/preview",
             json={"entity_ids": [entity.id]},
