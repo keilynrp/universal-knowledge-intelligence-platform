@@ -36,6 +36,8 @@ from backend.routers import (
     assistant_actions,
     api_import,
     analytics,
+    analytics_analyzers,
+    analytics_ops,
     annotations,
     api_keys,
     artifacts,
@@ -433,6 +435,8 @@ app.include_router(platform_auth_settings.router)
 app.include_router(ingest.router)
 app.include_router(domains.router)
 app.include_router(analytics.router)
+app.include_router(analytics_analyzers.router)
+app.include_router(analytics_ops.router)
 app.include_router(derived_status.router)
 app.include_router(enrichment_schedule.router)
 app.include_router(quality.router)
