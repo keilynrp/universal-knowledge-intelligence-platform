@@ -18,16 +18,16 @@ export default function ExecutivePanel({ summary }: { summary: ExecutiveSummary 
           <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-white/60 ring-1 ring-current/15 dark:bg-white/10">
             <ResearchIcon name="chart" className="h-5 w-5" />
           </div>
-          <p className="text-[10px] font-mono uppercase tracking-wider">Metrica ejecutiva</p>
+          <p className="text-[10px] font-mono uppercase tracking-wider">Métrica ejecutiva</p>
           <p className="mt-3 text-5xl font-bold tabular-nums">{confidence}</p>
           <p className="mt-1 text-sm font-medium">confianza del mapa</p>
         </div>
         <div className="min-w-0">
           <h2 className="text-xl font-bold tracking-tight text-slate-950 dark:text-white">
-            {summary?.headline ?? "Ejecuta una busqueda para generar el mapa ejecutivo."}
+            {summary?.headline ?? "Ejecuta una búsqueda para generar el mapa ejecutivo."}
           </h2>
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-            {summary?.stakeholder_value ?? "La metrica resume cobertura, autoridad, citas, evidencia y densidad de red para briefs y conversaciones ejecutivas."}
+            {summary?.stakeholder_value ?? "La métrica resume cobertura, autoridad, citas, evidencia y densidad de red para briefs y conversaciones ejecutivas."}
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-4">
             {metrics.map((metric) => (

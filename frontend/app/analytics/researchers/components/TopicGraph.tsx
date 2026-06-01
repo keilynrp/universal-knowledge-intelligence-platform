@@ -32,7 +32,7 @@ export default function TopicGraph({ graph }: { graph: GraphPayload | null }) {
   if (!graph || nodes.length === 0) {
     return (
       <div className="flex min-h-[360px] items-center justify-center rounded-xl bg-white text-sm text-slate-500 ring-1 ring-dashed ring-slate-200 dark:bg-slate-950 dark:text-slate-400 dark:ring-white/10">
-        Ejecuta una busqueda para construir la red del tema.
+        Ejecuta una búsqueda para construir la red del tema.
       </div>
     );
   }
@@ -62,7 +62,7 @@ export default function TopicGraph({ graph }: { graph: GraphPayload | null }) {
           </span>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-400/20">
             <ResearchIcon name="network" className="h-3 w-3" />
-            coautoria
+            coautoría
           </span>
         </div>
       </div>

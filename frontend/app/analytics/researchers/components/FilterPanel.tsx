@@ -18,8 +18,8 @@ const FILTER_FIELDS: Array<{ key: keyof FilterForm; label: string; placeholder: 
   { key: "source", label: "Fuente", placeholder: "openalex", icon: "database" },
   { key: "yearFrom", label: "Desde", placeholder: "2020", icon: "calendar" },
   { key: "yearTo", label: "Hasta", placeholder: "2026", icon: "calendar" },
-  { key: "country", label: "Pais", placeholder: "China", icon: "globe" },
-  { key: "institution", label: "Institucion", placeholder: "University", icon: "institution" },
+  { key: "country", label: "País", placeholder: "China", icon: "globe" },
+  { key: "institution", label: "Institución", placeholder: "University", icon: "institution" },
   { key: "minCitations", label: "Min. citas", placeholder: "10", icon: "chart" },
 ];
 
@@ -34,7 +34,7 @@ export default function FilterPanel({
             <ResearchIcon name="search" />
           </span>
           <div className="min-w-0">
-            <p className="text-lg font-bold tracking-tight text-slate-950 dark:text-white">Filtros de Busqueda Cientifica</p>
+            <p className="text-lg font-bold tracking-tight text-slate-950 dark:text-white">Filtros de Búsqueda Científica</p>
             <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Investigadores por tema</p>
           </div>
         </div>
@@ -45,7 +45,7 @@ export default function FilterPanel({
             className="inline-flex h-10 items-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-slate-600 ring-1 ring-slate-300 transition hover:bg-slate-50 hover:text-slate-900 dark:bg-slate-950 dark:text-slate-300 dark:ring-white/15 dark:hover:bg-white/5"
           >
             <ResearchIcon name="refresh" />
-            Reiniciar Filtros
+            Reiniciar filtros
           </button>
           <button
             type="submit"
@@ -54,7 +54,7 @@ export default function FilterPanel({
             className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-xs transition hover:bg-blue-700 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60 dark:focus:ring-blue-500/20"
           >
             <ResearchIcon name="spark" />
-            {loading ? "Analizando..." : "Analizar Tema"}
+            {loading ? "Analizando..." : "Analizar tema"}
           </button>
         </div>
       </div>

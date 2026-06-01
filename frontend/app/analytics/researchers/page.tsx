@@ -82,8 +82,8 @@ export default function ResearchersByTopicPage() {
     leadingGap: data?.researcher_count ? null : "Sin investigadores detectados para el tema consultado",
     recommendedActions: [
       `Listar investigadores que trabajan en ${activeTopic}`,
-      `Explorar red de coautoria para ${activeTopic}`,
-      `Usar confianza ejecutiva ${executiveSummary?.confidence ?? 0} como senal para briefing`,
+      `Explorar red de coautoría para ${activeTopic}`,
+      `Usar confianza ejecutiva ${executiveSummary?.confidence ?? 0} como señal para briefing`,
     ],
     actionLinks: [
       { id: "topic-researchers-ranking", label: "Ver ranking del tema", href: `/analytics/researchers?topic=${encodeURIComponent(activeTopic)}`, kind: "navigate" },
@@ -110,7 +110,7 @@ export default function ResearchersByTopicPage() {
       <PageHeader
         breadcrumbs={[{ label: "Home", href: "/" }, { label: "Analytics", href: "/analytics" }, { label: "Investigadores por tema" }]}
         title="Investigadores por tema"
-        description="Identifica investigadores, evidencia y relaciones de coautoria a partir de los datos ingeridos y enriquecidos."
+        description="Identifica investigadores, evidencia y relaciones de coautoría a partir de los datos ingeridos y enriquecidos."
       />
 
       <FilterPanel
@@ -148,7 +148,7 @@ export default function ResearchersByTopicPage() {
           <div>
             <h2 className="text-lg font-bold tracking-tight text-slate-950 dark:text-white">Ranking ponderado</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Score combinado por coincidencia tematica, produccion, citas, recencia, autoridad y calidad de enriquecimiento.
+              Score combinado por coincidencia temática, producción, citas, recencia, autoridad y calidad de enriquecimiento.
             </p>
           </div>
         </div>

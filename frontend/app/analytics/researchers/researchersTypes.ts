@@ -97,7 +97,7 @@ export type FilterForm = {
 
 export const DRIVER_LABELS: Array<{ key: keyof ScoreDrivers; label: string }> = [
   { key: "topic_match", label: "Tema" },
-  { key: "publication_signal", label: "Produccion" },
+  { key: "publication_signal", label: "Producción" },
   { key: "citation_signal", label: "Citas" },
   { key: "recency_signal", label: "Recencia" },
   { key: "authority_signal", label: "Autoridad" },

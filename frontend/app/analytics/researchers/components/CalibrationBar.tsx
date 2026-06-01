@@ -16,9 +16,9 @@ export default function CalibrationBar({ feedback, onFeedback }: CalibrationBarP
             <ResearchIcon name="check" />
           </span>
           <div className="min-w-0">
-            <h2 className="text-base font-bold tracking-tight text-slate-950 dark:text-white">Calibracion stakeholder</h2>
+            <h2 className="text-base font-bold tracking-tight text-slate-950 dark:text-white">Calibración stakeholder</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Marca si el mapa parece accionable. Esta senal nos ayuda a ajustar el scoring cuando validemos con usuarios reales.
+              Marca si el mapa parece accionable. Esta señal nos ayuda a ajustar el scoring cuando validemos con usuarios reales.
             </p>
           </div>
         </div>
@@ -29,7 +29,7 @@ export default function CalibrationBar({ feedback, onFeedback }: CalibrationBarP
             className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 ring-1 transition ${feedback === "useful" ? "bg-emerald-600 text-white ring-emerald-600" : "bg-emerald-50 text-emerald-700 ring-emerald-200 hover:bg-emerald-100 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-400/20"}`}
           >
             <ResearchIcon name="check" className="h-3.5 w-3.5" />
-            Util
+            Útil
           </button>
           <button
             type="button"
@@ -43,7 +43,7 @@ export default function CalibrationBar({ feedback, onFeedback }: CalibrationBarP
       </div>
       {feedback && (
         <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 dark:bg-white/5 dark:text-slate-300">
-          Feedback registrado localmente para este corte: {feedback === "useful" ? "mapa util" : "requiere revision"}.
+          Feedback registrado localmente para este corte: {feedback === "useful" ? "mapa útil" : "requiere revisión"}.
         </p>
       )}
     </section>
