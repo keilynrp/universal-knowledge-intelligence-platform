@@ -4,6 +4,8 @@ import { useMemo } from "react";
 
 import type { GraphEdge, GraphPayload, PositionedNode } from "../researchersTypes";
 
+import ResearchIcon from "./ResearchersIcons";
+
 export default function TopicGraph({ graph }: { graph: GraphPayload | null }) {
   const { nodes, edges, nodeMap } = useMemo(() => {
     if (!graph || graph.nodes.length === 0) return { nodes: [] as PositionedNode[], edges: [] as GraphEdge[], nodeMap: new Map<string, PositionedNode>() };
@@ -38,16 +40,30 @@ export default function TopicGraph({ graph }: { graph: GraphPayload | null }) {
   return (
     <div className="rounded-xl bg-white p-4 shadow-xs ring-1 ring-slate-950/5 dark:bg-slate-950 dark:ring-white/10">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold tracking-tight text-slate-950 dark:text-white">Red de investigadores</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {graph.summary.researcher_count} investigadores · {graph.summary.relationship_count} relaciones
-          </p>
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-700 ring-1 ring-violet-200 dark:bg-violet-400/10 dark:text-violet-200 dark:ring-violet-400/20">
+            <ResearchIcon name="network" />
+          </span>
+          <div>
+            <h2 className="text-lg font-bold tracking-tight text-slate-950 dark:text-white">Red de investigadores</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {graph.summary.researcher_count} investigadores · {graph.summary.relationship_count} relaciones
+            </p>
+          </div>
         </div>
         <div className="flex gap-2 font-mono text-[10px] font-medium uppercase tracking-wider">
-          <span className="rounded-full bg-violet-50 px-3 py-1 text-violet-700 ring-1 ring-violet-200 dark:bg-violet-400/10 dark:text-violet-200 dark:ring-violet-400/20">tema</span>
-          <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700 ring-1 ring-blue-200 dark:bg-blue-400/10 dark:text-blue-200 dark:ring-blue-400/20">autor</span>
-          <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-400/20">coautoria</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-3 py-1 text-violet-700 ring-1 ring-violet-200 dark:bg-violet-400/10 dark:text-violet-200 dark:ring-violet-400/20">
+            <ResearchIcon name="target" className="h-3 w-3" />
+            tema
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-blue-700 ring-1 ring-blue-200 dark:bg-blue-400/10 dark:text-blue-200 dark:ring-blue-400/20">
+            <ResearchIcon name="users" className="h-3 w-3" />
+            autor
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-400/20">
+            <ResearchIcon name="network" className="h-3 w-3" />
+            coautoria
+          </span>
         </div>
       </div>
       <div className="overflow-x-auto">

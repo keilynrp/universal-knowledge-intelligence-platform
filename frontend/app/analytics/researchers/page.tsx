@@ -14,6 +14,7 @@ import ExecutivePanel from "./components/ExecutivePanel";
 import FilterPanel from "./components/FilterPanel";
 import KpiStrip from "./components/KpiStrip";
 import ResearcherCard from "./components/ResearcherCard";
+import ResearchIcon from "./components/ResearchersIcons";
 import TopicGraph from "./components/TopicGraph";
 import { EMPTY_FILTERS } from "./researchersTypes";
 import type { FilterForm, GraphPayload, ResearchersPayload } from "./researchersTypes";
@@ -140,11 +141,16 @@ export default function ResearchersByTopicPage() {
       <CalibrationBar feedback={feedback} onFeedback={setFeedback} />
 
       <section className="space-y-4">
-        <div>
-          <h2 className="text-lg font-bold tracking-tight text-slate-950 dark:text-white">Ranking ponderado</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Score combinado por coincidencia tematica, produccion, citas, recencia, autoridad y calidad de enriquecimiento.
-          </p>
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100 dark:bg-blue-400/10 dark:text-blue-200 dark:ring-blue-400/20">
+            <ResearchIcon name="award" />
+          </span>
+          <div>
+            <h2 className="text-lg font-bold tracking-tight text-slate-950 dark:text-white">Ranking ponderado</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Score combinado por coincidencia tematica, produccion, citas, recencia, autoridad y calidad de enriquecimiento.
+            </p>
+          </div>
         </div>
         {loading && !data ? (
           <div className="rounded-xl bg-white p-8 text-center text-sm text-slate-500 shadow-xs ring-1 ring-slate-950/5 dark:bg-slate-950 dark:text-slate-400 dark:ring-white/10">Calculando investigadores...</div>
