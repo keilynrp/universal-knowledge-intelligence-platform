@@ -59,7 +59,9 @@ from backend.routers import (
     entities,
     entity_linker,
     external_attention,
-    governance,
+    governance_sources,
+    governance_field_correspondence,
+    governance_field_correspondence_ops,
     graph_export,
     harmonization,
     ingest,
@@ -448,7 +450,9 @@ app.include_router(harmonization.router)
 app.include_router(authority.router)
 app.include_router(authority_institutions.router)
 app.include_router(authority_records.router)
-app.include_router(governance.router)
+app.include_router(governance_sources.router)
+app.include_router(governance_field_correspondence.router)
+app.include_router(governance_field_correspondence_ops.router)
 app.include_router(stores.router)
 app.include_router(ai_rag.router)
 app.include_router(agentic_chat.router)
