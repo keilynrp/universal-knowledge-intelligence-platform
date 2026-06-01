@@ -43,12 +43,12 @@ def _python_result():
 @pytest.mark.asyncio
 async def test_no_engine_uses_python_fallback(monkeypatch):
     """When engine is None, Python graph_materializer is called directly."""
-    from backend.routers.ingest import _materialize_graph
+    from backend.routers.ingest_helpers import _materialize_graph
 
     monkeypatch.setenv("ENGINE_SHADOW_MODE", "false")
     request = _make_request(engine=None)
 
-    with patch("backend.routers.ingest.materialize_scientific_import_graph",
+    with patch("backend.routers.ingest_helpers.materialize_scientific_import_graph",
                return_value=_python_result()) as mock_py:
         result = await _materialize_graph(
             request=request, db=_make_db(), import_batch_id=1, org_id=None, domain="science"
@@ -63,16 +63,16 @@ async def test_no_engine_uses_python_fallback(monkeypatch):
 @pytest.mark.asyncio
 async def test_shadow_mode_returns_python_result(monkeypatch):
     """Shadow mode: Python result is returned, engine fires async for comparison."""
-    from backend.routers.ingest import _materialize_graph
+    from backend.routers.ingest_helpers import _materialize_graph
 
     monkeypatch.setenv("ENGINE_SHADOW_MODE", "true")
     engine = _make_engine()
     request = _make_request(engine=engine)
     mock_entities = [MagicMock(id=i) for i in range(2)]
 
-    with patch("backend.routers.ingest.materialize_scientific_import_graph",
+    with patch("backend.routers.ingest_helpers.materialize_scientific_import_graph",
                return_value=_python_result()) as mock_py, \
-         patch("backend.routers.ingest.engine_bridge.entity_to_publication",
+         patch("backend.routers.ingest_helpers.engine_bridge.entity_to_publication",
                return_value=MagicMock()), \
          patch("asyncio.ensure_future"):
         result = await _materialize_graph(
@@ -89,7 +89,7 @@ async def test_shadow_mode_returns_python_result(monkeypatch):
 @pytest.mark.asyncio
 async def test_primary_mode_uses_engine_sync(monkeypatch):
     """Primary mode with ≤ threshold pubs → process_sync is called."""
-    from backend.routers.ingest import _materialize_graph
+    from backend.routers.ingest_helpers import _materialize_graph
 
     monkeypatch.setenv("ENGINE_SHADOW_MODE", "false")
     monkeypatch.setenv("ENGINE_SYNC_THRESHOLD", "500")
@@ -97,9 +97,9 @@ async def test_primary_mode_uses_engine_sync(monkeypatch):
     request = _make_request(engine=engine)
     mock_entities = [MagicMock(id=i) for i in range(3)]
 
-    with patch("backend.routers.ingest.engine_bridge.entity_to_publication",
+    with patch("backend.routers.ingest_helpers.engine_bridge.entity_to_publication",
                return_value=MagicMock()), \
-         patch("backend.routers.ingest.materialize_scientific_import_graph") as mock_py:
+         patch("backend.routers.ingest_helpers.materialize_scientific_import_graph") as mock_py:
         result = await _materialize_graph(
             request=request, db=_make_db(mock_entities), import_batch_id=1, org_id=None, domain="science"
         )
@@ -115,7 +115,7 @@ async def test_primary_mode_uses_engine_sync(monkeypatch):
 @pytest.mark.asyncio
 async def test_engine_failure_falls_back_to_python(monkeypatch):
     """Engine raises → fallback to Python when ENGINE_FALLBACK_PYTHON=true."""
-    from backend.routers.ingest import _materialize_graph
+    from backend.routers.ingest_helpers import _materialize_graph
 
     monkeypatch.setenv("ENGINE_SHADOW_MODE", "false")
     monkeypatch.setenv("ENGINE_FALLBACK_PYTHON", "true")
@@ -123,9 +123,9 @@ async def test_engine_failure_falls_back_to_python(monkeypatch):
     request = _make_request(engine=engine)
     mock_entities = [MagicMock(id=1)]
 
-    with patch("backend.routers.ingest.engine_bridge.entity_to_publication",
+    with patch("backend.routers.ingest_helpers.engine_bridge.entity_to_publication",
                return_value=MagicMock()), \
-         patch("backend.routers.ingest.materialize_scientific_import_graph",
+         patch("backend.routers.ingest_helpers.materialize_scientific_import_graph",
                return_value=_python_result()) as mock_py:
         result = await _materialize_graph(
             request=request, db=_make_db(mock_entities), import_batch_id=1, org_id=None, domain="science"
@@ -141,7 +141,7 @@ async def test_engine_failure_falls_back_to_python(monkeypatch):
 @pytest.mark.asyncio
 async def test_engine_failure_no_fallback_returns_zeros(monkeypatch):
     """Engine fails + fallback disabled → zero-count result, Python not called."""
-    from backend.routers.ingest import _materialize_graph
+    from backend.routers.ingest_helpers import _materialize_graph
 
     monkeypatch.setenv("ENGINE_SHADOW_MODE", "false")
     monkeypatch.setenv("ENGINE_FALLBACK_PYTHON", "false")
@@ -149,9 +149,9 @@ async def test_engine_failure_no_fallback_returns_zeros(monkeypatch):
     request = _make_request(engine=engine)
     mock_entities = [MagicMock(id=1)]
 
-    with patch("backend.routers.ingest.engine_bridge.entity_to_publication",
+    with patch("backend.routers.ingest_helpers.engine_bridge.entity_to_publication",
                return_value=MagicMock()), \
-         patch("backend.routers.ingest.materialize_scientific_import_graph") as mock_py:
+         patch("backend.routers.ingest_helpers.materialize_scientific_import_graph") as mock_py:
         result = await _materialize_graph(
             request=request, db=_make_db(mock_entities), import_batch_id=1, org_id=None, domain="science"
         )
@@ -166,7 +166,7 @@ async def test_engine_failure_no_fallback_returns_zeros(monkeypatch):
 @pytest.mark.asyncio
 async def test_large_batch_uses_process_async(monkeypatch):
     """Publications > sync threshold → process_async is called."""
-    from backend.routers.ingest import _materialize_graph
+    from backend.routers.ingest_helpers import _materialize_graph
 
     monkeypatch.setenv("ENGINE_SHADOW_MODE", "false")
     monkeypatch.setenv("ENGINE_SYNC_THRESHOLD", "2")
@@ -175,9 +175,9 @@ async def test_large_batch_uses_process_async(monkeypatch):
     request = _make_request(engine=engine)
     mock_entities = [MagicMock(id=i) for i in range(5)]  # 5 > threshold 2
 
-    with patch("backend.routers.ingest.engine_bridge.entity_to_publication",
+    with patch("backend.routers.ingest_helpers.engine_bridge.entity_to_publication",
                return_value=MagicMock()), \
-         patch("backend.routers.ingest.materialize_scientific_import_graph"):
+         patch("backend.routers.ingest_helpers.materialize_scientific_import_graph"):
         await _materialize_graph(
             request=request, db=_make_db(mock_entities), import_batch_id=1, org_id=None, domain="science"
         )

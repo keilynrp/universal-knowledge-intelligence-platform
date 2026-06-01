@@ -9,7 +9,7 @@ import pytest
 
 from backend import models
 from backend.scripts import dedup_entities as dedup
-from backend.routers.ingest import _dedup_before_insert
+from backend.routers.ingest_helpers import _dedup_before_insert
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
