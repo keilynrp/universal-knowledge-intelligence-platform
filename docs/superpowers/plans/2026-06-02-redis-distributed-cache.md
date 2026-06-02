@@ -36,6 +36,28 @@
 
 ---
 
+## Cross-Cutting Execution Notes (READ FIRST — apply to every task)
+
+These resolve real risks found in plan review against the live code. Violating any of them will break the suite or a call-site.
+
+**A. Module-level singletons + backend selection.** Every migrated cache is a module-level singleton built **at import time** (`_GLOBAL_CACHE`, `_cache`, `status_cache`, `_analytics_cache`, `_dashboard_cache`). `get_cache()` therefore picks the backend once, at import. The default test suite never sets `REDIS_URL`, so all singletons are `InProcessBackend` — that is what keeps "suite unchanged" true. **Do NOT rely on monkeypatching `config.REDIS_URL` after import** to test the Redis path — the singleton is already built. Instead, Redis-path tests MUST inject a `fakeredis`-backed backend directly: either construct `RedisBackend(..., client_factory=lambda: fake)` and exercise it, or replace the module-level singleton (e.g. `monkeypatch.setattr(thresholds, "_backend", RedisBackend(..., client_factory=lambda: fake))`). Never depend on a `REDIS_URL` env var leaking into the suite.
+
+**B. Always stringify keys with `make_key` before any backend call.** Caches #2 and #3 use **tuple** keys (with `None` elements). `RedisBackend` requires `str` keys. Every `get`/`get_or_load`/`delete`/`set` call must pass `make_key(tuple)` — never the raw tuple. (InProcessBackend would tolerate tuples, Redis will not; be consistent.)
+
+**C. Preserve module-level NAMES and the `None`-on-miss contract.** Other modules import these singletons **by name**:
+- `backend/routers/analytics_analyzers.py` → `from backend.routers.analytics import _analytics_cache` and does `if cached is not None` (~10 call-sites).
+- `backend/routers/admin_data_fixes.py:282` → `from backend.routers.analytics import _analytics_cache`; calls `_analytics_cache.invalidate("coauth_")` expecting an **int** return.
+- `backend/tests/test_sprint83.py:14` → `from backend.routers.analytics import _SimpleCache` (the class name itself).
+- `backend/tests/conftest.py:342-343` → `_analytics_cache.invalidate()` / `_dashboard_cache.invalidate()` with **no argument**.
+
+Therefore: `_analytics_cache`, `_dashboard_cache`, and `status_cache` must remain the same module-level names, assigned to a **thin wrapper** (NOT a bare `CacheBackend`). The wrapper's `.get()` translates `MISS → None`; `.invalidate(prefix="")` returns `int` and accepts the zero-arg form; `.get`/`.set` keep their shapes. Keep the `_SimpleCache` class defined in `analytics.py` (now as the wrapper, or keep the name) so `test_sprint83.py`'s import survives — or update that test as part of Task 10.
+
+**D. `clear_cache()` return type.** `thresholds.clear_cache()` and `feedback.clear_cache()` currently return `None`; delegating to `invalidate_prefix("")` makes them return `int`. Grep call-sites (`git grep -n "clear_cache()"`) and confirm none depend on the `None` return (tests call it for effect only — fine, but verify).
+
+**E. Preserve exact invalidation prefix strings.** Pass the SAME prefix strings currently given to `_SimpleCache.invalidate` / `_StatusCache.invalidate` straight through to `invalidate_prefix`/`exists_prefix` (application-level prefix, WITHOUT the Redis namespace — the backend prepends `GLOBAL_PREFIX:namespace:`). Examples that must not be normalized: `_StatusCache.invalidate(domain_id)` → prefix `f"{domain_id}:"`; `invalidate_analytics_for_domain` → `f"dashboard_{domain_id}"` (no trailing separator, per `analytics.py`).
+
+---
+
 ## File Structure
 
 ```
@@ -438,7 +460,7 @@ def get_cache(namespace: str, ttl: int, *, maxsize: int = 1024,
     from backend.cache.inprocess_backend import InProcessBackend
     return InProcessBackend(namespace, ttl, maxsize=maxsize)
 ```
-Note: backend selection is evaluated at `get_cache(...)` call time. Existing caches build their singleton at import — fine, since `REDIS_URL` is read at process start.
+Note: backend selection is evaluated at `get_cache(...)` call time, and existing caches build their singleton at import. See cross-cutting note **A** — Redis-path tests must inject `fakeredis` directly (not monkeypatch `REDIS_URL` post-import).
 
 - [ ] **Step 4: Run — expect pass.**
 
@@ -454,7 +476,8 @@ Note: backend selection is evaluated at `get_cache(...)` call time. Existing cac
 **Files:** Modify `backend/authority/cache.py`; Test `backend/tests/test_cache_resolver_migration.py`.
 - Keep `get_or_load(source, value, entity_type, loader)` and `get_resolver_cache()` signatures.
 - Build key: `make_key((source, normalize_name(value), entity_type))`.
-- Serializer: normalize each candidate to a dict — `asdict(c) if is_dataclass(c) else c`. Deserializer: leave as `list[dict]` UNLESS existing call-sites require `AuthorityCandidate` objects — **verify `backend/authority/resolver.py:170` and surrounding usage** to decide whether to reconstruct `AuthorityCandidate(**d)`; match current behavior exactly. Add a test pinning the returned shape.
+- Serializer: normalize each candidate to a dict — `asdict(c) if is_dataclass(c) else c`. **Deserializer MUST reconstruct `AuthorityCandidate(**d)`** (a `list[AuthorityCandidate]`), NOT return `list[dict]`. Reason: `backend/authority/resolver.py` `resolve_all` does `raw.extend(future.result())` into a `list[AuthorityCandidate]` and then accesses attributes (`c.canonical_label`, `c.score_breakdown`, `c.evidence`, scoring-engine application). Returning dicts would raise `AttributeError` on the first candidate. Add a test that round-trips a candidate with **all fields populated** (incl. `aliases: list[str]` and the optional fields) and asserts an `AuthorityCandidate` with equal field values comes back.
+- Thread-safety note: the current `get_or_load` releases the lock between miss-check and store, so two threads can both run the loader on a cold key (last write wins). `RedisBackend.get_or_load` has the same non-atomic semantics. This is intentional (no stampede lock) — do NOT "fix" it with a distributed lock.
 - Internals call `get_cache("authority:resolver", ttl=_DEFAULT_TTL, maxsize=_DEFAULT_MAXSIZE, serializer=..., deserializer=...).get_or_load(key, loader)`.
 - Commit: `refactor: back ResolverCache with distributed cache (signature unchanged)`
 
@@ -470,7 +493,7 @@ Note: backend selection is evaluated at `get_cache(...)` call time. Existing cac
 **Files:** Modify `backend/authority/feedback.py`; Test `backend/tests/test_cache_feedback_migration.py`.
 - Keep `get_source_prior(...)`, `record_outcome(...)`, `get_source_priors(...)`, `clear_cache()`.
 - Key: `make_key((org_id, field_name, authority_source))`. Value: `float` (JSON-native).
-- `get_source_prior` → `get_or_load(key, loader)`.
+- `get_source_prior` → `get_or_load(make_key(key), loader)` — stringify the tuple via `make_key` before the backend call (note B), in BOTH `get_source_prior` and `record_outcome`.
 - `record_outcome`'s `_cache.pop(scope_key, None)` → `get_cache(...).delete(make_key(scope_key))`.
 - `clear_cache()` → `invalidate_prefix("")`.
 - Test: `record_outcome` evicts exactly that scope key (cross-instance: set prior via A, record_outcome via B deletes it, A misses).
@@ -485,9 +508,11 @@ Note: backend selection is evaluated at `get_cache(...)` call time. Existing cac
 
 ### Task 10: analytics _SimpleCache ×2 + fix snapshot coupling
 **Files:** Modify `backend/routers/analytics.py` AND `backend/services/derived_status_service.py`; Test `backend/tests/test_cache_analytics_migration.py`.
-- Reimplement `_SimpleCache` usages: `_analytics_cache = get_cache("analytics", ttl=300)`, `_dashboard_cache = get_cache("dashboard", ttl=120)`. Keep `invalidate_analytics_cache(prefix)` and `invalidate_analytics_for_domain(domain_id)` behavior (delegate to `invalidate_prefix`). Where call-sites use `.get()` expecting `None` on miss, add a thin `None`-translation (either a small wrapper class or translate at call-site — prefer a wrapper to keep call-sites unchanged).
-- **Fix the private-internals coupling:** rewrite `_compute_executive_dashboard_snapshot` (≈ lines 258–283) to use `_dashboard_cache.exists_prefix(f"dashboard_{bare}")` instead of `_dashboard_cache._lock/._ttl/._store`. Preserve the warm→READY / cold→STALE logic. Keep the `except` fallback.
-- Tests: analytics get/set/invalidate parity; snapshot reports READY when a matching `dashboard_<domain>` key exists and STALE when not (run against `fakeredis`-backed get_cache).
+- Keep `_SimpleCache` as a **thin wrapper class** in `analytics.py` (preserve the name — `test_sprint83.py:14` imports it) whose internals delegate to `get_cache`. Its `.get()` translates `MISS → None`; `.set()` delegates; `.invalidate(prefix="")` delegates to `invalidate_prefix` and returns `int`, accepting the zero-arg form. Assign the SAME module-level names: `_analytics_cache = _SimpleCache("analytics", ttl=300)`, `_dashboard_cache = _SimpleCache("dashboard", ttl=120)` (see cross-cutting note C — these are imported by name elsewhere).
+- Keep `invalidate_analytics_cache(prefix)` and `invalidate_analytics_for_domain(domain_id)` behavior. Preserve exact prefixes (note E): `invalidate_analytics_for_domain` passes `f"dashboard_{domain_id}"` (no trailing separator) to `_dashboard_cache.invalidate`.
+- **Untracked call-site to preserve:** `backend/routers/admin_data_fixes.py:282` does `from backend.routers.analytics import _analytics_cache` then `_analytics_cache.invalidate("coauth_")` and uses the **int** return. The wrapper's `.invalidate` returning int keeps this working — add a test asserting it.
+- **Fix the private-internals coupling:** rewrite `_compute_executive_dashboard_snapshot` (≈ lines 258–283) to use `_dashboard_cache.exists_prefix(<app-prefix>)` instead of `_dashboard_cache._lock/._ttl/._store`. Preserve the existing `bare`-derivation (`"dashboard_all"` for scope `all`, else `f"dashboard_{bare}"`) and pass that string as the **application-level** prefix (the backend prepends `GLOBAL_PREFIX:dashboard:`, producing `SCAN MATCH ukip:dashboard:dashboard_all*`). Preserve warm→READY / cold→STALE and keep the `except` fallback.
+- Tests: analytics get/set/invalidate parity; `admin_data_fixes` int-return; snapshot reports READY when a matching `dashboard_<domain>` key exists and STALE when not (run against a `fakeredis`-backed wrapper).
 - Commit: `refactor: back analytics caches with distributed cache; fix dashboard snapshot coupling`
 
 ---
@@ -528,7 +553,7 @@ UKIP_CACHE_SOCKET_TIMEOUT=0.5
 
 - [ ] **Step 1:** `.venv\Scripts\python -m pytest backend/tests -q` — expect the full suite green (≈2478+ passing, no new failures), proving the in-process backend preserves today's behavior with `REDIS_URL` unset.
 - [ ] **Step 2:** Run only the new cache suite for a fast signal: `.venv\Scripts\python -m pytest backend/tests/test_cache_*.py -v`.
-- [ ] **Step 3:** Sanity grep — confirm no remaining direct `TTLCache(`/`_SimpleCache(`/`_StatusCache(` instantiations outside `backend/cache/` and the (now-wrapper) class definitions: `git grep -n "TTLCache(\|_SimpleCache(\|_StatusCache(" backend/`.
+- [ ] **Step 3:** Sanity grep — confirm no remaining direct `TTLCache(` instantiations in the migrated modules, and confirm every `_analytics_cache` call-site (incl. `backend/routers/admin_data_fixes.py:282` and `backend/routers/analytics_analyzers.py`) still resolves against the wrapper: `git grep -n "TTLCache(\|_analytics_cache\|_dashboard_cache\|status_cache" backend/`. Verify the wrapper names/types are intact and `clear_cache()` call-sites (`git grep -n "clear_cache()"`) don't depend on a `None` return.
 - [ ] **Step 4:** No commit needed (per-task commits cover the work).
 
 ---
