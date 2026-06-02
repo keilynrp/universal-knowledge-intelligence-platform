@@ -48,10 +48,13 @@ def test_top_k_100_is_rejected():
 
 # ── database.py env var wiring ────────────────────────────────────────────────
 
-def test_database_url_defaults_to_sqlite():
-    """Without DATABASE_URL env var, the default is the sqlite file path."""
+def test_test_env_uses_sqlite_but_production_default_is_postgres():
+    """In the test env the module URL is SQLite (conftest sets DATABASE_URL),
+    but the production default (no DATABASE_URL) is now PostgreSQL."""
     from backend import database
-    assert "sqlite" in database.SQLALCHEMY_DATABASE_URL
+    from backend.db_config import default_database_url
+    assert "sqlite" in database.SQLALCHEMY_DATABASE_URL  # test env
+    assert default_database_url().startswith("postgresql")  # production default
 
 
 def test_database_url_reads_from_env(monkeypatch):
