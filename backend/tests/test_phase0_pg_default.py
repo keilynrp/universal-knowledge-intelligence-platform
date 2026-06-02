@@ -6,6 +6,7 @@ manipulating os.environ directly. They do NOT import backend.database (whose
 module-level URL is already frozen to the test sqlite URL by conftest).
 """
 import importlib
+import logging
 import os
 
 
@@ -39,3 +40,18 @@ def test_explicit_database_url_is_still_honoured(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
     db_config = _reload_db_config()
     assert db_config.resolve_database_url() == "sqlite:///:memory:"
+
+
+def test_sqlite_engine_emits_production_warning(caplog):
+    from backend.main import warn_if_sqlite_engine
+    with caplog.at_level(logging.WARNING):
+        warn_if_sqlite_engine("sqlite:///./sql_app.db")
+    assert any("SQLite" in r.message and "production" in r.message.lower()
+               for r in caplog.records)
+
+
+def test_postgres_engine_emits_no_warning(caplog):
+    from backend.main import warn_if_sqlite_engine
+    with caplog.at_level(logging.WARNING):
+        warn_if_sqlite_engine("postgresql+psycopg2://u:p@h:5432/db")
+    assert not any("SQLite" in r.message for r in caplog.records)
