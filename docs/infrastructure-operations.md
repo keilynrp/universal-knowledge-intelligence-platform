@@ -72,6 +72,10 @@ All workers start as `asyncio.create_task()` during app lifespan. They share the
 | `ENGINE_GRPC_URL` | Rust engine gRPC endpoint | Empty (disabled) |
 | `ENGINE_AUTH_TOKEN` | Rust engine auth token | Empty |
 | `UKIP_SKIP_STARTUP_SIDE_EFFECTS` | Skip workers/migrations in test | `0` |
+| `REDIS_URL` | Distributed cache connection string. Empty ⇒ in-process caches | Empty (in-process) |
+| `UKIP_CACHE_PREFIX` | Key namespace prefix (lets multiple deploys share one Redis) | `ukip` |
+| `UKIP_CACHE_CONNECT_TIMEOUT` | Redis socket connect timeout (seconds), fail-open | `0.5` |
+| `UKIP_CACHE_SOCKET_TIMEOUT` | Redis socket op timeout (seconds), fail-open | `0.5` |
 
 ### Startup Guard
 
@@ -88,6 +92,53 @@ The lifespan function validates on startup:
 
 The health endpoint is always public and does not require authentication. It confirms the API server is responsive. It does not check database connectivity or worker health.
 
+## Distributed Cache (Redis)
+
+UKIP's six internal caches (authority resolver, adaptive thresholds, feedback
+priors, derived-status bundles, and the two analytics caches) are backed by a
+pluggable cache layer in `backend/cache/`. Backend selection is automatic:
+
+| `REDIS_URL` | Backend | Behavior |
+|-------------|---------|----------|
+| Empty / unset | `InProcessBackend` (`cachetools`) | Per-process caches. Single-process only — **not** coherent across workers or deploys. This is the default and matches pre-Redis behavior. |
+| Set | `RedisBackend` (JSON, `redis-py`) | Cross-worker coherent, survives restarts/deploys. Cache invalidation propagates to every backend instance sharing the Redis. |
+
+### Design properties
+
+- **Fail-open.** Every Redis error is swallowed: reads degrade to a cache miss
+  (recompute), writes and invalidations become no-ops. A Redis outage never
+  raises into a request handler. Timeouts are kept small (`0.5s`) so a hung
+  Redis cannot stall requests.
+- **Key namespacing.** All keys are prefixed `${UKIP_CACHE_PREFIX}:<cache>:` so
+  multiple deployments can safely share one Redis instance.
+- **TTLs preserved per cache** (resolver 7d, thresholds/feedback/analytics 300s,
+  dashboard 120s, derived-status 30s). Negative results (e.g. "no threshold
+  override") are cached too, so misses don't re-hit the DB.
+- **No app-visible API change.** Every cache keeps its original public
+  signature; only the storage backend changed.
+
+### Production wiring (Dokploy / Compose)
+
+`docker-compose.prod.yml` ships a co-located `ukip-redis` service
+(`redis:7-alpine`, `--maxmemory 256mb --maxmemory-policy allkeys-lru`, no
+persistence — cache data is regenerable). `ukip-backend` declares the cache
+env vars and `depends_on` redis being healthy. `REDIS_URL` defaults to
+`redis://ukip-redis:6379/0` and is overridable from the Dokploy Environment tab
+to point at a managed Redis instead.
+
+### Operating
+
+- **Enable:** ensure `REDIS_URL` is set (default points at the in-stack service),
+  then redeploy. Confirm the startup log line:
+  `Redis cache reachable — distributed cache active`.
+  If unset/unreachable you'll see `Redis not configured/reachable — using in-process cache`.
+- **Rollback:** set `REDIS_URL=` (empty) in Dokploy and redeploy → in-process caches.
+- **Lifespan:** a non-blocking `ping()` runs on startup (log only — never blocks
+  boot); the pool is closed on shutdown.
+- **Monitoring suggestions:** Redis `INFO` memory/`evicted_keys` (LRU pressure
+  ⇒ raise `UKIP_REDIS_MAXMEMORY`), `keyspace_hits`/`keyspace_misses` ratio, and
+  connection count. Eviction is expected and safe (every key has a TTL).
+
 ## Ports
 
 | Service | Port | Configurable |
@@ -97,6 +148,7 @@ The health endpoint is always public and does not require authentication. It con
 | ChromaDB | In-process | N/A |
 | DuckDB | In-process | N/A |
 | SQLite | File-based | Via `DATABASE_URL` |
+| Redis (optional) | 6379 | Via `REDIS_URL`; in-stack `ukip-redis` service, not host-published |
 
 ## Operational Metrics
 
