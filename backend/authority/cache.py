@@ -5,37 +5,64 @@ and rate-limited. The same field value is frequently resolved repeatedly across
 disambiguation passes, so we memoize candidate lists keyed on a normalized
 ``(source, value, entity_type)`` tuple with a configurable TTL.
 
-The cache stores whatever the loader returns (typically a list of candidate
-dicts or ``AuthorityCandidate`` objects); it is value-agnostic.
+Backed by the distributed cache layer (``backend.cache.get_cache``): in-process
+by default, Redis-backed (cross-worker, deploy-surviving) when ``REDIS_URL`` is
+set. The public signature is unchanged.
 """
 from __future__ import annotations
 
 import os
-from threading import Lock
-from typing import Callable
+from dataclasses import asdict, is_dataclass
+from typing import Any, Callable
 
-from cachetools import TTLCache
-
+from backend.authority.base import AuthorityCandidate
 from backend.authority.normalize import normalize_name
+from backend.cache import get_cache, make_key
 
 # Defaults: one week TTL, 10k distinct keys. Overridable via env for ops tuning.
 _DEFAULT_TTL = int(os.environ.get("UKIP_AUTHORITY_CACHE_TTL", 7 * 24 * 3600))
 _DEFAULT_MAXSIZE = int(os.environ.get("UKIP_AUTHORITY_CACHE_MAXSIZE", 10_000))
+
+_NAMESPACE = "authority:resolver"
+
+
+def _serialize_candidates(value: Any) -> Any:
+    """Normalize a list of AuthorityCandidate (or dicts) to JSON-safe dicts."""
+    if isinstance(value, list):
+        return [asdict(c) if is_dataclass(c) else c for c in value]
+    return value
+
+
+def _deserialize_candidates(value: Any) -> Any:
+    """Reconstruct AuthorityCandidate objects from JSON dicts.
+
+    ``resolver.resolve_all`` extends a ``list[AuthorityCandidate]`` with the
+    cached result and then accesses attributes (``c.canonical_label`` etc.), so
+    the deserializer MUST return dataclass instances, not raw dicts.
+    """
+    if isinstance(value, list):
+        return [
+            AuthorityCandidate(**c) if isinstance(c, dict) else c
+            for c in value
+        ]
+    return value
 
 
 class ResolverCache:
     """Thread-safe TTL cache keyed on the normalized lookup tuple."""
 
     def __init__(self, ttl: int | None = None, maxsize: int | None = None) -> None:
-        self._cache: TTLCache = TTLCache(
-            maxsize=maxsize or _DEFAULT_MAXSIZE,
+        self._backend = get_cache(
+            _NAMESPACE,
             ttl=ttl or _DEFAULT_TTL,
+            maxsize=maxsize or _DEFAULT_MAXSIZE,
+            serializer=_serialize_candidates,
+            deserializer=_deserialize_candidates,
         )
-        self._lock = Lock()
 
     @staticmethod
-    def _key(source: str, value: str, entity_type: str) -> tuple[str, str, str]:
-        return (source, normalize_name(value), entity_type)
+    def _key(source: str, value: str, entity_type: str) -> str:
+        return make_key((source, normalize_name(value), entity_type))
 
     def get_or_load(
         self,
@@ -46,17 +73,14 @@ class ResolverCache:
     ):
         """Return the cached result for the key, or compute it via ``loader``.
 
-        The loader is invoked outside the lock so concurrent misses for
-        different keys do not serialize on each other.
+        Memoizes whatever the loader returns (including falsy/empty lists). The
+        loader runs outside any lock, matching the original non-stampede-locked
+        semantics: concurrent cold misses may both run the loader (last write
+        wins) — this is intentional.
         """
-        key = self._key(source, value, entity_type)
-        with self._lock:
-            if key in self._cache:
-                return self._cache[key]
-        result = loader()
-        with self._lock:
-            self._cache[key] = result
-        return result
+        return self._backend.get_or_load(
+            self._key(source, value, entity_type), loader
+        )
 
 
 _GLOBAL_CACHE = ResolverCache()
