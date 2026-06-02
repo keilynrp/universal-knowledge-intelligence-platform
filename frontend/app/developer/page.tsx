@@ -42,7 +42,7 @@ const TAG_GROUPS = [
       { name: "analytics",  description: "KPI dashboard, domain compare, topic modeling" },
       { name: "ai-rag",     description: "AI integrations and RAG vector search" },
       { name: "reports",    description: "Report builder, PDF/Excel exports" },
-      { name: "search",     description: "Full-text search (FTS5)" },
+      { name: "search",     description: "Full-text search" },
     ],
   },
   {

@@ -619,7 +619,7 @@ Available scopes: `read`, `write`, `admin`. Key format: `ukip_<40 chars>`.
 
 | Method | Path | Min Role | Description |
 |---|---|---|---|
-| `GET` | `/search` | viewer | Full-text search (FTS5) across entities and annotations |
+| `GET` | `/search` | viewer | Full-text search across entities and annotations |
 
 **GET /search** query: `q` (query string), `limit`, `skip`.
 

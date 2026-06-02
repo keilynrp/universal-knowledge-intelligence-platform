@@ -377,7 +377,7 @@ _OPENAPI_TAGS = [
     {"name": "dashboards",         "description": "Per-user custom dashboards with drag-and-drop widget layout."},
     {"name": "alert-channels",     "description": "Slack/Teams/Discord/webhook push notifications for platform events."},
     {"name": "api-keys",           "description": "Long-lived API keys for programmatic access with scope control."},
-    {"name": "search",         "description": "Full-text search index (FTS5) across entities and annotations."},
+    {"name": "search",         "description": "Full-text search index across entities and annotations."},
     {"name": "entity-linker",  "description": "Find and merge duplicate entity pairs."},
     {"name": "audit",          "description": "Immutable audit log of all mutating API calls."},
     {"name": "branding",       "description": "Platform branding and white-label settings."},

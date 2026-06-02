@@ -2506,7 +2506,7 @@ export const translations = {
         'page.search.no_results_hint': 'Try a different term or rebuild the search index via Settings.',
         'page.search.no_title': '(no title)',
         'page.search.empty_title': 'Search across entities, authority records, and annotations',
-        'page.search.empty_description': 'Powered by SQLite FTS5 full-text search',
+        'page.search.empty_description': 'Powered by PostgreSQL full-text search',
 
         // ── Page: Domains ─────────────────────────────────────────────────────
         'page.domains.breadcrumb': 'Domain Registry',
@@ -5906,7 +5906,7 @@ export const translations = {
         'page.search.no_results_hint': 'Prueba otro término o reconstruye el índice de búsqueda desde Configuración.',
         'page.search.no_title': '(sin título)',
         'page.search.empty_title': 'Busca entre entidades, registros de autoridad y anotaciones',
-        'page.search.empty_description': 'Impulsado por búsqueda de texto completo SQLite FTS5',
+        'page.search.empty_description': 'Impulsado por búsqueda de texto completo PostgreSQL',
 
         // ── Página: Dominios ──────────────────────────────────────────────────
         'page.domains.breadcrumb': 'Registro de Dominios',
