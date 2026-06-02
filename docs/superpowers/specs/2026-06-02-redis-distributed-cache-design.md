@@ -76,6 +76,10 @@ backend/cache/
 │                        #   Uses the shared redis-py pool; lazy connection.
 ├── inprocess_backend.py # InProcessBackend — wraps cachetools.TTLCache behind
 │                        #   the same interface (parity with current behavior).
+│                        #   Preserves each cache's original maxsize (resolver
+│                        #   10k, feedback 4096, thresholds 2048) so local/test
+│                        #   behavior is byte-for-byte unchanged. (Redis path
+│                        #   ignores maxsize — Redis uses its own memory policy.)
 ├── client.py            # redis-py connection pool singleton built from REDIS_URL;
 │                        #   ping() helper for the startup probe; close() for shutdown.
 └── config.py            # REDIS_URL, UKIP_CACHE_PREFIX, socket_connect_timeout,
@@ -98,12 +102,16 @@ _resolver_cache = get_cache("authority:resolver", ttl=7 * 24 * 3600,
 get(key: str) -> Any | None
 set(key: str, value: Any, ttl: int | None = None) -> None
 get_or_load(key: str, loader: Callable[[], Any], ttl: int | None = None) -> Any
-invalidate_prefix(prefix: str = "") -> int   # returns count evicted
+delete(key: str) -> bool                     # point-key eviction; True if existed
+invalidate_prefix(prefix: str = "") -> int   # always returns an int count (0 valid)
+exists_prefix(prefix: str) -> bool           # any key under prefix? (warm check)
 ```
 
 The two existing interface shapes both map onto this:
 - `get`/`set`/`invalidate(prefix)` caches (analytics, derived_status) map directly.
 - `get_or_load(...)` caches (ResolverCache) build a namespaced key from their tuple and call `get_or_load`.
+
+`delete` and `exists_prefix` exist for two real call-sites found during spec review (see per-cache notes): `feedback.record_outcome` evicts a single scope key (point delete, not a prefix scan), and `derived_status` inspects whether a domain's dashboard is warm. On Redis: `delete` → `DEL`; `exists_prefix` → `SCAN MATCH <prefix>* COUNT 1` (stop at first hit). On in-process: key-dict operations. `invalidate_prefix` MUST always return an int (0 is valid) even though the legacy `invalidate()` methods returned `None`/nothing — call-sites ignore the value, but the contract stays clean.
 
 ### New dependencies
 
@@ -134,6 +142,10 @@ The two existing interface shapes both map onto this:
 **1. `ResolverCache` — the only one storing objects.** Its public `get_or_load(source, value, entity_type, loader)` signature is **preserved**. Internally it builds the namespaced key `authority:resolver:<source>:<normalize_name(value)>:<entity_type>` and delegates to the backend's `get_or_load` with a serializer (normalize to `list[dict]`) and deserializer (reconstruct `AuthorityCandidate` when expected). `backend/authority/resolver.py:170` does not change.
 
 **2. `derived_status` — the correctness win.** `invalidate(domain)` becomes `invalidate_prefix("<domain>:")` on Redis, so eviction propagates to **all** processes, fixing the latent cross-worker staleness bug.
+
+**3. `feedback.record_outcome` — single-key eviction (spec-review finding).** `feedback.py` calls `_cache.pop(scope_key, None)` directly (it is a point delete, not a prefix scan). This maps to the new `delete(scope_key)` method, NOT `invalidate_prefix`. The plan must use `delete` here.
+
+**4. `derived_status` snapshot reads `_dashboard_cache` private internals (spec-review finding).** `derived_status_service._compute_executive_dashboard_snapshot` (≈ lines 258–283) currently reaches into `_dashboard_cache._lock` / `._ttl` / `._store` to decide whether a domain's dashboard is "warm" (STATUS_READY vs STATUS_STALE). Once `_dashboard_cache` becomes a `CacheBackend`, those attributes vanish and the existing `except Exception` branch silently degrades the result to always-READY, losing the warm/stale signal. The plan MUST migrate this check to the new public `exists_prefix("dashboard_<domain>")` method so the warm/stale distinction is preserved. This is part of the `derived_status`/`analytics` migration's definition of done — not optional.
 
 ### Migration principle
 
