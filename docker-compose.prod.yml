@@ -15,8 +15,17 @@ services:
     depends_on:
       ukip-engine:
         condition: service_started
+      ukip-redis:
+        condition: service_healthy
     environment:
       PORT: 8000
+      # Distributed cache (Redis). Defaults to the co-located ukip-redis service;
+      # override REDIS_URL in Dokploy to point at a managed instance. Unset =>
+      # in-process caches (single-process fallback). Fail-open on Redis errors.
+      REDIS_URL: ${REDIS_URL:-redis://ukip-redis:6379/0}
+      UKIP_CACHE_PREFIX: ${UKIP_CACHE_PREFIX:-ukip}
+      UKIP_CACHE_CONNECT_TIMEOUT: ${UKIP_CACHE_CONNECT_TIMEOUT:-0.5}
+      UKIP_CACHE_SOCKET_TIMEOUT: ${UKIP_CACHE_SOCKET_TIMEOUT:-0.5}
       RUN_DB_MIGRATIONS_ON_START: ${RUN_DB_MIGRATIONS_ON_START:-1}
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
       ADMIN_USERNAME: ${ADMIN_USERNAME:?Set ADMIN_USERNAME}
@@ -95,6 +104,35 @@ services:
     expose:
       - "50051"
 
+  ukip-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - dokploy-network
+    # Cache-only workload: bound memory and evict LRU under pressure (every key
+    # carries a TTL, so eviction is safe). Data is regenerable — the volume just
+    # smooths restarts; loss is handled fail-open by the app.
+    command:
+      - redis-server
+      - --maxmemory
+      - ${UKIP_REDIS_MAXMEMORY:-256mb}
+      - --maxmemory-policy
+      - allkeys-lru
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+    volumes:
+      - ukip_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    expose:
+      - "6379"
+
   ukip-frontend:
     image: ${UKIP_FRONTEND_IMAGE:?Set UKIP_FRONTEND_IMAGE}
     pull_policy: always
@@ -129,6 +167,7 @@ services:
 
 volumes:
   ukip_static_data:
+  ukip_redis_data:
 
 networks:
   dokploy-network:
