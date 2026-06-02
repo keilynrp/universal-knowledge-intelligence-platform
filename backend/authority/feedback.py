@@ -15,9 +15,8 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from cachetools import TTLCache
-
 from backend import models
+from backend.cache import MISS, get_cache, make_key
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +26,17 @@ _MAX_ADJUSTMENT = 0.05
 # it to damp small samples toward zero (confidence scaling).
 _MIN_OBSERVATIONS = 3
 
-_cache: TTLCache = TTLCache(maxsize=4096, ttl=300)
+_NAMESPACE = "authority:feedback"
+_TTL = 300
+_MAXSIZE = 4096
+
+# Values are plain floats (JSON-native); identity (de)serialization is fine.
+_backend = get_cache(_NAMESPACE, ttl=_TTL, maxsize=_MAXSIZE)
 
 
-def clear_cache() -> None:
+def clear_cache() -> int:
     """Drop all memoized priors (used by tests and after bulk updates)."""
-    _cache.clear()
+    return _backend.invalidate_prefix("")
 
 
 def compute_adjustment(confirmed: int, rejected: int) -> float:
@@ -95,7 +99,7 @@ def record_outcome(
         row.confirmed = (row.confirmed or 0) + 1
     if rejected:
         row.rejected = (row.rejected or 0) + 1
-    _cache.pop(_scope_key(org_id, field_name, authority_source), None)
+    _backend.delete(make_key(_scope_key(org_id, field_name, authority_source)))
     return row
 
 
@@ -106,21 +110,22 @@ def get_source_prior(
     org_id: Optional[int] = None,
 ) -> float:
     """Return the bounded prior adjustment for a scope (0.0 when unknown)."""
-    key = _scope_key(org_id, field_name, authority_source)
-    if key in _cache:
-        return _cache[key]
-    try:
-        row = (
-            db.query(models.AuthorityScoringFeedback)
-            .filter_by(org_id=org_id, field_name=field_name, authority_source=authority_source)
-            .first()
-        )
-        adj = compute_adjustment(row.confirmed, row.rejected) if row else 0.0
-    except Exception as exc:  # defensive: scoring must not fail on feedback lookup
-        logger.debug("get_source_prior failed for %s: %s", key, exc)
-        adj = 0.0
-    _cache[key] = adj
-    return adj
+    scope = _scope_key(org_id, field_name, authority_source)
+    key = make_key(scope)
+
+    def _load() -> float:
+        try:
+            row = (
+                db.query(models.AuthorityScoringFeedback)
+                .filter_by(org_id=org_id, field_name=field_name, authority_source=authority_source)
+                .first()
+            )
+            return compute_adjustment(row.confirmed, row.rejected) if row else 0.0
+        except Exception as exc:  # defensive: scoring must not fail on feedback lookup
+            logger.debug("get_source_prior failed for %s: %s", scope, exc)
+            return 0.0
+
+    return _backend.get_or_load(key, _load)
 
 
 def get_source_priors(

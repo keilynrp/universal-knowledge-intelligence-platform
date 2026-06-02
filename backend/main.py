@@ -316,6 +316,13 @@ async def lifespan(app: FastAPI):
             logger.info("Engine gRPC client configured: %s", engine_url)
         else:
             logger.info("ENGINE_GRPC_URL not set — engine disabled, using Python fallback")
+
+        # ── Distributed cache probe (non-blocking, fail-open) ────────────────
+        from backend.cache import client as cache_client
+        if cache_client.ping():
+            logger.info("Redis cache reachable — distributed cache active")
+        else:
+            logger.info("Redis not configured/reachable — using in-process cache")
     except Exception:
         logger.exception(
             "Startup worker/scheduler/engine init FAILED — continuing so /health "
@@ -327,6 +334,9 @@ async def lifespan(app: FastAPI):
     # ── Cleanup ──────────────────────────────────────────────────────────────
     if getattr(app.state, "engine_client", None):
         await app.state.engine_client.close()
+
+    from backend.cache import client as cache_client
+    cache_client.close()
 
 
 # ── App ───────────────────────────────────────────────────────────────────────

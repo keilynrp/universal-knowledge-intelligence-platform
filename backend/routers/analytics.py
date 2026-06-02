@@ -16,15 +16,14 @@ Analytics — Dashboard, Discovery & Shared State.
 import logging
 import json
 import re
-import time
 from collections import defaultdict
-from threading import Lock
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.cache import MISS, get_cache
 from backend.analyzers.external_attention import compute_attention_summary
 from backend.analyzers.geographic import geographic_heatmap
 from backend.analyzers.roi_calculator import ROIParams, simulate as _roi_simulate
@@ -359,36 +358,35 @@ def abstract_coverage(
 # ── In-memory TTL analytics cache (Sprint 83) ─────────────────────────────────
 
 class _SimpleCache:
-    """Thread-safe in-memory TTL cache for expensive analytics computations."""
+    """Thin wrapper over the distributed cache for expensive analytics results.
 
-    def __init__(self, ttl_seconds: int = 300):
-        self._store: dict[str, tuple[float, object]] = {}
-        self._lock = Lock()
+    Public surface unchanged (get/set/invalidate) so the ~10 call-sites in
+    ``analytics_analyzers.py`` and ``admin_data_fixes.py`` keep working. Backed
+    by Redis when ``REDIS_URL`` is set (cross-worker, deploy-surviving) and the
+    in-process backend otherwise. ``get`` translates MISS → None to preserve the
+    None-on-miss contract; ``invalidate`` returns an int count.
+    """
+
+    def __init__(self, ttl_seconds: int = 300, *, namespace: str = "analytics"):
         self._ttl = ttl_seconds
+        self._backend = get_cache(namespace, ttl=ttl_seconds, maxsize=4096)
 
     def get(self, key: str):
-        with self._lock:
-            if key in self._store:
-                ts, val = self._store[key]
-                if time.time() - ts < self._ttl:
-                    return val
-                del self._store[key]
-        return None
+        value = self._backend.get(key)
+        return None if value is MISS else value
 
     def set(self, key: str, value: object) -> None:
-        with self._lock:
-            self._store[key] = (time.time(), value)
+        self._backend.set(key, value)
 
     def invalidate(self, prefix: str = "") -> int:
-        with self._lock:
-            keys = [k for k in self._store if k.startswith(prefix)] if prefix else list(self._store.keys())
-            for k in keys:
-                del self._store[k]
-            return len(keys)
+        return self._backend.invalidate_prefix(prefix)
+
+    def exists_prefix(self, prefix: str) -> bool:
+        return self._backend.exists_prefix(prefix)
 
 
-_analytics_cache = _SimpleCache(ttl_seconds=300)   # 5 min — topic / correlation
-_dashboard_cache = _SimpleCache(ttl_seconds=120)   # 2 min — dashboard snapshots
+_analytics_cache = _SimpleCache(ttl_seconds=300, namespace="analytics")   # 5 min — topic / correlation
+_dashboard_cache = _SimpleCache(ttl_seconds=120, namespace="dashboard")   # 2 min — dashboard snapshots
 
 
 def _resolve_benchmark_org(

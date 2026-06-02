@@ -6,14 +6,13 @@ for a given domain scope. Read-only — does not modify data or trigger pipeline
 from __future__ import annotations
 
 import logging
-import time
 from datetime import datetime, timezone
-from threading import Lock
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.cache import MISS, get_cache
 from backend.domain_scope import parse_scope, resolve_domain_filter
 from backend.schemas import EnrichmentStatus
 from backend.services.entity_query import entity_base_q
@@ -61,35 +60,33 @@ _REBUILD_ENDPOINTS: dict[str, Optional[str]] = {
 # ---------------------------------------------------------------------------
 
 class _StatusCache:
-    """Thread-safe in-memory TTL cache for derived-status bundles."""
+    """Thin wrapper over the distributed cache for derived-status bundles.
+
+    Public surface unchanged (get/set/invalidate). Backed by Redis when
+    ``REDIS_URL`` is set — making cross-worker invalidation finally coherent —
+    and the in-process backend otherwise. ``get`` translates the MISS sentinel
+    back to ``None`` to preserve the original None-on-miss contract.
+    """
 
     def __init__(self, ttl_seconds: int = 30):
-        self._store: dict[str, tuple[float, Any]] = {}
-        self._lock = Lock()
         self._ttl = ttl_seconds
+        self._backend = get_cache("derived_status", ttl=ttl_seconds, maxsize=4096)
 
     def get(self, key: str) -> Optional[Any]:
-        with self._lock:
-            if key in self._store:
-                ts, val = self._store[key]
-                if time.time() - ts < self._ttl:
-                    return val
-                del self._store[key]
-        return None
+        value = self._backend.get(key)
+        return None if value is MISS else value
 
     def set(self, key: str, value: Any) -> None:
-        with self._lock:
-            self._store[key] = (time.time(), value)
+        self._backend.set(key, value)
 
     def invalidate(self, domain_id: str) -> None:
         """Evict all cache entries whose key starts with the domain prefix."""
-        prefix = f"{domain_id}:"
-        with self._lock:
-            keys = [k for k in self._store if k.startswith(prefix)]
-            for k in keys:
-                del self._store[k]
-        if keys:
-            logger.debug("derived-status cache invalidated for domain %s (%d entries)", domain_id, len(keys))
+        removed = self._backend.invalidate_prefix(f"{domain_id}:")
+        if removed:
+            logger.debug(
+                "derived-status cache invalidated for domain %s (%d entries)",
+                domain_id, removed,
+            )
 
 
 status_cache = _StatusCache(ttl_seconds=30)
@@ -268,12 +265,9 @@ def _compute_executive_dashboard_snapshot(scope: str, db: Session) -> dict[str, 
         else:
             domain_key_prefix = f"dashboard_{scope}"
 
-        with _dashboard_cache._lock:
-            now = time.time()
-            is_warm = any(
-                k.startswith(domain_key_prefix) and (now - ts) < _dashboard_cache._ttl
-                for k, (ts, _) in _dashboard_cache._store.items()
-            )
+        # Application-level prefix; the backend prepends GLOBAL_PREFIX:dashboard:
+        # and the TTL is enforced by the backend (warm == a live matching key).
+        is_warm = _dashboard_cache.exists_prefix(domain_key_prefix)
 
         status = STATUS_READY if is_warm else STATUS_STALE
         derived_count = source_count if is_warm else 0
