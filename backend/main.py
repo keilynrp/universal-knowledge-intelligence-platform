@@ -95,6 +95,21 @@ def _startup_side_effects_enabled() -> bool:
     return os.environ.get("UKIP_SKIP_STARTUP_SIDE_EFFECTS", "0") != "1"
 
 
+def warn_if_sqlite_engine(database_url: str) -> None:
+    """Loudly warn when the runtime resolved to SQLite.
+
+    SQLite is no longer a supported production engine. It remains usable for
+    local dev/tests only via an explicit DATABASE_URL. This is a pure log call
+    with no side effects, safe to invoke on every boot.
+    """
+    if database_url.startswith("sqlite"):
+        logger.warning(
+            "⚠ Resolved DB engine is SQLite (%s). SQLite is NOT supported in "
+            "production — set DATABASE_URL / POSTGRES_* to a PostgreSQL instance.",
+            database_url,
+        )
+
+
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 
 _BUILTIN_TEMPLATES = [
@@ -242,6 +257,8 @@ async def lifespan(app: FastAPI):
     if os.environ.get("ALLOWED_ORIGINS", "").strip() == "*":
         logger.warning("⚠ ALLOWED_ORIGINS=* allows all origins. Restrict this in production.")
 
+    warn_if_sqlite_engine(database.SQLALCHEMY_DATABASE_URL)
+
     if not _startup_side_effects_enabled():
         logger.info("Startup side effects disabled via UKIP_SKIP_STARTUP_SIDE_EFFECTS=1")
         yield
@@ -360,7 +377,7 @@ _OPENAPI_TAGS = [
     {"name": "dashboards",         "description": "Per-user custom dashboards with drag-and-drop widget layout."},
     {"name": "alert-channels",     "description": "Slack/Teams/Discord/webhook push notifications for platform events."},
     {"name": "api-keys",           "description": "Long-lived API keys for programmatic access with scope control."},
-    {"name": "search",         "description": "Full-text search index (FTS5) across entities and annotations."},
+    {"name": "search",         "description": "Full-text search index across entities and annotations."},
     {"name": "entity-linker",  "description": "Find and merge duplicate entity pairs."},
     {"name": "audit",          "description": "Immutable audit log of all mutating API calls."},
     {"name": "branding",       "description": "Platform branding and white-label settings."},

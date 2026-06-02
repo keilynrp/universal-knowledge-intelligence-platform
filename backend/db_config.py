@@ -2,10 +2,12 @@ import os
 
 
 def default_database_url() -> str:
-    db_mode = os.environ.get("UKIP_DB_MODE", "postgres").lower()
-    if db_mode == "sqlite":
-        return os.environ.get("SQLITE_DATABASE_URL", "sqlite:///./sql_app.db")
+    """Build the default PostgreSQL URL from POSTGRES_* env vars.
 
+    SQLite is no longer a supported default engine (Phase 0, 2026-06-02).
+    To run against SQLite for local dev/tests, set DATABASE_URL explicitly;
+    resolve_database_url() passes it through untouched.
+    """
     pg_user = os.environ.get("POSTGRES_USER", "ukip")
     pg_password = os.environ.get("POSTGRES_PASSWORD", "ukip_secret")
     pg_host = os.environ.get("POSTGRES_HOST", "127.0.0.1")
