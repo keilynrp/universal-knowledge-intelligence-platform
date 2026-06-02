@@ -36,12 +36,16 @@ from backend.routers import (
     assistant_actions,
     api_import,
     analytics,
+    analytics_analyzers,
+    analytics_ops,
     annotations,
     api_keys,
     artifacts,
     audit_log,
     auth_users,
     authority,
+    authority_institutions,
+    authority_records,
     branding,
     catalogs,
     coauthorship,
@@ -55,7 +59,9 @@ from backend.routers import (
     entities,
     entity_linker,
     external_attention,
-    governance,
+    governance_sources,
+    governance_field_correspondence,
+    governance_field_correspondence_ops,
     graph_export,
     harmonization,
     ingest,
@@ -433,6 +439,8 @@ app.include_router(platform_auth_settings.router)
 app.include_router(ingest.router)
 app.include_router(domains.router)
 app.include_router(analytics.router)
+app.include_router(analytics_analyzers.router)
+app.include_router(analytics_ops.router)
 app.include_router(derived_status.router)
 app.include_router(enrichment_schedule.router)
 app.include_router(quality.router)
@@ -440,7 +448,11 @@ app.include_router(entities.router)
 app.include_router(disambiguation.router)
 app.include_router(harmonization.router)
 app.include_router(authority.router)
-app.include_router(governance.router)
+app.include_router(authority_institutions.router)
+app.include_router(authority_records.router)
+app.include_router(governance_sources.router)
+app.include_router(governance_field_correspondence.router)
+app.include_router(governance_field_correspondence_ops.router)
 app.include_router(stores.router)
 app.include_router(ai_rag.router)
 app.include_router(agentic_chat.router)

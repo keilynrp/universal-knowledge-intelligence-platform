@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 # ── _parse_llm_mapping unit tests ─────────────────────────────────────────────
 
 from backend.routers.column_maps import COLUMN_MAPPING, COMMERCE_COLUMN_MAPPING, CORE_COLUMN_MAPPING
-from backend.routers.ingest import _parse_llm_mapping, _VALID_UKIP_FIELDS
+from backend.routers.ingest_helpers import _parse_llm_mapping, _VALID_UKIP_FIELDS
 
 
 class TestParseLlmMapping:

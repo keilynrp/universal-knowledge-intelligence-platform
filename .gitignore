@@ -92,6 +92,11 @@ htmlcov/
 /static/
 
 # =========================
+# Browser automation artifacts
+# =========================
+.playwright-mcp/
+
+# =========================
 # Rust Engine
 # =========================
 engine/target/
