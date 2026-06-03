@@ -11,7 +11,9 @@ env:
   ADMIN_USERNAME: testadmin
   ADMIN_PASSWORD: testpassword
   JWT_SECRET_KEY: test-jwt-secret-key-for-ci-only-not-production
-  ENCRYPTION_KEY: "vRHc0zVcTXbRfUBZEsKNal2lMCfINwDh90EXE8vu2Ew="
+  # ENCRYPTION_KEY is intentionally NOT hardcoded here: the test suite supplies a
+  # CI default via conftest (os.environ.setdefault), and the postgres-smoke job
+  # generates an ephemeral Fernet key at runtime. Keeps a real key out of VCS.
   ALLOWED_ORIGINS: "http://localhost:3004"
   UKIP_SKIP_STARTUP_SIDE_EFFECTS: "1"
   SENTRY_ENABLED: "0"
@@ -84,21 +86,6 @@ jobs:
   postgres-smoke:
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: ukip_test
-          POSTGRES_PASSWORD: ukip_test_pw
-          POSTGRES_DB: ukip_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U ukip_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -112,10 +99,65 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt -c requirements.lock
 
-      - name: Validate PostgreSQL migrations
+      - name: Prepare ephemeral CI secrets
+        # Generate all per-run secrets at runtime so none are hardcoded in VCS
+        # (keeps the secret scanner clean). Exposed only to later steps in this job.
+        run: |
+          python - >> "$GITHUB_ENV" <<'PY'
+          import secrets
+          from cryptography.fernet import Fernet
+          pw = secrets.token_hex(16)
+          print(f"ENCRYPTION_KEY={Fernet.generate_key().decode()}")
+          print(f"SESSION_SECRET_KEY={secrets.token_urlsafe(32)}")
+          print(f"PG_PASSWORD={pw}")
+          print(f"DATABASE_URL=postgresql+psycopg2://ukip_test:{pw}@localhost:5432/ukip_test")
+          print("UKIP_DB_MODE=postgres")
+          PY
+
+      - name: Start PostgreSQL (retry pull to absorb Docker Hub hiccups)
+        # Replaces a `services:` container, whose image pull cannot be retried and
+        # was the top cause of unrelated CI failures (issue #20). Authenticates
+        # when DOCKERHUB_* secrets exist; retries the pull either way.
         env:
-          DATABASE_URL: "postgresql+psycopg2://ukip_test:ukip_test_pw@localhost:5432/ukip_test"
-          UKIP_DB_MODE: postgres
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
+            echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+          fi
+          for attempt in 1 2 3 4 5; do
+            if docker pull postgres:16-alpine; then
+              break
+            fi
+            if [ "${attempt}" -eq 5 ]; then
+              echo "postgres image pull failed after 5 attempts" >&2
+              exit 1
+            fi
+            echo "pull failed (attempt ${attempt}) — retrying after backoff…"
+            sleep $((attempt * 5))
+          done
+          docker run -d --name ukip-postgres \
+            -e POSTGRES_USER=ukip_test \
+            -e POSTGRES_PASSWORD="${PG_PASSWORD}" \
+            -e POSTGRES_DB=ukip_test \
+            -p 5432:5432 \
+            postgres:16-alpine
+          for attempt in $(seq 1 30); do
+            if docker exec ukip-postgres pg_isready -U ukip_test >/dev/null 2>&1; then
+              echo "PostgreSQL ready"
+              break
+            fi
+            if [ "${attempt}" -eq 30 ]; then
+              echo "PostgreSQL did not become ready in time" >&2
+              docker logs ukip-postgres || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Validate PostgreSQL migrations
+        # DATABASE_URL and UKIP_DB_MODE come from the prepare step via $GITHUB_ENV.
         run: python -m alembic upgrade head
 
       - name: Smoke-test real startup against PostgreSQL
@@ -123,10 +165,9 @@ jobs:
         # /health against Postgres — the path unit tests skip via
         # UKIP_SKIP_STARTUP_SIDE_EFFECTS=1. Catches dialect/schema startup
         # failures before they reach a production deploy.
+        # DATABASE_URL, UKIP_DB_MODE, SESSION_SECRET_KEY, ENCRYPTION_KEY come from
+        # the prepare step via $GITHUB_ENV.
         env:
-          DATABASE_URL: "postgresql+psycopg2://ukip_test:ukip_test_pw@localhost:5432/ukip_test"
-          UKIP_DB_MODE: postgres
-          SESSION_SECRET_KEY: ci-session-secret-not-for-production
           UKIP_SKIP_STARTUP_SIDE_EFFECTS: "0"
           PYTHONPATH: .
         run: python scripts/ci_lifespan_smoke.py

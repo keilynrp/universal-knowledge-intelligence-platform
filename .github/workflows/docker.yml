@@ -9,6 +9,10 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  # Authenticated Docker Hub pulls have a far higher rate limit, which avoids the
+  # transient anonymous-pull timeouts that fail base-image fetches (issue #20).
+  # Optional: the login steps below are no-ops until these secrets are set.
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
 jobs:
   build-backend:
@@ -23,6 +27,13 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub (raises base-image pull rate limit; no-op if unset)
+        if: env.DOCKERHUB_USERNAME != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Extract backend metadata
         id: meta
@@ -66,6 +77,13 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub (raises base-image pull rate limit; no-op if unset)
+        if: env.DOCKERHUB_USERNAME != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Extract frontend metadata
         id: meta
@@ -111,6 +129,13 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub (raises base-image pull rate limit; no-op if unset)
+        if: env.DOCKERHUB_USERNAME != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Extract engine metadata
         id: meta
