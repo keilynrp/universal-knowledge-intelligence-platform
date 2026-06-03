@@ -34,6 +34,7 @@ from backend.analyzers.concept_hierarchy import (
 from backend.analyzers.domain_health import compute_health_metrics
 from backend.analyzers.epistemic_classifier import classify_batch
 from backend.auth import get_current_user, require_role
+from backend.cache import client as cache_client
 from backend.database import get_db
 from backend.enterprise_readiness import get_enterprise_readiness_report
 from backend.logging_utils import current_log_format
@@ -159,10 +160,18 @@ def health_check(request: Request, db: Session = Depends(get_db)):
         db_status = "error"
         logger.exception("health_check_db_error")
     status = "ok" if db_status == "ok" else "degraded"
+    # Cache status is informational and fail-open: a Redis hiccup never degrades
+    # the overall health status (the app keeps serving from cache misses).
+    try:
+        cache_health = cache_client.cache_status()
+    except Exception:  # noqa: BLE001 — never let the probe break /health
+        logger.exception("health_check_cache_error")
+        cache_health = {"backend": "unknown", "configured": None, "reachable": False}
     return {
         "status": status,
         "service": "ukip-backend",
         "database": db_status,
+        "cache": cache_health,
         "request_id": getattr(request.state, "request_id", None),
         "log_format": current_log_format(),
         "telemetry": telemetry_status(),

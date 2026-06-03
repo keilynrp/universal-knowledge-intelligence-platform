@@ -32,15 +32,32 @@ def get_redis():
 
 
 def ping() -> bool:
-    """Best-effort reachability probe for startup logging."""
-    client = get_redis()
-    if client is None:
-        return False
+    """Best-effort reachability probe for startup logging (fully fail-open)."""
     try:
+        client = get_redis()
+        if client is None:
+            return False
         return bool(client.ping())
     except Exception as exc:  # noqa: BLE001 — fail-open probe
         logger.warning("Redis ping failed: %s", exc)
         return False
+
+
+def cache_status() -> dict:
+    """Non-blocking cache health summary for /health (fail-open).
+
+    - ``backend``: ``"redis"`` when REDIS_URL is set, else ``"in-process"``.
+    - ``reachable``: for redis, the result of a best-effort ping; for the
+      in-process backend it is always True (no external dependency).
+    - ``configured``: whether REDIS_URL is set (distinguishes "Redis down" from
+      "Redis intentionally not configured").
+    """
+    configured = bool(config.REDIS_URL)
+    return {
+        "backend": "redis" if configured else "in-process",
+        "configured": configured,
+        "reachable": ping() if configured else True,
+    }
 
 
 def close() -> None:
