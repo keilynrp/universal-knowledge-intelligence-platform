@@ -10,7 +10,7 @@
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-gRPC_Engine-000000?logo=rust&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/Tests-2480_passing-28A745?logo=pytest&logoColor=white)
+![Tests](https://img.shields.io/badge/Tests-2530_passing-28A745?logo=pytest&logoColor=white)
 ![Routes](https://img.shields.io/badge/API_Routes-388-blue)
 
 UKIP is a research intelligence platform for ingesting, normalizing, enriching, reconciling, exploring, and reporting on knowledge datasets. It is built around a governed semantic canonical layer: source data is profiled, mapped into canonical entities, resolved against authority registries, enriched with evidence, and surfaced through dashboards, graph analytics, and executive reports.
@@ -61,8 +61,9 @@ backend/                 FastAPI API server
   authority/             19 modules: resolution, scoring, normalization, caching, benchmarking, 5 resolver plugins
   analyzers/             13 analyzers: topics, correlation, coauthorship, geographic, trends, etc.
   adapters/enrichment/   8 adapters: OpenAlex, Crossref, PubMed, WoS, Scopus, Semantic Scholar, DBLP, Scholar
+  cache/                 distributed cache layer: Redis backend + in-process fallback, fail-open
   domains/               3 configurable schemas: default, science, healthcare
-  tests/                 170 test files, 2480 tests
+  tests/                 182 test files, 2537 tests
 frontend/                Next.js 16 App Router
   app/                   61 pages, 93 components, 8 context providers
   i18n/                  EN / ES localization
@@ -103,6 +104,7 @@ UKIP manages major product and implementation decisions as architecture decision
 | **Analytics** | Executive dashboards, topic modeling, OLAP-style cross-tabulations, researcher analytics, trend analysis, geographic distribution, domain health scoring. |
 | **Reporting** | HTML, PDF (WeasyPrint), Excel, and PowerPoint exports. Stakeholder-oriented summaries and evidence-traceable intelligence narratives. |
 | **Governance** | Source profiling, field correspondence rules, mapping suggestions, readiness assessments, JSON-LD export, and OpenSpec-driven architecture governance. |
+| **Distributed Cache** | Optional Redis-backed cache (authority resolver, thresholds, feedback priors, derived-status, analytics) — cross-worker coherent and deploy-surviving, fail-open, with automatic in-process fallback when `REDIS_URL` is unset. |
 | **Agentic Features** | Research chat assistant, RAG skill execution, natural language query (NLQ), assistant actions, and GenAI-governed mapping suggestions. |
 
 ---
@@ -113,12 +115,13 @@ UKIP manages major product and implementation decisions as architecture decision
 | --- | --- |
 | Backend API | Python 3.11+, FastAPI, Pydantic v2, SQLAlchemy |
 | Database | PostgreSQL (production), SQLite (local/test), DuckDB (OLAP), ChromaDB (RAG) |
+| Caching | Redis (distributed, optional via `REDIS_URL`) with automatic in-process `cachetools` fallback |
 | Migrations | Alembic |
 | Auth | JWT + RBAC (super_admin / admin / editor / viewer), SSO via Authlib, rate limiting via SlowAPI |
 | Frontend | Next.js 16, React 19, TypeScript 5, Tailwind CSS 4, Recharts, D3 |
 | Engine | Rust, Tokio, tonic gRPC, sqlx |
 | Analytics | pandas, DuckDB, PyArrow, NumPy, SciPy |
-| Testing | pytest (2480 tests), Vitest, Playwright |
+| Testing | pytest (2537 tests), Vitest, Playwright |
 | Deployment | Docker Compose, GHCR images, Dokploy-oriented production compose |
 | Monitoring | Sentry (opt-in), structured logging |
 
@@ -155,6 +158,8 @@ Required variables:
 | `ALLOWED_ORIGINS` | CORS origins (comma-separated) |
 
 Optional enrichment variables: `OPENALEX_EMAIL`, `WOS_API_KEY`, `SCOPUS_API_KEY`, `OPENAI_API_KEY`, `S2_API_KEY`, `NCBI_API_KEY`.
+
+Optional cache variables: `REDIS_URL` (enables the distributed cache; unset ⇒ in-process caches), `UKIP_CACHE_PREFIX`, `UKIP_CACHE_CONNECT_TIMEOUT`, `UKIP_CACHE_SOCKET_TIMEOUT`.
 
 ### Backend
 
@@ -193,6 +198,8 @@ docker compose -f docker-compose.dev.yml up -d
 docker compose -f docker-compose.prod.yml up -d
 ```
 
+The production compose includes a co-located `ukip-redis` service that activates the distributed cache out of the box (`REDIS_URL` defaults to `redis://ukip-redis:6379/0`, overridable to a managed instance).
+
 ---
 
 ## Testing
@@ -214,7 +221,7 @@ cd frontend && npm run e2e
 cd frontend && npx tsc --noEmit
 ```
 
-**Current test stats:** 2480 backend tests across 170 test files, all passing.
+**Current test stats:** 2537 backend tests across 182 test files (2530 passing, 7 skipped).
 
 ---
 
@@ -388,6 +395,7 @@ Custom domains can be created through the Domain Registry UI (`/domains`).
 - **Database**: PostgreSQL is the preferred production database. SQLite remains useful for local development and tests.
 - **Migrations**: Run `alembic upgrade head` explicitly or through the guarded backend entrypoint.
 - **Enrichment**: Background enrichment worker runs on startup. Monitor circuit breaker states and adapter health in production.
+- **Caching**: Set `REDIS_URL` to enable the distributed cache (cross-worker, deploy-surviving); leaving it unset keeps single-process in-process caches. Cache access is fail-open — a Redis outage degrades to cache misses, never request failures. See [Infrastructure Operations](docs/infrastructure-operations.md#distributed-cache-redis) for enable/rollback and monitoring.
 - **Monitoring**: Sentry and structured logging are opt-in through environment variables.
 - **Scholar**: Google Scholar fallback is disabled by default. Enable only after understanding operational and legal implications.
 - **GenAI**: All AI-assisted features are grounded in evidence, provenance, confidence, and review rules.
