@@ -75,7 +75,7 @@ export default function EntityTable() {
         scrollTop,
     });
     return (
-        <div className="rounded-[28px] bg-slate-100/70 p-5 dark:bg-black/10">
+        <div className="rounded-[28px] bg-slate-100/70 p-3 sm:p-5 dark:bg-black/10">
             <div className="grid items-start gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
                     <FacetPanel
                         activeFacets={activeFacets}

@@ -239,7 +239,7 @@ export default function EntityTableContent({
                         <ErrorBanner variant="row" message={t("page.entity_table.failed_load")} detail={fetchError} onRetry={onRetry} />
                     </div>
                 ) : loading ? (
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                         {Array.from({ length: limit }).map((_, index) => (
                             <div key={index} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-950">
                                 <div className="flex animate-pulse gap-4">
@@ -269,7 +269,7 @@ export default function EntityTableContent({
                 ) : (
                     <>
                         {paddingTop > 0 && <div style={{ height: paddingTop }} />}
-                        <div className={viewMode === "list" ? "space-y-2" : "grid gap-4 md:grid-cols-2"}>
+                        <div className={viewMode === "list" ? "space-y-2" : "grid grid-cols-1 gap-4 xl:grid-cols-2"}>
                             {visibleEntities.map((entity) => {
                                 const isEditing = editingId === entity.id;
                                 const parsedJson = parseNormalizedJson(entity.normalized_json);
@@ -412,7 +412,7 @@ export default function EntityTableContent({
                                                 {
                                                     label: "ID canónico",
                                                     value: renderDisplayValue("canonical_id", identifierValue, t("page.entity_table.empty_value")),
-                                                    minWidthClassName: "min-w-[12rem]",
+                                                    minWidthClassName: "sm:min-w-[12rem]",
                                                 },
                                                 {
                                                     label: "Revisión",

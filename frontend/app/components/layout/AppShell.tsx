@@ -9,7 +9,7 @@ interface AppShellProps {
 
 export default function AppShell({ sidebar, header, children, collapsed = false }: AppShellProps) {
   return (
-    <div className="ukip-app-shell flex min-h-screen">
+    <div className="ukip-app-shell flex min-h-screen overflow-x-clip">
       {sidebar}
       <div
         className={`flex min-w-0 flex-1 flex-col transition-[margin,width] duration-300 ease-out ${
@@ -24,4 +24,3 @@ export default function AppShell({ sidebar, header, children, collapsed = false 
     </div>
   );
 }
-
