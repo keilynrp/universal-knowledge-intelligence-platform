@@ -91,8 +91,9 @@ export default function EntityTableToolbar({
             {hasToolbarFilters && (
                 <div className="mb-3 flex flex-wrap gap-1.5 px-1">
                     {search && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs text-sky-800 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-200">
-                            <span className="font-medium">{t("common.search")}:</span> {search}
+                        <span className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs text-sky-800 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-200">
+                            <span className="shrink-0 font-medium">{t("common.search")}:</span>
+                            <span className="min-w-0 truncate">{search}</span>
                             <button
                                 onClick={() => onSearchChange("")}
                                 className="ml-0.5 font-bold leading-none hover:text-sky-600"
@@ -102,9 +103,9 @@ export default function EntityTableToolbar({
                         </span>
                     )}
                     {minQuality && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
-                            <span className="font-medium">{t("page.entity_table.min_quality")}:</span>
-                            {minQuality === "0.7" ? "70%+" : minQuality === "0.3" ? "30%+" : t("page.entity_table.under_30")}
+                        <span className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
+                            <span className="shrink-0 font-medium">{t("page.entity_table.min_quality")}:</span>
+                            <span className="min-w-0 truncate">{minQuality === "0.7" ? "70%+" : minQuality === "0.3" ? "30%+" : t("page.entity_table.under_30")}</span>
                             <button
                                 onClick={() => onMinQualityChange("")}
                                 className="ml-0.5 font-bold leading-none hover:text-emerald-600"
@@ -118,9 +119,10 @@ export default function EntityTableToolbar({
                         .map(([field, value]) => (
                             <span
                                 key={field}
-                                className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs text-violet-800 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-200"
+                                className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs text-violet-800 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-200"
                             >
-                                <span className="font-medium">{formatFacetField(field)}:</span> {formatFacetValue(field, value)}
+                                <span className="shrink-0 font-medium">{formatFacetField(field)}:</span>
+                                <span className="min-w-0 truncate">{formatFacetValue(field, value)}</span>
                                 <button
                                     onClick={() => onClearFacet(field)}
                                     className="ml-0.5 font-bold leading-none hover:text-indigo-600"

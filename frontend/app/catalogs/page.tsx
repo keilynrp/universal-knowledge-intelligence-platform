@@ -334,7 +334,7 @@ export default function CatalogPortalsPage() {
       <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
         <form
           onSubmit={handleCreate}
-          className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900"
+          className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6 dark:border-gray-800 dark:bg-gray-900"
         >
           <div className="mb-6">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-600 dark:text-blue-400">
@@ -460,7 +460,7 @@ export default function CatalogPortalsPage() {
           </div>
         </form>
 
-        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6 dark:border-gray-800 dark:bg-gray-900">
           <div className="mb-6">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-600 dark:text-violet-400">
               {tr("catalogs.list_eyebrow", "Existing portals")}
@@ -494,7 +494,7 @@ export default function CatalogPortalsPage() {
                   key={portal.id}
                   className="rounded-2xl border border-gray-200 p-4 transition hover:border-blue-300 hover:bg-blue-50/50 dark:border-gray-800 dark:hover:border-blue-700 dark:hover:bg-blue-950/20"
                 >
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-base font-semibold text-gray-900 dark:text-white">{portal.title}</h3>
@@ -514,7 +514,7 @@ export default function CatalogPortalsPage() {
                         {portal.description || tr("catalogs.no_description", "No description yet.")}
                       </p>
                     </div>
-                    <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:shrink-0 sm:flex-row">
                       <Link
                         href={`/catalogs/${portal.slug}`}
                         className="inline-flex items-center justify-center rounded-xl border border-blue-200 px-3 py-2 text-sm font-medium text-blue-700 transition hover:border-blue-300 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-300 dark:hover:bg-blue-950/40"
@@ -540,7 +540,7 @@ export default function CatalogPortalsPage() {
         </section>
       </section>
 
-      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6 dark:border-gray-800 dark:bg-gray-900">
         <div className="mb-6">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-600 dark:text-emerald-400">
             {tr("catalogs.candidate.eyebrow", "Previous imports")}

@@ -37,7 +37,7 @@ interface FacetPanelProps {
 
 const FIELD_ORDER = ["entity_type", "domain", "validation_status", "enrichment_status", "source"];
 
-export default function FacetPanel({ activeFacets, onFacetChange, search, minQuality, totalCount, visibleCount, refreshKey, facetsData }: FacetPanelProps) {
+export default function FacetPanel({ activeFacets, onFacetChange, search, minQuality, refreshKey, facetsData }: FacetPanelProps) {
   const { t } = useLanguage();
   const [facets, setFacets] = useState<FacetData>({});
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -141,7 +141,7 @@ export default function FacetPanel({ activeFacets, onFacetChange, search, minQua
   };
 
   return (
-    <aside className="h-full min-h-[72rem] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
+    <aside className="h-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)] lg:min-h-[72rem]">
       {/* Header */}
       <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 dark:border-white/10">
         <div>
@@ -161,7 +161,7 @@ export default function FacetPanel({ activeFacets, onFacetChange, search, minQua
         <div className="animate-pulse px-5 py-4 text-xs text-slate-400">{t("page.facets.loading")}</div>
       )}
 
-      <div className="max-h-[calc(100vh-8rem)] overflow-y-auto px-5 py-4">
+      <div className="max-h-[28rem] overflow-y-auto px-5 py-4 lg:max-h-[calc(100vh-8rem)]">
         {FIELD_ORDER.map((field) => {
           const values = facets[field] ?? [];
           if (values.length === 0) return null;

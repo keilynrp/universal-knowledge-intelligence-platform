@@ -24,13 +24,13 @@ function MetaRow({ items }: { items: MetaItem[] }) {
   if (items.length === 0) return null;
 
   return (
-    <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-slate-100 pt-4 dark:border-white/10">
+    <div className="mt-4 grid grid-cols-1 gap-x-4 gap-y-3 border-t border-slate-100 pt-4 sm:grid-cols-2 dark:border-white/10">
       {items.map((item) => (
-        <div key={item.label} className="min-w-0">
+        <div key={item.label} className={`min-w-0 ${item.minWidthClassName ?? ""}`}>
           <p className="truncate text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-[var(--ukip-muted)]">
             {item.label}
           </p>
-          <div className="mt-1 truncate text-xs font-bold leading-5 text-slate-950 dark:text-[var(--ukip-text-strong)]">{item.value}</div>
+          <div className="mt-1 break-words text-xs font-bold leading-5 text-slate-950 dark:text-[var(--ukip-text-strong)]">{item.value}</div>
         </div>
       ))}
     </div>
@@ -63,7 +63,7 @@ export default function RecordResultCard({
       onClick={onClick}
     >
       <div className={`h-full rounded-2xl border border-l-4 border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-md dark:border-white/10 dark:bg-[var(--ukip-panel)] dark:hover:border-violet-400/30 ${toneClass}`}>
-        <div className="grid h-full grid-cols-[1.25rem_minmax(0,1fr)] gap-3">
+        <div className="grid h-full grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-[1.25rem_minmax(0,1fr)]">
           <div className="pt-1">{leadingSlot}</div>
           <div className="flex min-w-0 flex-col">
             <div className="min-w-0">
