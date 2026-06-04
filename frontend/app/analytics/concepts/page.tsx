@@ -172,7 +172,7 @@ function SunburstView({
 
   return (
     <div className="flex flex-col items-center gap-4">
-      <svg viewBox={`0 0 ${size} ${size}`} className="h-[400px] w-[400px]">
+      <svg viewBox={`0 0 ${size} ${size}`} className="h-auto w-full max-w-[400px]">
         {levels.map((level) => {
           const ring = byLevel[level];
           const totalCount = ring.reduce((s, r) => s + r.count, 0);
