@@ -60,7 +60,7 @@ function renderDisplayValue(attributeName: string, value: unknown, emptyLabel: s
 
     if (attributeName === "canonical_id" || attributeName === "doi") {
         return (
-            <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+            <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700 break-all dark:bg-gray-800 dark:text-gray-300">
                 {String(value)}
             </code>
         );

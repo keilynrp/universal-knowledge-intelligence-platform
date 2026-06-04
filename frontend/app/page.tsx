@@ -616,7 +616,7 @@ export default function Home() {
         ) : null}
 
         <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
-          <div className="grid gap-5 p-5 lg:grid-cols-[minmax(13rem,0.58fr)_minmax(0,1.42fr)] lg:p-6 xl:grid-cols-[minmax(14rem,0.5fr)_minmax(0,1.5fr)]">
+          <div className="grid grid-cols-1 gap-5 p-5 lg:grid-cols-[minmax(13rem,0.58fr)_minmax(0,1.42fr)] lg:p-6 xl:grid-cols-[minmax(14rem,0.5fr)_minmax(0,1.5fr)]">
             <div className="flex flex-col justify-between gap-4">
               <div>
                 <p className="ukip-kicker">{tr("page.home.pipeline_title", "Pipeline UKIP")}</p>
@@ -637,7 +637,7 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/[0.04]">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-[var(--ukip-muted)]">

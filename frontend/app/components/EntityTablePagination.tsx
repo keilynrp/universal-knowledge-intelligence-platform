@@ -27,7 +27,7 @@ export function EntityTablePagination({
     const hasNextPage = pageEnd < totalCount;
 
     return (
-        <div className="flex items-center justify-between border-t border-gray-200 px-5 py-3.5 dark:border-gray-800">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 px-5 py-3.5 dark:border-gray-800">
             <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-500 dark:text-gray-400">{t("common.rows_per_page")}:</span>
