@@ -219,6 +219,7 @@ export default function CatalogPortalPage() {
 
   useEffect(() => {
     void loadPortal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, currentPage]);
 
   const totalPages = useMemo(() => {
@@ -400,7 +401,7 @@ export default function CatalogPortalPage() {
 
       {portal && (
         <section className="rounded-[28px] bg-slate-100/70 p-4 dark:bg-black/10">
-          <div className="grid gap-4 lg:grid-cols-[1.2fr_repeat(3,minmax(0,0.45fr))]">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-[1.2fr_repeat(3,minmax(0,0.45fr))]">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="ukip-kicker">{tr("catalogs.hero.eyebrow", "Catalog portal")}</span>
@@ -447,7 +448,7 @@ export default function CatalogPortalPage() {
         </section>
       )}
 
-      <section className="grid gap-5 rounded-[28px] bg-slate-100/70 p-3 sm:p-4 dark:bg-black/10 lg:grid-cols-[260px_minmax(0,1fr)]">
+      <section className="grid grid-cols-1 gap-5 rounded-[28px] bg-slate-100/70 p-3 sm:p-4 dark:bg-black/10 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)]">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[var(--ukip-surface)]">
             <div className="flex items-center justify-between gap-3">
@@ -698,7 +699,7 @@ export default function CatalogPortalPage() {
                         {
                           label: tr("page.import.field.canonical_id", "Identifier"),
                           value: (
-                            <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                            <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700 break-all dark:bg-gray-800 dark:text-gray-300">
                               {record.canonical_id || "—"}
                             </code>
                           ),
