@@ -41,6 +41,10 @@ services:
       SSO_METADATA_URL: ${SSO_METADATA_URL:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FORMAT: ${LOG_FORMAT:-json}
+      # Deployment environment marker (telemetry/Sentry + /health). This compose
+      # IS the prod stack, so default to production; local dev doesn't use this
+      # file and keeps telemetry.py's "development" default. Override in Dokploy.
+      ENVIRONMENT: ${ENVIRONMENT:-production}
       SCHOLAR_USE_FREE_PROXIES: ${SCHOLAR_USE_FREE_PROXIES:-0}
       OPENALEX_EMAIL: ${OPENALEX_EMAIL:-}
       WOS_API_KEY: ${WOS_API_KEY:-}
