@@ -19,14 +19,20 @@ from sqlalchemy.orm import Session
 from backend import models, schemas
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
+from backend.tenant_access import (
+    get_scoped_record,
+    persisted_org_id,
+    resolve_request_org_id,
+    scope_query_to_org,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-def _get_or_404(ann_id: int, db: Session) -> models.Annotation:
-    ann = db.get(models.Annotation, ann_id)
+def _get_or_404(ann_id: int, db: Session, org_id: int | None) -> models.Annotation:
+    ann = get_scoped_record(db, models.Annotation, ann_id, org_id)
     if not ann:
         raise HTTPException(status_code=404, detail="Annotation not found")
     return ann
@@ -46,9 +52,10 @@ def list_annotations(
     entity_id:    Optional[int] = Query(None),
     authority_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
-    q = db.query(models.Annotation)
+    org_id = resolve_request_org_id(db, current_user)
+    q = scope_query_to_org(db.query(models.Annotation), models.Annotation, org_id)
     if entity_id is not None:
         q = q.filter(models.Annotation.entity_id == entity_id)
     if authority_id is not None:
@@ -70,7 +77,14 @@ def create_annotation(
             status_code=422,
             detail="At least one of entity_id or authority_id must be provided",
         )
+    # entity_id / authority_id are soft references (not enforced FKs), so we do
+    # not assert their existence here. Tenant isolation is guaranteed by stamping
+    # the annotation with the caller's org and filtering every read by org_id:
+    # an annotation created in org A is never visible to org B regardless of which
+    # entity_id it points at.
+    org_id = resolve_request_org_id(db, current_user)
     ann = models.Annotation(
+        org_id=persisted_org_id(org_id),
         entity_id=payload.entity_id,
         authority_id=payload.authority_id,
         parent_id=payload.parent_id,
@@ -92,11 +106,12 @@ def create_annotation(
 def annotation_stats(
     entity_id: int,
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
     """Thread statistics for an entity: total / resolved / unresolved top-level threads."""
+    org_id = resolve_request_org_id(db, current_user)
     threads = (
-        db.query(models.Annotation)
+        scope_query_to_org(db.query(models.Annotation), models.Annotation, org_id)
         .filter(
             models.Annotation.entity_id == entity_id,
             models.Annotation.parent_id.is_(None),
@@ -124,9 +139,10 @@ def annotation_stats(
 def get_annotation(
     ann_id: int,
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
-    return schemas.AnnotationResponse.model_validate(_get_or_404(ann_id, db))
+    org_id = resolve_request_org_id(db, current_user)
+    return schemas.AnnotationResponse.model_validate(_get_or_404(ann_id, db, org_id))
 
 
 # ── PUT /annotations/{id} ─────────────────────────────────────────────────────
@@ -138,7 +154,8 @@ def update_annotation(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
 ):
-    ann = _get_or_404(ann_id, db)
+    org_id = resolve_request_org_id(db, current_user)
+    ann = _get_or_404(ann_id, db, org_id)
     _check_ownership(ann, current_user)
     ann.content = payload.content
     db.commit()
@@ -154,7 +171,8 @@ def delete_annotation(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
 ):
-    ann = _get_or_404(ann_id, db)
+    org_id = resolve_request_org_id(db, current_user)
+    ann = _get_or_404(ann_id, db, org_id)
     _check_ownership(ann, current_user)
     db.delete(ann)
     db.commit()
@@ -171,7 +189,8 @@ def toggle_resolve(
     current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
 ):
     """Toggle the resolved state of a top-level annotation thread."""
-    ann = _get_or_404(ann_id, db)
+    org_id = resolve_request_org_id(db, current_user)
+    ann = _get_or_404(ann_id, db, org_id)
     if ann.parent_id is not None:
         raise HTTPException(status_code=400, detail="Only top-level annotations can be resolved")
     ann.is_resolved = not ann.is_resolved
@@ -209,7 +228,8 @@ def react_to_annotation(
             status_code=422,
             detail=f"Emoji '{emoji}' not allowed. Use: {sorted(_ALLOWED_REACTIONS)}",
         )
-    ann = _get_or_404(ann_id, db)
+    org_id = resolve_request_org_id(db, current_user)
+    ann = _get_or_404(ann_id, db, org_id)
     try:
         reactions: dict = _json.loads(ann.emoji_reactions or "{}")
     except Exception:

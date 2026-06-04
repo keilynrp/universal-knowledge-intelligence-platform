@@ -22,6 +22,11 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.auth import get_current_user
 from backend.database import get_db
+from backend.tenant_access import (
+    persisted_org_id,
+    resolve_request_org_id,
+    scope_query_to_org,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -150,8 +155,9 @@ def list_dashboards(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    org_id = resolve_request_org_id(db, current_user)
     items = (
-        db.query(models.UserDashboard)
+        scope_query_to_org(db.query(models.UserDashboard), models.UserDashboard, org_id)
         .filter(models.UserDashboard.user_id == current_user.id)
         .order_by(models.UserDashboard.is_default.desc(), models.UserDashboard.id.desc())
         .all()
@@ -173,6 +179,7 @@ def create_dashboard(
             detail=f"Unknown widget type(s): {invalid}. Valid: {sorted(_VALID_WIDGET_TYPES)}",
         )
 
+    org_id = resolve_request_org_id(db, current_user)
     now = datetime.now(timezone.utc)
     # First dashboard for this user becomes default
     existing_count = (
@@ -181,6 +188,7 @@ def create_dashboard(
         .count()
     )
     d = models.UserDashboard(
+        org_id=persisted_org_id(org_id),
         user_id=current_user.id,
         name=payload.name.strip(),
         layout=json.dumps([w.model_dump() for w in payload.layout]),

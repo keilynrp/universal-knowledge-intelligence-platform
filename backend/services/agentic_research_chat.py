@@ -17,7 +17,11 @@ from backend.olap import olap_engine
 from backend.routers.deps import _get_active_integration
 from backend.routers.nlq import NLQSanitizer, _build_system_prompt
 from backend.services.pattern_discovery import PatternDiscoveryService
-from backend.tenant_access import scope_query_to_org
+from backend.tenant_access import (
+    persisted_org_id,
+    resolve_request_org_id,
+    scope_query_to_org,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -389,9 +393,11 @@ class AgenticResearchChatService:
             "trace": trace,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
+        org_id = resolve_request_org_id(db, current_user)
         record = models.AnalysisContext(
             domain_id=payload.domain_id,
             user_id=current_user.id,
+            org_id=persisted_org_id(org_id),
             label=f"agentic-chat: {payload.question[:72]}",
             context_snapshot=json.dumps(snapshot, ensure_ascii=False, default=str),
             notes="Saved agentic research chat trace.",

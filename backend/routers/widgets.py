@@ -37,6 +37,13 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
+from backend.tenant_access import (
+    LEGACY_GLOBAL_ORG_ID,
+    get_scoped_record,
+    persisted_org_id,
+    resolve_request_org_id,
+    scope_query_to_org,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +94,9 @@ def create_widget(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_role("super_admin", "admin")),
 ):
+    org_id = resolve_request_org_id(db, current_user)
     w = models.EmbedWidget(
+        org_id=persisted_org_id(org_id),
         name=payload.name,
         widget_type=payload.widget_type,
         config=json.dumps(payload.config),
@@ -107,11 +116,13 @@ def list_widgets(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
-    total = db.query(models.EmbedWidget).count()
+    org_id = resolve_request_org_id(db, current_user)
+    base = scope_query_to_org(db.query(models.EmbedWidget), models.EmbedWidget, org_id)
+    total = base.count()
     items = (
-        db.query(models.EmbedWidget)
+        base
         .order_by(models.EmbedWidget.created_at.desc())
         .offset(skip).limit(limit).all()
     )
@@ -122,9 +133,10 @@ def list_widgets(
 def get_widget(
     widget_id: int = Path(..., ge=1),
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
-    w = db.query(models.EmbedWidget).filter(models.EmbedWidget.id == widget_id).first()
+    org_id = resolve_request_org_id(db, current_user)
+    w = get_scoped_record(db, models.EmbedWidget, widget_id, org_id)
     if not w:
         raise HTTPException(status_code=404, detail="Widget not found")
     return _serialize(w)
@@ -135,9 +147,10 @@ def update_widget(
     payload: WidgetUpdate,
     widget_id: int = Path(..., ge=1),
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_role("super_admin", "admin")),
+    current_user: models.User = Depends(require_role("super_admin", "admin")),
 ):
-    w = db.query(models.EmbedWidget).filter(models.EmbedWidget.id == widget_id).first()
+    org_id = resolve_request_org_id(db, current_user)
+    w = get_scoped_record(db, models.EmbedWidget, widget_id, org_id)
     if not w:
         raise HTTPException(status_code=404, detail="Widget not found")
     if payload.name is not None:
@@ -159,9 +172,10 @@ def update_widget(
 def delete_widget(
     widget_id: int = Path(..., ge=1),
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_role("super_admin", "admin")),
+    current_user: models.User = Depends(require_role("super_admin", "admin")),
 ):
-    w = db.query(models.EmbedWidget).filter(models.EmbedWidget.id == widget_id).first()
+    org_id = resolve_request_org_id(db, current_user)
+    w = get_scoped_record(db, models.EmbedWidget, widget_id, org_id)
     if not w:
         raise HTTPException(status_code=404, detail="Widget not found")
     db.delete(w)
@@ -179,14 +193,27 @@ def _configured_domain(cfg: dict) -> str | None:
     return domain or None
 
 
-def _data_entity_stats(db: Session, cfg: dict) -> dict:
+def _scoped_entities(db: Session, org_scope: int | None):
+    """RawEntity query filtered to the embed widget's owning tenant.
+
+    org_scope is None only for direct/unit callers (no tenant filter); the public
+    embed path always passes a concrete scope so tenant data never leaks.
+    """
+    return scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_scope)
+
+
+def _data_entity_stats(db: Session, cfg: dict, org_scope: int | None = None) -> dict:
     domain = _configured_domain(cfg)
-    q = db.query(models.RawEntity)
+    q = _scoped_entities(db, org_scope)
     if domain:
         q = q.filter(models.RawEntity.domain == domain)
     total = q.count()
     enriched = q.filter(models.RawEntity.enrichment_status == "completed").count()
-    by_domain_query = db.query(models.RawEntity.domain, func.count(models.RawEntity.id))
+    by_domain_query = scope_query_to_org(
+        db.query(models.RawEntity.domain, func.count(models.RawEntity.id)),
+        models.RawEntity,
+        org_scope,
+    )
     if domain:
         by_domain_query = by_domain_query.filter(models.RawEntity.domain == domain)
     by_domain = (
@@ -203,10 +230,12 @@ def _data_entity_stats(db: Session, cfg: dict) -> dict:
     }
 
 
-def _data_top_concepts(db: Session, cfg: dict) -> dict:
+def _data_top_concepts(db: Session, cfg: dict, org_scope: int | None = None) -> dict:
     domain = _configured_domain(cfg)
     limit = min(int(cfg.get("limit", 20)), 50)
-    q = db.query(models.RawEntity.enrichment_concepts).filter(
+    q = scope_query_to_org(
+        db.query(models.RawEntity.enrichment_concepts), models.RawEntity, org_scope
+    ).filter(
         models.RawEntity.enrichment_concepts != None,
         models.RawEntity.enrichment_concepts != "",
     )
@@ -220,10 +249,10 @@ def _data_top_concepts(db: Session, cfg: dict) -> dict:
     return {"concepts": top, "total_unique": len(counter)}
 
 
-def _data_recent_entities(db: Session, cfg: dict) -> dict:
+def _data_recent_entities(db: Session, cfg: dict, org_scope: int | None = None) -> dict:
     domain = _configured_domain(cfg)
     limit = min(int(cfg.get("limit", 10)), 50)
-    q = db.query(models.RawEntity)
+    q = _scoped_entities(db, org_scope)
     if domain:
         q = q.filter(models.RawEntity.domain == domain)
     rows = q.order_by(models.RawEntity.id.desc()).limit(limit).all()
@@ -240,9 +269,9 @@ def _data_recent_entities(db: Session, cfg: dict) -> dict:
     }
 
 
-def _data_quality_score(db: Session, cfg: dict) -> dict:
+def _data_quality_score(db: Session, cfg: dict, org_scope: int | None = None) -> dict:
     domain = _configured_domain(cfg)
-    q = db.query(models.RawEntity).filter(models.RawEntity.quality_score != None)
+    q = _scoped_entities(db, org_scope).filter(models.RawEntity.quality_score != None)
     if domain:
         q = q.filter(models.RawEntity.domain == domain)
     scores = [row.quality_score for row in q.all()]
@@ -324,7 +353,11 @@ def embed_data(token: str, request: Request, db: Session = Depends(get_db)):
     if not provider:
         raise HTTPException(status_code=400, detail=f"Unknown widget type: {w.widget_type}")
 
-    data = provider(db, cfg)
+    # Public embeds must only ever surface data from the widget's owning tenant.
+    # A widget persisted with org_id IS NULL is a legacy/global widget and maps to
+    # the legacy-global scope (org_id IS NULL rows) rather than an unfiltered query.
+    org_scope = w.org_id if w.org_id is not None else LEGACY_GLOBAL_ORG_ID
+    data = provider(db, cfg, org_scope)
     _record_view(w, db)
 
     return {

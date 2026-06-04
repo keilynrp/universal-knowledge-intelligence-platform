@@ -19,6 +19,12 @@ from backend.context_engine import ContextEngine
 from backend.database import get_db
 from backend.routers.deps import _get_active_integration
 from backend.schema_registry import SchemaRegistry
+from backend.tenant_access import (
+    get_scoped_record,
+    persisted_org_id,
+    resolve_request_org_id,
+    scope_query_to_org,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +59,13 @@ def get_snapshot(
 def list_sessions(
     domain_id: str | None = None,
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
-    """List all saved analysis context sessions, optionally filtered by domain."""
-    q = db.query(models.AnalysisContext).order_by(models.AnalysisContext.created_at.desc())
+    """List saved analysis context sessions for the active org, optionally filtered by domain."""
+    org_id = resolve_request_org_id(db, current_user)
+    q = scope_query_to_org(
+        db.query(models.AnalysisContext), models.AnalysisContext, org_id
+    ).order_by(models.AnalysisContext.created_at.desc())
     if domain_id:
         q = q.filter(models.AnalysisContext.domain_id == domain_id)
     return q.limit(100).all()
@@ -70,8 +79,10 @@ def create_session(
 ):
     """Build and persist a domain context snapshot as a named session."""
     _validate_domain(payload.domain_id)
+    org_id = resolve_request_org_id(db, current_user)
     ctx = _engine.build_domain_context(payload.domain_id, db)
     record = models.AnalysisContext(
+        org_id=persisted_org_id(org_id),
         domain_id=payload.domain_id,
         user_id=current_user.id,
         label=payload.label or f"Snapshot {ctx['generated_at'][:10]}",
@@ -88,11 +99,12 @@ def diff_sessions(
     a: int = Query(..., ge=1, description="ID of the older session"),
     b: int = Query(..., ge=1, description="ID of the newer session"),
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
     """Return a structured KPI delta between two saved sessions (A = older, B = newer)."""
-    session_a = db.get(models.AnalysisContext, a)
-    session_b = db.get(models.AnalysisContext, b)
+    org_id = resolve_request_org_id(db, current_user)
+    session_a = get_scoped_record(db, models.AnalysisContext, a, org_id)
+    session_b = get_scoped_record(db, models.AnalysisContext, b, org_id)
     if not session_a:
         raise HTTPException(status_code=404, detail=f"Session {a} not found")
     if not session_b:
@@ -104,10 +116,11 @@ def diff_sessions(
 def get_session(
     session_id: int = Path(..., ge=1),
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
     """Return a single saved session; context_snapshot is returned as a parsed dict."""
-    record = db.get(models.AnalysisContext, session_id)
+    org_id = resolve_request_org_id(db, current_user)
+    record = get_scoped_record(db, models.AnalysisContext, session_id, org_id)
     if not record:
         raise HTTPException(status_code=404, detail="Session not found")
     return {
@@ -127,10 +140,11 @@ def update_session(
     payload: schemas.AnalysisContextUpdate,
     session_id: int = Path(..., ge=1),
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_role("super_admin", "admin", "editor")),
+    current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
 ):
     """Update a session's label, notes, or pinned flag."""
-    record = db.get(models.AnalysisContext, session_id)
+    org_id = resolve_request_org_id(db, current_user)
+    record = get_scoped_record(db, models.AnalysisContext, session_id, org_id)
     if not record:
         raise HTTPException(status_code=404, detail="Session not found")
     for field, value in payload.model_dump(exclude_unset=True).items():
@@ -144,10 +158,11 @@ def update_session(
 def delete_session(
     session_id: int = Path(..., ge=1),
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_role("super_admin", "admin", "editor")),
+    current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
 ):
     """Delete a saved session."""
-    record = db.get(models.AnalysisContext, session_id)
+    org_id = resolve_request_org_id(db, current_user)
+    record = get_scoped_record(db, models.AnalysisContext, session_id, org_id)
     if not record:
         raise HTTPException(status_code=404, detail="Session not found")
     db.delete(record)
@@ -191,14 +206,15 @@ def diff_insights(
     a: int = Query(..., ge=1, description="ID of the older session"),
     b: int = Query(..., ge=1, description="ID of the newer session"),
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
     """
     Generate AI-written analysis of the delta between two saved sessions.
     Requires an active AI provider.
     """
-    session_a = db.get(models.AnalysisContext, a)
-    session_b = db.get(models.AnalysisContext, b)
+    org_id = resolve_request_org_id(db, current_user)
+    session_a = get_scoped_record(db, models.AnalysisContext, a, org_id)
+    session_b = get_scoped_record(db, models.AnalysisContext, b, org_id)
     if not session_a:
         raise HTTPException(status_code=404, detail=f"Session {a} not found")
     if not session_b:
@@ -220,13 +236,14 @@ def diff_insights(
 def session_insights(
     session_id: int = Path(..., ge=1),
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
     """
     Generate AI-written insights and recommendations for a single saved session.
     Requires an active AI provider.
     """
-    record = db.get(models.AnalysisContext, session_id)
+    org_id = resolve_request_org_id(db, current_user)
+    record = get_scoped_record(db, models.AnalysisContext, session_id, org_id)
     if not record:
         raise HTTPException(status_code=404, detail="Session not found")
 
