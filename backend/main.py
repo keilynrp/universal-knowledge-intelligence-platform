@@ -31,6 +31,7 @@ from backend.routers.limiter import limiter
 from backend.routers import (
     admin_data_fixes,
     ai_rag,
+    data_lifecycle,
     agentic_chat,
     alert_channels,
     assistant_actions,
@@ -516,6 +517,7 @@ app.include_router(scrapers.router)
 app.include_router(onboarding.router)
 app.include_router(widgets.router)
 app.include_router(workspace_reset.router)
+app.include_router(data_lifecycle.router)
 app.include_router(workflows.router)
 app.include_router(ws.router)
 
