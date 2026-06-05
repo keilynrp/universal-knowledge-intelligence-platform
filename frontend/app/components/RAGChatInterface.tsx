@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { apiFetch } from "@/lib/api";
 import { Badge } from "./ui";
+import { useAuth } from "../contexts/AuthContext";
 import { useDomain } from "../contexts/DomainContext";
 import { useLanguage } from "../contexts/LanguageContext";
 
@@ -56,7 +57,9 @@ interface RAGQueryResponse {
 
 export default function RAGChatInterface() {
     const { t } = useLanguage();
+    const { user } = useAuth();
     const { activeDomainId } = useDomain();
+    const isAdmin = ["super_admin", "admin"].includes(user?.role ?? "");
     const [messages, setMessages] = useState<Message[]>([
         {
             role: "system",
@@ -90,6 +93,13 @@ export default function RAGChatInterface() {
         setIsIndexing(true);
         try {
             const res = await apiFetch("/rag/index", { method: "POST" });
+            if (res.status === 401 || res.status === 403) {
+                setMessages(prev => [...prev, {
+                    role: "assistant",
+                    content: "❌ " + t('rag.index.forbidden'),
+                }]);
+                return;
+            }
             if (!res.ok) throw new Error("Indexing failed");
             const data: RAGIndexResponse = await res.json();
             setMessages(prev => [...prev, {
@@ -186,19 +196,21 @@ export default function RAGChatInterface() {
                             {indexStats.total_indexed > 0 ? `${indexStats.total_indexed} ${t('rag.entities_indexed')}` : t('rag.not_indexed')}
                         </Badge>
                     )}
-                    <button
-                        onClick={handleIndex}
-                        disabled={isIndexing}
-                        className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 disabled:opacity-60 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400"
-                    >
-                        {isIndexing ? (
-                            <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                            </svg>
-                        ) : "⚡"}
-                        {isIndexing ? t('rag.index.rebuilding') : t('rag.index.rebuild')}
-                    </button>
+                    {isAdmin && (
+                        <button
+                            onClick={handleIndex}
+                            disabled={isIndexing}
+                            className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 disabled:opacity-60 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400"
+                        >
+                            {isIndexing ? (
+                                <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                            ) : "⚡"}
+                            {isIndexing ? t('rag.index.rebuilding') : t('rag.index.rebuild')}
+                        </button>
+                    )}
                 </div>
             </div>
 
