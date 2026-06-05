@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.analytics.rag_engine import ENRICHED_STATUSES
 from backend.schema_registry import SchemaRegistry
+from backend.tenant_access import scope_query_to_org
 
 _registry = SchemaRegistry()
 
@@ -33,25 +34,25 @@ class GapItem:
 class GapAnalyzer:
     """Runs all gap checks and returns results sorted by severity then impact."""
 
-    def analyze(self, domain_id: str, db: Session) -> List[GapItem]:
+    def analyze(self, domain_id: str, db: Session, org_id: int | None = None) -> List[GapItem]:
         gaps: List[GapItem] = []
-        gaps += self._enrichment_gaps(db)
-        gaps += self._authority_gaps(db)
-        gaps += self._concept_density(db)
-        gaps += self._dimension_completeness(domain_id, db)
-        gaps += self._quality_gaps(db)
+        gaps += self._enrichment_gaps(db, org_id)
+        gaps += self._authority_gaps(db, org_id)
+        gaps += self._concept_density(db, org_id)
+        gaps += self._dimension_completeness(domain_id, db, org_id)
+        gaps += self._quality_gaps(db, org_id)
         # Sort: critical first, then by pct desc within each severity
         _order = {"critical": 0, "warning": 1, "ok": 2}
         return sorted(gaps, key=lambda g: (_order.get(g.severity, 3), -g.pct))
 
     # ── 1. Enrichment coverage ────────────────────────────────────────────────
 
-    def _enrichment_gaps(self, db: Session) -> List[GapItem]:
-        total = db.query(models.RawEntity).count()
+    def _enrichment_gaps(self, db: Session, org_id: int | None = None) -> List[GapItem]:
+        total = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id).count()
         if total == 0:
             return []
         not_done = (
-            db.query(models.RawEntity)
+            scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
             .filter(models.RawEntity.enrichment_status.notin_(ENRICHED_STATUSES))
             .count()
         )
@@ -75,12 +76,12 @@ class GapAnalyzer:
 
     # ── 2. Authority resolution backlog ──────────────────────────────────────
 
-    def _authority_gaps(self, db: Session) -> List[GapItem]:
-        total = db.query(models.AuthorityRecord).count()
+    def _authority_gaps(self, db: Session, org_id: int | None = None) -> List[GapItem]:
+        total = scope_query_to_org(db.query(models.AuthorityRecord), models.AuthorityRecord, org_id).count()
         if total == 0:
             return []
         pending = (
-            db.query(models.AuthorityRecord)
+            scope_query_to_org(db.query(models.AuthorityRecord), models.AuthorityRecord, org_id)
             .filter(models.AuthorityRecord.status == "pending")
             .count()
         )
@@ -100,9 +101,9 @@ class GapAnalyzer:
 
     # ── 3. Concept density ────────────────────────────────────────────────────
 
-    def _concept_density(self, db: Session) -> List[GapItem]:
+    def _concept_density(self, db: Session, org_id: int | None = None) -> List[GapItem]:
         enriched = (
-            db.query(models.RawEntity)
+            scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
             .filter(models.RawEntity.enrichment_status.in_(ENRICHED_STATUSES))
             .all()
         )
@@ -132,13 +133,17 @@ class GapAnalyzer:
 
     # ── 5. Low-quality entities ───────────────────────────────────────────────
 
-    def _quality_gaps(self, db: Session) -> List[GapItem]:
-        total_with_score = db.query(func.count(models.RawEntity.id)).filter(
+    def _quality_gaps(self, db: Session, org_id: int | None = None) -> List[GapItem]:
+        total_with_score = scope_query_to_org(
+            db.query(func.count(models.RawEntity.id)), models.RawEntity, org_id
+        ).filter(
             models.RawEntity.quality_score != None
         ).scalar() or 0
 
         if total_with_score > 0:
-            low_quality_count = db.query(func.count(models.RawEntity.id)).filter(
+            low_quality_count = scope_query_to_org(
+                db.query(func.count(models.RawEntity.id)), models.RawEntity, org_id
+            ).filter(
                 models.RawEntity.quality_score < 0.3,
                 models.RawEntity.quality_score != None,
             ).scalar() or 0
@@ -171,11 +176,11 @@ class GapAnalyzer:
 
     # ── 4. Dimension completeness ─────────────────────────────────────────────
 
-    def _dimension_completeness(self, domain_id: str, db: Session) -> List[GapItem]:
+    def _dimension_completeness(self, domain_id: str, db: Session, org_id: int | None = None) -> List[GapItem]:
         domain = _registry.get_domain(domain_id)
         if not domain:
             return []
-        total = db.query(models.RawEntity).count()
+        total = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id).count()
         if total == 0:
             return []
 
@@ -187,7 +192,7 @@ class GapAnalyzer:
             col = getattr(models.RawEntity, attr.name, None)
             if col is None:
                 continue
-            rows = db.query(col).all()
+            rows = scope_query_to_org(db.query(col), models.RawEntity, org_id).all()
             missing = sum(
                 1 for (v,) in rows
                 if v is None or str(v).strip().lower() in _EMPTY

@@ -53,9 +53,9 @@ def detect_gaps(
     if domain is None:
         raise HTTPException(status_code=404, detail=f"Domain '{domain_id}' not found")
 
-    gaps = _analyzer.analyze(domain_id, db)
-
     org_id = resolve_request_org_id(db, current_user)
+    gaps = _analyzer.analyze(domain_id, db, org_id)
+
     total_entities = scope_query_to_org(
         db.query(models.RawEntity), models.RawEntity, org_id
     ).count()
