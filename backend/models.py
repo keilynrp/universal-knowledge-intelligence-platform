@@ -1142,6 +1142,28 @@ class CoauthorContribution(Base):
     domain_id = Column(String, nullable=False)
 
 
+class RetentionPolicy(Base):
+    """EPIC-016 US-073: per-org (or global) data retention configuration.
+
+    When retention_days is set, the retention purge job deletes data older than
+    that window. NULL means no automatic purge for that org/data class.
+    org_id NULL = platform-wide default (applies to orgs without a specific policy).
+    """
+    __tablename__ = "retention_policies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
+    data_class = Column(String(50), nullable=False, default="all")  # all | entities | ...
+    retention_days = Column(Integer, nullable=True)                  # NULL = no auto-purge
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "data_class", name="uq_retention_policy_org_class"),
+    )
+
+
 class DataLifecycleEvent(Base):
     """EPIC-016 US-070: tenant-scoped audit trail for data lifecycle actions
     (subject export, deletion / right-to-erasure, retention purge).
