@@ -132,3 +132,87 @@ def collect_subject_data(
 
     bundle["_counts"] = counts
     return bundle
+
+
+# ── Slice 3 (US-072): Cascade deletion / right to erasure ────────────────────
+
+# Surfaces deleted in dependency-safe order (children before parents).
+# DataLifecycleEvent intentionally excluded — audit records are retained as
+# compliance evidence even after the underlying tenant data is erased.
+_DELETION_SURFACES: list[tuple[str, str]] = [
+    ("Annotation",              "annotations"),
+    ("AnalysisContext",         "analysis_contexts"),
+    ("UserDashboard",           "dashboards"),
+    ("EmbedWidget",             "embed_widgets"),
+    ("AlertChannel",            "alert_channels"),
+    ("ArtifactTemplate",        "artifact_templates"),
+    ("AuthorityRecord",         "authority_records"),
+    ("NormalizationRule",       "normalization_rules"),
+    ("HarmonizationLog",        "harmonization_logs"),
+    ("ScheduledImport",         "scheduled_imports"),
+    ("ScheduledReport",         "scheduled_reports"),
+    ("Workflow",                "workflows"),
+    ("ImportBatch",             "import_batches"),
+    ("StoreConnection",         "store_connections"),
+    # Entities last — ChromaDB doc_ids are collected from them first.
+    ("RawEntity",               "entities"),
+]
+
+
+def delete_subject_data(
+    db: Session,
+    org_id: int | None,
+) -> dict[str, int]:
+    """Erase all tenant-owned data for *org_id* across every store.
+
+    Returns a dict of per-surface deleted counts (evidence for the lifecycle
+    event). The caller is responsible for recording the event.
+
+    Cascade steps:
+    1. Collect entity ids for ChromaDB doc_id derivation (before deletion).
+    2. Delete every row in _DELETION_SURFACES scoped to org_id.
+    3. Delete corresponding ChromaDB documents (entity-<id> per entity).
+
+    DataLifecycleEvent rows are intentionally retained as compliance evidence.
+    """
+    from backend.analytics.vector_store import VectorStoreService
+    from backend.tenant_access import scope_query_to_org
+
+    counts: dict[str, int] = {}
+
+    # Step 1: collect entity ids before any deletion.
+    entity_ids: list[int] = [
+        row.id for row in
+        scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id).all()
+    ]
+
+    # Step 2: delete DB surfaces in dependency-safe order.
+    for model_name, label in _DELETION_SURFACES:
+        model_cls = getattr(models, model_name, None)
+        if model_cls is None:
+            counts[label] = 0
+            continue
+        rows = scope_query_to_org(db.query(model_cls), model_cls, org_id).all()
+        count = len(rows)
+        for row in rows:
+            db.delete(row)
+        db.flush()
+        counts[label] = count
+
+    db.commit()
+
+    # Step 3: delete ChromaDB documents.
+    chroma_deleted = 0
+    chroma_errors = 0
+    for entity_id in entity_ids:
+        try:
+            VectorStoreService.delete_document(f"entity-{entity_id}")
+            chroma_deleted += 1
+        except Exception:  # noqa: BLE001 — log but don't abort the overall deletion
+            chroma_errors += 1
+
+    counts["chromadb_deleted"] = chroma_deleted
+    if chroma_errors:
+        counts["chromadb_errors"] = chroma_errors
+
+    return counts
