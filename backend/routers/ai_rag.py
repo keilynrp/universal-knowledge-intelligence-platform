@@ -264,7 +264,7 @@ def rag_query(
         # Priority 2: live domain context
         try:
             from backend.context_engine import ContextEngine
-            ctx = ContextEngine().build_domain_context(payload.domain_id, db)
+            ctx = ContextEngine().build_domain_context(payload.domain_id, db, org_id)
             extra_system = ContextEngine().format_for_llm(ctx)
         except Exception:
             pass
@@ -277,6 +277,7 @@ def rag_query(
             top_k=payload.top_k,
             extra_system_context=extra_system,
             min_similarity=payload.min_similarity,
+            org_id=org_id,
         )
     else:
         result = rag_engine.query_catalog(
@@ -285,6 +286,7 @@ def rag_query(
             top_k=payload.top_k,
             extra_system_context=extra_system,
             min_similarity=payload.min_similarity,
+            org_id=org_id,
         )
 
     result["context_injected"]    = extra_system is not None

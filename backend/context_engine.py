@@ -19,8 +19,14 @@ class ContextEngine:
     Suitable for injecting into LLM system prompts.
     """
 
-    def build_domain_context(self, domain_id: str, db: Session) -> Dict[str, Any]:
-        """Return a rich context dict for the given domain."""
+    def build_domain_context(
+        self, domain_id: str, db: Session, org_id: int | None = None
+    ) -> Dict[str, Any]:
+        """Return a rich context dict for the given domain.
+
+        The result is injected into LLM system prompts, so every aggregate
+        is scoped to ``org_id`` (issue #32). ``org_id=None`` = super_admin global.
+        """
 
         ctx: Dict[str, Any] = {
             "domain_id":    domain_id,
@@ -31,13 +37,13 @@ class ContextEngine:
         ctx["schema"] = self._get_schema(domain_id)
 
         # 2. Entity stats
-        ctx["entity_stats"] = self._get_entity_stats(domain_id, db)
+        ctx["entity_stats"] = self._get_entity_stats(domain_id, db, org_id)
 
         # 3. Gap summary
-        ctx["gaps"] = self._get_gap_summary(domain_id, db)
+        ctx["gaps"] = self._get_gap_summary(domain_id, db, org_id)
 
         # 4. Top topics
-        ctx["top_topics"] = self._get_top_topics(domain_id, db)
+        ctx["top_topics"] = self._get_top_topics(domain_id, db, org_id)
 
         return ctx
 
@@ -57,11 +63,12 @@ class ContextEngine:
             ],
         }
 
-    def _get_entity_stats(self, domain_id: str, db: Session) -> Dict[str, Any]:
+    def _get_entity_stats(self, domain_id: str, db: Session, org_id: int | None = None) -> Dict[str, Any]:
         from backend import models
         from backend.analytics.rag_engine import ENRICHED_STATUSES
-        total    = db.query(models.RawEntity).count()
-        enriched = db.query(models.RawEntity).filter(
+        from backend.tenant_access import scope_query_to_org
+        total    = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id).count()
+        enriched = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id).filter(
             models.RawEntity.enrichment_status.in_(ENRICHED_STATUSES)
         ).count()
         return {
@@ -70,10 +77,10 @@ class ContextEngine:
             "pct_enriched": round(enriched / total * 100, 1) if total else 0.0,
         }
 
-    def _get_gap_summary(self, domain_id: str, db: Session) -> Dict[str, Any]:
+    def _get_gap_summary(self, domain_id: str, db: Session, org_id: int | None = None) -> Dict[str, Any]:
         try:
             from backend.analyzers.gap_detector import GapAnalyzer
-            gaps = GapAnalyzer().analyze(domain_id, db)
+            gaps = GapAnalyzer().analyze(domain_id, db, org_id)
             return {
                 "critical": sum(1 for g in gaps if g.severity == "critical"),
                 "warning":  sum(1 for g in gaps if g.severity == "warning"),
@@ -83,10 +90,10 @@ class ContextEngine:
             logger.debug("ContextEngine gap error: %s", exc)
             return {"critical": 0, "warning": 0, "ok": 0}
 
-    def _get_top_topics(self, domain_id: str, db: Session, top_n: int = 5) -> List[Dict[str, Any]]:
+    def _get_top_topics(self, domain_id: str, db: Session, org_id: int | None = None, top_n: int = 5) -> List[Dict[str, Any]]:
         try:
             from backend.analyzers.topic_modeling import TopicAnalyzer
-            result = TopicAnalyzer().top_topics(domain_id, top_n=top_n)
+            result = TopicAnalyzer().top_topics(domain_id, top_n=top_n, org_id=org_id)
             # top_topics returns a dict with a "topics" key (list of {concept, count, ...})
             raw_topics = result.get("topics", [])
             return [{"concept": t["concept"], "count": t["count"]} for t in raw_topics[:top_n]]

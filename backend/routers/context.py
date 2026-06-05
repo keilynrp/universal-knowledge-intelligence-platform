@@ -46,11 +46,12 @@ def _validate_domain(domain_id: str) -> None:
 def get_snapshot(
     domain_id: str,
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
-    """Return a live domain context snapshot (not saved to DB)."""
+    """Return a live domain context snapshot (not saved to DB), scoped to the active org."""
     _validate_domain(domain_id)
-    return _engine.build_domain_context(domain_id, db)
+    org_id = resolve_request_org_id(db, current_user)
+    return _engine.build_domain_context(domain_id, db, org_id)
 
 
 # ── Saved sessions ─────────────────────────────────────────────────────────────
@@ -80,7 +81,7 @@ def create_session(
     """Build and persist a domain context snapshot as a named session."""
     _validate_domain(payload.domain_id)
     org_id = resolve_request_org_id(db, current_user)
-    ctx = _engine.build_domain_context(payload.domain_id, db)
+    ctx = _engine.build_domain_context(payload.domain_id, db, org_id)
     record = models.AnalysisContext(
         org_id=persisted_org_id(org_id),
         domain_id=payload.domain_id,
