@@ -2,29 +2,9 @@
 from __future__ import annotations
 
 PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2}
-REGISTER_UPDATED_AT = "2026-03-27"
+REGISTER_UPDATED_AT = "2026-06-05"
 
 ENTERPRISE_READINESS_GAPS = [
-    {
-        "id": "tenant_isolation",
-        "area": "access_control",
-        "priority": "P0",
-        "status": "partial",
-        "title": "Hard tenant data isolation is not complete",
-        "current_state": (
-            "Organizations and memberships exist, but data access is not yet "
-            "uniformly scoped and enforced at tenant level across the platform."
-        ),
-        "impact": (
-            "High risk for enterprise accounts that expect contractual or legal "
-            "segregation of customer data."
-        ),
-        "recommendation": (
-            "Prioritize EPIC-012: propagate org_id, enforce tenant-scoped queries, "
-            "and review exports, dashboards, and background jobs for tenant safety."
-        ),
-        "related_work": ["EPIC-012", "US-043", "US-044", "US-045"],
-    },
     {
         "id": "data_lifecycle_controls",
         "area": "privacy_governance",
@@ -154,6 +134,41 @@ ENTERPRISE_READINESS_GAPS = [
 ]
 
 
+RESOLVED_GAPS = [
+    {
+        "id": "tenant_isolation",
+        "area": "access_control",
+        "priority": "P0",
+        "status": "resolved",
+        "title": "Hard tenant data isolation",
+        "current_state": (
+            "org_id is propagated and enforced across user-owned, collaboration, "
+            "and agentic surfaces. Tenant-scoped queries are applied in routers, "
+            "the GapAnalyzer, the agentic tool registry, ContextEngine, and ChromaDB "
+            "retrieval. Isolation test suites pin the cross-tenant boundary."
+        ),
+        "impact": (
+            "Closes the highest-risk data-segregation gap for enterprise accounts."
+        ),
+        "recommendation": (
+            "Maintain the tenant_access helper pattern for any new tenant-scoped "
+            "surface; run the post-deploy ChromaDB re-index so existing vectors "
+            "gain org_id metadata."
+        ),
+        "related_work": ["EPIC-012", "US-043", "US-044", "US-045"],
+        "resolved_at": "2026-06-05",
+        "evidence": [
+            "PR #30 (Wave 2-3 closure)",
+            "PR #33 (GapAnalyzer scope)",
+            "PR #35 (agentic tenant context)",
+            "PR #36 (deploy runbook + re-index script)",
+            "PR #37 (admin-gated re-index UI)",
+            "docs/operating/EPIC012_TENANT_ISOLATION_DEPLOY_RUNBOOK.md",
+        ],
+    },
+]
+
+
 def _priority_counts(gaps: list[dict]) -> dict[str, int]:
     return {
         "P0": sum(1 for gap in gaps if gap["priority"] == "P0"),
@@ -174,6 +189,10 @@ def get_enterprise_readiness_report() -> dict:
         ENTERPRISE_READINESS_GAPS,
         key=lambda gap: (PRIORITY_ORDER[gap["priority"]], gap["title"]),
     )
+    resolved = sorted(
+        RESOLVED_GAPS,
+        key=lambda gap: (PRIORITY_ORDER[gap["priority"]], gap["title"]),
+    )
     return {
         "status": "baseline",
         "service": "ukip-backend",
@@ -183,12 +202,18 @@ def get_enterprise_readiness_report() -> dict:
             "total_gaps": len(gaps),
             "priority_counts": _priority_counts(gaps),
             "status_counts": _status_counts(gaps),
+            "resolved_count": len(resolved),
         },
         "roadmap_hooks": [
             {
-                "id": "EPIC-012",
-                "label": "Tenant isolation and access control",
-                "why": "Highest leverage track for enterprise data separation.",
+                "id": "COMPLIANCE-TBD-RETENTION",
+                "label": "Data lifecycle: retention, export, and deletion controls",
+                "why": "Top open P0; unblocks GDPR-style legal and procurement review.",
+            },
+            {
+                "id": "COMPLIANCE-TBD-SECRETS",
+                "label": "Secrets and credential rotation program",
+                "why": "Open P0; required for enterprise security posture and incident response.",
             },
             {
                 "id": "US-042",
@@ -197,9 +222,10 @@ def get_enterprise_readiness_report() -> dict:
             },
             {
                 "id": "COMPLIANCE-TBD-PRIVACY",
-                "label": "Privacy, retention, and legal pack baseline",
+                "label": "Privacy and legal pack baseline (DPA, ROPA, subprocessors)",
                 "why": "Needed before making enterprise privacy or procurement claims.",
             },
         ],
         "gaps": gaps,
+        "resolved": resolved,
     }
