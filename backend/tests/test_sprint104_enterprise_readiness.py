@@ -31,8 +31,28 @@ def test_enterprise_readiness_roadmap_hooks_reference_follow_up_work(client: Tes
 
     hooks = response.json()["roadmap_hooks"]
     hook_ids = {hook["id"] for hook in hooks}
-    assert "EPIC-012" in hook_ids
+    # EPIC-012 is now resolved, so the hooks should point at the remaining work.
+    assert "EPIC-012" not in hook_ids
     assert "US-042" in hook_ids
+
+
+def test_enterprise_readiness_reports_resolved_tenant_isolation(client: TestClient, auth_headers: dict):
+    response = client.get("/ops/enterprise-readiness", headers=auth_headers)
+    assert response.status_code == 200
+
+    body = response.json()
+    resolved = body.get("resolved", [])
+    assert body["summary"]["resolved_count"] == len(resolved)
+
+    resolved_ids = {item["id"] for item in resolved}
+    assert "tenant_isolation" in resolved_ids
+
+    tenant = next(item for item in resolved if item["id"] == "tenant_isolation")
+    assert tenant["status"] == "resolved"
+    assert tenant["evidence"]
+    # Resolved items must not also appear as open gaps.
+    open_ids = {gap["id"] for gap in body["gaps"]}
+    assert "tenant_isolation" not in open_ids
 
 
 def test_enterprise_readiness_requires_admin(client: TestClient, viewer_headers: dict):
