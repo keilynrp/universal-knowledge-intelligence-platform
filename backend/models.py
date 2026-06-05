@@ -1140,3 +1140,26 @@ class CoauthorContribution(Base):
     author_b_id = Column(Integer, ForeignKey("authors.id", ondelete="CASCADE"), primary_key=True)
     org_id = Column(Integer, nullable=False, default=0)
     domain_id = Column(String, nullable=False)
+
+
+class DataLifecycleEvent(Base):
+    """EPIC-016 US-070: tenant-scoped audit trail for data lifecycle actions
+    (subject export, deletion / right-to-erasure, retention purge).
+
+    Every lifecycle operation records a started event and is later completed
+    with per-store evidence counts, so customers can trace what was exported
+    or erased, for whom, by whom, and when.
+    """
+    __tablename__ = "data_lifecycle_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
+    action = Column(String(20), nullable=False, index=True)        # export | deletion | purge
+    subject_type = Column(String(20), nullable=False)              # org | user | entity_owner
+    subject_ref = Column(String(200), nullable=False)              # identifier of the subject
+    requested_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    status = Column(String(20), nullable=False, default="started")  # started | completed | failed
+    scope_json = Column(Text, nullable=True)                       # JSON: request scope/filters
+    evidence_json = Column(Text, nullable=True)                    # JSON: per-store counts/details
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    completed_at = Column(DateTime, nullable=True)
