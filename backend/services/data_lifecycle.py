@@ -1,9 +1,7 @@
 """EPIC-016 — Data lifecycle service.
 
-Slice 1 (US-070): the audit backbone. Records tenant-scoped lifecycle events
-(export / deletion / purge) with per-store evidence. Later slices (export,
-deletion, retention) write through these helpers so every operation leaves a
-traceable record.
+Slice 1 (US-070): audit backbone — record_event / complete_event helpers.
+Slice 2 (US-071): subject/tenant export (DSAR) — collect_subject_data.
 """
 from __future__ import annotations
 
@@ -18,6 +16,28 @@ from backend.tenant_access import persisted_org_id
 
 VALID_ACTIONS = {"export", "deletion", "purge"}
 VALID_SUBJECT_TYPES = {"org", "user", "entity_owner"}
+
+# ── DSAR surface catalogue ───────────────────────────────────────────────────
+# Each entry: (model_class_name, human_label). Only surfaces that carry
+# tenant-owned content; derived/infrastructure tables are excluded.
+_EXPORT_SURFACES: list[tuple[str, str]] = [
+    ("RawEntity",               "entities"),
+    ("Annotation",              "annotations"),
+    ("AnalysisContext",         "analysis_contexts"),
+    ("UserDashboard",           "dashboards"),
+    ("EmbedWidget",             "embed_widgets"),
+    ("AlertChannel",            "alert_channels"),
+    ("ArtifactTemplate",        "artifact_templates"),
+    ("AuthorityRecord",         "authority_records"),
+    ("NormalizationRule",       "normalization_rules"),
+    ("HarmonizationLog",        "harmonization_logs"),
+    ("StoreConnection",         "store_connections"),
+    ("ScheduledImport",         "scheduled_imports"),
+    ("ScheduledReport",         "scheduled_reports"),
+    ("Workflow",                "workflows"),
+    ("ImportBatch",             "import_batches"),
+    ("DataLifecycleEvent",      "lifecycle_events"),
+]
 
 
 def record_event(
@@ -68,3 +88,47 @@ def complete_event(
     db.commit()
     db.refresh(event)
     return event
+
+
+# ── Slice 2 (US-071): DSAR export ────────────────────────────────────────────
+
+def _row_to_dict(row: Any) -> dict[str, Any]:
+    """Convert an ORM row to a JSON-safe dict."""
+    result: dict[str, Any] = {}
+    for col in row.__table__.columns:
+        val = getattr(row, col.name)
+        if hasattr(val, "isoformat"):
+            result[col.name] = val.isoformat()
+        else:
+            result[col.name] = val
+    return result
+
+
+def collect_subject_data(
+    db: Session,
+    org_id: int | None,
+) -> dict[str, Any]:
+    """Return all tenant-owned data for *org_id* across every DSAR surface.
+
+    The result is a dict keyed by surface label with the rows for that surface,
+    plus a ``_counts`` summary. Used by the admin export endpoint to build a
+    portable bundle and to record evidence counts in the lifecycle event.
+
+    ``org_id=None`` (super_admin global scope) returns data across all orgs —
+    callers must validate that the requesting user is allowed that scope.
+    """
+    from backend.tenant_access import scope_query_to_org
+
+    bundle: dict[str, Any] = {}
+    counts: dict[str, int] = {}
+
+    for model_name, label in _EXPORT_SURFACES:
+        model_cls = getattr(models, model_name, None)
+        if model_cls is None:
+            continue
+        rows = scope_query_to_org(db.query(model_cls), model_cls, org_id).all()
+        bundle[label] = [_row_to_dict(r) for r in rows]
+        counts[label] = len(rows)
+
+    bundle["_counts"] = counts
+    return bundle
