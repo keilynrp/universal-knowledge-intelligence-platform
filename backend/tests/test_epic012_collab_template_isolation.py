@@ -185,6 +185,72 @@ def test_dashboards_scope_to_active_org(client, session_factory):
     assert client.get(f"/dashboards/{dash_id}", headers=tenant_a["headers"]).status_code == 200
 
 
+def _add_org_membership(session_factory, *, user_id: int):
+    """Create a second org, enrol the user as a member, return its id."""
+    suffix = uuid4().hex[:8]
+    with session_factory() as db:
+        org = models.Organization(
+            name=f"Org {suffix}",
+            slug=f"org-{suffix}",
+            owner_id=user_id,
+            plan="pro",
+            is_active=True,
+        )
+        db.add(org)
+        db.flush()
+        db.add(models.OrganizationMember(org_id=org.id, user_id=user_id, role="owner"))
+        db.commit()
+        return org.id
+
+
+def _set_active_org(session_factory, *, user_id: int, org_id: int):
+    with session_factory() as db:
+        user = db.get(models.User, user_id)
+        user.org_id = org_id
+        db.commit()
+
+
+def test_dashboard_point_endpoints_scope_when_user_switches_org(client, session_factory):
+    """A user who belongs to two orgs must not reach a dashboard created in
+    org A while their active org is B — covers get/update/delete/set_default,
+    which previously guarded by user_id alone and leaked across the user's own
+    org contexts."""
+    tenant = _tenant_user(session_factory, with_org=True)
+    org_a = tenant["org_id"]
+    org_b = _add_org_membership(session_factory, user_id=tenant["user_id"])
+
+    # Active org = A: create a dashboard stamped to org A.
+    created = client.post(
+        "/dashboards",
+        json={"name": "Dash in A", "layout": []},
+        headers=tenant["headers"],
+    )
+    assert created.status_code == 201
+    dash_id = created.json()["id"]
+
+    # Switch active org to B — the org-A dashboard must become unreachable.
+    _set_active_org(session_factory, user_id=tenant["user_id"], org_id=org_b)
+
+    assert client.get(f"/dashboards/{dash_id}", headers=tenant["headers"]).status_code == 404
+    assert client.put(
+        f"/dashboards/{dash_id}",
+        json={"name": "hijack"},
+        headers=tenant["headers"],
+    ).status_code == 404
+    assert client.post(
+        f"/dashboards/{dash_id}/default", headers=tenant["headers"]
+    ).status_code == 404
+    assert client.delete(f"/dashboards/{dash_id}", headers=tenant["headers"]).status_code == 404
+
+    # It must not appear in the org-B listing either.
+    list_b = client.get("/dashboards", headers=tenant["headers"])
+    assert all(d["id"] != dash_id for d in list_b.json())
+
+    # Switching back to org A restores access.
+    _set_active_org(session_factory, user_id=tenant["user_id"], org_id=org_a)
+    assert client.get(f"/dashboards/{dash_id}", headers=tenant["headers"]).status_code == 200
+
+
 # ── Artifact templates ──────────────────────────────────────────────────────
 
 def test_artifact_templates_builtins_shared_customs_scoped(client, session_factory, db_session):

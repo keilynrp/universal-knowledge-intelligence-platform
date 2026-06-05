@@ -154,7 +154,8 @@ def delete_template(
         raise HTTPException(status_code=403, detail="Built-in templates cannot be deleted")
     # Custom templates may only be deleted from within their owning organization.
     org_id = resolve_request_org_id(db, current_user)
-    if not get_scoped_record(db, models.ArtifactTemplate, template_id, org_id):
+    scoped = get_scoped_record(db, models.ArtifactTemplate, template_id, org_id)
+    if not scoped:
         raise HTTPException(status_code=404, detail="Template not found")
-    db.delete(tmpl)
+    db.delete(scoped)
     db.commit()
