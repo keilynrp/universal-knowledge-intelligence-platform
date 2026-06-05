@@ -11,6 +11,7 @@ import json
 from typing import Optional, List, Dict, Any, Iterable, Tuple
 
 from backend.analytics.vector_store import VectorStoreService
+from backend.tenant_access import LEGACY_GLOBAL_ORG_ID
 
 logger = logging.getLogger(__name__)
 
@@ -184,12 +185,18 @@ def index_entity(entity, integration_record) -> Dict[str, Any]:
         embedding_signature = _embedding_signature(adapter)
         doc_id = f"entity-{entity.id}"
 
+        # Tenant tag (issue #32): ChromaDB metadata cannot store None, so
+        # legacy-global entities (org_id IS NULL) are stored with the -1 sentinel.
+        entity_org_id = getattr(entity, "org_id", None)
+        org_tag = entity_org_id if entity_org_id is not None else LEGACY_GLOBAL_ORG_ID
+
         VectorStoreService.upsert_document(
             doc_id=doc_id,
             text=text,
             embedding=embedding,
             metadata={
                 **metadata,
+                "org_id": org_tag,
                 "provider_used": adapter.provider_name,
                 "embedding_model": embedding_signature,
             }
@@ -206,6 +213,7 @@ def query_catalog(
     top_k: int = 5,
     extra_system_context: Optional[str] = None,
     min_similarity: float = MIN_SIMILARITY_SCORE,
+    org_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Phase 5 / 11 — Generation Step:
@@ -224,13 +232,14 @@ def query_catalog(
         # Step 1: Embed user query
         query_embedding = adapter.get_embedding(user_question)
 
-        # Step 2: Retrieve relevant context
+        # Step 2: Retrieve relevant context (org-scoped)
         embedding_signature = _embedding_signature(adapter)
         retrieved_docs = VectorStoreService.query(
             query_embedding,
             top_k=top_k,
             min_similarity=min_similarity,
             embedding_model=embedding_signature,
+            org_id=org_id,
         )
 
         if not retrieved_docs:
@@ -276,6 +285,7 @@ def query_catalog_agentic(
     extra_system_context: Optional[str] = None,
     max_iterations: int = 5,
     min_similarity: float = MIN_SIMILARITY_SCORE,
+    org_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Sprint 69C — Agentic RAG with function calling.
@@ -296,6 +306,7 @@ def query_catalog_agentic(
             top_k=top_k,
             min_similarity=min_similarity,
             embedding_model=embedding_signature,
+            org_id=org_id,
         )
 
         if not retrieved_docs:
@@ -318,7 +329,7 @@ def query_catalog_agentic(
         tools = registry.list_tools()
 
         def _invoke(name: str, params: Dict[str, Any]) -> Any:
-            return registry.invoke(name, params, db)
+            return registry.invoke(name, params, db, org_id)
 
         agentic_result = adapter.chat_with_tools(
             system_prompt=system_prompt,

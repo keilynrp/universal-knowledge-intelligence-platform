@@ -49,23 +49,38 @@ class VectorStoreService:
         top_k: int = 5,
         min_similarity: float = 0.0,
         embedding_model: Optional[str] = None,
+        org_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         Retrieve the top_k most semantically relevant documents given a query vector.
         Returns list of dicts with 'text', 'id', and 'metadata'.
+
+        Tenant scoping (issue #32): when ``org_id`` is provided, only documents
+        whose metadata ``org_id`` matches are returned. ``org_id=None`` means
+        super_admin global scope (no org filter). Legacy-global documents are
+        stored with the ``-1`` sentinel and matched when ``org_id == -1``.
         """
         collection = cls._get_collection()
         count = collection.count()
         if count == 0:
             return []
 
+        # Build the metadata filter. ChromaDB requires $and to combine clauses.
+        conditions: List[Dict[str, Any]] = []
+        if embedding_model:
+            conditions.append({"embedding_model": embedding_model})
+        if org_id is not None:
+            conditions.append({"org_id": org_id})
+
         query_kwargs = {
             "query_embeddings": [query_embedding],
             "n_results": min(top_k, count),
             "include": ["documents", "metadatas", "distances"],
         }
-        if embedding_model:
-            query_kwargs["where"] = {"embedding_model": embedding_model}
+        if len(conditions) == 1:
+            query_kwargs["where"] = conditions[0]
+        elif len(conditions) > 1:
+            query_kwargs["where"] = {"$and": conditions}
 
         results = collection.query(**query_kwargs)
 

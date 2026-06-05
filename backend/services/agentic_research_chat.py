@@ -58,7 +58,7 @@ class AgenticResearchChatService:
         errors: list[str] = []
 
         if mode_used in {"rag", "hybrid"}:
-            rag_result = cls._run_rag(db, payload, integration, context["system_prompt"])
+            rag_result = cls._run_rag(db, payload, integration, context["system_prompt"], org_id)
             if rag_result.get("error"):
                 errors.append(str(rag_result["error"]))
 
@@ -152,7 +152,7 @@ class AgenticResearchChatService:
         blocks: dict[str, Any] = {}
 
         try:
-            ctx = ContextEngine().build_domain_context(payload.domain_id, db)
+            ctx = ContextEngine().build_domain_context(payload.domain_id, db, org_id)
             blocks["domain_snapshot"] = ctx
         except Exception as exc:
             blocks["domain_snapshot_error"] = str(exc)
@@ -238,6 +238,7 @@ class AgenticResearchChatService:
         payload: AgenticChatRequest,
         integration,
         extra_system_context: str,
+        org_id: int | None,
     ) -> dict[str, Any]:
         if payload.use_tools:
             return rag_engine.query_catalog_agentic(
@@ -247,12 +248,14 @@ class AgenticResearchChatService:
                 top_k=payload.top_k,
                 extra_system_context=extra_system_context,
                 max_iterations=4,
+                org_id=org_id,
             )
         return rag_engine.query_catalog(
             user_question=payload.question,
             integration_record=integration,
             top_k=payload.top_k,
             extra_system_context=extra_system_context,
+            org_id=org_id,
         )
 
     @staticmethod
