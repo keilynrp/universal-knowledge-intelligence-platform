@@ -9,13 +9,18 @@ Built-in tools:
   get_topics           — run TopicAnalyzer, return top concepts
   get_harmonization_log — last N harmonization steps
   get_enrichment_stats  — enrichment coverage + citation stats
+
+Tenant scoping (issue #32): every handler receives the caller's resolved
+``org_id`` and scopes its queries with ``scope_query_to_org``. ``org_id=None``
+means super_admin global scope (no filter); ``-1`` means legacy-global.
 """
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 from backend.analytics.rag_engine import ENRICHED_STATUSES
+from backend.tenant_access import scope_query_to_org
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +53,16 @@ class ToolRegistry:
             for t in self._tools.values()
         ]
 
-    def invoke(self, name: str, params: Dict[str, Any], db: Session) -> Any:
+    def invoke(
+        self,
+        name: str,
+        params: Dict[str, Any],
+        db: Session,
+        org_id: int | None = None,
+    ) -> Any:
         if name not in self._handlers:
             raise KeyError(name)
-        return self._handlers[name](params, db)
+        return self._handlers[name](params, db, org_id)
 
 
 # ── Singleton ──────────────────────────────────────────────────────────────────
@@ -68,14 +79,14 @@ def get_registry() -> ToolRegistry:
 
 # ── Tool implementations ────────────────────────────────────────────────────────
 
-def _tool_entity_stats(params: Dict[str, Any], db: Session) -> Dict[str, Any]:
+def _tool_entity_stats(params: Dict[str, Any], db: Session, org_id: int | None = None) -> Dict[str, Any]:
     from backend import models
     domain_id = params.get("domain_id", "default")
-    total    = db.query(models.RawEntity).count()
-    enriched = db.query(models.RawEntity).filter(
+    total    = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id).count()
+    enriched = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id).filter(
         models.RawEntity.enrichment_status.in_(ENRICHED_STATUSES)
     ).count()
-    pending  = db.query(models.RawEntity).filter(
+    pending  = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id).filter(
         models.RawEntity.enrichment_status == "pending"
     ).count()
     return {
@@ -87,10 +98,10 @@ def _tool_entity_stats(params: Dict[str, Any], db: Session) -> Dict[str, Any]:
     }
 
 
-def _tool_get_gaps(params: Dict[str, Any], db: Session) -> List[Dict[str, Any]]:
+def _tool_get_gaps(params: Dict[str, Any], db: Session, org_id: int | None = None) -> List[Dict[str, Any]]:
     from backend.analyzers.gap_detector import GapAnalyzer
     domain_id = params.get("domain_id", "default")
-    gaps = GapAnalyzer().analyze(domain_id, db)
+    gaps = GapAnalyzer().analyze(domain_id, db, org_id)
     return [
         {
             "category": g.category, "severity": g.severity,
@@ -102,44 +113,47 @@ def _tool_get_gaps(params: Dict[str, Any], db: Session) -> List[Dict[str, Any]]:
     ]
 
 
-def _tool_get_topics(params: Dict[str, Any], db: Session) -> List[Dict[str, Any]]:
+def _tool_get_topics(params: Dict[str, Any], db: Session, org_id: int | None = None) -> List[Dict[str, Any]]:
     from backend.analyzers.topic_modeling import TopicAnalyzer
     domain_id = params.get("domain_id", "default")
     top_n     = int(params.get("top_n", 10))
-    result = TopicAnalyzer().top_topics(domain_id, top_n=top_n)
+    result = TopicAnalyzer().top_topics(domain_id, top_n=top_n, org_id=org_id)
     return [{"concept": t["concept"], "count": t["count"]} for t in result.get("topics", [])]
 
 
-def _tool_harmonization_log(params: Dict[str, Any], db: Session) -> List[Dict[str, Any]]:
+def _tool_harmonization_log(params: Dict[str, Any], db: Session, org_id: int | None = None) -> List[Dict[str, Any]]:
     from backend import models
     limit = int(params.get("limit", 10))
     steps = (
-        db.query(models.HarmonizationStep)
-        .order_by(models.HarmonizationStep.created_at.desc())
+        scope_query_to_org(db.query(models.HarmonizationLog), models.HarmonizationLog, org_id)
+        .order_by(models.HarmonizationLog.executed_at.desc())
         .limit(limit)
         .all()
     )
     return [
         {
             "id": s.id,
-            "field_name": s.field_name,
-            "step_type": s.step_type,
-            "status": s.status,
-            "affected_count": s.affected_count,
-            "created_at": str(s.created_at),
+            "step_id": s.step_id,
+            "step_name": s.step_name,
+            "records_updated": s.records_updated,
+            "fields_modified": s.fields_modified,
+            "reverted": s.reverted,
+            "executed_at": str(s.executed_at),
         }
         for s in steps
     ]
 
 
-def _tool_enrichment_stats(params: Dict[str, Any], db: Session) -> Dict[str, Any]:
+def _tool_enrichment_stats(params: Dict[str, Any], db: Session, org_id: int | None = None) -> Dict[str, Any]:
     from backend import models
     from sqlalchemy import func
     domain_id      = params.get("domain_id", "default")
-    total_enriched = db.query(models.RawEntity).filter(
+    total_enriched = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id).filter(
         models.RawEntity.enrichment_status.in_(ENRICHED_STATUSES)
     ).count()
-    avg_citations  = db.query(func.avg(models.RawEntity.enrichment_citation_count)).filter(
+    avg_citations  = scope_query_to_org(
+        db.query(func.avg(models.RawEntity.enrichment_citation_count)), models.RawEntity, org_id
+    ).filter(
         models.RawEntity.enrichment_citation_count.isnot(None),
     ).scalar() or 0.0
     return {
@@ -155,13 +169,13 @@ def _optional_int(value: Any) -> int | None:
     return int(value)
 
 
-def _tool_researchers_by_topic(params: Dict[str, Any], db: Session) -> Dict[str, Any]:
+def _tool_researchers_by_topic(params: Dict[str, Any], db: Session, org_id: int | None = None) -> Dict[str, Any]:
     from backend.services.researcher_topic_analytics import researchers_by_topic
 
     return researchers_by_topic(
         db,
         domain_id=params.get("domain_id", "default"),
-        org_id=None,
+        org_id=org_id,
         topic=params.get("topic", ""),
         limit=int(params.get("limit", 25)),
         source=params.get("source"),
@@ -173,13 +187,13 @@ def _tool_researchers_by_topic(params: Dict[str, Any], db: Session) -> Dict[str,
     )
 
 
-def _tool_topic_researcher_graph(params: Dict[str, Any], db: Session) -> Dict[str, Any]:
+def _tool_topic_researcher_graph(params: Dict[str, Any], db: Session, org_id: int | None = None) -> Dict[str, Any]:
     from backend.services.researcher_topic_analytics import topic_researcher_graph
 
     return topic_researcher_graph(
         db,
         domain_id=params.get("domain_id", "default"),
-        org_id=None,
+        org_id=org_id,
         topic=params.get("topic", ""),
         limit=int(params.get("limit", 50)),
         min_weight=int(params.get("min_weight", 1)),
@@ -276,7 +290,7 @@ def _build_registry() -> ToolRegistry:
     return r
 
 
-def _tool_analyze_domain(params: Dict[str, Any], db: Session) -> Dict[str, Any]:
+def _tool_analyze_domain(params: Dict[str, Any], db: Session, org_id: int | None = None) -> Dict[str, Any]:
     from backend.analyzers.gap_detector import GapAnalyzer
     from backend.analyzers.topic_modeling import TopicAnalyzer
 
@@ -284,7 +298,7 @@ def _tool_analyze_domain(params: Dict[str, Any], db: Session) -> Dict[str, Any]:
 
     # Gaps
     try:
-        gaps = GapAnalyzer().analyze(domain_id, db)
+        gaps = GapAnalyzer().analyze(domain_id, db, org_id)
         gap_summary = {
             "critical": sum(1 for g in gaps if g.severity == "critical"),
             "warning":  sum(1 for g in gaps if g.severity == "warning"),
@@ -296,7 +310,7 @@ def _tool_analyze_domain(params: Dict[str, Any], db: Session) -> Dict[str, Any]:
 
     # Topics
     try:
-        result   = TopicAnalyzer().top_topics(domain_id, top_n=5)
+        result   = TopicAnalyzer().top_topics(domain_id, top_n=5, org_id=org_id)
         top_concepts = [t["concept"] for t in result.get("topics", [])]
     except Exception as exc:
         top_concepts = []
