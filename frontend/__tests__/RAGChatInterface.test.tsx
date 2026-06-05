@@ -14,6 +14,10 @@ vi.mock("../app/contexts/DomainContext", () => ({
   useDomain: () => ({ activeDomainId: "default", activeDomain: null }),
 }));
 
+vi.mock("../app/contexts/AuthContext", () => ({
+  useAuth: () => ({ user: { role: "admin" } }),
+}));
+
 // Stub scrollIntoView — not available in jsdom
 Element.prototype.scrollIntoView = vi.fn();
 
