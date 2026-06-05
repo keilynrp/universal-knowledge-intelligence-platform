@@ -191,3 +191,71 @@ def test_manual_purge_trigger_requires_super_admin(client, session_factory):
     admin = _org_with_user(session_factory, role="admin")
     resp = client.post("/admin/data-lifecycle/purge", headers=admin["headers"])
     assert resp.status_code == 403
+
+
+# ── Partial-deletion correctness (bug fix) ──────────────────────────────────
+
+def test_purge_only_removes_expired_rows_not_whole_org(db_session, session_factory):
+    """A retention policy must delete ONLY rows older than the cutoff, leaving
+    fresh data intact. The original implementation wiped the entire org as soon
+    as a single row aged out — this guards against that regression.
+    """
+    with session_factory() as db:
+        user = models.User(username=f"u_{uuid4().hex[:6]}", password_hash="x",
+                           role="admin", is_active=True)
+        db.add(user)
+        db.flush()
+        org = models.Organization(name=f"O-{uuid4().hex[:4]}", slug=f"o-{uuid4().hex[:4]}",
+                                   owner_id=user.id, plan="pro", is_active=True)
+        db.add(org)
+        db.flush()
+        user.org_id = org.id
+        db.commit()
+        org_id = org.id
+
+    # Two old (past 30d window) + one fresh (within window).
+    _entity(db_session, org_id=org_id, days_old=100)
+    _entity(db_session, org_id=org_id, days_old=45)
+    fresh = _entity(db_session, org_id=org_id, days_old=5)
+    fresh_id = fresh.id
+    _set_policy(db_session, org_id, retention_days=30)
+
+    with patch("backend.analytics.vector_store.VectorStoreService") as mock_vs:
+        mock_vs.delete_document = MagicMock()
+        result = purge_expired_orgs(db_session)
+
+    assert str(org_id) in result
+    remaining = db_session.query(models.RawEntity).filter(
+        models.RawEntity.org_id == org_id
+    ).all()
+    # Only the fresh entity should survive.
+    assert [e.id for e in remaining] == [fresh_id]
+
+
+def test_delete_subject_data_returns_counts(db_session, session_factory):
+    """Slice 3/4 record the returned counts as audit evidence; the function
+    must return the dict, not None.
+    """
+    from backend.services.data_lifecycle import delete_subject_data
+
+    with session_factory() as db:
+        user = models.User(username=f"u_{uuid4().hex[:6]}", password_hash="x",
+                           role="admin", is_active=True)
+        db.add(user)
+        db.flush()
+        org = models.Organization(name=f"O-{uuid4().hex[:4]}", slug=f"o-{uuid4().hex[:4]}",
+                                   owner_id=user.id, plan="pro", is_active=True)
+        db.add(org)
+        db.flush()
+        user.org_id = org.id
+        db.commit()
+        org_id = org.id
+
+    _entity(db_session, org_id=org_id, days_old=1)
+
+    with patch("backend.analytics.vector_store.VectorStoreService") as mock_vs:
+        mock_vs.delete_document = MagicMock()
+        counts = delete_subject_data(db_session, org_id)
+
+    assert counts is not None
+    assert counts["entities"] == 1
