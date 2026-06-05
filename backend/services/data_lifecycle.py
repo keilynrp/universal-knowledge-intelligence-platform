@@ -217,6 +217,8 @@ def delete_subject_data(
     if chroma_errors:
         counts["chromadb_errors"] = chroma_errors
 
+    return counts
+
 
 # ── Slice 4 (US-073): Retention purge ────────────────────────────────────────
 
@@ -227,15 +229,90 @@ _logger = _logging.getLogger(__name__)
 _DEFAULT_PURGE_INTERVAL_SECONDS = 86_400  # 24 h
 
 
-def purge_expired_orgs(db: Session) -> dict[str, Any]:
-    """Run one retention-purge tick: find every org with an expired policy and
-    delete its data via the existing cascade.
+# Tables whose rows reference a RawEntity and must be removed alongside the
+# entities they belong to. (entity_id / record_id / relationship endpoints.)
+# Order matters: children before the entities themselves.
+_ENTITY_CHILD_SURFACES: list[tuple[str, str]] = [
+    ("CoauthorContribution",     "entity_id"),
+    ("AuthorPublication",        "entity_id"),
+    ("HarmonizationChangeRecord", "record_id"),
+]
 
-    Returns a summary dict: {org_id: per-store counts, ...}.
+
+def purge_expired_entities(
+    db: Session,
+    org_id: int,
+    cutoff_dt: datetime,
+) -> dict[str, int]:
+    """Delete only the org's RawEntity rows older than *cutoff_dt* (and their
+    FK children + ChromaDB docs), leaving fresher data and org-level config
+    (stores, workflows, dashboards…) intact.
+
+    Returns per-surface deleted counts. Caller records the audit event.
     """
-    from backend.tenant_access import LEGACY_GLOBAL_ORG_ID
+    from backend.analytics.vector_store import VectorStoreService
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)  # naive UTC for comparison
+    counts: dict[str, int] = {}
+
+    expired_ids: list[int] = [
+        row.id for row in
+        db.query(models.RawEntity.id).filter(
+            models.RawEntity.org_id == org_id,
+            models.RawEntity.updated_at <= cutoff_dt,
+        ).all()
+    ]
+    if not expired_ids:
+        return counts
+
+    # Delete per-entity child rows first to respect FK constraints.
+    for model_name, fk_col in _ENTITY_CHILD_SURFACES:
+        model_cls = getattr(models, model_name, None)
+        if model_cls is None:
+            continue
+        col = getattr(model_cls, fk_col)
+        deleted = db.query(model_cls).filter(col.in_(expired_ids)).delete(
+            synchronize_session=False
+        )
+        counts[f"{model_name}"] = deleted
+
+    # entity_relationships reference entities on either endpoint.
+    rel_cls = getattr(models, "EntityRelationship", None)
+    if rel_cls is not None:
+        counts["EntityRelationship"] = db.query(rel_cls).filter(
+            (rel_cls.source_id.in_(expired_ids)) | (rel_cls.target_id.in_(expired_ids))
+        ).delete(synchronize_session=False)
+
+    # Finally the entities themselves.
+    counts["entities"] = db.query(models.RawEntity).filter(
+        models.RawEntity.id.in_(expired_ids)
+    ).delete(synchronize_session=False)
+
+    db.commit()
+
+    # ChromaDB documents (best-effort; don't abort the purge on failure).
+    chroma_deleted = 0
+    chroma_errors = 0
+    for entity_id in expired_ids:
+        try:
+            VectorStoreService.delete_document(f"entity-{entity_id}")
+            chroma_deleted += 1
+        except Exception:  # noqa: BLE001
+            chroma_errors += 1
+    counts["chromadb_deleted"] = chroma_deleted
+    if chroma_errors:
+        counts["chromadb_errors"] = chroma_errors
+
+    return counts
+
+
+def purge_expired_orgs(db: Session) -> dict[str, Any]:
+    """Run one retention-purge tick: for every org with a retention policy,
+    delete only the entity data older than its retention window.
+
+    Returns a summary dict: {org_id: per-surface counts, ...}.
+    """
+    from datetime import timedelta
+
     policies = db.query(models.RetentionPolicy).filter(
         models.RetentionPolicy.retention_days.isnot(None)
     ).all()
@@ -249,15 +326,12 @@ def purge_expired_orgs(db: Session) -> dict[str, Any]:
         if org_id is None:
             continue
 
-        # Find entities older than the retention window.
-        cutoff = now
-        from datetime import timedelta
         cutoff_dt = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
             days=policy.retention_days
         )
 
-        # Check if any entity predates the cutoff — if not, skip.
-        has_expired = db.query(models.RawEntity).filter(
+        # Skip orgs with nothing past the cutoff — avoids empty audit events.
+        has_expired = db.query(models.RawEntity.id).filter(
             models.RawEntity.org_id == org_id,
             models.RawEntity.updated_at <= cutoff_dt,
         ).first()
@@ -274,7 +348,7 @@ def purge_expired_orgs(db: Session) -> dict[str, Any]:
             scope={"retention_days": policy.retention_days, "cutoff": cutoff_dt.isoformat()},
         )
         try:
-            counts = delete_subject_data(db, org_id)
+            counts = purge_expired_entities(db, org_id, cutoff_dt)
             complete_event(db, event, status="completed", evidence=counts)
             summary[str(org_id)] = counts
             _logger.info("Retention purge completed for org_id=%s: %s", org_id, counts)
