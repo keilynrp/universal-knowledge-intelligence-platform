@@ -257,7 +257,8 @@ def viewer_headers():
 # ── DB cleanup (function-scoped) ────────────────────────────────────────────
 
 _TABLES_TO_CLEAN = [
-    # EPIC-016: lifecycle audit — FK to organizations/users, clean before them
+    # EPIC-016: lifecycle + retention — clean before organizations
+    "retention_policies",
     "data_lifecycle_events",
     # V2 coauthorship tables — must be cleaned before raw_entities / authors
     "coauthor_contributions",

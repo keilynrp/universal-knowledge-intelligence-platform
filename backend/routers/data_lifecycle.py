@@ -2,6 +2,7 @@
 
 Slice 2 (US-071): subject/tenant export (DSAR).
 Slice 3 (US-072): cascade deletion / right to erasure.
+Slice 4 (US-073): retention policy management + manual purge trigger.
 
 POST /admin/data-lifecycle/export
   — admin-only; returns a portable JSON bundle of all org-scoped data for
@@ -28,6 +29,7 @@ from backend.services.data_lifecycle import (
     collect_subject_data,
     complete_event,
     delete_subject_data,
+    purge_expired_orgs,
     record_event,
 )
 from backend.tenant_access import resolve_request_org_id, scope_query_to_org
@@ -157,3 +159,75 @@ def list_lifecycle_events(
         }
         for e in events
     ]
+
+
+# ── Slice 4 (US-073): Retention policy endpoints ─────────────────────────────
+
+class RetentionPolicyUpsert(BaseModel):
+    data_class: str = "all"
+    retention_days: int | None = None  # None disables auto-purge
+
+
+@router.get("/retention")
+def get_retention_policy(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin")),
+) -> dict:
+    """Return the retention policy for the active org (or the platform default if none set)."""
+    org_id = resolve_request_org_id(db, current_user)
+    policy = db.query(models.RetentionPolicy).filter(
+        models.RetentionPolicy.org_id == (org_id if org_id is not None else None)
+    ).first()
+    if not policy:
+        return {"org_id": org_id, "data_class": "all", "retention_days": None}
+    return {
+        "id": policy.id,
+        "org_id": policy.org_id,
+        "data_class": policy.data_class,
+        "retention_days": policy.retention_days,
+        "updated_at": policy.updated_at.isoformat() if policy.updated_at else None,
+    }
+
+
+@router.put("/retention")
+def upsert_retention_policy(
+    payload: RetentionPolicyUpsert,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin")),
+) -> dict:
+    """Set or update the retention policy for the active org."""
+    org_id = resolve_request_org_id(db, current_user)
+    from backend.tenant_access import persisted_org_id
+    persisted = persisted_org_id(org_id)
+
+    policy = db.query(models.RetentionPolicy).filter(
+        models.RetentionPolicy.org_id == persisted,
+        models.RetentionPolicy.data_class == payload.data_class,
+    ).first()
+    if policy:
+        policy.retention_days = payload.retention_days
+    else:
+        policy = models.RetentionPolicy(
+            org_id=persisted,
+            data_class=payload.data_class,
+            retention_days=payload.retention_days,
+        )
+        db.add(policy)
+    db.commit()
+    db.refresh(policy)
+    return {"org_id": policy.org_id, "data_class": policy.data_class,
+            "retention_days": policy.retention_days}
+
+
+@router.post("/purge")
+def trigger_retention_purge(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_role("super_admin")),
+) -> dict:
+    """Manually trigger a retention purge run (super_admin only).
+
+    Scans all orgs with a retention policy and purges expired data.
+    Same logic as the scheduled RetentionPurger loop.
+    """
+    summary = purge_expired_orgs(db)
+    return {"purged_orgs": len(summary), "detail": summary}
