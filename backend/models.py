@@ -497,6 +497,7 @@ class Annotation(Base):
     __tablename__ = "annotations"
 
     id           = Column(Integer, primary_key=True, index=True)
+    org_id       = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
     entity_id    = Column(Integer, nullable=True, index=True)    # FK raw_entities.id
     authority_id = Column(Integer, nullable=True, index=True)    # FK authority_records.id
     parent_id    = Column(Integer, nullable=True)                # FK annotations.id (replies)
@@ -568,6 +569,7 @@ class ArtifactTemplate(Base):
     __tablename__ = "artifact_templates"
 
     id            = Column(Integer, primary_key=True, index=True)
+    org_id        = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)  # NULL for platform built-ins
     name          = Column(String, nullable=False)
     description   = Column(String, default="")
     sections      = Column(Text, nullable=False)       # JSON: ["entity_stats", ...]
@@ -588,6 +590,7 @@ class AnalysisContext(Base):
     __tablename__ = "analysis_contexts"
 
     id               = Column(Integer, primary_key=True, index=True)
+    org_id           = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
     domain_id        = Column(String, nullable=False, index=True)
     user_id          = Column(Integer, nullable=True)     # FK users.id (nullable for system)
     label            = Column(String, default="")         # user-defined name
@@ -680,6 +683,7 @@ class AlertChannel(Base):
     __tablename__ = "alert_channels"
 
     id          = Column(Integer, primary_key=True, index=True)
+    org_id      = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
     name        = Column(String(200), nullable=False)
     type        = Column(String(20), nullable=False, default="slack")  # slack|teams|discord|webhook
     webhook_url = Column(Text, nullable=False)                          # Fernet-encrypted
@@ -724,6 +728,7 @@ class UserDashboard(Base):
     __tablename__ = "user_dashboards"
 
     id         = Column(Integer, primary_key=True, index=True)
+    org_id     = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
     user_id    = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     name       = Column(String(200), nullable=False)
     layout     = Column(Text, default="[]")    # JSON list of WidgetConfig objects
@@ -929,6 +934,7 @@ class EmbedWidget(Base):
     __tablename__ = "embed_widgets"
 
     id              = Column(Integer, primary_key=True, index=True)
+    org_id          = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
     name            = Column(String(200), nullable=False)
     widget_type     = Column(String(50), nullable=False, index=True)
     config          = Column(Text, default="{}")          # JSON: domain, limit, title, theme, etc.

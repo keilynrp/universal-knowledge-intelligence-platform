@@ -23,6 +23,12 @@ from backend import models
 from backend.auth import require_role
 from backend.database import get_db
 from backend.notifications.alert_sender import ALL_EVENTS, ALL_EVENT_IDS, fire_alert
+from backend.tenant_access import (
+    get_scoped_record,
+    persisted_org_id,
+    resolve_request_org_id,
+    scope_query_to_org,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +92,7 @@ def list_alert_events(_: models.User = Depends(require_role("super_admin", "admi
 def create_alert_channel(
     payload: AlertChannelCreate,
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_role("super_admin", "admin")),
+    current_user: models.User = Depends(require_role("super_admin", "admin")),
 ):
     invalid_events = [e for e in payload.events if e not in ALL_EVENT_IDS]
     if invalid_events:
@@ -94,7 +100,9 @@ def create_alert_channel(
             status_code=422,
             detail=f"Unknown events: {invalid_events}. Valid: {sorted(ALL_EVENT_IDS)}",
         )
+    org_id = resolve_request_org_id(db, current_user)
     ch = models.AlertChannel(
+        org_id=persisted_org_id(org_id),
         name=payload.name.strip(),
         type=payload.type,
         webhook_url=_encrypt_url(payload.webhook_url),
@@ -112,9 +120,14 @@ def create_alert_channel(
 @router.get("/alert-channels", tags=["alert-channels"])
 def list_alert_channels(
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_role("super_admin", "admin")),
+    current_user: models.User = Depends(require_role("super_admin", "admin")),
 ):
-    channels = db.query(models.AlertChannel).order_by(models.AlertChannel.id.desc()).all()
+    org_id = resolve_request_org_id(db, current_user)
+    channels = (
+        scope_query_to_org(db.query(models.AlertChannel), models.AlertChannel, org_id)
+        .order_by(models.AlertChannel.id.desc())
+        .all()
+    )
     return [_serialize(c) for c in channels]
 
 
@@ -122,9 +135,10 @@ def list_alert_channels(
 def get_alert_channel(
     channel_id: int = Path(..., ge=1),
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_role("super_admin", "admin")),
+    current_user: models.User = Depends(require_role("super_admin", "admin")),
 ):
-    ch = db.get(models.AlertChannel, channel_id)
+    org_id = resolve_request_org_id(db, current_user)
+    ch = get_scoped_record(db, models.AlertChannel, channel_id, org_id)
     if not ch:
         raise HTTPException(status_code=404, detail="Alert channel not found")
     return _serialize(ch)
@@ -135,9 +149,10 @@ def update_alert_channel(
     channel_id: int = Path(..., ge=1),
     payload: AlertChannelUpdate = ...,
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_role("super_admin", "admin")),
+    current_user: models.User = Depends(require_role("super_admin", "admin")),
 ):
-    ch = db.get(models.AlertChannel, channel_id)
+    org_id = resolve_request_org_id(db, current_user)
+    ch = get_scoped_record(db, models.AlertChannel, channel_id, org_id)
     if not ch:
         raise HTTPException(status_code=404, detail="Alert channel not found")
     if payload.name is not None:
@@ -162,9 +177,10 @@ def update_alert_channel(
 def delete_alert_channel(
     channel_id: int = Path(..., ge=1),
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_role("super_admin", "admin")),
+    current_user: models.User = Depends(require_role("super_admin", "admin")),
 ):
-    ch = db.get(models.AlertChannel, channel_id)
+    org_id = resolve_request_org_id(db, current_user)
+    ch = get_scoped_record(db, models.AlertChannel, channel_id, org_id)
     if not ch:
         raise HTTPException(status_code=404, detail="Alert channel not found")
     db.delete(ch)
@@ -176,10 +192,11 @@ def delete_alert_channel(
 def test_alert_channel(
     channel_id: int = Path(..., ge=1),
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_role("super_admin", "admin")),
+    current_user: models.User = Depends(require_role("super_admin", "admin")),
 ):
     """Send a test message to verify the channel is configured correctly."""
-    ch = db.get(models.AlertChannel, channel_id)
+    org_id = resolve_request_org_id(db, current_user)
+    ch = get_scoped_record(db, models.AlertChannel, channel_id, org_id)
     if not ch:
         raise HTTPException(status_code=404, detail="Alert channel not found")
     ok = fire_alert(

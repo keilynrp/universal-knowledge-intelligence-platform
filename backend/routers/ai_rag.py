@@ -233,7 +233,7 @@ def rag_index_entity(
 def rag_query(
     payload: RAGQueryPayload,
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
     """
     Phase 5 / 11: Natural language question answered using ChromaDB + active LLM.
@@ -241,13 +241,15 @@ def rag_query(
     system prompt, grounding the LLM in the current data state.
     """
     integration = _get_active_integration(db)
+    org_id = resolve_request_org_id(db, current_user)
 
     # Phase 11 / 69A: inject context into the system prompt (memory recall takes priority)
     extra_system = None
 
     if payload.session_id is not None:
-        # Priority 1: recalled memory session
-        session = db.get(models.AnalysisContext, payload.session_id)
+        # Priority 1: recalled memory session (tenant-scoped — a recalled snapshot
+        # is injected into the LLM prompt, so it must never cross orgs).
+        session = get_scoped_record(db, models.AnalysisContext, payload.session_id, org_id)
         if session:
             try:
                 from backend.context_engine import ContextEngine

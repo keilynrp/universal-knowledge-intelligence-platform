@@ -22,6 +22,12 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.auth import get_current_user
 from backend.database import get_db
+from backend.tenant_access import (
+    get_scoped_record,
+    persisted_org_id,
+    resolve_request_org_id,
+    scope_query_to_org,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -150,8 +156,9 @@ def list_dashboards(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    org_id = resolve_request_org_id(db, current_user)
     items = (
-        db.query(models.UserDashboard)
+        scope_query_to_org(db.query(models.UserDashboard), models.UserDashboard, org_id)
         .filter(models.UserDashboard.user_id == current_user.id)
         .order_by(models.UserDashboard.is_default.desc(), models.UserDashboard.id.desc())
         .all()
@@ -173,14 +180,16 @@ def create_dashboard(
             detail=f"Unknown widget type(s): {invalid}. Valid: {sorted(_VALID_WIDGET_TYPES)}",
         )
 
+    org_id = resolve_request_org_id(db, current_user)
     now = datetime.now(timezone.utc)
-    # First dashboard for this user becomes default
+    # First dashboard for this user in this org becomes default
     existing_count = (
-        db.query(models.UserDashboard)
+        scope_query_to_org(db.query(models.UserDashboard), models.UserDashboard, org_id)
         .filter(models.UserDashboard.user_id == current_user.id)
         .count()
     )
     d = models.UserDashboard(
+        org_id=persisted_org_id(org_id),
         user_id=current_user.id,
         name=payload.name.strip(),
         layout=json.dumps([w.model_dump() for w in payload.layout]),
@@ -200,7 +209,8 @@ def get_dashboard(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    d = db.get(models.UserDashboard, dashboard_id)
+    org_id = resolve_request_org_id(db, current_user)
+    d = get_scoped_record(db, models.UserDashboard, dashboard_id, org_id)
     if not d or d.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Dashboard not found")
     return _serialize(d)
@@ -213,7 +223,8 @@ def update_dashboard(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    d = db.get(models.UserDashboard, dashboard_id)
+    org_id = resolve_request_org_id(db, current_user)
+    d = get_scoped_record(db, models.UserDashboard, dashboard_id, org_id)
     if not d or d.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Dashboard not found")
 
@@ -239,16 +250,17 @@ def delete_dashboard(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    d = db.get(models.UserDashboard, dashboard_id)
+    org_id = resolve_request_org_id(db, current_user)
+    d = get_scoped_record(db, models.UserDashboard, dashboard_id, org_id)
     if not d or d.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Dashboard not found")
     was_default = d.is_default
     db.delete(d)
     db.commit()
-    # Promote the most recent remaining dashboard to default
+    # Promote the most recent remaining dashboard in the same org to default
     if was_default:
         remaining = (
-            db.query(models.UserDashboard)
+            scope_query_to_org(db.query(models.UserDashboard), models.UserDashboard, org_id)
             .filter(models.UserDashboard.user_id == current_user.id)
             .order_by(models.UserDashboard.id.desc())
             .first()
@@ -266,11 +278,12 @@ def set_default_dashboard(
     current_user: models.User = Depends(get_current_user),
 ):
     """Mark this dashboard as the caller's default, clearing any previous default."""
-    target = db.get(models.UserDashboard, dashboard_id)
+    org_id = resolve_request_org_id(db, current_user)
+    target = get_scoped_record(db, models.UserDashboard, dashboard_id, org_id)
     if not target or target.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Dashboard not found")
-    # Clear existing default
-    db.query(models.UserDashboard).filter(
+    # Clear existing default within the same org scope
+    scope_query_to_org(db.query(models.UserDashboard), models.UserDashboard, org_id).filter(
         models.UserDashboard.user_id == current_user.id,
         models.UserDashboard.is_default == True,  # noqa: E712
     ).update({"is_default": False})
