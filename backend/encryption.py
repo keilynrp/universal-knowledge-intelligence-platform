@@ -106,6 +106,11 @@ def decrypt(value: Optional[str]) -> Optional[str]:
         return value
 
 
+# Backward-compatible aliases for callers that import the *_value names.
+encrypt_value = encrypt
+decrypt_value = decrypt
+
+
 def is_encrypted_with_primary(value: Optional[str]) -> bool:
     """True iff ``value`` decrypts under the primary key alone.
 
