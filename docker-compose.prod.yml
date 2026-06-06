@@ -32,8 +32,17 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY}
+      # Staged JWT rotation (EPIC-017): old signing key(s), verify-only, during the
+      # grace window. Empty => no retiring keys. Compose only passes vars it
+      # declares, so this MUST be referenced here or Dokploy's value never reaches
+      # the container. See docs/operating/SECRETS_ROTATION_RUNBOOK.md §2.
+      JWT_SECRET_KEYS_RETIRING: ${JWT_SECRET_KEYS_RETIRING:-}
       SESSION_SECRET_KEY: ${SESSION_SECRET_KEY:?Set SESSION_SECRET_KEY}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY}
+      # Staged Fernet rotation (EPIC-017): old key(s), decrypt-only, until the
+      # re-encrypt completes. Empty => no retiring keys. Must be declared here for
+      # the same reason as above. See SECRETS_ROTATION_RUNBOOK.md §1.
+      ENCRYPTION_KEYS_RETIRING: ${ENCRYPTION_KEYS_RETIRING:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://ukip.inbounduxd.com}
       FRONTEND_URL: ${FRONTEND_URL:-https://ukip.inbounduxd.com}
       SSO_CLIENT_ID: ${SSO_CLIENT_ID:-}
@@ -162,6 +171,10 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY}
       SESSION_SECRET_KEY: ${SESSION_SECRET_KEY:?Set SESSION_SECRET_KEY}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY}
+      # Required by the re-encrypt script (python -m backend.scripts.rotate_encryption):
+      # MultiFernet needs the retiring key(s) to decrypt rows still on the old key
+      # before re-encrypting them onto the primary. See SECRETS_ROTATION_RUNBOOK.md §1.
+      ENCRYPTION_KEYS_RETIRING: ${ENCRYPTION_KEYS_RETIRING:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://ukip.inbounduxd.com}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FORMAT: ${LOG_FORMAT:-json}
