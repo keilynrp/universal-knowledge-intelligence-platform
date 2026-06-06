@@ -28,7 +28,8 @@ def test_ops_checks_returns_repeatable_summary(client, auth_headers):
     assert "summary" in body
     check_ids = {check["id"] for check in body["checks"]}
     assert check_ids == {
-        "database", "migrations", "scheduled_imports", "scheduled_reports", "ops_alerting"
+        "database", "migrations", "scheduled_imports", "scheduled_reports", "ops_alerting",
+        "secrets",
     }
 
     database_check = next(check for check in body["checks"] if check["id"] == "database")
@@ -45,6 +46,9 @@ def test_ops_checks_returns_repeatable_summary(client, auth_headers):
 
     alerting_check = next(check for check in body["checks"] if check["id"] == "ops_alerting")
     assert alerting_check["status"] == "warning"
+    # The EPIC-017 `secrets` check returns `ok` under the test env (JWT_SECRET_KEY
+    # != insecure default, ENCRYPTION_KEY set, no rotation events, no retiring keys),
+    # so it adds no warning/skipped — the counts below stay valid.
     assert body["summary"]["warning"] == 1
     assert body["summary"]["skipped"] == 3
 
