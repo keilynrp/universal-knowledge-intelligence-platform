@@ -6,25 +6,6 @@ REGISTER_UPDATED_AT = "2026-06-05"
 
 ENTERPRISE_READINESS_GAPS = [
     {
-        "id": "data_lifecycle_controls",
-        "area": "privacy_governance",
-        "priority": "P0",
-        "status": "gap",
-        "title": "Data retention, export, and deletion controls are not formalized",
-        "current_state": (
-            "The platform can import, mutate, and export data, but it lacks a "
-            "policy-backed workflow for retention, subject deletion, and lifecycle evidence."
-        ),
-        "impact": (
-            "Blocks GDPR-style conversations and creates ambiguity during customer legal review."
-        ),
-        "recommendation": (
-            "Define lifecycle policy, create admin workflows for export and deletion requests, "
-            "and document evidence retained for those operations."
-        ),
-        "related_work": ["COMPLIANCE-TBD-RETENTION", "COMPLIANCE-TBD-PRIVACY"],
-    },
-    {
         "id": "secrets_rotation",
         "area": "security_operations",
         "priority": "P0",
@@ -136,6 +117,47 @@ ENTERPRISE_READINESS_GAPS = [
 
 RESOLVED_GAPS = [
     {
+        "id": "data_lifecycle_controls",
+        "area": "privacy_governance",
+        "priority": "P0",
+        "status": "resolved",
+        "title": "Data retention, export, and deletion controls are formalized",
+        "current_state": (
+            "EPIC-016 delivered a policy-backed data lifecycle: lifecycle audit "
+            "foundation, subject/tenant export (DSAR), cascade deletion (right to "
+            "erasure), and retention policy management with a scoped purge that "
+            "deletes only expired rows. Operations are super_admin-gated under "
+            "/admin/data-lifecycle/* and retain audit evidence."
+        ),
+        "impact": (
+            "Unblocks GDPR-style legal and procurement review and removes ambiguity "
+            "during customer legal due diligence."
+        ),
+        "recommendation": (
+            "Keep the RetentionPurger manual-only until env-flag gating "
+            "(RETENTION_PURGE_ENABLED) and partial-deletion coverage are added before "
+            "wiring the daily loop into the app lifespan."
+        ),
+        "related_work": [
+            "EPIC-016",
+            "US-070",
+            "US-071",
+            "US-072",
+            "US-073",
+            "COMPLIANCE-TBD-RETENTION",
+            "COMPLIANCE-TBD-PRIVACY",
+        ],
+        "resolved_at": "2026-06-05",
+        "evidence": [
+            "PR #40 (US-070 lifecycle audit foundation + policy)",
+            "PR #41 (US-071 subject/tenant export / DSAR)",
+            "PR #42 (US-072 cascade deletion / right to erasure)",
+            "PR #43 (US-073 retention policy management + purge)",
+            "PR #44 (scoped purge fix: deletes only expired rows, not whole org)",
+            "Alembic migration d4e5f6a7b8c0 (retention_policies table)",
+        ],
+    },
+    {
         "id": "tenant_isolation",
         "area": "access_control",
         "priority": "P0",
@@ -206,14 +228,9 @@ def get_enterprise_readiness_report() -> dict:
         },
         "roadmap_hooks": [
             {
-                "id": "COMPLIANCE-TBD-RETENTION",
-                "label": "Data lifecycle: retention, export, and deletion controls",
-                "why": "Top open P0; unblocks GDPR-style legal and procurement review.",
-            },
-            {
                 "id": "COMPLIANCE-TBD-SECRETS",
                 "label": "Secrets and credential rotation program",
-                "why": "Open P0; required for enterprise security posture and incident response.",
+                "why": "Top open P0; required for enterprise security posture and incident response.",
             },
             {
                 "id": "US-042",
