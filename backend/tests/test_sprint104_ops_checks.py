@@ -27,10 +27,16 @@ def test_ops_checks_returns_repeatable_summary(client, auth_headers):
     assert "checked_at" in body
     assert "summary" in body
     check_ids = {check["id"] for check in body["checks"]}
-    assert check_ids == {"database", "scheduled_imports", "scheduled_reports", "ops_alerting"}
+    assert check_ids == {
+        "database", "migrations", "scheduled_imports", "scheduled_reports", "ops_alerting"
+    }
 
     database_check = next(check for check in body["checks"] if check["id"] == "database")
     assert database_check["status"] == "ok"
+
+    # Migration drift check is skipped under tests (startup side effects disabled).
+    migrations_check = next(check for check in body["checks"] if check["id"] == "migrations")
+    assert migrations_check["status"] == "skipped"
 
     import_check = next(check for check in body["checks"] if check["id"] == "scheduled_imports")
     report_check = next(check for check in body["checks"] if check["id"] == "scheduled_reports")
@@ -40,7 +46,7 @@ def test_ops_checks_returns_repeatable_summary(client, auth_headers):
     alerting_check = next(check for check in body["checks"] if check["id"] == "ops_alerting")
     assert alerting_check["status"] == "warning"
     assert body["summary"]["warning"] == 1
-    assert body["summary"]["skipped"] == 2
+    assert body["summary"]["skipped"] == 3
 
 
 def test_ops_checks_turn_ok_when_ops_alert_channel_exists(client, auth_headers, db_session):

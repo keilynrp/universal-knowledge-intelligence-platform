@@ -56,6 +56,22 @@ if [ "${RUN_DB_MIGRATIONS_ON_START:-1}" = "1" ]; then
       exit 1
     fi
   fi
+
+  # Verify the schema actually reached head — even if 'alembic upgrade head'
+  # exited 0. Catches silent drift (partial/failed upgrade that still returned
+  # 0). Emits a greppable MIGRATION_DRIFT marker for log-based alerting; runtime
+  # drift is also reported by /ops/checks (ops.check_failed fan-out).
+  if ! python -m backend.db_revision --check; then
+    echo "============================================================" >&2
+    echo "ERROR: database schema is NOT at the latest migration head (drift)." >&2
+    echo "Starting fail-open so /health responds, but the schema is STALE." >&2
+    echo "Apply migrations via the ukip-migrate ops service." >&2
+    echo "Set MIGRATIONS_FATAL=1 to abort startup on drift instead." >&2
+    echo "============================================================" >&2
+    if [ "${MIGRATIONS_FATAL:-0}" = "1" ]; then
+      exit 1
+    fi
+  fi
 fi
 
 # One-time text normalization (fixes mojibake + inline HTML in existing entities)

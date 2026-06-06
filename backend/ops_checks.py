@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.db_revision import migration_drift
 from backend.notifications.alert_sender import dispatch_event
 from backend.routers import scheduled_imports, scheduled_reports
 
@@ -149,6 +150,54 @@ def _scheduler_check(
     )
 
 
+def _migrations_check() -> dict:
+    """Detect schema drift: is the DB behind the latest Alembic migration?
+
+    Mitigates the fail-open entrypoint (a failed `alembic upgrade head` keeps
+    the service up but leaves the schema stale). A stale schema is reported as
+    ``critical`` so the ops-check alert fan-out (ops.check_failed) fires.
+
+    Skipped when startup side effects are disabled (unit tests run against a
+    create_all() SQLite schema with no alembic_version table).
+    """
+    if not _startup_side_effects_enabled():
+        return _make_check(
+            "migrations",
+            "skipped",
+            "Migration drift check skipped because startup side effects are disabled.",
+            {"startup_side_effects_enabled": False},
+        )
+
+    from backend import database
+
+    drift = migration_drift(database.engine)
+    details = {
+        "current": drift["current"],
+        "heads": drift["heads"],
+        "error": drift["error"],
+    }
+    if drift["error"]:
+        return _make_check(
+            "migrations",
+            "critical",
+            "Could not determine the database schema migration state.",
+            details,
+        )
+    if drift["is_stale"]:
+        return _make_check(
+            "migrations",
+            "critical",
+            "Database schema is behind the latest migration — drift detected.",
+            details,
+        )
+    return _make_check(
+        "migrations",
+        "ok",
+        "Database schema is at the latest migration head.",
+        details,
+    )
+
+
 def _alert_channel_check(db: Session) -> dict:
     active_channels = db.query(models.AlertChannel).filter(
         models.AlertChannel.is_active == True,  # noqa: E712
@@ -201,6 +250,11 @@ def _recommended_actions(checks: list[dict]) -> list[str]:
     for check in checks:
         if check["id"] == "database" and check["status"] == "critical":
             actions.append("Restore database connectivity before trusting other operational signals.")
+        if check["id"] == "migrations" and check["status"] == "critical":
+            actions.append(
+                "Apply pending migrations: run the ukip-migrate ops service "
+                "(docker compose --profile ops run --rm ukip-migrate) or `alembic upgrade head`."
+            )
         if check["id"] in {"scheduled_imports", "scheduled_reports"} and check["status"] == "critical":
             actions.append(f"Restart the application or inspect the {check['id']} scheduler thread and logs.")
         if check["id"] in {"scheduled_imports", "scheduled_reports"} and check["status"] == "warning":
@@ -222,6 +276,7 @@ def run_operational_checks(db: Session) -> dict:
     now = datetime.now(timezone.utc)
     checks = [
         _db_check(db),
+        _migrations_check(),
         _scheduler_check(
             db=db,
             now=now,
