@@ -361,6 +361,27 @@ def isolate_test_state():
         post.close()
 
 
+@pytest.fixture(autouse=True)
+def _restore_auth_module():
+    """Restore backend.auth module state after tests that call importlib.reload.
+
+    Tests in test_epic017_jwt.py use monkeypatch + importlib.reload to
+    temporarily change JWT_SECRET_KEY/RETIRING keys. Without this fixture the
+    mutated module state leaks into subsequent tests, breaking tests in
+    test_auth.py that import SECRET_KEY at module load time and rely on the
+    canonical test key.
+    """
+    yield
+    # Re-set the canonical test key so the module re-reads it on reload.
+    os.environ["JWT_SECRET_KEY"] = os.environ.get(
+        "JWT_SECRET_KEY", "test-secret-key-not-for-production"
+    )
+    os.environ.pop("JWT_SECRET_KEYS_RETIRING", None)
+    import importlib
+    import backend.auth as _auth_mod
+    importlib.reload(_auth_mod)
+
+
 @pytest.fixture()
 def db_session():
     """

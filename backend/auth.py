@@ -33,6 +33,34 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("JWT_EXPIRE_MINUTES", "480"))  # 8h
 REFRESH_TOKEN_EXPIRE_MINUTES = int(os.environ.get("JWT_REFRESH_MINUTES", "10080")) # 7 days
 
+
+def _parse_secret_keys(raw):  # raw: str | None
+    if not raw:
+        return []
+    return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+# Verify-only retiring JWT keys (decode grace window during rotation).
+RETIRING_SECRET_KEYS = _parse_secret_keys(os.environ.get("JWT_SECRET_KEYS_RETIRING"))
+
+
+def _decode_token(token: str) -> dict:
+    """Decode a JWT, verifying against the primary key then each retiring key.
+
+    Raises jose.JWTError if no configured key validates the token. This is the
+    single decode path for ALL JWT verification sites.
+    """
+    keys = [SECRET_KEY, *RETIRING_SECRET_KEYS]
+    last_error: Optional[JWTError] = None
+    for key in keys:
+        try:
+            return jwt.decode(token, key, algorithms=[ALGORITHM])
+        except JWTError as exc:
+            last_error = exc
+            continue
+    raise last_error if last_error else JWTError("No JWT keys configured")
+
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
 
@@ -156,7 +184,7 @@ async def get_current_user(
 
     # ── JWT path ──────────────────────────────────────────────────────────────
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = _decode_token(token)
         username: Optional[str] = payload.get("sub")
         if not username:
             raise credentials_exc
@@ -195,7 +223,7 @@ async def get_current_user_optional(
         ).first()
 
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = _decode_token(token)
         username: Optional[str] = payload.get("sub")
         if not username:
             return None
