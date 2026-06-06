@@ -12,7 +12,7 @@ import logging
 import re
 from typing import Optional
 
-from jose import JWTError, jwt
+from jose import JWTError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
@@ -91,8 +91,8 @@ def _decode_username(authorization: Optional[str]) -> Optional[str]:
         return None
     token = authorization.split(" ", 1)[1]
     try:
-        from backend.auth import ALGORITHM, SECRET_KEY
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        from backend.auth import _decode_token
+        payload = _decode_token(token)
         return payload.get("sub")
     except JWTError:
         return None

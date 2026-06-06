@@ -19,8 +19,8 @@ from authlib.integrations.starlette_client import OAuth
 import os
 
 from backend import models, schemas
-from backend.auth import authenticate_user, create_access_token, create_refresh_token, get_current_user, require_role, SECRET_KEY, ALGORITHM, hash_password
-from jose import jwt, JWTError
+from backend.auth import authenticate_user, create_access_token, create_refresh_token, get_current_user, require_role, _decode_token, hash_password
+from jose import JWTError
 from backend.database import get_db
 from backend.routers.platform_auth_settings import get_or_create_auth_settings, sso_provider_configured
 from backend.routers.limiter import limiter
@@ -95,7 +95,7 @@ def refresh_token(request: Request, payload: RefreshTokenRequest, db: Session = 
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        token_payload = jwt.decode(payload.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        token_payload = _decode_token(payload.refresh_token)
         username = token_payload.get("sub")
         token_type = token_payload.get("type")
         if not username or token_type != "refresh":
