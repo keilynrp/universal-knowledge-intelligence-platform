@@ -49,8 +49,8 @@ def _resolve_user(token: str, db: Session) -> models.User | None:
     Validate a JWT or ukip_ API key against *db*.
     Returns the active User on success, None otherwise.
     """
-    from jose import JWTError, jwt
-    from backend.auth import SECRET_KEY, ALGORITHM
+    from jose import JWTError
+    from backend.auth import _decode_token
 
     try:
         if token.startswith("ukip_"):
@@ -63,7 +63,7 @@ def _resolve_user(token: str, db: Session) -> models.User | None:
                 models.User.is_active == True,  # noqa: E712
             ).first()
 
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = _decode_token(token)
         username: str | None = payload.get("sub")
         if not username:
             return None
