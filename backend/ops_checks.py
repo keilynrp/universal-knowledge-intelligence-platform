@@ -261,6 +261,10 @@ def _recommended_actions(checks: list[dict]) -> list[str]:
             actions.append(f"Review overdue or failed jobs for {check['id']} and inspect recent scheduler logs.")
         if check["id"] == "ops_alerting" and check["status"] == "warning":
             actions.append("Create at least one active Alert Channel subscribed to ops.check_failed.")
+        if check["id"] == "secrets" and check["status"] == "critical":
+            actions.append("Set JWT_SECRET_KEY and ENCRYPTION_KEY to strong unique values; see docs/operating/SECRETS_ROTATION_RUNBOOK.md.")
+        if check["id"] == "secrets" and check["status"] == "warning":
+            actions.append("Rotate stale secrets and/or run the re-encrypt script then drop retiring keys; see the secrets rotation runbook.")
 
     # Preserve order while dropping duplicates
     seen = set()
@@ -270,6 +274,52 @@ def _recommended_actions(checks: list[dict]) -> list[str]:
             deduped.append(action)
             seen.add(action)
     return deduped
+
+
+def _secrets_check(db: Session) -> dict:
+    """Secrets/credential rotation health (EPIC-017).
+
+    critical: JWT using the insecure default key, or no encryption key configured.
+    warning:  a tracked secret's last rotation is older than the cadence, or
+              retiring keys are still configured (encryption or JWT).
+    Reads the in-process module state (what the app actually uses), not os.environ.
+    """
+    from backend import auth, encryption, secret_rotation as sr
+
+    jwt_default = auth.SECRET_KEY == auth._INSECURE_DEFAULT_KEY
+    no_enc_key = not encryption.has_primary_key()
+    enc_retiring = sr.encryption_retiring_keys_present()
+    jwt_retiring = sr.jwt_retiring_keys_present()
+
+    now = datetime.now(timezone.utc)
+    max_age = timedelta(days=sr.SECRET_ROTATION_MAX_AGE_DAYS)
+    stale = []
+    for secret in ("ENCRYPTION_KEY", "JWT_SECRET_KEY"):
+        last = sr.last_rotation_at(db, secret)
+        if last is None:
+            continue
+        # DateTime columns come back tz-naive (SQLite/Postgres) — assume UTC.
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        if (now - last) > max_age:
+            stale.append(secret)
+
+    details = {
+        "jwt_insecure_default": jwt_default,
+        "encryption_key_configured": not no_enc_key,
+        "encryption_retiring_keys_present": enc_retiring,
+        "jwt_retiring_keys_present": jwt_retiring,
+        "stale_rotations": stale,
+        "max_age_days": sr.SECRET_ROTATION_MAX_AGE_DAYS,
+    }
+
+    if jwt_default or no_enc_key:
+        return _make_check("secrets", "critical",
+            "Insecure secret configuration detected.", details)
+    if stale or enc_retiring or jwt_retiring:
+        return _make_check("secrets", "warning",
+            "Secrets need attention (stale rotation or lingering retiring keys).", details)
+    return _make_check("secrets", "ok", "Secret keys are non-default and rotations are current.", details)
 
 
 def run_operational_checks(db: Session) -> dict:
@@ -294,6 +344,7 @@ def run_operational_checks(db: Session) -> dict:
             overdue_tolerance_seconds=scheduled_reports.SCHEDULER_POLL_SECONDS * 3,
         ),
         _alert_channel_check(db),
+        _secrets_check(db),
     ]
     status, summary = _aggregate_status(checks)
     return {
