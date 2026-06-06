@@ -1185,3 +1185,22 @@ class DataLifecycleEvent(Base):
     evidence_json = Column(Text, nullable=True)                    # JSON: per-store counts/details
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime, nullable=True)
+
+
+class SecretRotationEvent(Base):
+    """EPIC-017: append-only evidence that a secret was rotated.
+
+    Source of truth for the secrets ops health check ("when was each secret last
+    rotated"). Fingerprints are non-reversible SHA-256 truncations — never the
+    raw key.
+    """
+    __tablename__ = "secret_rotation_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    secret_name = Column(String(60), nullable=False, index=True)   # ENCRYPTION_KEY | JWT_SECRET_KEY
+    rotated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    operator = Column(String(120), nullable=False)
+    rows_reencrypted = Column(Integer, nullable=True)
+    old_key_fingerprint = Column(String(40), nullable=True)
+    new_key_fingerprint = Column(String(40), nullable=True)
+    notes = Column(Text, nullable=True)

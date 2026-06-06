@@ -257,6 +257,8 @@ def viewer_headers():
 # ── DB cleanup (function-scoped) ────────────────────────────────────────────
 
 _TABLES_TO_CLEAN = [
+    # EPIC-017: secret rotation evidence — clean first (no FK deps)
+    "secret_rotation_events",
     # EPIC-016: lifecycle + retention — clean before organizations
     "retention_policies",
     "data_lifecycle_events",
