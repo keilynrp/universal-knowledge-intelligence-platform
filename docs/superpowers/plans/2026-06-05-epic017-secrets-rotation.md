@@ -230,11 +230,10 @@ def is_encrypted_with_primary(value: Optional[str]) -> bool:
     """
     if not _primary_fernet or not value:
         return False
-    from cryptography.fernet import InvalidToken
     try:
         _primary_fernet.decrypt(value.encode())
         return True
-    except (InvalidToken, Exception):
+    except Exception:
         return False
 
 
@@ -389,7 +388,7 @@ git commit -m "feat: EPIC-017 Slice 2 — JWT multi-key verify (_decode_token)"
 
 **Files:** Modify `backend/audit.py:95`, `backend/routers/auth_users.py:98`, `backend/routers/ws.py:66`.
 
-- [ ] **Step 1:** In each file, replace `jwt.decode(<token>, SECRET_KEY, algorithms=[ALGORITHM])` with `from backend.auth import _decode_token` (top-level import) and `_decode_token(<token>)`. Keep surrounding `try/except JWTError` blocks. Confirm none remain on the single-key path:
+- [ ] **Step 1:** In each file, replace `jwt.decode(<token>, SECRET_KEY, algorithms=[ALGORITHM])` with `from backend.auth import _decode_token` (top-level import) and `_decode_token(<token>)`. Keep surrounding `try/except JWTError` blocks. **Note `auth_users.py:98`** decodes `payload.refresh_token` (not a bare `token`) inside the `/auth/refresh` endpoint — preserve the existing `token_type != "refresh"` validation that follows the decode; only the `jwt.decode(...)` call changes. Confirm none remain on the single-key path:
 
 Run: `.venv/Scripts/python -m pytest -q` then
 `grep -rn "jwt.decode" backend --include=*.py | grep -v tests | grep -v "def _decode_token"`
@@ -693,7 +692,8 @@ def test_reencrypts_only_non_primary_rows_and_records_evidence(db_session, monke
     monkeypatch.delenv("ENCRYPTION_KEYS_RETIRING", raising=False)
     import backend.encryption as enc
     importlib.reload(enc)
-    integ = models.AIIntegration(name="x", provider="openai", api_key=enc.encrypt("sk-secret"))
+    integ = models.AIIntegration(provider_name="openai", model_name="gpt-4o",
+                                 api_key=enc.encrypt("sk-secret"), is_active=True)
     db_session.add(integ); db_session.commit()
 
     # Rotate env: new primary, old retiring.
@@ -726,7 +726,8 @@ def test_dry_run_writes_nothing(db_session, monkeypatch):
     old = Fernet.generate_key().decode(); new = Fernet.generate_key().decode()
     monkeypatch.setenv("ENCRYPTION_KEY", old)
     import backend.encryption as enc; importlib.reload(enc)
-    db_session.add(models.AIIntegration(name="y", provider="openai", api_key=enc.encrypt("v")))
+    db_session.add(models.AIIntegration(provider_name="openai", model_name="gpt-4o",
+                                        api_key=enc.encrypt("v"), is_active=True))
     db_session.commit()
     monkeypatch.setenv("ENCRYPTION_KEY", new); monkeypatch.setenv("ENCRYPTION_KEYS_RETIRING", old)
     importlib.reload(enc)
@@ -736,7 +737,11 @@ def test_dry_run_writes_nothing(db_session, monkeypatch):
     assert db_session.query(models.SecretRotationEvent).count() == 0  # but wrote no evidence
 ```
 
-> Note: `AIIntegration`/`StoreConnection` constructor field names must match the model. If a NOT NULL column is missing in the test seed, add the minimal required fields (read `backend/models.py`).
+> Note: `AIIntegration` columns are `provider_name` (unique), `base_url`, `api_key`,
+> `model_name`, `is_active`, `created_at` — there is no `name`/`provider` field
+> (verified in `backend/models.py:236-249`). `provider_name` is UNIQUE, so within a
+> single test do not seed two rows with the same `provider_name`. Match real field
+> names for any `StoreConnection` seed too.
 
 - [ ] **Step 2: Run to verify failure.** Expected: FAIL (module missing).
 
@@ -771,14 +776,18 @@ _ADVISORY_LOCK_KEY = 0x55_4B_49_50_17  # "UKIP" + 0x17 (EPIC-017)
 
 
 def _try_advisory_lock(db: Session) -> bool:
-    """Postgres advisory lock; no-op True on SQLite (tests)."""
-    if db.bind.dialect.name != "postgresql":
+    """Postgres advisory lock; no-op True on SQLite (tests).
+
+    Use db.get_bind() (robust) rather than db.bind, which can be None on sessions
+    that resolve their bind at query time.
+    """
+    if db.get_bind().dialect.name != "postgresql":
         return True
     return bool(db.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": _ADVISORY_LOCK_KEY}).scalar())
 
 
 def _release_advisory_lock(db: Session) -> None:
-    if db.bind.dialect.name == "postgresql":
+    if db.get_bind().dialect.name == "postgresql":
         db.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": _ADVISORY_LOCK_KEY})
 
 
@@ -848,7 +857,8 @@ if __name__ == "__main__":
 - [ ] **Step 4: Run tests to verify pass**
 
 Run: `.venv/Scripts/python -m pytest backend/tests/test_epic017_reencrypt_script.py -v`
-Expected: PASS (3 tests). If `db.bind` is None under the test session, use `db.get_bind()` in the lock helpers.
+Expected: PASS (3 tests). The lock helpers use `db.get_bind()` (robust against a
+`None` `db.bind`).
 
 - [ ] **Step 5: Commit + PR**
 
@@ -974,7 +984,7 @@ Wire it into `run_operational_checks` (add `_secrets_check(db),` to the `checks`
 - [ ] **Step 4: Run tests to verify pass**
 
 Run: `.venv/Scripts/python -m pytest backend/tests/test_epic017_secrets_check.py backend/tests/test_sprint104_ops_checks.py -v`
-Expected: PASS. (If the existing ops-checks test asserts an exact check count, update it to include `secrets`.)
+Expected: PASS — **but first update `test_sprint104_ops_checks.py`**: its assertion does **set equality** on the check ids (`{"database","migrations","scheduled_imports","scheduled_reports","ops_alerting"}`); add `"secrets"` to that expected set. The `summary` status counts in that test (`warning == 1`, `skipped == 3`) stay valid because under the test env (`JWT_SECRET_KEY` ≠ insecure default, `ENCRYPTION_KEY` set, no rotation events, no retiring keys) `_secrets_check` returns `ok` — note this in the test so the dependency is explicit.
 
 - [ ] **Step 5: Commit**
 
