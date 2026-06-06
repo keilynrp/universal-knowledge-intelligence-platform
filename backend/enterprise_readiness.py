@@ -6,24 +6,6 @@ REGISTER_UPDATED_AT = "2026-06-05"
 
 ENTERPRISE_READINESS_GAPS = [
     {
-        "id": "secrets_rotation",
-        "area": "security_operations",
-        "priority": "P0",
-        "status": "partial",
-        "title": "Secrets and credentials lack a documented rotation program",
-        "current_state": (
-            "Secrets are configurable and some sensitive values are encrypted at rest, "
-            "but there is no documented rotation cadence, dual-key rollout, or audit workflow."
-        ),
-        "impact": (
-            "Weakens enterprise security posture and slows incident response after credential exposure."
-        ),
-        "recommendation": (
-            "Add rotation runbooks, ownership, staged secret rollover, and evidence that rotations occurred."
-        ),
-        "related_work": ["COMPLIANCE-TBD-SECRETS"],
-    },
-    {
         "id": "audit_evidence_pack",
         "area": "auditability",
         "priority": "P1",
@@ -116,6 +98,36 @@ ENTERPRISE_READINESS_GAPS = [
 
 
 RESOLVED_GAPS = [
+    {
+        "id": "secrets_rotation",
+        "area": "security_operations",
+        "priority": "P0",
+        "status": "resolved",
+        "title": "Secrets and credentials have a documented rotation program",
+        "current_state": (
+            "EPIC-017 delivered zero-downtime staged dual-key rotation for "
+            "ENCRYPTION_KEY (MultiFernet + eager re-encrypt) and JWT_SECRET_KEY "
+            "(multi-key verify), a secret_rotation_events evidence trail, a secrets "
+            "ops health check, and a rotation runbook with ownership and cadence."
+        ),
+        "impact": (
+            "Closes the last open P0 — strengthens enterprise security posture and "
+            "speeds incident response after credential exposure."
+        ),
+        "recommendation": (
+            "Follow the 90-day cadence in docs/operating/SECRETS_ROTATION_RUNBOOK.md; "
+            "verify each rotation via /ops/checks and the secret_rotation_events table."
+        ),
+        "related_work": ["EPIC-017", "COMPLIANCE-TBD-SECRETS"],
+        "resolved_at": "2026-06-05",
+        "evidence": [
+            "Slice 1 (MultiFernet core)",
+            "Slice 2 (JWT multi-key verify)",
+            "Slice 3 (evidence table + re-encrypt script)",
+            "Slice 4 (ops check + runbook + register)",
+            "Alembic migration e5f6a7b8c0d1 (secret_rotation_events)",
+        ],
+    },
     {
         "id": "data_lifecycle_controls",
         "area": "privacy_governance",
@@ -227,11 +239,6 @@ def get_enterprise_readiness_report() -> dict:
             "resolved_count": len(resolved),
         },
         "roadmap_hooks": [
-            {
-                "id": "COMPLIANCE-TBD-SECRETS",
-                "label": "Secrets and credential rotation program",
-                "why": "Top open P0; required for enterprise security posture and incident response.",
-            },
             {
                 "id": "US-042",
                 "label": "Background job externalization plan",
