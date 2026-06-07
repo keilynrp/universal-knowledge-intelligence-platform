@@ -1,11 +1,12 @@
 "use client";
 
+import type { ReactNode } from "react";
 import DeltaBadge from "./DeltaBadge";
 
 interface StatCardProps {
   icon: React.ReactNode;
   iconColor?: "blue" | "emerald" | "amber" | "violet" | "red" | "gray";
-  label: string;
+  label: ReactNode;
   value: string | number;
   trend?: {
     value: string;

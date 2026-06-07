@@ -13,7 +13,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { ErrorBanner, SkeletonCard, useToast } from "../../components/ui";
+import { ConceptTooltip, ErrorBanner, SkeletonCard, useToast } from "../../components/ui";
 import ConceptCloud from "../../components/ConceptCloud";
 import DerivedStatusPanel from "../../components/DerivedStatusPanel";
 import EnrichmentSchedulerCard from "../../components/EnrichmentSchedulerCard";
@@ -333,7 +333,7 @@ function StoryMetricCard({
   footer,
 }: {
   icon: NarrativeIconName;
-  label: string;
+  label: ReactNode;
   value: ReactNode;
   description: string;
   tone?: "violet" | "emerald" | "amber" | "cyan";
@@ -1329,7 +1329,7 @@ export default function ExecutiveDashboardPage() {
             <StoryMetricCard
               icon="route"
               tone="cyan"
-              label={tr("page.exec_dashboard.kpi.total_entities", "Total Entities")}
+              label={<ConceptTooltip concept="entity">{tr("page.exec_dashboard.kpi.total_entities", "Total Entities")}</ConceptTooltip>}
               value={data.kpis.total_entities.toLocaleString()}
               description={tr("page.exec_dashboard.volume_signal", "Volume")}
             />

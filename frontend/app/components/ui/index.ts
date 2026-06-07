@@ -18,6 +18,7 @@ export type { ToastVariant } from "./Toast";
 export { default as EmptyState } from "./EmptyState";
 export { default as ErrorBanner } from "./ErrorBanner";
 export { default as QualityBadge } from "./QualityBadge";
+export { default as ConceptTooltip } from "./ConceptTooltip";
 export {
   SkeletonText,
   SkeletonAvatar,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
@@ -15,7 +15,7 @@ import {
 import { useDomain } from "../../contexts/DomainContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { apiFetch } from "@/lib/api";
-import { SkeletonList, ErrorBanner, EmptyState as UiEmptyState } from "../../components/ui";
+import { ConceptTooltip, SkeletonList, ErrorBanner, EmptyState as UiEmptyState } from "../../components/ui";
 import { flagEmoji } from "./countryMeta";
 
 // Lazy-load WorldMap so d3-geo + the atlas (~140 KB gz) only ship to this page.
@@ -73,7 +73,7 @@ const SORT_OPTIONS = [
 const MAP_W = 1000;
 const MAP_H = 500;
 
-function KpiCard({ label, value, accent }: { label: string; value: string; accent: string }) {
+function KpiCard({ label, value, accent }: { label: ReactNode; value: string; accent: string }) {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white px-5 py-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
       <div className={`absolute inset-x-0 top-0 h-0.5 ${accent}`} />
@@ -344,7 +344,7 @@ export default function GeographicPage() {
             }`}
           >
             <KpiCard
-              label={t("page.geographic.entities")}
+              label={<ConceptTooltip concept="entity">{t("page.geographic.entities")}</ConceptTooltip>}
               value={data.total_entities.toLocaleString()}
               accent="bg-blue-500"
             />
