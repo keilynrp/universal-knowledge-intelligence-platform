@@ -26,6 +26,20 @@ describe("design-token audit", () => {
     expect(result.duplicates).toEqual(["--ukip-space-4"]);
   });
 
+  it("ignores commented-out token declarations", () => {
+    const result = auditTokenText(`
+      :root {
+        --ukip-bg: white;
+        /*
+        --ukip-bg: oldlace;
+        */
+      }
+    `);
+
+    expect(result.declarations).toEqual(["--ukip-bg"]);
+    expect(result.duplicates).toEqual([]);
+  });
+
   it("detects gradient, fill, and stroke color utilities", () => {
     const matches = findHardcodedColorClasses(
       "from-violet-500 via-cyan-400 to-blue-600 fill-red-500 stroke-emerald-600",
@@ -46,6 +60,14 @@ describe("design-token audit", () => {
     );
 
     expect(matches).toEqual([]);
+  });
+
+  it("requires a complete Tailwind color class boundary", () => {
+    const matches = findHardcodedColorClasses(
+      "text-red-500ish bg-blue-600_button text-red-500 bg-blue-600/20",
+    );
+
+    expect(matches).toEqual(["text-red-500", "bg-blue-600/20"]);
   });
 
   it("reports declarations, duplicates, and hardcoded UI color families", async () => {

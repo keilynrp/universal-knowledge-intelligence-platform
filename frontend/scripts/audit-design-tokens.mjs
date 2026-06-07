@@ -5,21 +5,23 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TOKEN_FILE = path.join(ROOT, "app", "styles", "tokens.css");
 const UI_DIR = path.join(ROOT, "app", "components", "ui");
+const CSS_BLOCK_COMMENT_RE = /\/\*[\s\S]*?\*\//g;
 const TOKEN_RE = /^\s*(--ukip-[a-z0-9-]+):/gm;
 const CSS_BLOCK_RE = /([^{}]+)\{([^{}]*)\}/g;
 const TAILWIND_COLOR_FAMILIES =
   "slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose";
 const HARDCODED_RE =
   new RegExp(
-    `\\b(?:bg|text|border|ring|shadow|from|via|to|fill|stroke|outline|divide|decoration)-(?:${TAILWIND_COLOR_FAMILIES})-[0-9]+(?:\\/[0-9]+)?`,
+    `\\b(?:bg|text|border|ring|shadow|from|via|to|fill|stroke|outline|divide|decoration)-(?:${TAILWIND_COLOR_FAMILIES})-[0-9]+(?:\\/[0-9]+)?(?![a-zA-Z0-9_/-])`,
     "g",
   );
 
 export function auditTokenText(css) {
-  const declarations = [...css.matchAll(TOKEN_RE)].map((match) => match[1]);
+  const activeCss = css.replace(CSS_BLOCK_COMMENT_RE, "");
+  const declarations = [...activeCss.matchAll(TOKEN_RE)].map((match) => match[1]);
   const duplicateTokens = new Set();
 
-  for (const match of css.matchAll(CSS_BLOCK_RE)) {
+  for (const match of activeCss.matchAll(CSS_BLOCK_RE)) {
     const scopeTokens = [...match[2].matchAll(TOKEN_RE)].map((tokenMatch) => tokenMatch[1]);
     const scopeCounts = new Map();
     for (const token of scopeTokens) scopeCounts.set(token, (scopeCounts.get(token) ?? 0) + 1);
