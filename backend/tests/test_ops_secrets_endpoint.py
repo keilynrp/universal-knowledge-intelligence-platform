@@ -28,3 +28,27 @@ def test_list_rotation_events_newest_first_and_limit(db_session):
     limited = sr.list_rotation_events(db_session, limit=1)
     assert len(limited) == 1
     assert limited[0].operator == "new"
+
+
+def test_secrets_overview_admin_ok(client, auth_headers, db_session):
+    _seed_event(db_session, operator="keilyn")
+    resp = client.get("/ops/secrets", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["check"]["id"] == "secrets"
+    assert body["check"]["status"] in {"ok", "warning", "critical"}
+    assert "encryption_key_configured" in body["check"]["details"]
+    assert any(e["operator"] == "keilyn" for e in body["events"])
+    ev = body["events"][0]
+    assert {"secret_name", "rotated_at", "rows_reencrypted",
+            "old_key_fingerprint", "new_key_fingerprint"} <= set(ev.keys())
+
+
+def test_secrets_overview_forbidden_for_editor(client, editor_headers):
+    resp = client.get("/ops/secrets", headers=editor_headers)
+    assert resp.status_code == 403
+
+
+def test_secrets_overview_forbidden_for_viewer(client, viewer_headers):
+    resp = client.get("/ops/secrets", headers=viewer_headers)
+    assert resp.status_code == 403
