@@ -9,7 +9,7 @@ import GuidedTour, { resetTour } from "./components/GuidedTour";
 import WelcomeModal from "./components/WelcomeModal";
 import ScientificIntelligenceCommandCenter from "./components/ScientificIntelligenceCommandCenter";
 import { AdaptiveNarrativeBlock, DashboardInsightMetrics } from "./components/ukip";
-import { KpiSummaryCard } from "./components/ui";
+import { EntityConcept, KpiSummaryCard } from "./components/ui";
 import DerivedStatusPanel from "./components/DerivedStatusPanel";
 import { apiFetch } from "../lib/api";
 import { useAuth } from "./contexts/AuthContext";
@@ -284,24 +284,28 @@ export default function Home() {
   const pipelineProgress = clampPercent(((pipelineCompleted + (pipelineCurrentStage.status === "current" ? 0.5 : 0)) / pipelineStages.length) * 100);
   const metricCards = [
     {
-      label: tr("page.home.metric_total_entities", "Entidades"),
+      id: "total-entities",
+      label: <EntityConcept>{tr("page.home.metric_total_entities", "Entidades")}</EntityConcept>,
       value: stats?.total_entities?.toLocaleString() ?? "—",
       tone: "violet" as const,
       icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
     },
     {
+      id: "enrichment",
       label: tr("page.home.metric_enrichment_coverage", "Enriquecimiento"),
       value: hasEntities ? `${Math.round(enrichPct)}%` : "—",
       tone: "sky" as const,
       icon: "M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z",
     },
     {
-      label: tr("page.home.metric_entity_types", "Tipos de entidad"),
+      id: "entity-types",
+      label: <EntityConcept>{tr("page.home.metric_entity_types", "Tipos de entidad")}</EntityConcept>,
       value: stats?.unique_entity_types?.toLocaleString() ?? "—",
       tone: "violet" as const,
       icon: "M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z",
     },
     {
+      id: "domains",
       label: tr("page.home.metric_active_domains", "Dominios activos"),
       value: domainCount > 0 ? domainCount.toLocaleString() : "—",
       tone: "sky" as const,
@@ -574,7 +578,7 @@ export default function Home() {
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {metricCards.map((metric) => (
             <KpiSummaryCard
-              key={metric.label}
+              key={metric.id}
               label={metric.label}
               value={metric.value}
               icon={<MetricIcon path={metric.icon} />}

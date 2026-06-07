@@ -2,7 +2,7 @@
 
 import type { DomainAttribute, DomainSchema } from "../contexts/DomainContext";
 import { useLanguage } from "../contexts/LanguageContext";
-import { ConceptTooltip } from "../components/ui";
+import { EntityConcept } from "../components/ui";
 import type { QueueSummary } from "./reviewQueueTypes";
 import { getEntityTypeLabel, getRouteLabel } from "./reviewQueueI18n";
 
@@ -125,10 +125,14 @@ export default function ReviewQueueControls({
                             </select>
                         </div>
                         <div className="min-w-[130px]">
-                            <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">
-                                <ConceptTooltip concept="entity">{t("page.authority.entity_type")}</ConceptTooltip>
-                            </label>
+                            <div className="mb-1 flex items-center gap-1">
+                                <label htmlFor="authority-batch-entity-type" className="block text-xs text-gray-500 dark:text-gray-400">
+                                    {t("page.authority.entity_type")}
+                                </label>
+                                <EntityConcept><span className="sr-only">{t("page.authority.entity_type")}</span></EntityConcept>
+                            </div>
                             <select
+                                id="authority-batch-entity-type"
                                 value={batchEntityType}
                                 onChange={e => onBatchEntityTypeChange(e.target.value)}
                                 className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"

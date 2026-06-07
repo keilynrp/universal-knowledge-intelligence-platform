@@ -15,7 +15,7 @@ import {
 import { useDomain } from "../../contexts/DomainContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { apiFetch } from "@/lib/api";
-import { ConceptTooltip, SkeletonList, ErrorBanner, EmptyState as UiEmptyState } from "../../components/ui";
+import { EntityConcept, SkeletonList, ErrorBanner, EmptyState as UiEmptyState } from "../../components/ui";
 import { flagEmoji } from "./countryMeta";
 
 // Lazy-load WorldMap so d3-geo + the atlas (~140 KB gz) only ship to this page.
@@ -344,7 +344,7 @@ export default function GeographicPage() {
             }`}
           >
             <KpiCard
-              label={<ConceptTooltip concept="entity">{t("page.geographic.entities")}</ConceptTooltip>}
+              label={<EntityConcept>{t("page.geographic.entities")}</EntityConcept>}
               value={data.total_entities.toLocaleString()}
               accent="bg-blue-500"
             />
@@ -476,7 +476,7 @@ export default function GeographicPage() {
                   <div className="grid grid-cols-2 gap-3 px-5 py-4">
                     <div>
                       <p className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                        {t("page.geographic.entities")}
+                        <EntityConcept>{t("page.geographic.entities")}</EntityConcept>
                       </p>
                       <p className="mt-1 text-xl font-semibold tabular-nums text-gray-900 dark:text-white">
                         {(selectedCountry?.entity_count ?? detail?.total_entities ?? 0).toLocaleString()}
@@ -570,7 +570,9 @@ export default function GeographicPage() {
                 <span>#</span>
                 <span>{t("page.geographic.country")}</span>
                 <span>{t("page.geographic.distribution") || "Distribution"}</span>
-                <span className="text-right">{t("page.geographic.entities")}</span>
+                <span className="text-right">
+                  <EntityConcept>{t("page.geographic.entities")}</EntityConcept>
+                </span>
                 <span className="text-right">{t("page.geographic.citations")}</span>
                 <span className="text-right">{t("page.geographic.percentage")}</span>
               </div>

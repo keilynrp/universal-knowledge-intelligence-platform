@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { EntityConcept } from "../../components/ui";
 
 // ── Standalone embed page — no auth, no sidebar ────────────────────────────
 // Rendered at /embed/{token} — consumer sites can iframe this URL directly.
@@ -30,7 +31,9 @@ function EntityStatsView({ data }: { data: Record<string, unknown> }) {
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-center">
           <p className="text-2xl font-bold text-blue-700">{total ?? 0}</p>
-          <p className="text-xs text-blue-500 mt-1">Total Entities</p>
+          <p className="mt-1 text-xs text-blue-500">
+            <EntityConcept>Total Entities</EntityConcept>
+          </p>
         </div>
         <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-3 text-center">
           <p className="text-2xl font-bold text-emerald-700">{enriched ?? 0}</p>

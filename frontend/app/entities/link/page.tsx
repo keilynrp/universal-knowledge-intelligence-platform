@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import { PageHeader, Badge } from "../../components/ui";
+import { PageHeader, Badge, EntityConcept } from "../../components/ui";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -46,7 +46,7 @@ const DISPLAY_FIELDS: Array<{ key: keyof EntitySnap; label: string }> = [
   { key: "entity_type",     label: "Entity Type"     },
 ];
 
-function FieldRow({ label, valA, valB }: { label: string; valA: string | null; valB: string | null }) {
+function FieldRow({ label, valA, valB }: { label: ReactNode; valA: string | null; valB: string | null }) {
   const diff = (valA || "") !== (valB || "");
   return (
     <tr className={diff ? "bg-amber-50/40 dark:bg-amber-500/5" : ""}>
@@ -161,7 +161,7 @@ function CandidateCard({
             {DISPLAY_FIELDS.map(({ key, label }) => (
               <FieldRow
                 key={key}
-                label={label}
+                label={key === "entity_type" ? <EntityConcept>{label}</EntityConcept> : label}
                 valA={entity_a[key] as string | null}
                 valB={entity_b[key] as string | null}
               />

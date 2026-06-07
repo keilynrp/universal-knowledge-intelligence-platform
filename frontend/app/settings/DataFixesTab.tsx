@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { apiFetch } from "@/lib/api";
 import type { ToastVariant } from "../components/ui";
+import { EntityConcept } from "../components/ui";
 
 type CanonicalIdentityResult = {
   mode: "dry-run" | "applied";
@@ -14,7 +15,7 @@ type CanonicalIdentityResult = {
 
 type OnlyField = "" | "canonical_id" | "entity_type";
 
-function ResultMetric({ label, value }: { label: string; value: number | string }) {
+function ResultMetric({ label, value }: { label: ReactNode; value: number | string }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-950/40">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">
@@ -173,7 +174,7 @@ export default function DataFixesTab({
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <ResultMetric label="Escaneados" value={lastResult.scanned} />
               <ResultMetric label="ID canonico" value={lastResult.fixed_canonical_id} />
-              <ResultMetric label="Tipo entidad" value={lastResult.fixed_entity_type} />
+              <ResultMetric label={<EntityConcept>Tipo entidad</EntityConcept>} value={lastResult.fixed_entity_type} />
               <ResultMetric label="Duplicados omitidos" value={lastResult.skipped_duplicates} />
             </div>
           ) : (

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useLanguage } from "../contexts/LanguageContext";
+import { EntityConcept } from "../components/ui";
 
 const smallTrend = [
   { x: 0, y: 22 },
@@ -227,7 +228,7 @@ function StatCard({ label, value, helper, badge }: { label: string; value: strin
   );
 }
 
-function MiniMetric({ icon, value, label, helper, tone }: { icon: string; value: string; label: string; helper: string; tone: string }) {
+function MiniMetric({ icon, value, label, helper, tone }: { icon: string; value: string; label: ReactNode; helper: string; tone: string }) {
   return (
     <Card className="p-5">
       <div className={`mb-5 flex h-10 w-10 items-center justify-center rounded-lg ${tone}`}>
@@ -370,7 +371,7 @@ export default function DashboardsPage() {
         </Card>
 
         <div className="grid gap-4 lg:grid-cols-4">
-          <MiniMetric icon="M9 12h6m-6 4h6M8 4h8a2 2 0 012 2v12a2 2 0 01-2 2H8a2 2 0 01-2-2V6a2 2 0 012-2z" value="497" label={t("dashboard_showcase.entities")} helper={t("dashboard_showcase.total_identified")} tone="bg-blue-50 text-blue-600" />
+          <MiniMetric icon="M9 12h6m-6 4h6M8 4h8a2 2 0 012 2v12a2 2 0 01-2 2H8a2 2 0 01-2-2V6a2 2 0 012-2z" value="497" label={<EntityConcept>{t("dashboard_showcase.entities")}</EntityConcept>} helper={t("dashboard_showcase.total_identified")} tone="bg-blue-50 text-blue-600" />
           <MiniMetric icon="M4 19V9m5 10V5m5 14v-7m5 7V8" value="2303.4" label={t("dashboard_showcase.avg_citations")} helper={t("dashboard_showcase.avg_impact")} tone="bg-violet-50 text-violet-600" />
           <MiniMetric icon="M12 21s-7.5-4.35-7.5-10.5A4.5 4.5 0 0112 7.1a4.5 4.5 0 017.5 3.4C19.5 16.65 12 21 12 21z" value="1923" label={t("dashboard_showcase.distinct_concepts")} helper={t("dashboard_showcase.conceptual_diversity")} tone="bg-orange-50 text-orange-500" />
           <Card className="p-5">
@@ -425,7 +426,9 @@ export default function DashboardsPage() {
         </div>
 
         <Card className="p-5">
-          <h2 className="text-lg font-semibold text-slate-950">{t("dashboard_showcase.entities_over_time")}</h2>
+          <h2 className="text-lg font-semibold text-slate-950">
+            <EntityConcept>{t("dashboard_showcase.entities_over_time")}</EntityConcept>
+          </h2>
           <Label tone="blue">{t("dashboard_showcase.temporal_signal")}</Label>
           <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_240px]">
             <div className="h-72">
@@ -478,10 +481,10 @@ export default function DashboardsPage() {
         </div>
 
         <Card className="p-5">
-          <div className="flex items-center justify-between"><div><h2 className="text-lg font-semibold text-slate-950">{t("dashboard_showcase.top_entities_impact")}</h2><Label tone="blue">{t("dashboard_showcase.impact_rank")}</Label></div><button className="text-sm font-semibold text-violet-600">{t("dashboard_showcase.view_full_ranking")}</button></div>
+          <div className="flex items-center justify-between"><div><h2 className="text-lg font-semibold text-slate-950"><EntityConcept>{t("dashboard_showcase.top_entities_impact")}</EntityConcept></h2><Label tone="blue">{t("dashboard_showcase.impact_rank")}</Label></div><button className="text-sm font-semibold text-violet-600">{t("dashboard_showcase.view_full_ranking")}</button></div>
           <div className="mt-5 overflow-hidden rounded-xl border border-[var(--ukip-border)]">
             <table className="w-full text-left text-sm">
-              <thead className="bg-white text-xs text-slate-500"><tr>{["#", t("dashboard_showcase.col_entity"), t("dashboard_showcase.col_primary_label"), t("dashboard_showcase.col_citations"), t("dashboard_showcase.col_source")].map((h) => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}</tr></thead>
+              <thead className="bg-white text-xs text-slate-500"><tr><th className="px-4 py-3 font-medium">#</th><th className="px-4 py-3 font-medium"><EntityConcept>{t("dashboard_showcase.col_entity")}</EntityConcept></th>{[t("dashboard_showcase.col_primary_label"), t("dashboard_showcase.col_citations"), t("dashboard_showcase.col_source")].map((h) => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}</tr></thead>
               <tbody>{impactRows.map((row) => <tr key={row[0]} className="border-t border-[var(--ukip-border)]">{row.map((cell, index) => <td key={index} className={`px-4 py-4 ${index === 1 ? "font-semibold text-slate-800" : index === 3 ? "font-semibold text-violet-600" : "text-slate-600"}`}>{index === 4 ? <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-600">{cell}</span> : cell}</td>)}</tr>)}</tbody>
             </table>
           </div>

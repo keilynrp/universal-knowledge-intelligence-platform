@@ -7,6 +7,7 @@ import MonteCarloChart from "./MonteCarloChart";
 import { EnrichmentFailureDetails, parseEnrichmentFailure, FailureReasonBadge } from "./EnrichmentFailurePanel";
 import { apiFetch } from "@/lib/api";
 import type { Entity } from "./EntityTable.types";
+import { EntityConcept } from "./ui";
 
 export interface EntityTableDetailsModalProps {
     entity: Entity | null;
@@ -978,17 +979,18 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
 
     const coreFields = activeDomain
         ? activeDomain.attributes.filter((attribute) => attribute.is_core).map((attribute) => ({
+            key: attribute.name,
             label: CORE_FIELD_LABEL_KEYS[attribute.name] ? t(CORE_FIELD_LABEL_KEYS[attribute.name]) : attribute.label,
             value: attribute.name === "entity_type"
                 ? resolvedEntityType
                 : resolveDomainAttributeValue(entity, mergedExtendedAttributes, attribute.name),
           }))
         : [
-            { label: t("entities.primary_label"), value: entity.primary_label },
-            { label: t("page.import.field.secondary_label"), value: entity.secondary_label },
-            { label: t("page.import.field.canonical_id"), value: entity.canonical_id },
-            { label: t("page.import.field.entity_type"), value: resolvedEntityType },
-            { label: t("page.import.field.domain"), value: entity.domain },
+            { key: "primary_label", label: t("entities.primary_label"), value: entity.primary_label },
+            { key: "secondary_label", label: t("page.import.field.secondary_label"), value: entity.secondary_label },
+            { key: "canonical_id", label: t("page.import.field.canonical_id"), value: entity.canonical_id },
+            { key: "entity_type", label: t("page.import.field.entity_type"), value: resolvedEntityType },
+            { key: "domain", label: t("page.import.field.domain"), value: entity.domain },
         ];
 
     const systemFields = SYSTEM_FIELDS.map((field) => ({
@@ -1064,8 +1066,10 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
                             <h3 className="mb-4 text-sm font-semibold text-gray-900 dark:text-white">{t("page.entity_table.section_core")}</h3>
                             <div className="grid grid-cols-1 gap-x-8 gap-y-4 md:grid-cols-2">
                                 {coreFields.map((field) => (
-                                    <div key={field.label} className="flex flex-col gap-1 border-b border-gray-50 pb-2 dark:border-gray-800/50">
-                                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{field.label}</span>
+                                    <div key={field.key} className="flex flex-col gap-1 border-b border-gray-50 pb-2 dark:border-gray-800/50">
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                            {field.key === "entity_type" ? <EntityConcept>{field.label}</EntityConcept> : field.label}
+                                        </span>
                                         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                             {formatValue(field.value, t("common.no_data"))}
                                         </span>

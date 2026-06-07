@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useDomain } from "../contexts/DomainContext";
 import { useAuth } from "../contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { useToast } from "./ui";
+import { EntityConcept, useToast } from "./ui";
 import { useLanguage } from "../contexts/LanguageContext";
 import DisambiguationGroupCard from "./DisambiguationGroupCard";
 
@@ -269,10 +269,14 @@ export default function DisambiguationTool() {
                         </select>
                     </div>
                     <div className="min-w-[180px]">
-                        <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                            {t('disambiguation.entity_type_label')}
-                        </label>
+                        <div className="mb-1.5 flex items-center gap-1">
+                            <label htmlFor="disambiguation-entity-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                {t('disambiguation.entity_type_label')}
+                            </label>
+                            <EntityConcept><span className="sr-only">{t('disambiguation.entity_type_label')}</span></EntityConcept>
+                        </div>
                         <select
+                            id="disambiguation-entity-type"
                             value={entityType}
                             onChange={(e) => setEntityType(e.target.value)}
                             className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"

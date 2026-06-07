@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "../../lib/api";
 import { STATUS_COLORS, type WorkflowRun } from "./workflowTypes";
 import { formatDateTime } from "../lib/dateFormat";
+import { EntityConcept } from "../components/ui";
 
 export function RunHistoryPanel({ workflowId, onClose }: { workflowId: number; onClose: () => void }) {
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
@@ -124,8 +125,12 @@ export function ManualRunDialog({
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">Manual Run</h2>
         {!result ? (
           <>
-            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Entity ID</label>
+            <div className="mb-1 flex items-center gap-1">
+              <label htmlFor="manual-run-entity-id" className="block text-sm font-medium text-slate-700 dark:text-slate-200">Entity ID</label>
+              <EntityConcept><span className="sr-only">Entity ID</span></EntityConcept>
+            </div>
             <input
+              id="manual-run-entity-id"
               type="number"
               value={entityId}
               onChange={(e) => setEntityId(e.target.value)}

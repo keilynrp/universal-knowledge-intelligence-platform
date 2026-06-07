@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
 import { useDomain } from "../../contexts/DomainContext";
-import { PageHeader } from "../../components/ui";
+import { EntityConcept, PageHeader } from "../../components/ui";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -148,7 +148,9 @@ export default function GapDetectorPage() {
               <span className="text-sm text-green-700 dark:text-green-400">OK</span>
             </div>
             <div className="ml-auto flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 dark:border-gray-700 dark:bg-gray-900">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Total entities:</span>
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                <EntityConcept>Total entities</EntityConcept>:
+              </span>
               <span className="text-sm font-semibold text-gray-900 dark:text-white">{report.summary.total_entities.toLocaleString()}</span>
             </div>
           </div>

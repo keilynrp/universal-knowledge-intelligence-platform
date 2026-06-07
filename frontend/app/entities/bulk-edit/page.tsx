@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { PageHeader, Badge, useToast } from "../../components/ui";
+import { PageHeader, Badge, EntityConcept, useToast } from "../../components/ui";
 import { apiFetch } from "@/lib/api";
 import { useLanguage } from "../../contexts/LanguageContext";
 
@@ -267,7 +267,9 @@ export default function BulkEditPage() {
                                 <th className="px-4 py-3">{t("page.bulk_edit.table_primary_label_header")}</th>
                                 <th className="px-4 py-3">{t("page.bulk_edit.table_secondary_label_header")}</th>
                                 <th className="px-4 py-3">{t("page.bulk_edit.table_canonical_id_header")}</th>
-                                <th className="px-4 py-3">{t("page.bulk_edit.table_entity_type_header")}</th>
+                                <th className="px-4 py-3">
+                                    <EntityConcept>{t("page.bulk_edit.table_entity_type_header")}</EntityConcept>
+                                </th>
                                 <th className="px-4 py-3">{t("page.bulk_edit.table_validation_status_header")}</th>
                             </tr>
                         </thead>

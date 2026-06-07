@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { EntityConcept } from "../../components/ui";
 
 interface SalesDeckData {
   generated_at: string;
@@ -94,12 +95,12 @@ export default function SalesDeckPage() {
         <h2 className="mb-5 text-xl font-bold text-gray-900 dark:text-white">Platform at a Glance</h2>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[
-            { label: "Entities Managed", value: kpis.total_entities, suffix: "" },
-            { label: "Auto-Enriched", value: kpis.enrichment_pct, suffix: "%" },
-            { label: "Avg Quality Score", value: kpis.avg_quality_pct, suffix: "%" },
-            { label: "Active Domains", value: kpis.domains_count, suffix: "" },
-          ].map(({ label, value, suffix }) => (
-            <div key={label} className="rounded-2xl border border-gray-100 bg-white p-6 text-center shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            { id: "entities", label: <EntityConcept>Entities Managed</EntityConcept>, value: kpis.total_entities, suffix: "" },
+            { id: "enrichment", label: "Auto-Enriched", value: kpis.enrichment_pct, suffix: "%" },
+            { id: "quality", label: "Avg Quality Score", value: kpis.avg_quality_pct, suffix: "%" },
+            { id: "domains", label: "Active Domains", value: kpis.domains_count, suffix: "" },
+          ].map(({ id, label, value, suffix }) => (
+            <div key={id} className="rounded-2xl border border-gray-100 bg-white p-6 text-center shadow-sm dark:border-gray-800 dark:bg-gray-900">
               <div className="text-4xl font-extrabold text-blue-600 dark:text-blue-400">
                 <AnimatedNumber value={value} suffix={suffix} />
               </div>
@@ -165,7 +166,9 @@ export default function SalesDeckPage() {
               <thead className="border-b border-gray-100 dark:border-gray-800">
                 <tr>
                   <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Domain</th>
-                  <th className="px-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">Entities</th>
+                  <th className="px-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    <EntityConcept>Entities</EntityConcept>
+                  </th>
                   <th className="px-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">Share</th>
                 </tr>
               </thead>

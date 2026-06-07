@@ -1,13 +1,17 @@
 "use client";
 
 import type { Snapshot } from "./contextTypes";
+import type { ReactNode } from "react";
+import { EntityConcept } from "../components/ui";
 
 export function SnapshotCards({ snap }: { snap: Snapshot }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-800 dark:bg-blue-900/10">
-          <p className="text-xs font-medium text-blue-600 dark:text-blue-400">Total Entities</p>
+          <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
+            <EntityConcept>Total Entities</EntityConcept>
+          </p>
           <p className="mt-1 text-3xl font-bold text-blue-700 dark:text-blue-300">
             {snap.entity_stats.total.toLocaleString()}
           </p>
@@ -56,7 +60,7 @@ export function DeltaTable({
   title,
   rows,
 }: {
-  title: string;
+  title: ReactNode;
   rows: Array<{ label: string; before: number; after: number; change: number }>;
 }) {
   return (

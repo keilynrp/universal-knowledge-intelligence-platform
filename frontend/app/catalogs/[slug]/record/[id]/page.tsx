@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
-import { ErrorBanner, PageHeader, QualityBadge } from "../../../../components/ui";
+import { EntityConcept, ErrorBanner, PageHeader, QualityBadge } from "../../../../components/ui";
 import { useLanguage } from "../../../../contexts/LanguageContext";
 
 interface CatalogRecord {
@@ -86,10 +86,10 @@ function buildEnrichmentSummary(
 export default function CatalogRecordPage() {
   const { slug, id } = useParams<{ slug: string; id: string }>();
   const { t } = useLanguage();
-  const tr = (key: string, fallback: string) => {
+  const tr = useCallback((key: string, fallback: string) => {
     const value = t(key);
     return value === key ? fallback : value;
-  };
+  }, [t]);
 
   const [record, setRecord] = useState<CatalogRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -117,7 +117,7 @@ export default function CatalogRecordPage() {
       }
     };
     void loadRecord();
-  }, [slug, id]);
+  }, [slug, id, tr]);
 
   const mergedAttributes = useMemo(() => {
     if (!record) return {};
@@ -128,11 +128,11 @@ export default function CatalogRecordPage() {
   }, [record]);
 
   const coreFields = record ? [
-    { label: tr("entities.primary_label", "Primary label"), value: record.primary_label },
-    { label: tr("page.import.field.secondary_label", "Secondary label"), value: record.secondary_label },
-    { label: tr("page.import.field.canonical_id", "Canonical ID"), value: record.canonical_id },
-    { label: tr("page.import.field.entity_type", "Entity type"), value: record.entity_type },
-    { label: tr("page.import.field.domain", "Domain"), value: record.domain },
+    { key: "primary_label", label: tr("entities.primary_label", "Primary label"), value: record.primary_label },
+    { key: "secondary_label", label: tr("page.import.field.secondary_label", "Secondary label"), value: record.secondary_label },
+    { key: "canonical_id", label: tr("page.import.field.canonical_id", "Canonical ID"), value: record.canonical_id },
+    { key: "entity_type", label: tr("page.import.field.entity_type", "Entity type"), value: record.entity_type },
+    { key: "domain", label: tr("page.import.field.domain", "Domain"), value: record.domain },
   ] : [];
 
   const systemFields = record ? [
@@ -211,8 +211,10 @@ export default function CatalogRecordPage() {
               </h2>
               <div className="mt-4 space-y-4">
                 {coreFields.map((field) => (
-                  <div key={field.label} className="border-b border-gray-100 pb-3 dark:border-gray-800">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">{field.label}</p>
+                  <div key={field.key} className="border-b border-gray-100 pb-3 dark:border-gray-800">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">
+                      {field.key === "entity_type" ? <EntityConcept>{field.label}</EntityConcept> : field.label}
+                    </p>
                     <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">{formatValue(field.value)}</p>
                   </div>
                 ))}

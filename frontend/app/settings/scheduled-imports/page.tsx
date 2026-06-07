@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { PageHeader, StatCard, Badge, useToast } from "../../components/ui";
+import { PageHeader, StatCard, Badge, EntityConcept, useToast } from "../../components/ui";
 import { apiFetch } from "@/lib/api";
 import { useLanguage } from "../../contexts/LanguageContext";
 
@@ -155,7 +155,7 @@ export default function ScheduledImportsPage() {
                 <StatCard
                     icon={<svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>}
                     iconColor="amber"
-                    label="Entities Imported"
+                    label={<EntityConcept>Entities Imported</EntityConcept>}
                     value={stats?.total_entities_imported ?? "—"}
                 />
             </div>

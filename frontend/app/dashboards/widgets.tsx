@@ -4,9 +4,10 @@
  */
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { apiFetch } from "@/lib/api";
 import { formatDateTime } from "../lib/dateFormat";
+import { EntityConcept } from "../components/ui";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Treemap,
@@ -30,8 +31,8 @@ function resolveWidgetDomain(config: Record<string, unknown>): string {
 function WidgetShell({
   title, children, loading, error,
 }: {
-  title: string;
-  children: React.ReactNode;
+  title: ReactNode;
+  children: ReactNode;
   loading?: boolean;
   error?: string | null;
 }) {
@@ -73,17 +74,17 @@ export function EntityKpiWidget({ config }: { config: WidgetConfig }) {
 
   const kpis = data
     ? [
-        { label: "Total Entities",    value: data.total_entities ?? 0,    color: "text-blue-600 dark:text-blue-400" },
-        { label: "Enriched",          value: `${data.enrichment_pct ?? 0}%`, color: "text-green-600 dark:text-green-400" },
-        { label: "Avg Quality",       value: `${(data.avg_quality ?? 0).toFixed(0)}`,  color: "text-violet-600 dark:text-violet-400" },
+        { id: "total-entities", label: <EntityConcept>Total Entities</EntityConcept>, value: data.total_entities ?? 0, color: "text-blue-600 dark:text-blue-400" },
+        { id: "enriched", label: "Enriched", value: `${data.enrichment_pct ?? 0}%`, color: "text-green-600 dark:text-green-400" },
+        { id: "quality", label: "Avg Quality", value: `${(data.avg_quality ?? 0).toFixed(0)}`, color: "text-violet-600 dark:text-violet-400" },
       ]
     : [];
 
   return (
-    <WidgetShell title={config.title || "Entity KPIs"} loading={loading}>
+    <WidgetShell title={config.title || <EntityConcept>Entity KPIs</EntityConcept>} loading={loading}>
       <div className="grid grid-cols-3 gap-3 h-full items-center">
         {kpis.map((k) => (
-          <div key={k.label} className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-3 text-center">
+          <div key={k.id} className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-3 text-center">
             <p className={`text-2xl font-bold ${k.color}`}>{k.value}</p>
             <p className="mt-0.5 text-[10px] text-gray-500 dark:text-gray-400">{k.label}</p>
           </div>
@@ -147,7 +148,7 @@ export function TopEntitiesWidget({ config }: { config: WidgetConfig }) {
   }, [domain]);
 
   return (
-    <WidgetShell title={config.title || "Top Entities"} loading={loading}>
+    <WidgetShell title={config.title || <EntityConcept>Top Entities</EntityConcept>} loading={loading}>
       <div className="overflow-auto h-full">
         <table className="w-full text-xs">
           <thead>
