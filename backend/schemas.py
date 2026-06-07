@@ -923,7 +923,7 @@ class SecretRotationEventResponse(BaseModel):
 
 class SecretsCheckResponse(BaseModel):
     id: str
-    status: str
+    status: Literal["ok", "warning", "critical", "skipped"]
     summary: str
     details: dict[str, Any]
 

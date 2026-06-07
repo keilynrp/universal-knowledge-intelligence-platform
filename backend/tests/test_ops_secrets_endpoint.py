@@ -52,3 +52,8 @@ def test_secrets_overview_forbidden_for_editor(client, editor_headers):
 def test_secrets_overview_forbidden_for_viewer(client, viewer_headers):
     resp = client.get("/ops/secrets", headers=viewer_headers)
     assert resp.status_code == 403
+
+
+def test_secrets_overview_requires_auth(client):
+    resp = client.get("/ops/secrets")
+    assert resp.status_code == 401
