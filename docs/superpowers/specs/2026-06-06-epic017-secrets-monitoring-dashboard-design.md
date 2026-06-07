@@ -86,6 +86,12 @@ def secrets_overview(
 Read-only; same `require_role("super_admin", "admin")` gate as the existing
 `/ops/checks`. Reuses `_secrets_check(db)` (tested) and the new helper.
 
+**`response_model` decision:** set `response_model=schemas.SecretsOverviewResponse`
+on the decorator (rather than only annotating the return type) so the ORM
+`events` list is coerced through `from_attributes`. This diverges intentionally
+from the sibling `/ops/checks`, which returns a bare dict with no `response_model`;
+here we want the typed coercion of the evidence rows.
+
 ### Frontend
 
 **1. New `frontend/app/settings/SecurityTab.tsx`** following the `AccountTab`
@@ -113,8 +119,10 @@ Data source: a single `apiFetch("/ops/secrets")` on mount and on Refresh.
 - Render `{tab === "security" && isAdmin && <SecurityTab toast={toast} />}`.
 
 **3. i18n:** add the new keys (tab label, card titles, detail labels, table
-headers, empty state, runbook callout) in both EN and ES, matching the existing
-`t(...)` key convention.
+headers, empty state, runbook callout) in both EN and ES, in
+`frontend/app/i18n/translations.ts` (both locales live in this single file),
+matching the existing `t(...)` key convention (e.g. `settings.tab.security`,
+`settings.security.*`).
 
 ### Error handling
 
@@ -145,7 +153,7 @@ headers, empty state, runbook callout) in both EN and ES, matching the existing
 | `backend/routers/analytics_ops.py` | + `GET /ops/secrets` endpoint |
 | `frontend/app/settings/SecurityTab.tsx` | new component |
 | `frontend/app/settings/page.tsx` | tab wiring (type union, tabs array, render) |
-| i18n files (EN + ES) | new translation keys |
+| `frontend/app/i18n/translations.ts` | new translation keys (EN + ES) |
 | `backend/tests/test_ops_secrets_endpoint.py` | new test file |
 
 ## Gotchas
