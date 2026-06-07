@@ -9,6 +9,15 @@ cd frontend
 npm run audit:design-tokens
 ```
 
+## Provenance
+
+- Audited token source: `frontend/app/styles/tokens.css`
+- Audited component path: `frontend/app/components/ui/*.tsx`
+- Current branch: `codex/design-system-governance`
+- Audit script baseline commit: `b5703e2`
+- `frontend/app/styles/tokens.css` SHA-256 at audit time: `5be593c58739f7d9759972699954d0cd633841534048de0dcd572ea707a95f67`
+- The 44-token count includes the approved, uncommitted Design System token additions present in this worktree at audit time. The fingerprint identifies that exact token-file state.
+
 ## Baseline
 
 - Declared `--ukip-*` tokens: 44
@@ -33,11 +42,11 @@ The audit reports unique class names per file, not occurrence counts.
 | `ConceptTooltip.tsx` | 3 | Replace now | Shared interaction primitive; hover text/background and focus ring should use primary/focus tokens. |
 | `DataTable.tsx` | 24 | Replace now | Shared table chrome, selection, pagination, text, borders, surfaces, and controls belong to existing design-system roles. |
 | `DeltaBadge.tsx` | 11 | Propose token | Reusable positive/negative/neutral semantic indicator. Propose semantic foreground/background roles; do not treat direction colors as chart-series tokens. |
-| `EmptyState.tsx` | 37 | Replace now + Keep | Replace shared text, CTA, border, and surface colors. Keep the bounded icon illustration palette (`blue`, `violet`, `emerald`, `amber`, `slate`, `rose`) local. |
+| `EmptyState.tsx` | 37 | Replace now + Keep | **Keep (24):** icon palette groups `bg-{blue,violet,emerald,amber,rose}-50`, `bg-{blue,violet,emerald,amber,rose}-900/20`, `text-{blue,violet,emerald,amber,rose}-500`, `text-{blue,violet,emerald,amber,rose}-400`, plus `bg-slate-100`, `bg-slate-800`, `text-slate-400`, `text-slate-500`. **Replace now (13):** `text-gray-900`, `text-gray-100`, `text-gray-500`, `text-gray-400`, `bg-blue-600`, `bg-blue-700`, `border-gray-300`, `text-gray-700`, `bg-gray-50`, `border-gray-600`, `bg-gray-800`, `text-gray-300`, `bg-gray-700`. |
 | `ErrorBanner.tsx` | 25 | Propose token | Shared danger feedback primitive needs danger foreground, muted foreground, background, border, and interaction roles beyond the single `--ukip-danger` value. |
-| `KpiSummaryCard.tsx` | 21 | Keep + Replace now | Keep KPI icon tones as local data-display colors. Replace card surface, border, text, and generic hover chrome with existing tokens when the component is refactored. |
+| `KpiSummaryCard.tsx` | 21 | Keep + Replace now | **Keep (16):** KPI icon groups `bg-{violet,amber,emerald,sky}-100`, `text-{violet,amber,emerald,sky}-700`, `bg-{violet,amber,emerald,sky}-400/15`, `text-{violet,amber,emerald,sky}-200`. **Replace now (5):** `border-slate-200`, `border-violet-200`, `border-violet-400/30`, `text-slate-600`, `text-slate-950`. |
 | `Metric.tsx` | 12 | Keep | Violet/cyan/emerald/amber gradients are an explicit metric visualization palette; structural chrome already uses tokens. |
-| `QualityBadge.tsx` | 5 | Keep + Replace now | Keep score thresholds (emerald/amber/red) local to quality meaning; replace the neutral track with a shared muted/surface role. |
+| `QualityBadge.tsx` | 5 | Keep + Replace now | **Keep (3):** score thresholds `bg-emerald-500`, `bg-amber-400`, `bg-red-500`. **Replace now (2):** neutral track `bg-slate-200`, `bg-slate-700/70`. |
 | `Skeleton.tsx` | 6 | Replace now | Loading placeholders are design-system primitives; neutral shimmer, card surface, and border colors should use shared tokens. |
 | `StatCard.tsx` | 10 | Keep | Icon tones are a bounded product/data-display palette; structural panel and typography already use tokens. |
 | `Surface.tsx` | 1 | Replace now | Shared raised-surface border should use a design-system border/focus role rather than a literal violet class. |
