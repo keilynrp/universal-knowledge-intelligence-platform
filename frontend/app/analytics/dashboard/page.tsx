@@ -532,7 +532,6 @@ export default function ExecutiveDashboardPage() {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL_SEC);
   const [exporting, setExporting] = useState(false);
-  const [queueingBulkEnrichment, setQueueingBulkEnrichment] = useState(false);
   const [benchmarkProfiles, setBenchmarkProfiles] = useState<BenchmarkProfile[]>([]);
   const [selectedBenchmarkProfile, setSelectedBenchmarkProfile] = useState(
     searchParams.get("benchmark_profile") || "",
@@ -721,53 +720,6 @@ export default function ExecutiveDashboardPage() {
       setExporting(false);
     }
   };
-
-  const handleBulkEnrichment = useCallback(async () => {
-    setQueueingBulkEnrichment(true);
-    try {
-      const params = new URLSearchParams({ limit: "250" });
-      if (dashboardDomainId && !isAllScope(dashboardDomainId)) {
-        params.set("domain_id", dashboardDomainId);
-      }
-      const response = await apiFetch(`/enrich/bulk?${params.toString()}`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const payload = await response.json();
-      const queuedIds = Array.isArray(payload.queued_ids)
-        ? payload.queued_ids.filter((id: unknown): id is number => typeof id === "number")
-        : [];
-      toast(
-        t("page.exec_dashboard.bulk_enrich_success", { count: payload.queued_records ?? 0 }),
-        "success",
-      );
-      if (queuedIds.length === 0) {
-        await fetchDashboard({ forceRefresh: true, preserveData: true });
-        return;
-      }
-
-      for (let attempt = 0; attempt < 80; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 3000));
-        const progress = await apiFetch("/enrich/progress", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids: queuedIds }),
-        });
-        if (!progress.ok) break;
-        const status = await progress.json();
-        if ((status.pending ?? 0) + (status.processing ?? 0) === 0) {
-          await fetchDashboard({ forceRefresh: true, preserveData: true });
-          break;
-        }
-      }
-    } catch {
-      toast(tr("page.exec_dashboard.bulk_enrich_failed", "Bulk enrichment could not be queued."), "error");
-    } finally {
-      setQueueingBulkEnrichment(false);
-    }
-  }, [dashboardDomainId, fetchDashboard, t, toast, tr]);
 
   // Compute heatmap max for scaling
   const labelYearMatrix = data?.label_year_matrix ?? (
