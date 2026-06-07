@@ -1,13 +1,13 @@
-import type { InputHTMLAttributes, ReactNode } from "react";
+import type { ReactNode, TextareaHTMLAttributes } from "react";
 import { FieldLabel, FieldMessages, useFieldChrome } from "./Field";
 
-export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: ReactNode;
   hint?: ReactNode;
   error?: ReactNode;
 }
 
-export default function Input({
+export default function Textarea({
   label,
   hint,
   error,
@@ -16,7 +16,7 @@ export default function Input({
   required,
   "aria-describedby": describedBy,
   ...props
-}: InputProps) {
+}: TextareaProps) {
   const { controlId, hintId, errorId, ariaDescribedBy } = useFieldChrome({
     id: id ?? props.name,
     describedBy,
@@ -27,16 +27,15 @@ export default function Input({
   return (
     <div className="block">
       {label ? <FieldLabel htmlFor={controlId} required={required}>{label}</FieldLabel> : null}
-      <input
+      <textarea
         id={controlId}
         aria-describedby={ariaDescribedBy}
         aria-invalid={Boolean(error) || undefined}
         required={required}
-        className={`ukip-control ukip-focus ${className}`}
+        className={`ukip-control ukip-focus min-h-28 resize-y ${className}`}
         {...props}
       />
       <FieldMessages error={error} errorId={errorId} hint={hint} hintId={hintId} />
     </div>
   );
 }
-

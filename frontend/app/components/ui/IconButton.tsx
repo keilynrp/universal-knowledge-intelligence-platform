@@ -1,20 +1,29 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ButtonProps, ButtonVariant } from "./Button";
+import Button from "./Button";
 
-interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface IconButtonProps extends Omit<ButtonProps, "size" | "variant" | "leftIcon" | "rightIcon" | "aria-label"> {
   label: string;
+  variant?: ButtonVariant;
 }
 
-export default function IconButton({ label, className = "", type = "button", children, ...props }: IconButtonProps) {
+export default function IconButton({
+  label,
+  variant = "outline",
+  className = "",
+  children,
+  ...props
+}: IconButtonProps) {
   return (
-    <button
-      type={type}
+    <Button
       aria-label={label}
       title={label}
-      className={`ukip-focus inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--ukip-border)] bg-[var(--ukip-panel)] text-[var(--ukip-muted)] transition hover:bg-[var(--ukip-panel-strong)] hover:text-[var(--ukip-text-strong)] ${className}`}
+      size="icon"
+      variant={variant}
+      className={`rounded-full ${className}`}
       {...props}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 

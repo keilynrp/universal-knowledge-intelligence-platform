@@ -9,7 +9,7 @@ import GuidedTour, { resetTour } from "./components/GuidedTour";
 import WelcomeModal from "./components/WelcomeModal";
 import ScientificIntelligenceCommandCenter from "./components/ScientificIntelligenceCommandCenter";
 import { AdaptiveNarrativeBlock, DashboardInsightMetrics } from "./components/ukip";
-import { EntityConcept, KpiSummaryCard } from "./components/ui";
+import { Button, EntityConcept, KpiSummaryCard } from "./components/ui";
 import DerivedStatusPanel from "./components/DerivedStatusPanel";
 import { apiFetch } from "../lib/api";
 import { useAuth } from "./contexts/AuthContext";
@@ -524,32 +524,32 @@ export default function Home() {
                     Portal
                   </Link>
                 ) : null}
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={handleClearDemo}
-                  disabled={demoLoading}
-                  className="rounded-lg px-2 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-50 dark:text-amber-400 dark:hover:bg-amber-800/30"
+                  loading={demoLoading}
+                  loadingLabel={t('page.home.demo_clearing')}
+                  className="min-h-8 px-2 py-1 text-[var(--ukip-warning)] hover:bg-[var(--ukip-warning-soft)]"
                 >
-                  {demoLoading ? t('page.home.demo_clearing') : t('page.home.demo_clear_button')}
-                </button>
+                  {t('page.home.demo_clear_button')}
+                </Button>
               </div>
             ) : demoStatus !== null ? (
-              <button
+              <Button
+                variant="outline"
                 onClick={handleLaunchDemo}
-                disabled={demoLoading}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-950 shadow-sm transition hover:border-violet-300 hover:text-violet-700 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text-strong)]"
-              >
-                {demoLoading ? (
-                  <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                ) : (
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                loading={demoLoading}
+                loadingLabel="Demo"
+                leftIcon={(
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
                   </svg>
                 )}
+                className="shadow-sm"
+              >
                 Demo
-              </button>
+              </Button>
             ) : null}
             <Link
               href="/import-export"
@@ -785,13 +785,14 @@ export default function Home() {
                   {t('page.home.cta_import_title')}
                 </Link>
                 {demoStatus !== null && !demoStatus.demo_seeded && (
-                  <button
+                  <Button
+                    variant="outline"
                     onClick={handleLaunchDemo}
-                    disabled={demoLoading}
-                    className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                    loading={demoLoading}
+                    loadingLabel={t('page.home.empty_loading')}
                   >
-                    {demoLoading ? t('page.home.empty_loading') : t('page.home.empty_demo_button')}
-                  </button>
+                    {t('page.home.empty_demo_button')}
+                  </Button>
                 )}
               </div>
             </div>
@@ -817,23 +818,28 @@ function DataReadinessSection({ domainId }: { domainId: string }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm overflow-hidden">
-      <button
+      <Button
+        variant="ghost"
+        size="md"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+        className="w-full justify-between rounded-none border-transparent px-4 py-3 text-left shadow-none"
         aria-expanded={open}
+        rightIcon={(
+          <svg
+            className={`h-4 w-4 text-[var(--ukip-muted)] transition-transform ${open ? "rotate-180" : ""}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        )}
       >
-        <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+        <span className="text-sm font-semibold text-[var(--ukip-text)]">
           Data Readiness
         </span>
-        <svg
-          className={`h-4 w-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
+      </Button>
       {open && (
         <div className="border-t border-gray-100 dark:border-gray-800">
           <DerivedStatusPanel domainId={domainId} />

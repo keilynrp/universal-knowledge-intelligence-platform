@@ -16,11 +16,26 @@
   --ukip-primary: oklch(57% 0.22 292);
   --ukip-primary-strong: oklch(49% 0.24 292);
   --ukip-primary-soft: oklch(93% 0.04 292);
+  --ukip-on-primary: oklch(100% 0 0);
   --ukip-violet: oklch(62% 0.22 292);
   --ukip-cyan: oklch(67% 0.15 220);
   --ukip-emerald: oklch(68% 0.16 155);
   --ukip-warning: oklch(76% 0.16 78);
   --ukip-danger: oklch(60% 0.2 25);
+  --ukip-on-danger: oklch(100% 0 0);
+
+  --ukip-control-bg: oklch(100% 0 0);
+  --ukip-control-hover: oklch(96.5% 0.018 268);
+  --ukip-control-disabled: oklch(94.5% 0.012 264);
+  --ukip-control-placeholder: oklch(62% 0.028 265);
+  --ukip-success-soft: oklch(95% 0.035 155);
+  --ukip-success-border: oklch(82% 0.09 155);
+  --ukip-warning-soft: oklch(96% 0.045 78);
+  --ukip-warning-border: oklch(84% 0.1 78);
+  --ukip-danger-soft: oklch(96% 0.035 25);
+  --ukip-danger-border: oklch(84% 0.08 25);
+  --ukip-info-soft: oklch(95% 0.035 220);
+  --ukip-info-border: oklch(82% 0.08 220);
 
   --ukip-radius-sm: 0.5rem;
   --ukip-radius-md: 0.75rem;
@@ -36,6 +51,7 @@
   --ukip-sidebar-bg: oklch(99% 0.012 268 / 0.96);
   --ukip-header-bg: oklch(99% 0.006 264 / 0.86);
   --ukip-focus-ring: oklch(64% 0.22 292);
+  --ukip-focus-shadow: oklch(64% 0.22 292 / 0.18);
 }
 
 .dark {
@@ -56,11 +72,26 @@
   --ukip-primary: oklch(69% 0.21 292);
   --ukip-primary-strong: oklch(75% 0.19 292);
   --ukip-primary-soft: oklch(27% 0.09 292);
+  --ukip-on-primary: oklch(13% 0.035 268);
   --ukip-violet: oklch(72% 0.2 292);
   --ukip-cyan: oklch(72% 0.14 220);
   --ukip-emerald: oklch(74% 0.16 155);
   --ukip-warning: oklch(80% 0.15 78);
   --ukip-danger: oklch(68% 0.2 25);
+  --ukip-on-danger: oklch(13% 0.035 268);
+
+  --ukip-control-bg: oklch(19% 0.045 268);
+  --ukip-control-hover: oklch(22.5% 0.055 268);
+  --ukip-control-disabled: oklch(20% 0.025 268);
+  --ukip-control-placeholder: oklch(58% 0.035 265);
+  --ukip-success-soft: oklch(24% 0.055 155);
+  --ukip-success-border: oklch(42% 0.1 155);
+  --ukip-warning-soft: oklch(25% 0.055 78);
+  --ukip-warning-border: oklch(44% 0.1 78);
+  --ukip-danger-soft: oklch(24% 0.055 25);
+  --ukip-danger-border: oklch(44% 0.09 25);
+  --ukip-info-soft: oklch(24% 0.055 220);
+  --ukip-info-border: oklch(43% 0.09 220);
 
   --ukip-shadow-panel: 0 22px 70px rgb(0 0 0 / 0.28);
   --ukip-shadow-soft: 0 14px 44px rgb(0 0 0 / 0.22);
@@ -70,4 +101,5 @@
   --ukip-sidebar-bg: oklch(10.5% 0.038 268 / 0.96);
   --ukip-header-bg: oklch(17.5% 0.044 268 / 0.82);
   --ukip-focus-ring: oklch(72% 0.2 292);
+  --ukip-focus-shadow: oklch(72% 0.2 292 / 0.22);
 }
