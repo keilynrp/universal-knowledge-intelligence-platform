@@ -40,6 +40,8 @@ Fuentes estrategicas relacionadas:
 | EPIC-013 | Commercial Readiness and Credibility | Alinear claims, onboarding y readiness comercial con la realidad del producto | Done | `README.md`, docs comerciales, onboarding, compliance baseline |
 | EPIC-014 | Frontend Decomposition and Maintainability | Reducir componentes monoliticos y mejorar capacidad de evolucion del frontend | Planned | `EntityTable.tsx`, `Sidebar.tsx`, `RAGChatInterface.tsx`, `DisambiguationTool.tsx` |
 | EPIC-015 | Observability and Operations | Construir salud operativa, logging y telemetria minima de producto serio | Done | health endpoints, logging, Sentry/telemetry, checks operativos |
+| EPIC-016 | Data Lifecycle and Privacy Controls | Formalizar export, deletion, retention y evidencia de ciclo de vida | Done | data lifecycle events, DSAR, deletion, retention policies |
+| EPIC-018 | Enterprise Assurance and Operational Readiness | Cerrar controles P0/P1 con operacion y evidencia verificable | In progress | jobs externos, BCP/DR, secure SDLC, audit evidence, IAM, privacy, residency |
 
 ## Prioridades recomendadas de corto plazo
 
@@ -50,10 +52,9 @@ Fuentes estrategicas relacionadas:
 
 ## Epicas futuras sugeridas
 
-| ID | Epic | Objetivo | Estado |
-|---|---|---|---|
-| EPIC-016 | Release Governance | Formalizar releases, versionado, notas y criterios de salida | Proposed |
-| EPIC-017 | Product Analytics | Medir adopcion, uso de features y valor entregado por modulo | Proposed |
+Los IDs `EPIC-016` y `EPIC-017` ya fueron usados por data lifecycle y secrets
+rotation. Release Governance y Product Analytics requieren IDs nuevos antes de
+ser formalizados; no deben reutilizar identificadores historicos.
 
 ## Criterios para abrir una nueva epic
 

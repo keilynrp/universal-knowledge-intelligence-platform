@@ -2,6 +2,7 @@
 
 import type { DomainAttribute, DomainSchema } from "../contexts/DomainContext";
 import { useLanguage } from "../contexts/LanguageContext";
+import { ConceptTooltip } from "../components/ui";
 import type { QueueSummary } from "./reviewQueueTypes";
 import { getEntityTypeLabel, getRouteLabel } from "./reviewQueueI18n";
 
@@ -124,7 +125,9 @@ export default function ReviewQueueControls({
                             </select>
                         </div>
                         <div className="min-w-[130px]">
-                            <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">{t("page.authority.entity_type")}</label>
+                            <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">
+                                <ConceptTooltip concept="entity">{t("page.authority.entity_type")}</ConceptTooltip>
+                            </label>
                             <select
                                 value={batchEntityType}
                                 onChange={e => onBatchEntityTypeChange(e.target.value)}

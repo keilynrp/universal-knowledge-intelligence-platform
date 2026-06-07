@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { StatCard } from "../components/ui";
+import { ConceptTooltip, StatCard } from "../components/ui";
 
 import { ProgressBar, SectionDivider } from "./AnalyticsPrimitives";
 import type { Stats } from "./analyticsTypes";
@@ -147,7 +147,7 @@ export function AnalyticsOverviewSection({
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
-              label={t("page.analytics.metric_total_entities")}
+              label={<ConceptTooltip concept="entity">{t("page.analytics.metric_total_entities")}</ConceptTooltip>}
               value={totalCount.toLocaleString()}
               iconColor="blue"
               icon={

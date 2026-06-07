@@ -1,6 +1,11 @@
 # Compliance Gap Register
 
-Registro base de gaps de compliance y enterprise readiness para `US-048`.
+Registro historico base de gaps de compliance y enterprise readiness para
+`US-048`.
+
+El source of truth operativo actual es
+`docs/product/ENTERPRISE_CONTROL_REGISTER.md`. Este documento conserva el
+baseline comercial original y no debe usarse para afirmar madurez actual.
 
 ## 1. Objetivo
 

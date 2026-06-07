@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { useLanguage } from "../../contexts/LanguageContext";
-import { PageHeader } from "../../components/ui";
+import { ConceptTooltip, PageHeader } from "../../components/ui";
 import { apiFetch } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ function getDomainPresetLabel(t: (key: string, params?: Record<string, string | 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function KPICard({ label, values, formatter = String }: {
-  label: string;
+  label: ReactNode;
   values: (string | number)[];
   formatter?: (v: string | number) => string;
 }) {
@@ -213,7 +213,7 @@ export default function DomainComparePage() {
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <KPICard
-                label={t("page.compare.total_entities")}
+                label={<ConceptTooltip concept="entity">{t("page.compare.total_entities")}</ConceptTooltip>}
                 values={snapshots.map(s => s.kpis.total_entities)}
                 formatter={v => Number(v).toLocaleString()}
               />

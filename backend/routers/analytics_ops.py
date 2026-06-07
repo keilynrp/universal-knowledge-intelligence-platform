@@ -26,6 +26,7 @@ from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend import schemas
 from backend.schemas import EnrichmentStatus
 from backend.analyzers.concept_hierarchy import (
     build_concept_tree,
@@ -38,8 +39,9 @@ from backend.cache import client as cache_client
 from backend.database import get_db
 from backend.enterprise_readiness import get_enterprise_readiness_report
 from backend.logging_utils import current_log_format
-from backend.ops_checks import dispatch_operational_alert_if_needed, run_operational_checks
+from backend.ops_checks import _secrets_check, dispatch_operational_alert_if_needed, run_operational_checks
 from backend.routers.analytics import _validate_domain_id
+from backend.secret_rotation import list_rotation_events
 from backend.services.analytics_service import AnalyticsService
 from backend.telemetry import telemetry_status
 from backend.tenant_access import resolve_request_org_id, scope_query_to_org
@@ -202,6 +204,18 @@ def run_operational_checks_now(
         else {"attempted": False, "event": "ops.check_failed", "reason": "notify_disabled"}
     )
     return report
+
+
+@router.get("/ops/secrets", tags=["analytics"], response_model=schemas.SecretsOverviewResponse)
+def secrets_overview(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_role("super_admin", "admin")),
+):
+    """Read-only secrets rotation health + evidence trail (EPIC-017 dashboard)."""
+    return {
+        "check": _secrets_check(db),
+        "events": list_rotation_events(db, limit=20),
+    }
 
 
 @router.get("/ops/enterprise-readiness", tags=["analytics"])
