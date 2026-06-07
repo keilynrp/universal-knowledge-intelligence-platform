@@ -604,3 +604,4 @@ git commit -m "chore: secrets monitoring dashboard verification"
 - **YAGNI:** read-only, secrets-only, no rotation actions over HTTP (per the runbook's off-HTTP mandate).
 - **CI scope:** only `pytest backend/tests/` is gated in CI; top-level `tests/` and `.worktrees/` are out of scope (known repo gotcha).
 - **`_secrets_check` import is local** to the endpoint to avoid widening `ops_checks` public surface.
+- **Windows/PowerShell shell note:** the typecheck steps pipe `tsc ... | grep`. On this environment `grep` may be unavailable — substitute `Select-String` (e.g. `npx tsc --noEmit --pretty false 2>&1 | Select-String SecurityTab`) or just run `npx tsc --noEmit` and scan the output. The pytest commands use `.venv/Scripts/python` (already Windows-correct).
