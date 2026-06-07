@@ -26,6 +26,7 @@ from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend import schemas
 from backend.schemas import EnrichmentStatus
 from backend.analyzers.concept_hierarchy import (
     build_concept_tree,
@@ -202,6 +203,20 @@ def run_operational_checks_now(
         else {"attempted": False, "event": "ops.check_failed", "reason": "notify_disabled"}
     )
     return report
+
+
+@router.get("/ops/secrets", tags=["analytics"], response_model=schemas.SecretsOverviewResponse)
+def secrets_overview(
+    db: Session = Depends(get_db),
+    _: models.User = Depends(require_role("super_admin", "admin")),
+):
+    """Read-only secrets rotation health + evidence trail (EPIC-017 dashboard)."""
+    from backend.ops_checks import _secrets_check
+    from backend.secret_rotation import list_rotation_events
+    return {
+        "check": _secrets_check(db),
+        "events": list_rotation_events(db, limit=20),
+    }
 
 
 @router.get("/ops/enterprise-readiness", tags=["analytics"])
