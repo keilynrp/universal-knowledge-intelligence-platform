@@ -3,7 +3,7 @@ from enum import Enum
 
 import json
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator, model_validator
-from typing import Literal, Optional, List
+from typing import Any, Literal, Optional, List
 from typing_extensions import TypedDict
 
 
@@ -902,3 +902,32 @@ class SourceStatsResponse(BaseModel):
     """Response for GET /enrichment/sources/stats."""
     domain_id:  Optional[str]              # echo of ?domain_id= filter
     entries:    List[SourceStatsEntry]
+
+
+# ---------------------------------------------------------------------------
+# EPIC-017 Secrets Monitoring Dashboard schemas
+# ---------------------------------------------------------------------------
+
+class SecretRotationEventResponse(BaseModel):
+    id: int
+    secret_name: str
+    rotated_at: datetime
+    operator: str
+    rows_reencrypted: Optional[int] = None
+    old_key_fingerprint: Optional[str] = None
+    new_key_fingerprint: Optional[str] = None
+    notes: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SecretsCheckResponse(BaseModel):
+    id: str
+    status: str
+    summary: str
+    details: dict[str, Any]
+
+
+class SecretsOverviewResponse(BaseModel):
+    check: SecretsCheckResponse
+    events: list[SecretRotationEventResponse]
