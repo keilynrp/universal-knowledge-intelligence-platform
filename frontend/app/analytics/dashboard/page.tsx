@@ -13,7 +13,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { ConceptTooltip, ErrorBanner, SkeletonCard, useToast } from "../../components/ui";
+import { EntityConcept, ErrorBanner, SkeletonCard, useToast } from "../../components/ui";
 import ConceptCloud from "../../components/ConceptCloud";
 import DerivedStatusPanel from "../../components/DerivedStatusPanel";
 import EnrichmentSchedulerCard from "../../components/EnrichmentSchedulerCard";
@@ -1281,7 +1281,7 @@ export default function ExecutiveDashboardPage() {
             <StoryMetricCard
               icon="route"
               tone="cyan"
-              label={<ConceptTooltip concept="entity">{tr("page.exec_dashboard.kpi.total_entities", "Total Entities")}</ConceptTooltip>}
+              label={<EntityConcept>{tr("page.exec_dashboard.kpi.total_entities", "Total Entities")}</EntityConcept>}
               value={data.kpis.total_entities.toLocaleString()}
               description={tr("page.exec_dashboard.volume_signal", "Volume")}
             />
@@ -1571,7 +1571,7 @@ export default function ExecutiveDashboardPage() {
       {/* ── Section 2: Impact Over Time ── */}
       <div className={`${showcaseCardClass} p-6`}>
         <h3 className="mb-1 text-base font-semibold text-slate-950">
-          {tr("page.exec_dashboard.entities_over_time", "Entities Over Time")}
+          <EntityConcept>{tr("page.exec_dashboard.entities_over_time", "Entities Over Time")}</EntityConcept>
         </h3>
         <p className={`mb-5 ${showcaseBlueLabelClass}`}>{tr("page.exec_dashboard.temporal_signal", "Temporal signal")}</p>
         {loading ? (
@@ -1760,7 +1760,7 @@ export default function ExecutiveDashboardPage() {
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h3 className="text-base font-semibold text-slate-950">
-              {tr("page.exec_dashboard.top_entities_impact", "Top Entities by Impact")}
+              <EntityConcept>{tr("page.exec_dashboard.top_entities_impact", "Top Entities by Impact")}</EntityConcept>
             </h3>
             <p className={showcaseBlueLabelClass}>{tr("page.exec_dashboard.impact_rank", "Impact rank")}</p>
           </div>
@@ -1783,7 +1783,9 @@ export default function ExecutiveDashboardPage() {
               <thead>
                 <tr className="border-b border-slate-100">
                   <th className="pb-3 pr-4 text-xs font-semibold uppercase tracking-wide text-slate-500">#</th>
-                  <th className="pb-3 pr-4 text-xs font-semibold uppercase tracking-wide text-slate-500">{tr("page.exec_dashboard.entity", "Entity")}</th>
+                  <th className="pb-3 pr-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <EntityConcept>{tr("page.exec_dashboard.entity", "Entity")}</EntityConcept>
+                  </th>
                   <th className="pb-3 pr-4 text-xs font-semibold uppercase tracking-wide text-slate-500">{tr("page.exec_dashboard.primary_label", "Primary Label")}</th>
                   <th className="pb-3 pr-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">{tr("page.exec_dashboard.citations", "Citations")}</th>
                   <th className="pb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">{tr("page.exec_dashboard.source", "Source")}</th>

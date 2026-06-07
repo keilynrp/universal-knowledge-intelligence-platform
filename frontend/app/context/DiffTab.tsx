@@ -3,6 +3,7 @@
 import { DeltaTable } from "./ContextPanels";
 import type { DiffResult, Session } from "./contextTypes";
 import { formatDateTime } from "../lib/dateFormat";
+import { EntityConcept } from "../components/ui";
 
 export function DiffTab({
   sortedSessions,
@@ -125,7 +126,7 @@ export function DiffTab({
           </div>
 
           <DeltaTable
-            title="Entity Stats"
+            title={<EntityConcept>Entity Stats</EntityConcept>}
             rows={Object.entries(diffResult.entity_stats).map(([key, value]) => ({ label: key, ...value }))}
           />
           <DeltaTable

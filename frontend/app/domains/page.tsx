@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { PageHeader, Badge } from "../components/ui";
+import { PageHeader, Badge, EntityConcept } from "../components/ui";
 import { useDomain, DomainAttribute, Paradigm } from "../contexts/DomainContext";
 import { useAuth } from "../contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
@@ -404,7 +404,8 @@ export default function DomainsPage() {
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-gray-900 dark:text-white">{selectedDomain.name}</h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {t("page.domains.primary_entity_label")} <span className="font-medium">{selectedDomain.primary_entity}</span>
+                    <EntityConcept>{t("page.domains.primary_entity_label")}</EntityConcept>{" "}
+                    <span className="font-medium">{selectedDomain.primary_entity}</span>
                     <span className="mx-2">·</span>
                     {t("page.domains.attributes_count", { count: selectedDomain.attributes.length })}
                   </p>
@@ -741,7 +742,12 @@ export default function DomainsPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="domain-entity" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{t("page.domains.form_entity_label")} <span className="text-red-500" aria-label={t("page.domains.required_aria")}>*</span></label>
+                  <div className="mb-1 flex items-center gap-1">
+                    <label htmlFor="domain-entity" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                      {t("page.domains.form_entity_label")} <span className="text-red-500" aria-label={t("page.domains.required_aria")}>*</span>
+                    </label>
+                    <EntityConcept><span className="sr-only">{t("page.domains.form_entity_label")}</span></EntityConcept>
+                  </div>
                   <input
                     id="domain-entity"
                     value={formEntity} onChange={e => setFormEntity(e.target.value)}

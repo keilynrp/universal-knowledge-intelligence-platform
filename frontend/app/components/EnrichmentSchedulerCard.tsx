@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { EntityConcept } from "./ui";
 import { useAuth } from "../contexts/AuthContext";
 
 // ---------------------------------------------------------------------------
@@ -415,7 +416,9 @@ export default function EnrichmentSchedulerCard() {
                 <tr className="bg-slate-50">
                   <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Domain</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Enrichment</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Stale Entities</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">
+                    <EntityConcept>Stale Entities</EntityConcept>
+                  </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Last Run</th>
                   {isAdmin && (

@@ -1,6 +1,7 @@
 "use client";
 
 import ConceptCloud from "../components/ConceptCloud";
+import { EntityConcept } from "../components/ui";
 
 import { CitationBar, CoverageRing, ProgressBar, SectionDivider, StatusBadge } from "./AnalyticsPrimitives";
 import type { EnrichStats } from "./analyticsTypes";
@@ -85,31 +86,35 @@ export function AnalyticsEnrichmentSection({
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             {[
               {
-                label: t("page.analytics.stat_enriched_entities"),
+                id: "enriched-entities",
+                label: <EntityConcept>{t("page.analytics.stat_enriched_entities")}</EntityConcept>,
                 value: enrichStats.enriched_count,
                 color: "text-emerald-600 dark:text-emerald-400",
                 bg: "bg-emerald-50 dark:bg-emerald-500/10",
               },
               {
+                id: "connectivity",
                 label: "Avg. Connectivity",
                 value: enrichStats.citations.average,
                 color: "text-violet-600 dark:text-violet-400",
                 bg: "bg-violet-50 dark:bg-violet-500/10",
               },
               {
+                id: "influence",
                 label: "Max Influence",
                 value: enrichStats.citations.max.toLocaleString(),
                 color: "text-fuchsia-600 dark:text-fuchsia-400",
                 bg: "bg-fuchsia-50 dark:bg-fuchsia-500/10",
               },
               {
+                id: "knowledge-points",
                 label: "Total Knowledge Points",
                 value: enrichStats.citations.total.toLocaleString(),
                 color: "text-blue-600 dark:text-blue-400",
                 bg: "bg-blue-50 dark:bg-blue-500/10",
               },
             ].map((card) => (
-              <div key={card.label} className={`rounded-2xl border border-gray-200 ${card.bg} p-5 dark:border-gray-800`}>
+              <div key={card.id} className={`rounded-2xl border border-gray-200 ${card.bg} p-5 dark:border-gray-800`}>
                 <p className={`text-2xl font-bold ${card.color}`}>{card.value}</p>
                 <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">{card.label}</p>
               </div>

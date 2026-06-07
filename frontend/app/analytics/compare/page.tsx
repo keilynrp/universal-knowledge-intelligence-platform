@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { useLanguage } from "../../contexts/LanguageContext";
-import { ConceptTooltip, PageHeader } from "../../components/ui";
+import { EntityConcept, PageHeader } from "../../components/ui";
 import { apiFetch } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -213,7 +213,7 @@ export default function DomainComparePage() {
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <KPICard
-                label={<ConceptTooltip concept="entity">{t("page.compare.total_entities")}</ConceptTooltip>}
+                label={<EntityConcept>{t("page.compare.total_entities")}</EntityConcept>}
                 values={snapshots.map(s => s.kpis.total_entities)}
                 formatter={v => Number(v).toLocaleString()}
               />
@@ -256,7 +256,9 @@ export default function DomainComparePage() {
                   {/* Entity types */}
                   {snap.type_distribution.length > 0 && (
                     <div>
-                      <p className="mb-2 text-xs font-semibold text-gray-500 dark:text-gray-400">{t("page.compare.entity_types")}</p>
+                      <p className="mb-2 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                        <EntityConcept>{t("page.compare.entity_types")}</EntityConcept>
+                      </p>
 
                       <div className="space-y-1.5">
                         {snap.type_distribution.slice(0, 6).map(t => (

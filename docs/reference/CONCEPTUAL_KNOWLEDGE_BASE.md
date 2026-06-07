@@ -82,6 +82,36 @@ entities.
 - UI tooltip: `frontend/app/lib/conceptGlossary.ts`
 - Last reviewed: 2026-06-07
 
+### UI coverage policy
+
+The governed entity definition must be exposed with `EntityConcept` whenever
+the UI uses Entity / Entidad as an operational category:
+
+- KPI and metric labels, including Total Entities;
+- chart, section, table, and ranked-list headings;
+- filter, facet, form-field, and record-detail labels;
+- workflow inputs and administrative result metrics;
+- embedded and stakeholder-facing dashboard cards.
+
+The tooltip is not added to narrative sentences, product or module names,
+event names, error messages, code identifiers, native select options, or
+fallback record names such as `Entity #123`. Those uses mention an entity but
+do not define the category.
+
+`frontend/__tests__/entityConceptCoverage.test.ts` is the regression contract
+for registered surfaces. A feature PR that introduces a new operational Entity
+label must add `EntityConcept` and register the surface in that test.
+
+Interaction requirements:
+
+- pointer hover opens the definition;
+- click opens the definition;
+- keyboard focus opens it and `Escape` closes it;
+- the trigger always references the governed definition through
+  `aria-describedby`;
+- form labels and buttons must not contain the tooltip button as a nested
+  interactive control.
+
 ## Governance backlog
 
 The next concepts should be added in this order:

@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
-import { PageHeader, EmptyState, ErrorBanner, useToast } from "../components/ui";
+import { PageHeader, EmptyState, EntityConcept, ErrorBanner, useToast } from "../components/ui";
 import { useAssistantContextRegistration } from "../contexts/AssistantContext";
 import { useDomain } from "../contexts/DomainContext";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -92,11 +92,11 @@ export default function CatalogPortalsPage() {
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const tr = (key: string, fallback: string) => {
+  const tr = useCallback((key: string, fallback: string) => {
     const value = t(key);
     return value === key ? fallback : value;
-  };
-  const normalizeFeedback = (message: string | null | undefined, fallback: string) => {
+  }, [t]);
+  const normalizeFeedback = useCallback((message: string | null | undefined, fallback: string) => {
     const normalized = message?.trim();
     if (!normalized) return fallback;
     if (/^https?:\/\//i.test(normalized)) return fallback;
@@ -108,7 +108,7 @@ export default function CatalogPortalsPage() {
       }
     }
     return normalized;
-  };
+  }, []);
 
   const [portals, setPortals] = useState<CatalogPortal[]>([]);
   const [candidates, setCandidates] = useState<CatalogImportCandidate[]>([]);
@@ -148,7 +148,7 @@ export default function CatalogPortalsPage() {
     }
   }, [router, searchParams]);
 
-  const loadPortals = async () => {
+  const loadPortals = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -178,7 +178,7 @@ export default function CatalogPortalsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [normalizeFeedback, tr]);
 
   const seedFromCandidate = (candidate: CatalogImportCandidate) => {
     const slugBase = `${candidate.domain_id}-${candidate.source}${candidate.entity_type ? `-${candidate.entity_type}` : ""}`
@@ -212,7 +212,7 @@ export default function CatalogPortalsPage() {
 
   useEffect(() => {
     void loadPortals();
-  }, []);
+  }, [loadPortals]);
 
   const domainOptions = useMemo(
     () => domains.map((domain) => ({ id: domain.id, name: domain.name })),
@@ -415,15 +415,19 @@ export default function CatalogPortalsPage() {
                 <option value="public">{tr("catalogs.visibility.public", "Public read-only")}</option>
               </select>
             </label>
-            <label className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-              <span>{tr("catalogs.field.entity_type", "Entity type filter")}</span>
+            <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+              <div className="flex items-center gap-1">
+                <label htmlFor="catalog-entity-type">{tr("catalogs.field.entity_type", "Entity type filter")}</label>
+                <EntityConcept><span className="sr-only">{tr("catalogs.field.entity_type", "Entity type filter")}</span></EntityConcept>
+              </div>
               <input
+                id="catalog-entity-type"
                 value={form.ft_entity_type}
                 onChange={(event) => setForm((prev) => ({ ...prev, ft_entity_type: event.target.value }))}
                 className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-gray-700 dark:bg-gray-950 dark:text-white dark:focus:ring-blue-900/40"
                 placeholder={tr("catalogs.field.entity_type_placeholder", "publication")}
               />
-            </label>
+            </div>
             <label className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
               <span>{tr("catalogs.field.min_quality", "Minimum quality")}</span>
               <input

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
 import { useLanguage } from "../contexts/LanguageContext";
+import { EntityConcept } from "./ui";
 
 export interface FacetValue { value: string; count: number; }
 export interface FacetData { [field: string]: FacetValue[]; }
@@ -174,13 +175,21 @@ export default function FacetPanel({ activeFacets, onFacetChange, search, minQua
               key={field}
               className="border-b border-slate-200 py-4 last:border-b-0 dark:border-white/10"
             >
-              <button
-                onClick={() => toggleCollapse(field)}
-                className="flex w-full items-center justify-between text-left"
-              >
-                <span className="text-sm font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-[var(--ukip-muted)]">{translateFacetLabel(field)}</span>
-                <span className="text-sm text-slate-500">{isCollapsed ? "⌄" : "⌃"}</span>
-              </button>
+              <div className="flex w-full items-center justify-between">
+                <span className="text-sm font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-[var(--ukip-muted)]">
+                  {field === "entity_type"
+                    ? <EntityConcept>{translateFacetLabel(field)}</EntityConcept>
+                    : translateFacetLabel(field)}
+                </span>
+                <button
+                  type="button"
+                  aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${translateFacetLabel(field)}`}
+                  onClick={() => toggleCollapse(field)}
+                  className="rounded p-1 text-sm text-slate-500 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-violet-500 dark:hover:bg-white/5"
+                >
+                  {isCollapsed ? "⌄" : "⌃"}
+                </button>
+              </div>
 
               {!isCollapsed && (
                 <ul className="mt-3 space-y-3">

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
+import { EntityConcept } from "./ui";
 
 interface Relationship {
     id: number;
@@ -224,8 +225,12 @@ export default function RelationshipManager({
                 </p>
                 <form onSubmit={handleAdd} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <div className="relative col-span-2">
-                        <label className="mb-1 block text-[10px] font-medium text-gray-500">Buscar entidad destino</label>
+                        <div className="mb-1 flex items-center gap-1">
+                            <label htmlFor="relationship-target-search" className="block text-[10px] font-medium text-gray-500">Buscar entidad destino</label>
+                            <EntityConcept><span className="sr-only">Entidad destino</span></EntityConcept>
+                        </div>
                         <input
+                            id="relationship-target-search"
                             type="text"
                             value={targetQuery}
                             onChange={(e) => setTargetQuery(e.target.value)}
