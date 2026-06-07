@@ -503,14 +503,15 @@ These specs have zero upstream dependencies and unlock everything else.
 - [x] `get_prov_badge()`, `get_confidence_level()`, `get_ai_disclosure()` helpers
 - [ ] React components (ProvBadge, ConfidenceIndicator) *(deferred to frontend sprint)*
 
-### 5.6 Component Foundation Contract *(deferred to frontend sprint)*
+### 5.6 Component Foundation Contract 🚧
 **Change:** ukip-design-system-foundation
 **Depends on:** 5.4
 **Type:** REFACTOR (standardize existing)
 **Effort:** M
 
-- [ ] Standardize Button/IconButton variants, sizes, states, accessibility
-- [ ] Standardize Input/Select/Textarea/Checkbox/Radio/Switch patterns
+- [x] Standardize Button/IconButton variants, sizes, states, accessibility
+- [x] Standardize Input/Select/Textarea/Checkbox/Radio/Switch patterns
+- [x] Establish semantic control/feedback tokens and a regression baseline
 - [ ] Standardize Tabs, segmented controls, menus
 - [ ] Standardize Panel/Surface/SectionHeader/EmptyState/ErrorBanner/Toast/Skeleton
 - [ ] Standardize KPI/Metric/DeltaBadge/QualityBadge

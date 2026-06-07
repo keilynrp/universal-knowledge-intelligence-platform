@@ -180,6 +180,10 @@ jobs:
         working-directory: frontend
         run: npm test
 
+      - name: Enforce Design System regression baseline
+        working-directory: frontend
+        run: npm run design-system:check
+
   # ── TypeScript type-check ──────────────────────────────────────────────────
   frontend-typecheck:
     runs-on: ubuntu-latest

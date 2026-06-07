@@ -1,34 +1,45 @@
-import type { SelectHTMLAttributes } from "react";
+import type { ReactNode, SelectHTMLAttributes } from "react";
+import { FieldLabel, FieldMessages, useFieldChrome } from "./Field";
 
-interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
-  label?: string;
-  hint?: string;
-  error?: string;
+export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
+  label?: ReactNode;
+  hint?: ReactNode;
+  error?: ReactNode;
 }
 
-export default function Select({ label, hint, error, id, className = "", children, ...props }: SelectProps) {
-  const selectId = id ?? props.name;
+export default function Select({
+  label,
+  hint,
+  error,
+  id,
+  className = "",
+  children,
+  required,
+  "aria-describedby": describedBy,
+  ...props
+}: SelectProps) {
+  const { controlId, hintId, errorId, ariaDescribedBy } = useFieldChrome({
+    id: id ?? props.name,
+    describedBy,
+    hint,
+    error,
+  });
 
   return (
-    <label className="block">
-      {label ? (
-        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ukip-muted)]">
-          {label}
-        </span>
-      ) : null}
+    <div className="block">
+      {label ? <FieldLabel htmlFor={controlId} required={required}>{label}</FieldLabel> : null}
       <select
-        id={selectId}
-        className={`ukip-focus h-10 w-full rounded-[var(--ukip-radius-md)] border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-3 text-sm text-[var(--ukip-text)] ${className}`}
+        id={controlId}
+        aria-describedby={ariaDescribedBy}
+        aria-invalid={Boolean(error) || undefined}
+        required={required}
+        className={`ukip-control ukip-focus ${className}`}
         {...props}
       >
         {children}
       </select>
-      {error ? (
-        <span className="mt-1.5 block text-xs font-medium text-[var(--ukip-danger)]">{error}</span>
-      ) : hint ? (
-        <span className="mt-1.5 block text-xs text-[var(--ukip-muted)]">{hint}</span>
-      ) : null}
-    </label>
+      <FieldMessages error={error} errorId={errorId} hint={hint} hintId={hintId} />
+    </div>
   );
 }
 
