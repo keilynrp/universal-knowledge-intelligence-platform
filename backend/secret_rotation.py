@@ -34,6 +34,16 @@ def last_rotation_at(db: Session, secret_name: str) -> Optional[datetime]:
     return row.rotated_at if row else None
 
 
+def list_rotation_events(db: Session, limit: int = 20) -> list[models.SecretRotationEvent]:
+    """Recent rotation evidence, newest first. Read-only."""
+    return (
+        db.query(models.SecretRotationEvent)
+        .order_by(models.SecretRotationEvent.rotated_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
 def record_rotation_event(
     db: Session,
     *,
