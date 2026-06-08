@@ -102,6 +102,46 @@ describe("design-token audit", () => {
     }
   });
 
+  it("uses accessible light foregrounds while preserving dark foregrounds", async () => {
+    const css = await readFile(
+      path.join(process.cwd(), "app", "styles", "tokens.css"),
+      "utf8",
+    );
+    const rootScope = css.match(/:root\s*\{([^}]*)\}/)?.[1];
+    const darkScope = css.match(/\.dark\s*\{([^}]*)\}/)?.[1];
+    const foregrounds = [
+      "--ukip-success",
+      "--ukip-warning",
+      "--ukip-danger",
+      "--ukip-info",
+      "--ukip-violet",
+    ];
+    const valuesFor = (scope: string) =>
+      Object.fromEntries(
+        foregrounds.map((token) => [
+          token,
+          scope.match(new RegExp(`${token}:\\s*([^;]+);`))?.[1].trim(),
+        ]),
+      );
+
+    expect(rootScope).toBeDefined();
+    expect(darkScope).toBeDefined();
+    expect(valuesFor(rootScope!)).toEqual({
+      "--ukip-success": "oklch(49% 0.16 155)",
+      "--ukip-warning": "oklch(52% 0.16 78)",
+      "--ukip-danger": "oklch(53% 0.20 25)",
+      "--ukip-info": "oklch(50% 0.16 245)",
+      "--ukip-violet": "oklch(52% 0.22 292)",
+    });
+    expect(valuesFor(darkScope!)).toEqual({
+      "--ukip-success": "oklch(74% 0.16 155)",
+      "--ukip-warning": "oklch(80% 0.15 78)",
+      "--ukip-danger": "oklch(68% 0.2 25)",
+      "--ukip-info": "oklch(72% 0.15 245)",
+      "--ukip-violet": "oklch(72% 0.2 292)",
+    });
+  });
+
   it("reports declarations, duplicates, and hardcoded UI color families", async () => {
     const result = await auditTokenSource();
 
