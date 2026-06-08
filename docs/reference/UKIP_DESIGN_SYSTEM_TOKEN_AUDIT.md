@@ -14,18 +14,22 @@ npm run audit:design-tokens
 - Audited token source: `frontend/app/styles/tokens.css`
 - Audited component path: `frontend/app/components/ui/*.tsx`
 - Current branch: `codex/design-system-governance`
-- Audit script baseline commit: `b5703e2`
+- Branch base: `41cf380`
+- Audit logic commits: `e2f13ba`, `00536f2`, `1aaf543`
+- Baseline report/package commit: `b5703e2`
+- Token addition commit: `b228fbc`
 - `frontend/app/styles/tokens.css` SHA-256 at audit time: `5be593c58739f7d9759972699954d0cd633841534048de0dcd572ea707a95f67`
-- The 44-token count includes the approved, uncommitted Design System token additions present in this worktree at audit time. The fingerprint identifies that exact token-file state.
+- The 44-token count includes the approved Design System token additions committed in `b228fbc`. The fingerprint identifies that exact token-file state.
 
 ## Baseline
 
 - Declared `--ukip-*` tokens: 44
 - Duplicate token declarations: 0
 - UI files with hardcoded Tailwind color classes: 15
-- Distinct classes reported across files: 246
+- Sum of per-file unique hardcoded Tailwind color class entries: 246
+- Globally distinct hardcoded Tailwind color classes: 167
 
-The audit reports unique class names per file, not occurrence counts.
+The audit reports unique class names per file, not occurrence counts. Because the same class can appear in multiple files, the 246 entry count is the sum of each file's unique class list rather than a globally distinct count.
 
 ## Disposition Rules
 
