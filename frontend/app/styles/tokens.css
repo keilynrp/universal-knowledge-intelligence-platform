@@ -16,11 +16,17 @@
   --ukip-primary: oklch(57% 0.22 292);
   --ukip-primary-strong: oklch(49% 0.24 292);
   --ukip-primary-soft: oklch(93% 0.04 292);
-  --ukip-violet: oklch(62% 0.22 292);
+  --ukip-violet: oklch(52% 0.22 292);
   --ukip-cyan: oklch(67% 0.15 220);
   --ukip-emerald: oklch(68% 0.16 155);
-  --ukip-warning: oklch(76% 0.16 78);
-  --ukip-danger: oklch(60% 0.2 25);
+  --ukip-success: oklch(49% 0.16 155);
+  --ukip-success-soft: oklch(94% 0.045 155);
+  --ukip-warning: oklch(52% 0.16 78);
+  --ukip-warning-soft: oklch(95% 0.055 78);
+  --ukip-danger: oklch(53% 0.20 25);
+  --ukip-danger-soft: oklch(94% 0.045 25);
+  --ukip-info: oklch(50% 0.16 245);
+  --ukip-info-soft: oklch(94% 0.04 245);
 
   --ukip-radius-sm: 0.5rem;
   --ukip-radius-md: 0.75rem;
@@ -74,8 +80,14 @@
   --ukip-violet: oklch(72% 0.2 292);
   --ukip-cyan: oklch(72% 0.14 220);
   --ukip-emerald: oklch(74% 0.16 155);
+  --ukip-success: oklch(74% 0.16 155);
+  --ukip-success-soft: oklch(27% 0.065 155);
   --ukip-warning: oklch(80% 0.15 78);
+  --ukip-warning-soft: oklch(27% 0.07 78);
   --ukip-danger: oklch(68% 0.2 25);
+  --ukip-danger-soft: oklch(27% 0.065 25);
+  --ukip-info: oklch(72% 0.15 245);
+  --ukip-info-soft: oklch(27% 0.06 245);
 
   --ukip-shadow-panel: 0 22px 70px rgb(0 0 0 / 0.28);
   --ukip-shadow-soft: 0 14px 44px rgb(0 0 0 / 0.22);
