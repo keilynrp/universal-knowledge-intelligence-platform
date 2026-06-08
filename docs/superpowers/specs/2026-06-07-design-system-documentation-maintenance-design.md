@@ -177,4 +177,3 @@ Ownership is role-based, not person-based, so it survives team changes.
 - Reviewers have a shared checklist.
 - The docs clearly distinguish design draft from production-ready contract.
 - V1 can evolve iteratively without losing traceability.
-

@@ -225,4 +225,3 @@ Per component:
 - `Button`, `Badge`, `Input`, and `Select` establish reusable patterns.
 - Figma variants map cleanly to React props.
 - Component buildout can proceed one checkpoint at a time.
-

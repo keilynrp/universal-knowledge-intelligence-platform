@@ -223,4 +223,3 @@ For Professional migration:
 - Components are created one at a time with checkpoint approvals.
 - The library can migrate to Professional modes without renaming semantic tokens.
 - Figma is useful for implementation, not just presentation.
-

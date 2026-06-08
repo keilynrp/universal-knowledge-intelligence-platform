@@ -338,4 +338,3 @@ npm run lint
 ```
 
 Expected: all focused tests pass, audit exits 0, lint exits 0.
-

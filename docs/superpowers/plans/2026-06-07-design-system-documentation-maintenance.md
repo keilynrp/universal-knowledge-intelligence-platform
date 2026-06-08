@@ -205,4 +205,3 @@ git diff --check
 ```
 
 Expected: tests pass and no whitespace errors.
-

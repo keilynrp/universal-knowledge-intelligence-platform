@@ -184,4 +184,3 @@ Required evidence:
 - No unresolved hardcoded visual properties except documented exceptions.
 - State ledger contains all collection/page/component IDs.
 - Design-system changelog records the Figma V1 build.
-

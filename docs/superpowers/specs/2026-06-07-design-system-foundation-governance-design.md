@@ -204,4 +204,3 @@ Required checks:
 - Foundation token names are stable enough for component buildout.
 - Figma Professional migration has a clear path.
 - Component specs can rely on this document for source-of-truth decisions.
-

@@ -310,4 +310,3 @@ git diff --check
 ```
 
 Expected: no whitespace errors.
-
