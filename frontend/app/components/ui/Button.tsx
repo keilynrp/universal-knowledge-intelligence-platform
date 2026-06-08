@@ -35,6 +35,14 @@ export default function Button({
   type = "button",
   ...props
 }: ButtonProps) {
+  if (
+    process.env.NODE_ENV !== "production" &&
+    size === "icon" &&
+    !props["aria-label"]?.trim()
+  ) {
+    throw new Error('Button with size="icon" requires a non-empty aria-label.');
+  }
+
   return (
     <button
       type={type}
