@@ -33,8 +33,11 @@ Do not begin mutation until every item is complete.
 - [ ] A migration owner and a separate design-system reviewer are named.
 - [ ] No parallel Figma mutations are in progress. Announce and enforce a
       mutation freeze for this file until migration or rollback is complete.
-- [ ] Existing component and style consumers of both Starter collections are
-      inventoried so their bindings can be checked and restored if necessary.
+- [ ] Every component, component set, instance, style, and direct node binding
+      that references either Starter semantic collection is inventoried. The
+      consumer ledger records the consumer ID, property, source variable ID,
+      source collection, page or library location, and intended target variable
+      ID so each binding can be migrated, validated, and restored.
 - [ ] A rollback evidence location is prepared for affected node, style,
       component, collection, mode, and variable IDs.
 
@@ -90,7 +93,8 @@ Perform these steps sequentially under the mutation freeze.
    20 target `Dark` resolved values with `UKIP/Color/Dark`. Record both source
    and target values, alias IDs, scopes, and syntax. Resolve every mismatch
    before continuing.
-9. Create a disposable probe frame that is not a library component. Add
+9. Create a disposable API smoke-test probe frame that is not a library
+   component. Add
    independently inspectable probe layers for:
    - fill bindings;
    - stroke bindings;
@@ -100,75 +104,118 @@ Perform these steps sequentially under the mutation freeze.
     never broaden a scope merely to make a probe pass.
 11. Switch the probe frame between `Light` and `Dark`. Confirm each property
     remains bound to the same target variable ID and resolves to the expected
-    mode value. Record inspection evidence and screenshots for both modes.
-12. Rebind an inventoried sample of existing styles, components, instances, and
-    direct node consumers to `UKIP/Color`. Validate both modes and record all
-    affected IDs. Expand validation to every consumer if any sample fails.
-13. Run the verification checklist below. Fix or roll back any failure; do not
-    deprecate a source collection while a check is unresolved.
-14. After reviewer sign-off, mark `UKIP/Color/Light` and `UKIP/Color/Dark`
-    deprecated in their descriptions and publishing guidance. Do not delete
-    them during this migration.
-15. Remove the disposable probe frame only after its IDs, screenshots, and
-    inspection results have been recorded. End the mutation freeze and announce
-    completion.
+    mode value. Record inspection evidence and screenshots for both modes. The
+    probes verify variable-binding APIs only; they are not evidence that real
+    consumers were migrated successfully.
+12. Using the pre-migration consumer ledger, rebind every component, component
+    set, instance, style, and direct node binding that references
+    `UKIP/Color/Light` or `UKIP/Color/Dark` to the matching variable in
+    `UKIP/Color`. After each rebind, record the consumer ID, property, original
+    source variable ID, target variable ID, operator, and completion status.
+13. Validate every rebound consumer in both `Light` and `Dark`. Confirm the
+    expected resolved value, visual result, explicit mode behavior, and target
+    variable ID. Record the result against each consumer ledger entry.
+14. Search or inspect the entire file and published library for remaining
+    references to either Starter semantic collection. Reconcile the result
+    against the ledger. Zero unaccounted Starter references are permitted.
+15. Complete the pre-deprecation gate below. Fix or roll back any failure; do
+    not deprecate a source collection while a check is unresolved.
 
-## Rollback
+## Gate 1: Pre-Deprecation Approval
 
-Retain `UKIP/Color/Light` and `UKIP/Color/Dark`, unchanged and publishable,
-until all value, probe, consumer, and reviewer validation passes. They are the
-rollback source of truth.
+Both approvers must review this evidence and approve deprecation:
 
-If any target value, alias, scope, syntax, mode, or consumer binding fails:
+- [ ] The pre-migration inventory/export, Figma file version, repository
+      revision, and passing CSS token audit are recorded.
+- [ ] The new collection ID, mode IDs, and all 20 target variable IDs are
+      mapped to both source variable IDs.
+- [ ] All 20 `Light` and all 20 `Dark` values, aliases, scopes, descriptions,
+      publishing settings, and exact `WEB` syntax have been compared and match.
+- [ ] Fill, stroke, and text API smoke-test probes pass in both modes, with IDs,
+      inspection results, and screenshots recorded.
+- [ ] Every consumer ledger entry has been rebound and validated in both modes,
+      with source and target IDs recorded.
+- [ ] A complete post-rebind search or inspection reports zero unaccounted
+      references to `UKIP/Color/Light` or `UKIP/Color/Dark`.
+- [ ] Every mismatch or exception has a recorded disposition and owner.
 
-1. Stop further mutations and keep the mutation freeze active.
-2. Record the failing target variable IDs and every affected node, style,
-   component, instance, collection, and mode ID.
-3. Restore affected bindings to the matching variable ID in
-   `UKIP/Color/Light` or `UKIP/Color/Dark`.
-4. Reapply the original explicit mode selection or collection usage recorded in
-   the pre-migration inventory.
-5. Verify restored fill, stroke, and text behavior in the affected theme.
-6. Remove or unpublish the incomplete `UKIP/Color` collection only after no
-   consumers remain bound to it. Do not alter or delete the Starter collections.
-7. Record the failure, restored bindings, affected IDs, operator, timestamp,
-   screenshots, and follow-up owner. Obtain reviewer confirmation that rollback
-   restored the pre-migration state before ending the freeze.
-
-## Verification Evidence
-
-- [ ] Pre-migration inventory/export location and timestamp are recorded.
-- [ ] Figma file version and repository revision are recorded.
-- [ ] CSS token audit command and passing output are attached.
-- [ ] New collection ID and `Light` and `Dark` mode IDs are recorded.
-- [ ] All 20 target variable IDs are mapped to both source variable IDs.
-- [ ] Names, aliases, scopes, descriptions, publishing settings, and exact
-      `WEB` syntax match the source inventory and checklist.
-- [ ] A comparison artifact proves 20 of 20 `Light` values and 20 of 20 `Dark`
-      values match their respective Starter collection values.
-- [ ] Disposable fill, stroke, and text probe IDs are recorded.
-- [ ] Probe screenshots and variable inspection evidence are attached for both
-      modes.
-- [ ] Consumer validation lists checked style, component, instance, and node
-      IDs, with no unresolved or detached bindings.
-- [ ] `UKIP/Color/Light` and `UKIP/Color/Dark` remained available through
-      validation and were only deprecated after approval.
-- [ ] Any mismatch, rollback, or exception includes affected IDs, disposition,
-      and owner.
-- [ ] Post-migration inventory/export and final Figma file version are recorded.
-
-## Sign-Off Checkpoint
-
-Deprecation is blocked until both approvers explicitly sign off on the evidence.
-
-| Role | Name | Decision | Date | Evidence link |
+| Pre-deprecation role | Name | Decision | Date | Evidence link |
 | --- | --- | --- | --- | --- |
 | Migration owner |  | Approve / Reject |  |  |
 | Design-system reviewer |  | Approve / Reject |  |  |
 
-Final decision:
+If either decision is `Reject`, keep the Starter collections active and execute
+the rollback procedure as needed.
 
-- [ ] Approved: all checks pass; deprecate the Starter collections without
-      deleting them.
-- [ ] Rejected: execute or retain rollback, document affected IDs, and schedule
-      a corrected migration under a new mutation freeze.
+## Deprecation Action
+
+Only after both pre-deprecation decisions are `Approve`:
+
+1. Record the current Figma file version and deprecation timestamp.
+2. Mark `UKIP/Color/Light` and `UKIP/Color/Dark` deprecated in their
+   descriptions and publishing guidance.
+3. Do not delete or structurally modify either Starter collection.
+4. Publish the approved library update and record the resulting version.
+
+## Rollback
+
+Retain `UKIP/Color/Light` and `UKIP/Color/Dark`, unchanged and publishable,
+through pre-deprecation approval and post-deprecation verification. They are
+the rollback source of truth.
+
+If any target value, alias, scope, syntax, mode, or consumer binding fails:
+
+1. Stop further mutations and keep the mutation freeze active.
+2. Freeze the consumer ledger and record which entries are not started, rebound,
+   validated, failed, or already restored. Record every affected component,
+   component set, instance, style, node, property, source variable, target
+   variable, collection, and mode ID.
+3. For a partial migration, identify every consumer currently bound to
+   `UKIP/Color`; do not assume the ledger status alone reflects the live file.
+4. Restore every migrated or partially migrated consumer binding to the
+   matching variable ID in
+   `UKIP/Color/Light` or `UKIP/Color/Dark`.
+5. Reapply the original explicit mode selection or collection usage recorded in
+   the pre-migration inventory.
+6. Validate every restored consumer in its original mode or collection context,
+   and record the restoration result against its IDs in the consumer ledger.
+7. Search or inspect the entire file and library to prove that no consumer
+   remains bound to the incomplete target collection.
+8. Remove or unpublish the incomplete `UKIP/Color` collection only after the
+   preceding search is clean. Reactivate Starter publishing guidance if
+   deprecation had already occurred. Do not delete the Starter collections.
+9. Record the failure, restored bindings, affected IDs, operator, timestamp,
+   screenshots, and follow-up owner. Obtain reviewer confirmation that rollback
+   restored the pre-migration state before ending the freeze.
+
+## Gate 2: Post-Deprecation Verification
+
+After publishing the deprecation action:
+
+- [ ] Reopen or refresh the published library and record the observed version.
+- [ ] Confirm `UKIP/Color` remains published with `Light` and `Dark` modes and
+      all 20 semantic variables available.
+- [ ] Confirm both Starter collections are visibly deprecated but retained.
+- [ ] Reinspect every consumer ledger entry and confirm it remains bound to the
+      recorded `UKIP/Color` target variable ID.
+- [ ] Validate every consumer again in both modes after publication.
+- [ ] Repeat the full-file and library reference search and record zero
+      unaccounted Starter references.
+- [ ] Record the post-deprecation inventory/export, final Figma file version,
+      consumer ledger, search result, screenshots, and any affected IDs.
+
+## Final Sign-Off
+
+End the mutation freeze only after post-deprecation verification is complete and
+both final decisions are `Approve`.
+
+| Final role | Name | Decision | Date | Evidence link |
+| --- | --- | --- | --- | --- |
+| Migration owner |  | Approve / Reject |  |  |
+| Design-system reviewer |  | Approve / Reject |  |  |
+
+If either final decision is `Reject`, keep the mutation freeze active, record
+all affected IDs, and execute the rollback procedure.
+
+After both final approvals, remove the disposable probes only after their IDs
+and evidence are retained, announce completion, and end the mutation freeze.
