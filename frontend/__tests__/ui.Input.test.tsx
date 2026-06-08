@@ -34,6 +34,38 @@ describe("Input", () => {
     expect(screen.queryByText("At least 12 characters.")).not.toBeInTheDocument();
   });
 
+  it("merges caller description references with the hint id", () => {
+    render(
+      <Input
+        id="topic"
+        aria-label="Topic"
+        aria-describedby="  topic-context   topic-hint  topic-context "
+        hint="Choose a precise topic."
+      />,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Topic" })).toHaveAttribute(
+      "aria-describedby",
+      "topic-context topic-hint",
+    );
+  });
+
+  it("merges caller description references with the error id", () => {
+    render(
+      <Input
+        id="title"
+        label="Title"
+        aria-describedby="title-guidance title-error"
+        hint="Use a concise title."
+        error="Title is required."
+      />,
+    );
+
+    const input = screen.getByRole("textbox", { name: "Title" });
+    expect(input).toHaveAttribute("aria-describedby", "title-guidance title-error");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+  });
+
   it("does not force invalid state and preserves caller-provided aria props", () => {
     render(
       <Input
