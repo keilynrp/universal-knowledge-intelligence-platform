@@ -3,12 +3,12 @@ import { render, screen, within } from "@testing-library/react";
 import Badge from "../app/components/ui/Badge";
 
 const variants = [
-  ["default", "bg-panel-strong", "text-muted", "bg-muted-soft"],
-  ["success", "bg-success-soft", "text-success", "bg-success"],
-  ["warning", "bg-warning-soft", "text-warning", "bg-warning"],
-  ["error", "bg-danger-soft", "text-danger", "bg-danger"],
-  ["info", "bg-info-soft", "text-info", "bg-info"],
-  ["purple", "bg-primary-soft", "text-violet", "bg-violet"],
+  ["default", "bg-[var(--ukip-panel-strong)]", "text-[var(--ukip-muted)]", "bg-[var(--ukip-muted-soft)]"],
+  ["success", "bg-[var(--ukip-success-soft)]", "text-[var(--ukip-success)]", "bg-[var(--ukip-success)]"],
+  ["warning", "bg-[var(--ukip-warning-soft)]", "text-[var(--ukip-warning)]", "bg-[var(--ukip-warning)]"],
+  ["error", "bg-[var(--ukip-danger-soft)]", "text-[var(--ukip-danger)]", "bg-[var(--ukip-danger)]"],
+  ["info", "bg-[var(--ukip-info-soft)]", "text-[var(--ukip-info)]", "bg-[var(--ukip-info)]"],
+  ["purple", "bg-[var(--ukip-primary-soft)]", "text-[var(--ukip-violet)]", "bg-[var(--ukip-violet)]"],
 ] as const;
 
 describe("Badge", () => {
@@ -53,9 +53,9 @@ describe("Badge", () => {
     const badge = screen.getByText("Live");
     expect(within(badge).getByTestId("badge-dot-pulse")).toHaveClass(
       "animate-ping",
-      "bg-success",
+      "bg-[var(--ukip-success)]",
     );
-    expect(within(badge).getByTestId("badge-dot")).toHaveClass("bg-success");
+    expect(within(badge).getByTestId("badge-dot")).toHaveClass("bg-[var(--ukip-success)]");
   });
 
   it("does not render dot elements unless dot is enabled", () => {

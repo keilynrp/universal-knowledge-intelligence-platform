@@ -12,34 +12,34 @@ interface BadgeProps {
 
 const VARIANT_CLASSES: Record<BadgeVariant, { bg: string; text: string; dot: string }> = {
   default: {
-    bg: "bg-panel-strong",
-    text: "text-muted",
-    dot: "bg-muted-soft",
+    bg: "bg-[var(--ukip-panel-strong)]",
+    text: "text-[var(--ukip-muted)]",
+    dot: "bg-[var(--ukip-muted-soft)]",
   },
   success: {
-    bg: "bg-success-soft",
-    text: "text-success",
-    dot: "bg-success",
+    bg: "bg-[var(--ukip-success-soft)]",
+    text: "text-[var(--ukip-success)]",
+    dot: "bg-[var(--ukip-success)]",
   },
   warning: {
-    bg: "bg-warning-soft",
-    text: "text-warning",
-    dot: "bg-warning",
+    bg: "bg-[var(--ukip-warning-soft)]",
+    text: "text-[var(--ukip-warning)]",
+    dot: "bg-[var(--ukip-warning)]",
   },
   error: {
-    bg: "bg-danger-soft",
-    text: "text-danger",
-    dot: "bg-danger",
+    bg: "bg-[var(--ukip-danger-soft)]",
+    text: "text-[var(--ukip-danger)]",
+    dot: "bg-[var(--ukip-danger)]",
   },
   info: {
-    bg: "bg-info-soft",
-    text: "text-info",
-    dot: "bg-info",
+    bg: "bg-[var(--ukip-info-soft)]",
+    text: "text-[var(--ukip-info)]",
+    dot: "bg-[var(--ukip-info)]",
   },
   purple: {
-    bg: "bg-primary-soft",
-    text: "text-violet",
-    dot: "bg-violet",
+    bg: "bg-[var(--ukip-primary-soft)]",
+    text: "text-[var(--ukip-violet)]",
+    dot: "bg-[var(--ukip-violet)]",
   },
 };
 
