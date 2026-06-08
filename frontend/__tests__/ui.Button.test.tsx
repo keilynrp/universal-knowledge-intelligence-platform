@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import Button from "../app/components/ui/Button";
 
 describe("Button", () => {
@@ -73,4 +73,24 @@ describe("Button", () => {
       ).toThrow(/non-empty aria-label/i);
     },
   );
+
+  it("does not block rendering an unlabeled icon button in production", () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    vi.stubEnv("NODE_ENV", "production");
+
+    try {
+      expect(() =>
+        render(
+          <Button size="icon">
+            <span aria-hidden="true">X</span>
+          </Button>,
+        ),
+      ).not.toThrow();
+      expect(screen.getByRole("button")).toBeInTheDocument();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    expect(process.env.NODE_ENV).toBe(originalNodeEnv);
+  });
 });
