@@ -75,6 +75,15 @@ describe("design-token audit", () => {
 
     expect(result.declarations).toContain("--ukip-bg");
     expect(result.declarations).toContain("--ukip-space-4");
+    expect(result.declarations).toEqual(
+      expect.arrayContaining([
+        "--ukip-success-soft",
+        "--ukip-warning-soft",
+        "--ukip-danger-soft",
+        "--ukip-info",
+        "--ukip-info-soft",
+      ]),
+    );
     expect(result.duplicates).toEqual([]);
     expect(result.hardcodedUsages).toEqual(
       expect.arrayContaining([
