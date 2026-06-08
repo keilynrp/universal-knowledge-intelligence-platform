@@ -46,6 +46,9 @@ No hardcoded color migration is identified by the audit baseline. Figma breadcru
 
 ## Status
 
-| React contract | Figma |
+| Dimension | Status |
 | --- | --- |
-| Draft | Figma pending |
+| Contract | Draft |
+| Token migration | Complete |
+| Accessibility | Reviewed with follow-ups |
+| Figma | Pending Professional buildout |

@@ -54,6 +54,9 @@ The current implementation is tokenized. Figma should model the closed control a
 
 ## Status
 
-| React contract | Figma |
+| Dimension | Status |
 | --- | --- |
-| Contract implemented | Figma pending |
+| Contract | Implemented |
+| Token migration | Complete |
+| Accessibility | Contract covered |
+| Figma | Pending Professional buildout |

@@ -50,6 +50,9 @@ The audit baseline marks the bounded icon palette **Keep**; structural panel and
 
 ## Status
 
-| React contract | Figma |
+| Dimension | Status |
 | --- | --- |
-| Draft | Figma pending |
+| Contract | Draft |
+| Token migration | Complete |
+| Accessibility | Reviewed with follow-ups |
+| Figma | Pending Professional buildout |

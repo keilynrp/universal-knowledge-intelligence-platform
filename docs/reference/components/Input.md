@@ -53,6 +53,9 @@ The current implementation is tokenized and its accessibility contract is implem
 
 ## Status
 
-| React contract | Figma |
+| Dimension | Status |
 | --- | --- |
-| Contract implemented | Figma pending |
+| Contract | Implemented |
+| Token migration | Complete |
+| Accessibility | Contract covered |
+| Figma | Pending Professional buildout |

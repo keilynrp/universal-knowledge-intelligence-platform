@@ -52,6 +52,9 @@ Audit disposition: keep the 24 icon-palette classes; replace 13 shared text/CTA/
 
 ## Status
 
-| React contract | Figma |
+| Dimension | Status |
 | --- | --- |
-| Draft | Figma pending |
+| Contract | Draft |
+| Token migration | Partial |
+| Accessibility | Reviewed with follow-ups |
+| Figma | Pending Professional buildout |

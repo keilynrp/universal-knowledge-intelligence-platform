@@ -4,26 +4,29 @@ These contracts describe the current React implementation and the approved prope
 
 ## Status Vocabulary
 
-| Status | Meaning |
-| --- | --- |
-| Draft | Contract is documented from current code but still has known accessibility, token, or coverage gaps. |
-| Contract implemented | The documented React contract and dedicated tests are implemented on this branch. |
-| Figma pending | Approved React props and visual states are mapped, but the Figma component awaits Professional buildout. |
+| Dimension | Values | Meaning |
+| --- | --- | --- |
+| Contract | Draft, Implemented | Whether the documented React contract is considered stable and implemented. |
+| Token migration | Pending, Partial, Complete | Whether component visual classes have migrated to approved tokens; intentional local palettes do not prevent Complete. |
+| Accessibility | Pending review, Reviewed with follow-ups, Contract covered | Whether accessibility is unreviewed, reviewed with documented gaps, or implemented and covered by the current contract/tests. |
+| Figma | Pending Professional buildout | Approved React props and visual states are mapped, but the Figma component is not yet built. |
+
+Dimensions are independent. For example, an implemented React contract may still have pending token migration or accessibility follow-ups.
 
 ## Component Index
 
-| Component | React contract | Figma | Dependency |
-| --- | --- | --- | --- |
-| [Button](Button.md) | Contract implemented | Figma pending | Foundation |
-| [Badge](Badge.md) | Contract implemented | Figma pending | Foundation |
-| [Input](Input.md) | Contract implemented | Figma pending | Foundation |
-| [Select](Select.md) | Contract implemented | Figma pending | Foundation |
-| [PageHeader](PageHeader.md) | Draft | Figma pending | Button for common actions |
-| [StatCard](StatCard.md) | Draft | Figma pending | DeltaBadge |
-| [TabNav](TabNav.md) | Draft | Figma pending | Badge semantics |
-| [EmptyState](EmptyState.md) | Draft | Figma pending | Button semantics |
-| [ErrorBanner](ErrorBanner.md) | Draft | Figma pending | Button and danger semantics |
-| [Skeleton](Skeleton.md) | Draft | Figma pending | Surface and layout tokens |
+| Component | Contract | Token migration | Accessibility | Figma | Dependency |
+| --- | --- | --- | --- | --- | --- |
+| [Button](Button.md) | Implemented | Partial | Contract covered | Pending Professional buildout | Foundation |
+| [Badge](Badge.md) | Implemented | Complete | Reviewed with follow-ups | Pending Professional buildout | Foundation |
+| [Input](Input.md) | Implemented | Complete | Contract covered | Pending Professional buildout | Foundation |
+| [Select](Select.md) | Implemented | Complete | Contract covered | Pending Professional buildout | Foundation |
+| [PageHeader](PageHeader.md) | Draft | Complete | Reviewed with follow-ups | Pending Professional buildout | Button for common actions |
+| [StatCard](StatCard.md) | Draft | Complete | Reviewed with follow-ups | Pending Professional buildout | DeltaBadge |
+| [TabNav](TabNav.md) | Draft | Pending | Reviewed with follow-ups | Pending Professional buildout | Badge semantics |
+| [EmptyState](EmptyState.md) | Draft | Partial | Reviewed with follow-ups | Pending Professional buildout | Button semantics |
+| [ErrorBanner](ErrorBanner.md) | Draft | Pending | Reviewed with follow-ups | Pending Professional buildout | Button and danger semantics |
+| [Skeleton](Skeleton.md) | Draft | Pending | Reviewed with follow-ups | Pending Professional buildout | Surface and layout tokens |
 
 ## Dependency Order
 

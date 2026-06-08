@@ -49,6 +49,9 @@ The current branch implements semantic status tokens and supersedes the audit ba
 
 ## Status
 
-| React contract | Figma |
+| Dimension | Status |
 | --- | --- |
-| Contract implemented | Figma pending |
+| Contract | Implemented |
+| Token migration | Complete |
+| Accessibility | Reviewed with follow-ups |
+| Figma | Pending Professional buildout |

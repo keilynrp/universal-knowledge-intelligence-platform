@@ -53,6 +53,9 @@ The implemented contract uses semantic tokens. The audit baseline still identifi
 
 ## Status
 
-| React contract | Figma |
+| Dimension | Status |
 | --- | --- |
-| Contract implemented | Figma pending |
+| Contract | Implemented |
+| Token migration | Partial |
+| Accessibility | Contract covered |
+| Figma | Pending Professional buildout |

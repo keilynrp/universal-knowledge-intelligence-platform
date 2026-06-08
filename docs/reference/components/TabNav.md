@@ -45,6 +45,9 @@ The audit baseline marks all shared navigation colors **Replace now** with prima
 
 ## Status
 
-| React contract | Figma |
+| Dimension | Status |
 | --- | --- |
-| Draft | Figma pending |
+| Contract | Draft |
+| Token migration | Pending |
+| Accessibility | Reviewed with follow-ups |
+| Figma | Pending Professional buildout |

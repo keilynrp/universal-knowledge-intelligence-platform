@@ -49,6 +49,9 @@ The audit baseline says **Propose token**: danger foreground, muted foreground, 
 
 ## Status
 
-| React contract | Figma |
+| Dimension | Status |
 | --- | --- |
-| Draft | Figma pending |
+| Contract | Draft |
+| Token migration | Pending |
+| Accessibility | Reviewed with follow-ups |
+| Figma | Pending Professional buildout |

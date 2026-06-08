@@ -53,6 +53,9 @@ The audit baseline marks all six unique hardcoded neutral classes **Replace now*
 
 ## Status
 
-| React contract | Figma |
+| Dimension | Status |
 | --- | --- |
-| Draft | Figma pending |
+| Contract | Draft |
+| Token migration | Pending |
+| Accessibility | Reviewed with follow-ups |
+| Figma | Pending Professional buildout |
