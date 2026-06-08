@@ -1,9 +1,20 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   auditTokenSource,
   auditTokenText,
   findHardcodedColorClasses,
 } from "../scripts/audit-design-tokens.mjs";
+
+const semanticStateTokens = [
+  "--ukip-success",
+  "--ukip-success-soft",
+  "--ukip-warning-soft",
+  "--ukip-danger-soft",
+  "--ukip-info",
+  "--ukip-info-soft",
+];
 
 describe("design-token audit", () => {
   it("allows one declaration per token in root and dark scopes", () => {
@@ -68,6 +79,27 @@ describe("design-token audit", () => {
     );
 
     expect(matches).toEqual(["text-red-500", "bg-blue-600/20"]);
+  });
+
+  it("declares each semantic state token once in root and dark scopes", async () => {
+    const css = await readFile(
+      path.join(process.cwd(), "app", "styles", "tokens.css"),
+      "utf8",
+    );
+    const rootScope = css.match(/:root\s*\{([^}]*)\}/)?.[1];
+    const darkScope = css.match(/\.dark\s*\{([^}]*)\}/)?.[1];
+
+    expect(rootScope).toBeDefined();
+    expect(darkScope).toBeDefined();
+
+    for (const scope of [rootScope!, darkScope!]) {
+      const result = auditTokenText(`.scope {${scope}}`);
+
+      expect(result.declarations).toEqual(
+        expect.arrayContaining(semanticStateTokens),
+      );
+      expect(result.duplicates).toEqual([]);
+    }
   });
 
   it("reports declarations, duplicates, and hardcoded UI color families", async () => {
