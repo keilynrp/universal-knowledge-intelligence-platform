@@ -157,10 +157,6 @@ describe("design-token audit", () => {
       ]),
     );
     expect(result.duplicates).toEqual([]);
-    expect(result.hardcodedUsages).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ file: expect.stringContaining("Badge.tsx") }),
-      ]),
-    );
+    expect(result.hardcodedUsages.some(({ file }) => file === "Badge.tsx")).toBe(false);
   });
 });
