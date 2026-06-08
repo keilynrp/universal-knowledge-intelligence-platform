@@ -1,56 +1,77 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { render, screen, within } from "@testing-library/react";
 import Badge from "../app/components/ui/Badge";
+
+const variants = [
+  ["default", "bg-panel-strong", "text-muted", "bg-muted-soft"],
+  ["success", "bg-success-soft", "text-success", "bg-success"],
+  ["warning", "bg-warning-soft", "text-warning", "bg-warning"],
+  ["error", "bg-danger-soft", "text-danger", "bg-danger"],
+  ["info", "bg-info-soft", "text-info", "bg-info"],
+  ["purple", "bg-primary-soft", "text-violet", "bg-violet"],
+] as const;
 
 describe("Badge", () => {
   it("renders children text", () => {
     render(<Badge>Active</Badge>);
+
     expect(screen.getByText("Active")).toBeInTheDocument();
   });
 
-  it("default variant includes gray background class", () => {
-    const { container } = render(<Badge>Default</Badge>);
-    const el = container.querySelector("span");
-    expect(el?.className).toContain("bg-gray-100");
+  it.each(variants)(
+    "uses semantic tokens for the %s variant",
+    (variant, backgroundClass, textClass) => {
+      render(<Badge variant={variant}>{variant}</Badge>);
+
+      expect(screen.getByText(variant)).toHaveClass(backgroundClass, textClass);
+    },
+  );
+
+  it.each(variants)(
+    "uses the matching semantic foreground token for the %s dot",
+    (variant, _backgroundClass, _textClass, dotClass) => {
+      render(
+        <Badge variant={variant} dot>
+          {variant}
+        </Badge>,
+      );
+
+      const badge = screen.getByText(variant);
+      const dots = within(badge).getAllByTestId("badge-dot");
+      expect(dots).toHaveLength(1);
+      expect(dots[0]).toHaveClass(dotClass);
+    },
+  );
+
+  it("renders a pulsing dot with the same semantic token", () => {
+    render(
+      <Badge variant="success" dot dotPulse>
+        Live
+      </Badge>,
+    );
+
+    const badge = screen.getByText("Live");
+    expect(within(badge).getByTestId("badge-dot-pulse")).toHaveClass(
+      "animate-ping",
+      "bg-success",
+    );
+    expect(within(badge).getByTestId("badge-dot")).toHaveClass("bg-success");
   });
 
-  it("success variant includes emerald background class", () => {
-    const { container } = render(<Badge variant="success">OK</Badge>);
-    const el = container.querySelector("span");
-    expect(el?.className).toContain("bg-emerald-50");
+  it("does not render dot elements unless dot is enabled", () => {
+    render(<Badge dotPulse>Quiet</Badge>);
+
+    const badge = screen.getByText("Quiet");
+    expect(within(badge).queryByTestId("badge-dot")).not.toBeInTheDocument();
+    expect(within(badge).queryByTestId("badge-dot-pulse")).not.toBeInTheDocument();
   });
 
-  it("error variant includes red background class", () => {
-    const { container } = render(<Badge variant="error">Fail</Badge>);
-    const el = container.querySelector("span");
-    expect(el?.className).toContain("bg-red-50");
-  });
+  it.each([
+    ["sm", "px-2", "py-0.5", "text-xs"],
+    ["md", "px-2.5", "py-1", "text-sm"],
+  ] as const)("preserves the %s size classes", (size, paddingX, paddingY, textSize) => {
+    render(<Badge size={size}>{size}</Badge>);
 
-  it("warning variant includes amber background class", () => {
-    const { container } = render(<Badge variant="warning">Warn</Badge>);
-    const el = container.querySelector("span");
-    expect(el?.className).toContain("bg-amber-50");
-  });
-
-  it("info variant includes blue background class", () => {
-    const { container } = render(<Badge variant="info">Info</Badge>);
-    const el = container.querySelector("span");
-    expect(el?.className).toContain("bg-blue-50");
-  });
-
-  it("renders dot indicator when dot=true", () => {
-    const { container } = render(<Badge dot>Live</Badge>);
-    // dot renders a nested <span> with relative flex
-    const dots = container.querySelectorAll("span > span");
-    expect(dots.length).toBeGreaterThan(0);
-  });
-
-  it("md size has larger padding than sm", () => {
-    const { container: sm } = render(<Badge size="sm">S</Badge>);
-    const { container: md } = render(<Badge size="md">M</Badge>);
-    const smClass = sm.querySelector("span")?.className ?? "";
-    const mdClass = md.querySelector("span")?.className ?? "";
-    expect(smClass).toContain("px-2 py-0.5 text-xs");
-    expect(mdClass).toContain("px-2.5 py-1 text-sm");
+    expect(screen.getByText(size)).toHaveClass(paddingX, paddingY, textSize);
   });
 });
