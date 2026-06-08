@@ -80,6 +80,10 @@ Semantic Figma variables map directly to CSS custom properties:
 
 Dimensions use the same convention:
 
+These CSS dimension tokens are present in the current approved worktree and are
+pending the baseline token commit. This note preserves provenance for readers
+reviewing this documentation commit in isolation.
+
 | Figma variable | CSS |
 | --- | --- |
 | `spacing/4` | `var(--ukip-space-4)` |
@@ -122,7 +126,8 @@ replaceable drift, or evidence for a new reusable semantic token.
 
 ## V1 Component Scope
 
-Components will be implemented in dependency order:
+The Figma component library will be built and aligned with the existing React
+components in dependency order:
 
 1. `Button`
 2. `Badge`
