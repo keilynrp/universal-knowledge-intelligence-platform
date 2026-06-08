@@ -9,7 +9,7 @@ import Switch from "../app/components/ui/Switch";
 import Textarea from "../app/components/ui/Textarea";
 
 describe("governed form controls", () => {
-  it("connects input label, hint, and error semantics", () => {
+  it("gives input errors precedence over hints", () => {
     render(
       <Input
         label="Institution"
@@ -24,9 +24,9 @@ describe("governed form controls", () => {
 
     expect(input).toBeRequired();
     expect(input).toHaveAttribute("aria-invalid", "true");
-    expect(describedBy).toContain("-hint");
     expect(describedBy).toContain("-error");
     expect(screen.getByRole("alert")).toHaveTextContent("Institution is required.");
+    expect(screen.queryByText("Use the canonical name.")).not.toBeInTheDocument();
   });
 
   it("exposes a standalone governed label primitive", () => {
