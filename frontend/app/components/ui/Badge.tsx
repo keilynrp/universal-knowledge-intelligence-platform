@@ -12,34 +12,34 @@ interface BadgeProps {
 
 const VARIANT_CLASSES: Record<BadgeVariant, { bg: string; text: string; dot: string }> = {
   default: {
-    bg: "bg-gray-100 dark:bg-gray-800",
-    text: "text-gray-600 dark:text-gray-400",
-    dot: "bg-gray-400",
+    bg: "bg-[var(--ukip-panel-strong)]",
+    text: "text-[var(--ukip-muted)]",
+    dot: "bg-[var(--ukip-muted-soft)]",
   },
   success: {
-    bg: "bg-emerald-50 dark:bg-emerald-500/10",
-    text: "text-emerald-700 dark:text-emerald-400",
-    dot: "bg-emerald-500",
+    bg: "bg-[var(--ukip-success-soft)]",
+    text: "text-[var(--ukip-success)]",
+    dot: "bg-[var(--ukip-success)]",
   },
   warning: {
-    bg: "bg-amber-50 dark:bg-amber-500/10",
-    text: "text-amber-700 dark:text-amber-400",
-    dot: "bg-amber-400",
+    bg: "bg-[var(--ukip-warning-soft)]",
+    text: "text-[var(--ukip-warning)]",
+    dot: "bg-[var(--ukip-warning)]",
   },
   error: {
-    bg: "bg-red-50 dark:bg-red-500/10",
-    text: "text-red-700 dark:text-red-400",
-    dot: "bg-red-500",
+    bg: "bg-[var(--ukip-danger-soft)]",
+    text: "text-[var(--ukip-danger)]",
+    dot: "bg-[var(--ukip-danger)]",
   },
   info: {
-    bg: "bg-blue-50 dark:bg-blue-500/10",
-    text: "text-blue-700 dark:text-blue-400",
-    dot: "bg-blue-500",
+    bg: "bg-[var(--ukip-info-soft)]",
+    text: "text-[var(--ukip-info)]",
+    dot: "bg-[var(--ukip-info)]",
   },
   purple: {
-    bg: "bg-violet-50 dark:bg-violet-500/10",
-    text: "text-violet-700 dark:text-violet-400",
-    dot: "bg-violet-500",
+    bg: "bg-[var(--ukip-primary-soft)]",
+    text: "text-[var(--ukip-violet)]",
+    dot: "bg-[var(--ukip-violet)]",
   },
 };
 
@@ -52,9 +52,15 @@ export default function Badge({ children, variant = "default", dot, dotPulse, si
       {dot && (
         <span className="relative flex h-1.5 w-1.5">
           {dotPulse && (
-            <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${classes.dot}`} />
+            <span
+              data-testid="badge-dot-pulse"
+              className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${classes.dot}`}
+            />
           )}
-          <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${classes.dot}`} />
+          <span
+            data-testid="badge-dot"
+            className={`relative inline-flex h-1.5 w-1.5 rounded-full ${classes.dot}`}
+          />
         </span>
       )}
       {children}

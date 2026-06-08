@@ -17,9 +17,12 @@ export function useFieldChrome({
 }: Pick<FieldChromeProps, "id" | "describedBy" | "hint" | "error">) {
   const generatedId = useId();
   const controlId = id ?? `ukip-field-${generatedId.replace(/:/g, "")}`;
-  const hintId = hint ? `${controlId}-hint` : undefined;
+  const hintId = hint && !error ? `${controlId}-hint` : undefined;
   const errorId = error ? `${controlId}-error` : undefined;
-  const ariaDescribedBy = [describedBy, hintId, errorId].filter(Boolean).join(" ") || undefined;
+  const ariaDescribedBy =
+    Array.from(
+      new Set([...(describedBy?.split(/\s+/) ?? []), hintId, errorId].filter(Boolean)),
+    ).join(" ") || undefined;
 
   return { controlId, hintId, errorId, ariaDescribedBy };
 }
@@ -58,7 +61,7 @@ export function FieldMessages({
 }) {
   return (
     <>
-      {hint ? (
+      {hint && !error ? (
         <span className="ukip-field-message" id={hintId}>
           {hint}
         </span>
