@@ -61,16 +61,37 @@ describe("Button", () => {
     ).toHaveClass(className);
   });
 
-  it.each([undefined, "", "   "])(
-    "requires a non-empty aria-label for icon-only buttons",
-    (ariaLabel) => {
+  it("accepts a non-empty aria-labelledby for icon-only buttons", () => {
+    render(
+      <>
+        <span id="settings-label">Settings</span>
+        <Button size="icon" aria-labelledby="settings-label">
+          <span aria-hidden="true">X</span>
+        </Button>
+      </>,
+    );
+
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+  });
+
+  it.each([
+    [undefined, undefined],
+    ["", ""],
+    ["   ", "   "],
+  ])(
+    "requires a non-empty aria-label or aria-labelledby for icon-only buttons",
+    (ariaLabel, ariaLabelledBy) => {
       expect(() =>
         render(
-          <Button size="icon" aria-label={ariaLabel}>
+          <Button
+            size="icon"
+            aria-label={ariaLabel}
+            aria-labelledby={ariaLabelledBy}
+          >
             <span aria-hidden="true">X</span>
           </Button>,
         ),
-      ).toThrow(/non-empty aria-label/i);
+      ).toThrow(/non-empty aria-label or aria-labelledby/i);
     },
   );
 

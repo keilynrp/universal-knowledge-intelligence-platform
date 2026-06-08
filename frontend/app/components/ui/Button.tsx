@@ -38,9 +38,12 @@ export default function Button({
   if (
     process.env.NODE_ENV !== "production" &&
     size === "icon" &&
-    !props["aria-label"]?.trim()
+    !props["aria-label"]?.trim() &&
+    !props["aria-labelledby"]?.trim()
   ) {
-    throw new Error('Button with size="icon" requires a non-empty aria-label.');
+    throw new Error(
+      'Button with size="icon" requires a non-empty aria-label or aria-labelledby.',
+    );
   }
 
   return (
