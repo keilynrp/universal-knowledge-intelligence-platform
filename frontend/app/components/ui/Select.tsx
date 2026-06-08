@@ -16,6 +16,7 @@ export default function Select({
   children,
   required,
   "aria-describedby": describedBy,
+  "aria-invalid": ariaInvalid,
   ...props
 }: SelectProps) {
   const { controlId, hintId, errorId, ariaDescribedBy } = useFieldChrome({
@@ -31,9 +32,9 @@ export default function Select({
       <select
         id={controlId}
         aria-describedby={ariaDescribedBy}
-        aria-invalid={Boolean(error) || undefined}
+        aria-invalid={error ? true : ariaInvalid}
         required={required}
-        className={`ukip-control ukip-focus ${className}`}
+        className={`ukip-control ukip-focus h-10 ${className}`}
         {...props}
       >
         {children}

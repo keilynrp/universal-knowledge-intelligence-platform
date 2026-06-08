@@ -17,12 +17,12 @@
   --ukip-primary-strong: oklch(49% 0.24 292);
   --ukip-primary-soft: oklch(93% 0.04 292);
   --ukip-on-primary: oklch(100% 0 0);
-  --ukip-violet: oklch(62% 0.22 292);
+  --ukip-violet: oklch(52% 0.22 292);
   --ukip-cyan: oklch(67% 0.15 220);
   --ukip-emerald: oklch(68% 0.16 155);
   --ukip-success: oklch(49% 0.16 155);
-  --ukip-warning: oklch(76% 0.16 78);
-  --ukip-danger: oklch(60% 0.2 25);
+  --ukip-warning: oklch(52% 0.16 78);
+  --ukip-danger: oklch(53% 0.20 25);
   --ukip-info: oklch(50% 0.16 245);
   --ukip-on-danger: oklch(100% 0 0);
 

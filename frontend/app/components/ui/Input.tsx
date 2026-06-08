@@ -15,6 +15,7 @@ export default function Input({
   className = "",
   required,
   "aria-describedby": describedBy,
+  "aria-invalid": ariaInvalid,
   ...props
 }: InputProps) {
   const { controlId, hintId, errorId, ariaDescribedBy } = useFieldChrome({
@@ -30,9 +31,9 @@ export default function Input({
       <input
         id={controlId}
         aria-describedby={ariaDescribedBy}
-        aria-invalid={Boolean(error) || undefined}
+        aria-invalid={error ? true : ariaInvalid}
         required={required}
-        className={`ukip-control ukip-focus ${className}`}
+        className={`ukip-control ukip-focus h-10 ${className}`}
         {...props}
       />
       <FieldMessages error={error} errorId={errorId} hint={hint} hintId={hintId} />
