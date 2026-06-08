@@ -40,6 +40,17 @@ export default function Button({
   disabled,
   ...props
 }: ButtonProps) {
+  if (
+    process.env.NODE_ENV !== "production" &&
+    size === "icon" &&
+    !props["aria-label"]?.trim() &&
+    !props["aria-labelledby"]?.trim()
+  ) {
+    throw new Error(
+      'Button with size="icon" requires a non-empty aria-label or aria-labelledby.',
+    );
+  }
+
   return (
     <button
       type={type}

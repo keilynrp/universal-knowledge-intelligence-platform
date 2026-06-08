@@ -1,9 +1,20 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   auditTokenSource,
   auditTokenText,
   findHardcodedColorClasses,
 } from "../scripts/audit-design-tokens.mjs";
+
+const semanticStateTokens = [
+  "--ukip-success",
+  "--ukip-success-soft",
+  "--ukip-warning-soft",
+  "--ukip-danger-soft",
+  "--ukip-info",
+  "--ukip-info-soft",
+];
 
 describe("design-token audit", () => {
   it("allows one declaration per token in root and dark scopes", () => {
@@ -70,16 +81,82 @@ describe("design-token audit", () => {
     expect(matches).toEqual(["text-red-500", "bg-blue-600/20"]);
   });
 
+  it("declares each semantic state token once in root and dark scopes", async () => {
+    const css = await readFile(
+      path.join(process.cwd(), "app", "styles", "tokens.css"),
+      "utf8",
+    );
+    const rootScope = css.match(/:root\s*\{([^}]*)\}/)?.[1];
+    const darkScope = css.match(/\.dark\s*\{([^}]*)\}/)?.[1];
+
+    expect(rootScope).toBeDefined();
+    expect(darkScope).toBeDefined();
+
+    for (const scope of [rootScope!, darkScope!]) {
+      const result = auditTokenText(`.scope {${scope}}`);
+
+      expect(result.declarations).toEqual(
+        expect.arrayContaining(semanticStateTokens),
+      );
+      expect(result.duplicates).toEqual([]);
+    }
+  });
+
+  it("uses accessible light foregrounds while preserving dark foregrounds", async () => {
+    const css = await readFile(
+      path.join(process.cwd(), "app", "styles", "tokens.css"),
+      "utf8",
+    );
+    const rootScope = css.match(/:root\s*\{([^}]*)\}/)?.[1];
+    const darkScope = css.match(/\.dark\s*\{([^}]*)\}/)?.[1];
+    const foregrounds = [
+      "--ukip-success",
+      "--ukip-warning",
+      "--ukip-danger",
+      "--ukip-info",
+      "--ukip-violet",
+    ];
+    const valuesFor = (scope: string) =>
+      Object.fromEntries(
+        foregrounds.map((token) => [
+          token,
+          scope.match(new RegExp(`${token}:\\s*([^;]+);`))?.[1].trim(),
+        ]),
+      );
+
+    expect(rootScope).toBeDefined();
+    expect(darkScope).toBeDefined();
+    expect(valuesFor(rootScope!)).toEqual({
+      "--ukip-success": "oklch(49% 0.16 155)",
+      "--ukip-warning": "oklch(52% 0.16 78)",
+      "--ukip-danger": "oklch(53% 0.20 25)",
+      "--ukip-info": "oklch(50% 0.16 245)",
+      "--ukip-violet": "oklch(52% 0.22 292)",
+    });
+    expect(valuesFor(darkScope!)).toEqual({
+      "--ukip-success": "oklch(74% 0.16 155)",
+      "--ukip-warning": "oklch(80% 0.15 78)",
+      "--ukip-danger": "oklch(68% 0.2 25)",
+      "--ukip-info": "oklch(72% 0.15 245)",
+      "--ukip-violet": "oklch(72% 0.2 292)",
+    });
+  });
+
   it("reports declarations, duplicates, and hardcoded UI color families", async () => {
     const result = await auditTokenSource();
 
     expect(result.declarations).toContain("--ukip-bg");
     expect(result.declarations).toContain("--ukip-space-4");
-    expect(result.duplicates).toEqual([]);
-    expect(result.hardcodedUsages).toEqual(
+    expect(result.declarations).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ file: expect.stringContaining("Badge.tsx") }),
+        "--ukip-success-soft",
+        "--ukip-warning-soft",
+        "--ukip-danger-soft",
+        "--ukip-info",
+        "--ukip-info-soft",
       ]),
     );
+    expect(result.duplicates).toEqual([]);
+    expect(result.hardcodedUsages.some(({ file }) => file === "Badge.tsx")).toBe(false);
   });
 });
