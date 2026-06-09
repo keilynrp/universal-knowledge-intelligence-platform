@@ -24,8 +24,11 @@ describe("governed form controls", () => {
 
     expect(input).toBeRequired();
     expect(input).toHaveAttribute("aria-invalid", "true");
-    expect(describedBy).toContain("-hint");
+    // Error takes precedence over the hint: only the error is announced, and the
+    // hint is suppressed (see ui.Input.test.tsx "gives errors precedence over hints").
     expect(describedBy).toContain("-error");
+    expect(describedBy).not.toContain("-hint");
+    expect(screen.queryByText("Use the canonical name.")).not.toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Institution is required.");
   });
 
