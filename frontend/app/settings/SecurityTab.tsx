@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useLanguage } from "../contexts/LanguageContext";
-import { Badge, type ToastVariant } from "../components/ui";
+import { Badge, SectionHeader, type ToastVariant } from "../components/ui";
 import { apiFetch } from "@/lib/api";
 
 type SecretsCheck = {
@@ -71,10 +71,7 @@ export default function SecurityTab({ toast }: { toast: (msg: string, v?: ToastV
 
     return (
         <div className="space-y-4">
-            <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t("settings.security.title")}</h2>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.security.subtitle")}</p>
-            </div>
+            <SectionHeader title={t("settings.security.title")} description={t("settings.security.subtitle")} />
             {/* Status card */}
             <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                 <div className="mb-4 flex items-center justify-between">
@@ -121,10 +118,10 @@ export default function SecurityTab({ toast }: { toast: (msg: string, v?: ToastV
             {/* Evidence table */}
             <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                 <h3 className="mb-4 text-base font-semibold text-gray-900 dark:text-white">{t("settings.security.evidence_title")}</h3>
-                {loading && !data ? (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">…</p>
-                ) : !data || data.events.length === 0 ? (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{t("settings.security.empty")}</p>
+                {!data || data.events.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {loading && !data ? "…" : t("settings.security.empty")}
+                    </p>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
