@@ -14,7 +14,7 @@ P0 gaps (tenant isolation, data lifecycle, secrets rotation) are resolved:
 | --- | --- | --- |
 | ER-BCP-001 (backup/restore) | identified | operated (first drill evidenced) |
 | ER-SDLC-001 (release security gates) | identified | operated (gates enforce on PRs) |
-| ER-PRIV-001 (privacy pack) | identified | specified/implemented, pending external legal review |
+| ER-PRIV-001 (privacy pack) | identified | specified, pending external legal review |
 
 Constraints inherited from the control register:
 
@@ -53,7 +53,7 @@ Existing CI: `test.yml` (pytest + postgres smoke + eval gate), `lint.yml`,
 | Artifact | Content |
 | --- | --- |
 | `.github/workflows/codeql.yml` | CodeQL for `python` + `javascript-typescript`; PR, push to main, weekly cron. Blocks via required status check on new HIGH/CRITICAL alerts. |
-| `.github/workflows/security.yml` | Jobs: `gitleaks` (blocking secret scan, `.gitleaks.toml` baseline with justification + expiry per entry), `pip-audit` (against `requirements.lock`, blocks new HIGH/CRITICAL, exceptions via `--ignore-vuln` documented in governance doc), `npm-audit` (`npm audit --omit=dev --audit-level=high` in `frontend/`). |
+| `.github/workflows/security.yml` | Jobs: `gitleaks` (blocking secret scan, `.gitleaks.toml` baseline with justification + expiry per entry), `pip-audit` (against `requirements.lock`, blocks new HIGH/CRITICAL, exceptions via `--ignore-vuln` documented in governance doc), `npm-audit` (`npm audit --omit=dev --audit-level=high` in `frontend/`; plain npm audit has no native baseline, so the gate runs against an allowlist file `frontend/.npm-audit-allowlist.json` consumed by a small wrapper script — if the current baseline is clean, the wrapper simply fails on any HIGH/CRITICAL). |
 | `docker.yml` additions | Trivy image scan for the 3 images **before** GHCR push (blocks CRITICAL, `.trivyignore` with expiry); Syft SBOM (SPDX) per image uploaded as build artifact. |
 | `.github/dependabot.yml` | Weekly updates: pip, npm, github-actions. |
 | `docs/operating/SECURITY_GATES.md` | Governance: tool inventory, ratchet policy, exception process (who/why/expiry), remediation SLA. |
@@ -95,6 +95,8 @@ S3-compatible destinations — we use that instead of owning a pg_dump sidecar.
 ### Scope decision (documented in the runbook)
 
 - **PostgreSQL is the source of truth** — only state that gets backed up.
+  Note: the Rust engine points at the **same** Postgres database as the backend
+  (per the 2026-05-18 engine-delegation design), so one database covers both.
 - ChromaDB vectors are re-indexable via the EPIC-012 re-index script.
 - Redis is a regenerable cache (fail-open by design).
 - The `ukip_static_data` volume is reviewed during the epic; if it holds
