@@ -25,3 +25,23 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
+
+  # ── Backend dependency audit (blocking; exceptions via --ignore-vuln) ───
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Audit pinned backend dependencies
+        # Ratchet baseline: every --ignore-vuln entry must have a row in
+        # docs/operating/SECURITY_GATES.md with justification + expiry.
+        # --no-deps: requirements.lock is a flat freeze (no hashes); pip
+        # resolver is disabled via --disable-pip so no network lookup needed.
+        run: pip-audit -r requirements.lock --disable-pip --no-deps --ignore-vuln PYSEC-2026-25 --ignore-vuln PYSEC-2026-188 --ignore-vuln CVE-2026-45829 --ignore-vuln PYSEC-2026-35 --ignore-vuln PYSEC-2026-36 --ignore-vuln CVE-2024-23342 --ignore-vuln CVE-2026-33936 --ignore-vuln CVE-2026-45409 --ignore-vuln PYSEC-2026-87 --ignore-vuln CVE-2026-44307 --ignore-vuln PYSEC-2026-165 --ignore-vuln CVE-2026-40192 --ignore-vuln CVE-2026-42309 --ignore-vuln CVE-2026-42310 --ignore-vuln CVE-2026-42311 --ignore-vuln CVE-2026-30922 --ignore-vuln CVE-2026-4539 --ignore-vuln CVE-2025-71176 --ignore-vuln CVE-2026-40347 --ignore-vuln CVE-2026-42561 --ignore-vuln CVE-2026-25645 --ignore-vuln PYSEC-2026-161 --ignore-vuln PYSEC-2026-142 --ignore-vuln PYSEC-2026-141
