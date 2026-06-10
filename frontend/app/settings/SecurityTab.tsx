@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useLanguage } from "../contexts/LanguageContext";
-import { Badge, type ToastVariant } from "../components/ui";
+import { Badge, SectionHeader, type ToastVariant } from "../components/ui";
 import { apiFetch } from "@/lib/api";
 
 type SecretsCheck = {
@@ -45,7 +45,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 export default function SecurityTab({ toast }: { toast: (msg: string, v?: ToastVariant) => void }) {
     const { t } = useLanguage();
     const [data, setData] = useState<Overview | null>(null);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -71,6 +71,7 @@ export default function SecurityTab({ toast }: { toast: (msg: string, v?: ToastV
 
     return (
         <div className="space-y-4">
+            <SectionHeader title={t("settings.security.title")} description={t("settings.security.subtitle")} />
             {/* Status card */}
             <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                 <div className="mb-4 flex items-center justify-between">
@@ -84,6 +85,7 @@ export default function SecurityTab({ toast }: { toast: (msg: string, v?: ToastV
                         <button
                             onClick={() => void load()}
                             disabled={loading}
+                            aria-busy={loading}
                             className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
                         >
                             {t("settings.security.refresh")}
@@ -91,7 +93,6 @@ export default function SecurityTab({ toast }: { toast: (msg: string, v?: ToastV
                     </div>
                 </div>
 
-                <p className="mb-1 text-sm text-gray-500 dark:text-gray-400">{t("settings.security.subtitle")}</p>
                 {check && <p className="mb-4 text-sm font-medium text-gray-800 dark:text-gray-200">{check.summary}</p>}
 
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -118,18 +119,20 @@ export default function SecurityTab({ toast }: { toast: (msg: string, v?: ToastV
             <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                 <h3 className="mb-4 text-base font-semibold text-gray-900 dark:text-white">{t("settings.security.evidence_title")}</h3>
                 {!data || data.events.length === 0 ? (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{t("settings.security.empty")}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {loading && !data ? "…" : t("settings.security.empty")}
+                    </p>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
                             <thead>
                                 <tr className="border-b border-gray-200 text-xs uppercase tracking-wider text-gray-400 dark:border-gray-800">
-                                    <th className="py-2 pr-4">{t("settings.security.col.date")}</th>
-                                    <th className="py-2 pr-4">{t("settings.security.col.secret")}</th>
-                                    <th className="py-2 pr-4">{t("settings.security.col.operator")}</th>
-                                    <th className="py-2 pr-4">{t("settings.security.col.rows")}</th>
-                                    <th className="py-2 pr-4">{t("settings.security.col.fingerprints")}</th>
-                                    <th className="py-2">{t("settings.security.col.notes")}</th>
+                                    <th scope="col" className="py-2 pr-4">{t("settings.security.col.date")}</th>
+                                    <th scope="col" className="py-2 pr-4">{t("settings.security.col.secret")}</th>
+                                    <th scope="col" className="py-2 pr-4">{t("settings.security.col.operator")}</th>
+                                    <th scope="col" className="py-2 pr-4">{t("settings.security.col.rows")}</th>
+                                    <th scope="col" className="py-2 pr-4">{t("settings.security.col.fingerprints")}</th>
+                                    <th scope="col" className="py-2">{t("settings.security.col.notes")}</th>
                                 </tr>
                             </thead>
                             <tbody>
