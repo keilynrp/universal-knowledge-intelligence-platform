@@ -146,14 +146,12 @@ Note: `requirements.lock` is the fully-pinned resolution (used as `-c` in CI ins
         run: pip install pip-audit
 
       - name: Audit pinned backend dependencies
-        # Ratchet baseline: every --ignore-vuln entry below must have a row in
+        # Ratchet baseline: every --ignore-vuln entry must have a row in
         # docs/operating/SECURITY_GATES.md with justification + expiry.
-        run: |
-          pip-audit -r requirements.lock --disable-pip \
-            # --ignore-vuln GHSA-xxxx-xxxx-xxxx   # (example) documented exception
+        run: pip-audit -r requirements.lock --disable-pip
 ```
 
-If Step 1 found existing vulnerabilities: add one `--ignore-vuln <id>` per finding (the ratchet baseline) and a row each in the governance table with remediation SLA. Do NOT silently upgrade dependencies in this epic — file follow-up work instead (upgrades need their own test pass).
+If Step 1 found existing vulnerabilities: append one `--ignore-vuln <GHSA-or-CVE-id>` per finding to that command (e.g. `pip-audit -r requirements.lock --disable-pip --ignore-vuln GHSA-xxxx-xxxx-xxxx`) — keep them on ONE line, no `\` continuations — and add a row each in the governance table with remediation SLA. Do NOT silently upgrade dependencies in this epic — file follow-up work instead (upgrades need their own test pass).
 
 - [ ] **Step 3: Commit, push, verify green**
 
@@ -262,6 +260,8 @@ cd frontend && npm run audit:gate
 ```
 
 Expected: PASS, or a list of HIGH/CRITICAL advisories. For each finding: prefer `npm audit fix` if it is a semver-compatible bump (then re-run `npm test`); otherwise add a documented allowlist entry with expiry.
+
+Note on transitive-only findings: when a vulnerable package's `via` contains only strings (pure transitive chain), the wrapper has no advisory id to match and blocks regardless of the allowlist — that is fail-closed by design. In that case allowlist the advisory at the direct dependency that surfaces it (the `via` object entry), not the transitive package name.
 
 - [ ] **Step 5: Add the job to `security.yml`**
 
@@ -454,6 +454,7 @@ updates:
 4. **Remediation SLA** — CRITICAL 7 days, HIGH 30 days; monthly review of the exceptions table.
 5. **Enforcement evidence** — link the failing gitleaks run from Task 1 Step 5; link first green Security Gates run on main.
 6. **Operator steps (one-time, repo settings)** — enable secret scanning + push protection; add required status checks: `gitleaks`, `pip-audit`, `npm-audit`, CodeQL legs, and the three image-build jobs.
+   Also note: `gitleaks-action@v2` is free for personal-account repos (this one), but requires a `GITLEAKS_LICENSE` secret if the repo ever moves to a GitHub organization — record this as a known migration caveat.
 7. **Exceptions table** — the actual baseline entries created during Tasks 1-5 (may legitimately be empty).
 
 - [ ] **Step 3: Update control register** — in `docs/product/ENTERPRISE_CONTROL_REGISTER.md`, ER-SDLC-001 row: `identified` → `implemented`, evidence gap → "Operator: enable push protection + required checks; first month of gate operation". (It becomes `operated` only after the operator steps are done and the gates have run on real PRs.)
@@ -624,6 +625,8 @@ gh run watch <run-id> --exit-status
 ```
 
 Expected: PASS (manual backup from step 3 is fresh).
+
+Caveat: `gh workflow run` may return 404 for a workflow that does not yet exist on the default branch. If so, EITHER merge the workflow file to main first (small standalone PR, then dispatch with `--ref main`), OR temporarily add `push: {branches: [ops/epic018-backup-restore]}` to the workflow's `on:` block for the test and remove it before the final PR.
 
 - [ ] **Step 3: Negative test (fail-loud evidence):**
 
