@@ -30,14 +30,17 @@ jobs:
   pip-audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout code
+        uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+          cache: pip
 
-      - name: Install pip-audit
-        run: pip install pip-audit
+      - name: Install pip-audit (pinned; bump intentionally — see SECURITY_GATES.md)
+        run: pip install "pip-audit==2.10.1"
 
       - name: Audit pinned backend dependencies
         # Ratchet baseline: every --ignore-vuln entry must have a row in
