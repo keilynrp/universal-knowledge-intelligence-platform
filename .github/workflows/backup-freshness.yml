@@ -1,0 +1,55 @@
+name: Backup Freshness
+
+on:
+  schedule:
+    - cron: "0 7 * * *" # daily 07:00 UTC — 4h after the 03:00 backup window
+  workflow_dispatch:
+    inputs:
+      prefix:
+        description: "Override bucket prefix (negative test: use empty-prefix/)"
+        required: false
+        default: "pg/"
+
+permissions:
+  contents: read
+
+env:
+  MAX_AGE_HOURS: 26
+
+jobs:
+  check-freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check newest backup object age
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_BACKUP_RO_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_BACKUP_RO_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          S3_ENDPOINT: ${{ secrets.S3_BACKUP_ENDPOINT }}
+          S3_BUCKET: ${{ secrets.S3_BACKUP_BUCKET }}
+          PREFIX: ${{ inputs.prefix || 'pg/' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${S3_ENDPOINT}" ] || [ -z "${S3_BUCKET}" ]; then
+            echo "::error::S3 backup secrets not configured (S3_BACKUP_ENDPOINT / S3_BACKUP_BUCKET)"
+            exit 1
+          fi
+          newest="$(aws s3api list-objects-v2 \
+            --endpoint-url "${S3_ENDPOINT}" \
+            --bucket "${S3_BUCKET}" \
+            --prefix "${PREFIX}" \
+            --query 'sort_by(Contents, &LastModified)[-1].{key: Key, ts: LastModified}' \
+            --output json)"
+          if [ "${newest}" = "null" ] || [ -z "${newest}" ]; then
+            echo "::error::No backup objects found under prefix '${PREFIX}' — backups are NOT running"
+            exit 1
+          fi
+          key="$(echo "${newest}" | jq -r .key)"
+          ts="$(echo "${newest}" | jq -r .ts)"
+          age_hours="$(( ( $(date -u +%s) - $(date -u -d "${ts}" +%s) ) / 3600 ))"
+          echo "Newest backup: ${key} (${ts}) — age ${age_hours}h (max ${MAX_AGE_HOURS}h)"
+          if [ "${age_hours}" -gt "${MAX_AGE_HOURS}" ]; then
+            echo "::error::Newest backup is ${age_hours}h old — exceeds RPO window (${MAX_AGE_HOURS}h)"
+            exit 1
+          fi
+          echo "Backup freshness OK"
