@@ -1,0 +1,4 @@
+{
+  "_comment": "Allowlisted npm advisories. Every entry: {\"id\": <advisory id or GHSA>, \"reason\": \"...\", \"owner\": \"...\", \"expires\": \"YYYY-MM-DD\"}. Must match a row in docs/operating/SECURITY_GATES.md.",
+  "allowlist": []
+}
