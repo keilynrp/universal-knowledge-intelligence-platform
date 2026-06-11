@@ -1,0 +1,2 @@
+# Trivy ignores — every CVE here needs a row in docs/operating/SECURITY_GATES.md
+# with justification, owner, expiry. Format: one CVE id per line.
