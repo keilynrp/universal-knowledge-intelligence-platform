@@ -41,7 +41,7 @@ export, and deletion.
 | Category | Description | Data subjects |
 |----------|-------------|---------------|
 | Platform user accounts | Username, email, role, password hash, login/lockout metadata | Customer staff who use the platform |
-| Research entities | Author names, affiliations, publications, concepts, public identifiers (ORCID, VIAF, Wikidata, OpenAlex IDs) | Researchers referenced in the Customer's datasets — predominantly professional, public-sphere data |
+| Research entities | Author names, affiliations, publications, concepts, public identifiers (ORCID, VIAF, Wikidata, OpenAlex, DBpedia IDs) | Researchers referenced in the Customer's datasets — predominantly professional, public-sphere data |
 | Operational records | Audit log entries, data-lifecycle events, secret-rotation evidence | Customer staff (actor attribution) |
 | Third-party credentials | Connection credentials the Customer configures for its own data stores / AI integrations | N/A (credentials, not personal data; encrypted at rest) |
 
@@ -83,11 +83,15 @@ operating documentation, except where explicitly marked otherwise.
 | Operational health checks | Automated checks including secrets posture (insecure defaults, stale keys) exposed to operators | `GET /ops/checks` |
 | Backups & recovery | Program defined with RTO 4h / RPO 24h (daily encrypted backups to S3-compatible storage + CI freshness monitor + restore-drill procedure). **Status: program defined; first operational configuration and restore drill pending.** | EPIC-018; `docs/operating/BACKUP_RESTORE_RUNBOOK.md` (pending merge from `ops/epic018-backup-restore`) |
 | Supply-chain / CI security gates | CodeQL SAST, gitleaks secret scanning, pip-audit, npm-audit, Trivy image scanning, SBOM generation. **Status: implemented in CI; operator enforcement steps pending (EPIC-019, PR #63 pending merge).** | `.github/workflows/` (EPIC-019 commits) |
+| Data minimization — optional telemetry/LLM egress disabled by default | Sentry error telemetry gated by `SENTRY_ENABLED` (default false); LLM providers (OpenAI) engaged only via customer-activated AI integration (opt-in) | `backend/telemetry.py`; see Section 8 and [SUBPROCESSOR_REGISTER.md](SUBPROCESSOR_REGISTER.md) |
 
 **Known open measures (disclosed, not represented as in place):** formal
 incident response plan (ER-IR-001), external penetration test (ER-ASSURE-001),
-contractual data-residency commitments (ER-DEP-001). See
-[PRIVACY_CONTROLS_OVERVIEW.md](PRIVACY_CONTROLS_OVERVIEW.md).
+contractual data-residency commitments (ER-DEP-001), first backup operational
+configuration and restore drill (EPIC-018), and CI security-gate operator
+enforcement steps (EPIC-019). See
+[PRIVACY_CONTROLS_OVERVIEW.md](PRIVACY_CONTROLS_OVERVIEW.md) for the full
+open-item register.
 
 ## 8. Sub-processors
 
@@ -141,8 +145,7 @@ acts on the controller's instructions.
 
 The processor shall notify the controller without undue delay after becoming
 aware of a personal data breach affecting the controller's data, and in any
-case within `[X hours — to be set when the ER-IR-001 incident response plan
-lands]`.
+case within `[NEGOTIATED — pending ER-IR-001 incident response plan]`.
 
 > **Pending control (disclosed):** A formal incident response plan is an open
 > item in the operator's gap register (ER-IR-001). Until it lands, the

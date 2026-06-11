@@ -13,7 +13,7 @@ customer enables the corresponding feature.
 
 | Name | Purpose | Data categories | Location | Status |
 |------|---------|-----------------|----------|--------|
-| `[OPERATOR TO FILL: VPS/hosting provider name]` | Hosting of the production VPS (Dokploy, FastAPI backend, Next.js frontend, Rust engine, PostgreSQL, ChromaDB, Redis) | All customer data processed by the platform | `[OPERATOR TO FILL: region]` | Active — core infrastructure |
+| `[OPERATOR TO FILL: VPS/hosting provider name]` | Hosting of the production VPS (Dokploy, FastAPI backend, Next.js frontend, Rust engine (optional acceleration component, disabled when ENGINE_GRPC_URL is not configured), PostgreSQL, ChromaDB, Redis) | All customer data processed by the platform | `[OPERATOR TO FILL: region]` | Active — core infrastructure |
 | Cloudflare | DNS and TLS reverse proxy in front of the origin | Traffic metadata (IP addresses, request headers); payloads transit encrypted through the proxy | Global edge network | Active — core infrastructure |
 | GitHub / GHCR (Microsoft) | Source code hosting, CI/CD, container image registry | Source code and container images only — **no customer data** | United States (global) | Active — development infrastructure |
 | `[TO FILL when EPIC-018 bucket provisioned: S3 backup provider + region]` | Off-site storage of encrypted database backups (EPIC-018 program) | Encrypted database backups (all customer data, encrypted) | `[TO FILL: region]` | Pending — backup program defined, bucket not yet provisioned |
