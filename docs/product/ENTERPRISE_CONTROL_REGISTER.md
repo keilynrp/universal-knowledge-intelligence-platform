@@ -23,7 +23,7 @@ specified, implemented, verified, operated, and auditable.
 | ER-BCP-001 | PostgreSQL and required state can be restored within measured objectives | P0 | identified | auditable | Operations owner | Approved RTO/RPO, automated backups, restore drill reports |
 | ER-SDLC-001 | Releases pass enforceable security and supply-chain gates | P0 | identified | operated | Security/platform owner | SAST, SCA, secret/container scan, SBOM, remediation SLA |
 | ER-AUD-001 | Tenant-scoped control evidence is integrity-verifiable and exportable | P1 | identified | auditable | Security/compliance owner | Evidence schema, signed export, retention, verification tool |
-| ER-PRIV-001 | Customer privacy review has a maintained legal/operational pack | P1 | identified | auditable | Privacy/legal owner | DPA, ROPA, subprocessors, transfer and deletion responsibilities |
+| ER-PRIV-001 | Customer privacy review has a maintained legal/operational pack | P1 | specified | auditable | Privacy/legal owner | External legal review of the docs/legal pack |
 | ER-IAM-001 | Joiner/mover/leaver lifecycle prevents orphaned access | P1 | identified | operated | Security/platform owner | MFA, SCIM or governed alternative, session/API-key revocation drills |
 | ER-DEP-001 | Supported deployment and residency boundaries are explicit and testable | P1 | identified | auditable | Architecture/operations owner | Topology matrix, region policy, data-flow inventory, exit procedure |
 | ER-IR-001 | Security incidents are detected, classified, contained, and evidenced | P0 | identified | operated | Security/operations owner | Incident plan, severity model, tabletop exercise, notification workflow |
