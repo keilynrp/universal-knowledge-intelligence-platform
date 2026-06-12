@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, DateTime, Text, Float, UniqueConstraint, Index, event
+from sqlalchemy.orm import Session
 from .database import Base
 
 
@@ -1253,3 +1254,14 @@ event.listen(
     "before_delete",
     _reject_backup_assurance_mutation,
 )
+
+
+@event.listens_for(Session, "do_orm_execute")
+def _reject_backup_assurance_bulk_mutation(orm_execute_state):
+    mapper = orm_execute_state.bind_mapper
+    if (
+        (orm_execute_state.is_update or orm_execute_state.is_delete)
+        and mapper is not None
+        and mapper.class_ is BackupAssuranceEvent
+    ):
+        _reject_backup_assurance_mutation()

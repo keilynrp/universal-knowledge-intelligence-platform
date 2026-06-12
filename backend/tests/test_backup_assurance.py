@@ -168,6 +168,37 @@ def test_persisted_backup_event_rejects_orm_delete(db_session):
     assert db_session.get(models.BackupAssuranceEvent, event_id) is not None
 
 
+def test_persisted_backup_event_rejects_query_bulk_update(db_session):
+    event = _record_backup(db_session)
+    event_id = event.id
+
+    with pytest.raises(RuntimeError, match="append-only"):
+        (
+            db_session.query(models.BackupAssuranceEvent)
+            .filter(models.BackupAssuranceEvent.id == event_id)
+            .update({"provider": "changed-provider"})
+        )
+    db_session.rollback()
+
+    persisted = db_session.get(models.BackupAssuranceEvent, event_id)
+    assert persisted.provider == "dokploy"
+
+
+def test_persisted_backup_event_rejects_query_bulk_delete(db_session):
+    event = _record_backup(db_session)
+    event_id = event.id
+
+    with pytest.raises(RuntimeError, match="append-only"):
+        (
+            db_session.query(models.BackupAssuranceEvent)
+            .filter(models.BackupAssuranceEvent.id == event_id)
+            .delete()
+        )
+    db_session.rollback()
+
+    assert db_session.get(models.BackupAssuranceEvent, event_id) is not None
+
+
 def test_freshness_is_ok_at_24_hours():
     now = datetime(2026, 6, 12, 12, tzinfo=timezone.utc)
     result = evaluate_backup_freshness(
