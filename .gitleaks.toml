@@ -1,0 +1,12 @@
+# Gitleaks configuration — UKIP secret-scan gate (EPIC-019, ER-SDLC-001).
+# Policy: this file is the ONLY suppression mechanism for this gate.
+# Every allowlist entry requires: justification, owner, expiry date,
+# and a matching row in docs/operating/SECURITY_GATES.md.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documented false positives only — see SECURITY_GATES.md"
+paths = []
+regexes = []

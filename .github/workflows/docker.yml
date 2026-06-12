@@ -52,6 +52,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build image locally for scanning
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.backend
+          push: false
+          load: true
+          tags: scan-target-backend:${{ github.sha }}
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+
+      - name: Trivy scan (blocks new CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: scan-target-backend:${{ github.sha }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+
+      - name: Generate SBOM (SPDX)
+        uses: anchore/sbom-action@v0.24.0
+        with:
+          image: scan-target-backend:${{ github.sha }}
+          format: spdx-json
+          artifact-name: sbom-backend-${{ github.sha }}.spdx.json
+
       - name: Build backend image
         uses: docker/build-push-action@v7
         with:
@@ -101,6 +129,36 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image locally for scanning
+        uses: docker/build-push-action@v7
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: false
+          load: true
+          tags: scan-target-frontend:${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://api.ukip.inbounduxd.com' }}
+            NEXT_PUBLIC_APP_VERSION=${{ github.sha }}
+            APP_VERSION=${{ github.sha }}
+
+      - name: Trivy scan (blocks new CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: scan-target-frontend:${{ github.sha }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+
+      - name: Generate SBOM (SPDX)
+        uses: anchore/sbom-action@v0.24.0
+        with:
+          image: scan-target-frontend:${{ github.sha }}
+          format: spdx-json
+          artifact-name: sbom-frontend-${{ github.sha }}.spdx.json
 
       - name: Build frontend image
         uses: docker/build-push-action@v7
@@ -153,6 +211,32 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image locally for scanning
+        uses: docker/build-push-action@v7
+        with:
+          context: ./engine
+          file: ./engine/Dockerfile
+          push: false
+          load: true
+          tags: scan-target-engine:${{ github.sha }}
+
+      - name: Trivy scan (blocks new CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: scan-target-engine:${{ github.sha }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+
+      - name: Generate SBOM (SPDX)
+        uses: anchore/sbom-action@v0.24.0
+        with:
+          image: scan-target-engine:${{ github.sha }}
+          format: spdx-json
+          artifact-name: sbom-engine-${{ github.sha }}.spdx.json
 
       - name: Build engine image
         uses: docker/build-push-action@v7
