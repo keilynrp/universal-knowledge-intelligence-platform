@@ -47,7 +47,7 @@ ftfy>=6.1
 
 # ── Engine (Rust gRPC) integration
 grpcio>=1.62.0
-grpcio-tools>=1.62.0
+grpcio-tools>=1.81.1
 protobuf>=4.25.0
 
 # ── Coauthorship V2: community detection (Sprint 2026-05-28 refactor)
