@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2}
-REGISTER_UPDATED_AT = "2026-06-05"
+REGISTER_UPDATED_AT = "2026-06-11"
 
 ENTERPRISE_READINESS_GAPS = [
     {
@@ -45,17 +45,18 @@ ENTERPRISE_READINESS_GAPS = [
         "id": "privacy_legal_pack",
         "area": "legal_privacy",
         "priority": "P1",
-        "status": "gap",
-        "title": "Privacy and legal readiness artifacts are missing",
+        "status": "partial",
+        "title": "Baseline privacy pack exists but is pending professional legal review",
         "current_state": (
-            "There is no standard DPA, subprocessor register, record of processing activity, "
-            "or concise privacy control pack for customer review."
+            "A baseline privacy pack exists in docs/legal/ (DPA baseline, subprocessor register, "
+            "ROPA, privacy controls overview, and a Mexico/LFPDPPP annex). It remains pending "
+            "professional legal review before it can be signed or relied upon."
         ),
         "impact": (
             "Sales and procurement review stall even when the technical product fit is strong."
         ),
         "recommendation": (
-            "Prepare a minimum privacy pack covering subprocessors, legal basis assumptions, and operational responsibilities."
+            "Obtain external legal review of the docs/legal/ pack, then move this gap to resolved."
         ),
         "related_work": ["COMPLIANCE-TBD-DPA", "COMPLIANCE-TBD-ROPA"],
     },

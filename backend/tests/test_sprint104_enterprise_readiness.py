@@ -79,3 +79,13 @@ def test_enterprise_readiness_reports_resolved_secrets_rotation(client: TestClie
 def test_enterprise_readiness_requires_admin(client: TestClient, viewer_headers: dict):
     response = client.get("/ops/enterprise-readiness", headers=viewer_headers)
     assert response.status_code == 403
+
+
+def test_privacy_legal_pack_is_partial_with_pack_reference(client: TestClient, auth_headers: dict):
+    response = client.get("/ops/enterprise-readiness", headers=auth_headers)
+    assert response.status_code == 200
+    body = response.json()
+    privacy = next(g for g in body["gaps"] if g["id"] == "privacy_legal_pack")
+    assert privacy["status"] == "partial"
+    assert "docs/legal" in privacy["current_state"]
+    assert "legal review" in privacy["current_state"].lower()
