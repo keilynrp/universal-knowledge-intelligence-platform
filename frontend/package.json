@@ -34,7 +34,7 @@
     "@types/d3-force": "^3.0.10",
     "@types/d3-geo": "^3.1.0",
     "@types/geojson": "^7946.0.16",
-    "@types/node": "^20",
+    "@types/node": "^25",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/topojson-client": "^3.1.5",
