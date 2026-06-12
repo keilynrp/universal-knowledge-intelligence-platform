@@ -257,6 +257,8 @@ def viewer_headers():
 # ── DB cleanup (function-scoped) ────────────────────────────────────────────
 
 _TABLES_TO_CLEAN = [
+    # Backup and restore assurance evidence (append-only outside tests)
+    "backup_assurance_events",
     # EPIC-017: secret rotation evidence — clean first (no FK deps)
     "secret_rotation_events",
     # EPIC-016: lifecycle + retention — clean before organizations

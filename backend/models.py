@@ -1204,3 +1204,36 @@ class SecretRotationEvent(Base):
     old_key_fingerprint = Column(String(40), nullable=True)
     new_key_fingerprint = Column(String(40), nullable=True)
     notes = Column(Text, nullable=True)
+
+
+class BackupAssuranceEvent(Base):
+    """Append-only metadata evidence for backups and restore drills."""
+
+    __tablename__ = "backup_assurance_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_type = Column(String(30), nullable=False, index=True)
+    status = Column(String(20), nullable=False, index=True)
+    environment = Column(String(50), nullable=False, index=True)
+    provider = Column(String(80), nullable=False)
+    backup_id = Column(String(200), nullable=True, index=True)
+    started_at = Column(DateTime, nullable=False)
+    completed_at = Column(DateTime, nullable=True, index=True)
+    release = Column(String(120), nullable=True)
+    alembic_revision = Column(String(120), nullable=True)
+    size_bytes = Column(Integer, nullable=True)
+    integrity_ref = Column(String(200), nullable=True)
+    encrypted = Column(Boolean, nullable=True)
+    storage_region = Column(String(120), nullable=True)
+    retention_class = Column(String(30), nullable=True)
+    operator = Column(String(120), nullable=False)
+    expected_rpo_hours = Column(Float, nullable=True)
+    expected_rto_hours = Column(Float, nullable=True)
+    achieved_rpo_hours = Column(Float, nullable=True)
+    achieved_rto_hours = Column(Float, nullable=True)
+    evidence_json = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
