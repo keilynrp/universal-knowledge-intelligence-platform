@@ -14,8 +14,10 @@ from backend.models import BackupAssuranceEvent
 BACKUP_RPO_HOURS = 24
 BACKUP_CRITICAL_AFTER_HOURS = 26
 
-_EVENT_TYPES = {"backup", "restore_drill"}
-_TERMINAL_STATUSES = {"completed", "failed", "passed", "passed_with_risk"}
+_VALID_EVENT_STATUSES = {
+    "backup": {"completed", "failed"},
+    "restore_drill": {"passed", "passed_with_risk", "failed"},
+}
 _SECRET_KEY_MARKERS = {
     "secret",
     "password",
@@ -69,10 +71,12 @@ def record_event(
     achieved_rto_hours: float | None = None,
     evidence: dict[str, Any] | None = None,
 ) -> BackupAssuranceEvent:
-    if event_type not in _EVENT_TYPES:
+    if event_type not in _VALID_EVENT_STATUSES:
         raise ValueError(f"Unsupported event_type: {event_type!r}")
-    if status not in _TERMINAL_STATUSES:
-        raise ValueError(f"Unsupported terminal status: {status!r}")
+    if status not in _VALID_EVENT_STATUSES[event_type]:
+        raise ValueError(
+            f"Unsupported status {status!r} for event_type {event_type!r}"
+        )
     if evidence is not None and _contains_secret_key(evidence):
         raise ValueError("Evidence contains a secret-like key")
 

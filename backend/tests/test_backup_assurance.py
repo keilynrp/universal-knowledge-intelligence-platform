@@ -82,6 +82,44 @@ def test_record_event_rejects_non_terminal_status(db_session, status):
 
 
 @pytest.mark.parametrize(
+    ("event_type", "status"),
+    [
+        ("backup", "completed"),
+        ("backup", "failed"),
+        ("restore_drill", "passed"),
+        ("restore_drill", "passed_with_risk"),
+        ("restore_drill", "failed"),
+    ],
+)
+def test_record_event_accepts_only_valid_type_status_combinations(
+    db_session,
+    event_type,
+    status,
+):
+    event = _record_backup(db_session, event_type=event_type, status=status)
+
+    assert event.event_type == event_type
+    assert event.status == status
+
+
+@pytest.mark.parametrize(
+    ("event_type", "status"),
+    [
+        ("backup", "passed"),
+        ("backup", "passed_with_risk"),
+        ("restore_drill", "completed"),
+    ],
+)
+def test_record_event_rejects_cross_type_terminal_statuses(
+    db_session,
+    event_type,
+    status,
+):
+    with pytest.raises(ValueError, match="status.*event_type"):
+        _record_backup(db_session, event_type=event_type, status=status)
+
+
+@pytest.mark.parametrize(
     "evidence",
     [
         {"database_url": "postgresql://example"},
@@ -103,6 +141,31 @@ def test_record_event_serializes_evidence_with_sorted_keys(db_session):
     assert event.evidence_json == (
         '{"alpha": 0, "nested": {"alpha": 1, "beta": 2}, "zeta": 1}'
     )
+
+
+def test_persisted_backup_event_rejects_orm_update(db_session):
+    event = _record_backup(db_session)
+    event_id = event.id
+    event.provider = "changed-provider"
+
+    with pytest.raises(RuntimeError, match="append-only"):
+        db_session.commit()
+    db_session.rollback()
+
+    persisted = db_session.get(models.BackupAssuranceEvent, event_id)
+    assert persisted.provider == "dokploy"
+
+
+def test_persisted_backup_event_rejects_orm_delete(db_session):
+    event = _record_backup(db_session)
+    event_id = event.id
+    db_session.delete(event)
+
+    with pytest.raises(RuntimeError, match="append-only"):
+        db_session.commit()
+    db_session.rollback()
+
+    assert db_session.get(models.BackupAssuranceEvent, event_id) is not None
 
 
 def test_freshness_is_ok_at_24_hours():

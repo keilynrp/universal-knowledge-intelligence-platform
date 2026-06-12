@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, DateTime, Text, Float, UniqueConstraint, Index
+from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, DateTime, Text, Float, UniqueConstraint, Index, event
 from .database import Base
 
 
@@ -1237,3 +1237,19 @@ class BackupAssuranceEvent(Base):
         default=lambda: datetime.now(timezone.utc),
         index=True,
     )
+
+
+def _reject_backup_assurance_mutation(*_args):
+    raise RuntimeError("BackupAssuranceEvent records are append-only")
+
+
+event.listen(
+    BackupAssuranceEvent,
+    "before_update",
+    _reject_backup_assurance_mutation,
+)
+event.listen(
+    BackupAssuranceEvent,
+    "before_delete",
+    _reject_backup_assurance_mutation,
+)
