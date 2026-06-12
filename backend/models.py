@@ -1,8 +1,13 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, DateTime, Text, Float, UniqueConstraint, Index, event
+from sqlalchemy import BigInteger, Column, ForeignKey, Integer, String, Boolean, DateTime, Text, Float, UniqueConstraint, Index, event
 from sqlalchemy.orm import Session
 from .database import Base
+
+
+def utc_now_naive() -> datetime:
+    """Return current UTC using the repository's naive DateTime convention."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class UniversalEntity(Base):
@@ -1222,7 +1227,7 @@ class BackupAssuranceEvent(Base):
     completed_at = Column(DateTime, nullable=True, index=True)
     release = Column(String(120), nullable=True)
     alembic_revision = Column(String(120), nullable=True)
-    size_bytes = Column(Integer, nullable=True)
+    size_bytes = Column(BigInteger, nullable=True)
     integrity_ref = Column(String(200), nullable=True)
     encrypted = Column(Boolean, nullable=True)
     storage_region = Column(String(120), nullable=True)
@@ -1235,7 +1240,7 @@ class BackupAssuranceEvent(Base):
     evidence_json = Column(Text, nullable=True)
     created_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
+        default=utc_now_naive,
         index=True,
     )
 

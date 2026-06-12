@@ -103,7 +103,7 @@ def record_event(
         evidence_json=json.dumps(evidence, sort_keys=True) if evidence is not None else None,
     )
     db.add(event)
-    db.commit()
+    db.flush()
     db.refresh(event)
     return event
 

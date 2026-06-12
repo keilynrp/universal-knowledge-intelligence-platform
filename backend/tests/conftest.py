@@ -61,6 +61,7 @@ else:
     )
 
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+database.install_backup_assurance_sql_guard(test_engine)
 
 
 def override_get_db():
@@ -324,7 +325,12 @@ def _reset_test_state(db):
         for table in _TABLES_TO_CLEAN:
             try:
                 nested = db.begin_nested()
-                db.execute(text(f"DELETE FROM {table}"))
+                statement = (
+                    database.backup_assurance_test_cleanup_statement()
+                    if table == "backup_assurance_events"
+                    else text(f"DELETE FROM {table}")
+                )
+                db.execute(statement)
                 nested.commit()
             except Exception:
                 nested.rollback()
@@ -338,7 +344,12 @@ def _reset_test_state(db):
     else:
         # SQLite: all tables exist (StaticPool in-memory), no need for savepoints
         for table in _TABLES_TO_CLEAN:
-            db.execute(text(f"DELETE FROM {table}"))
+            statement = (
+                database.backup_assurance_test_cleanup_statement()
+                if table == "backup_assurance_events"
+                else text(f"DELETE FROM {table}")
+            )
+            db.execute(statement)
         db.execute(text("UPDATE users SET org_id = NULL"))
         db.commit()
 

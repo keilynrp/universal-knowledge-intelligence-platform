@@ -48,7 +48,7 @@ def upgrade() -> None:
         sa.Column("completed_at", sa.DateTime(), nullable=True),
         sa.Column("release", sa.String(length=120), nullable=True),
         sa.Column("alembic_revision", sa.String(length=120), nullable=True),
-        sa.Column("size_bytes", sa.Integer(), nullable=True),
+        sa.Column("size_bytes", sa.BigInteger(), nullable=True),
         sa.Column("integrity_ref", sa.String(length=200), nullable=True),
         sa.Column("encrypted", sa.Boolean(), nullable=True),
         sa.Column("storage_region", sa.String(length=120), nullable=True),

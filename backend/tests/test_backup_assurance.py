@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import BigInteger, delete, text, update
 
 from backend import models
 from backend.backup_assurance import (
@@ -35,6 +36,12 @@ def _record_backup(db_session, **overrides):
     return record_event(db_session, **values)
 
 
+def _persist_backup(db_session, **overrides):
+    event = _record_backup(db_session, **overrides)
+    db_session.commit()
+    return event
+
+
 def test_record_backup_event_persists_non_secret_metadata(db_session):
     event = _record_backup(db_session)
 
@@ -44,6 +51,50 @@ def test_record_backup_event_persists_non_secret_metadata(db_session):
     assert json.loads(persisted.evidence_json) == {"provider_state": "completed"}
     assert persisted.started_at == datetime(2026, 6, 12, 11, 55)
     assert persisted.completed_at == datetime(2026, 6, 12, 12)
+
+
+def test_record_backup_event_supports_sizes_above_two_gibibytes(db_session):
+    size_bytes = 3 * 1024**3
+    event = _record_backup(db_session, size_bytes=size_bytes)
+
+    assert isinstance(
+        models.BackupAssuranceEvent.__table__.c.size_bytes.type,
+        BigInteger,
+    )
+    assert event.size_bytes == size_bytes
+
+
+def test_record_event_does_not_commit_callers_transaction(db_session):
+    unrelated = models.SecretRotationEvent(
+        secret_name="JWT_SECRET_KEY",
+        operator="ops@example.test",
+    )
+    db_session.add(unrelated)
+
+    event = _record_backup(db_session)
+    assert event.id is not None
+    assert unrelated.id is not None
+
+    db_session.rollback()
+
+    assert db_session.get(models.BackupAssuranceEvent, event.id) is None
+    assert db_session.get(models.SecretRotationEvent, unrelated.id) is None
+
+
+def test_record_event_persists_all_datetimes_as_utc_naive(db_session):
+    source_timezone = timezone(timedelta(hours=-6))
+    event = _record_backup(
+        db_session,
+        started_at=datetime(2026, 6, 12, 5, 30, tzinfo=source_timezone),
+        completed_at=datetime(2026, 6, 12, 6, tzinfo=source_timezone),
+    )
+
+    assert event.started_at == datetime(2026, 6, 12, 11, 30)
+    assert event.completed_at == datetime(2026, 6, 12, 12)
+    assert event.started_at.tzinfo is None
+    assert event.completed_at.tzinfo is None
+    assert event.created_at.tzinfo is None
+    assert models.utc_now_naive().tzinfo is None
 
 
 def test_record_restore_drill_keeps_expected_and_achieved_objectives(db_session):
@@ -144,7 +195,7 @@ def test_record_event_serializes_evidence_with_sorted_keys(db_session):
 
 
 def test_persisted_backup_event_rejects_orm_update(db_session):
-    event = _record_backup(db_session)
+    event = _persist_backup(db_session)
     event_id = event.id
     event.provider = "changed-provider"
 
@@ -157,7 +208,7 @@ def test_persisted_backup_event_rejects_orm_update(db_session):
 
 
 def test_persisted_backup_event_rejects_orm_delete(db_session):
-    event = _record_backup(db_session)
+    event = _persist_backup(db_session)
     event_id = event.id
     db_session.delete(event)
 
@@ -169,7 +220,7 @@ def test_persisted_backup_event_rejects_orm_delete(db_session):
 
 
 def test_persisted_backup_event_rejects_query_bulk_update(db_session):
-    event = _record_backup(db_session)
+    event = _persist_backup(db_session)
     event_id = event.id
 
     with pytest.raises(RuntimeError, match="append-only"):
@@ -185,7 +236,7 @@ def test_persisted_backup_event_rejects_query_bulk_update(db_session):
 
 
 def test_persisted_backup_event_rejects_query_bulk_delete(db_session):
-    event = _record_backup(db_session)
+    event = _persist_backup(db_session)
     event_id = event.id
 
     with pytest.raises(RuntimeError, match="append-only"):
@@ -197,6 +248,72 @@ def test_persisted_backup_event_rejects_query_bulk_delete(db_session):
     db_session.rollback()
 
     assert db_session.get(models.BackupAssuranceEvent, event_id) is not None
+
+
+def test_persisted_backup_event_rejects_core_update(db_session):
+    event = _record_backup(db_session)
+
+    with pytest.raises(RuntimeError, match="append-only"):
+        db_session.execute(
+            update(models.BackupAssuranceEvent.__table__)
+            .where(models.BackupAssuranceEvent.id == event.id)
+            .values(provider="changed-provider")
+        )
+    db_session.rollback()
+
+
+def test_persisted_backup_event_rejects_core_delete(db_session):
+    event = _record_backup(db_session)
+
+    with pytest.raises(RuntimeError, match="append-only"):
+        db_session.execute(
+            delete(models.BackupAssuranceEvent.__table__).where(
+                models.BackupAssuranceEvent.id == event.id
+            )
+        )
+    db_session.rollback()
+
+
+def test_persisted_backup_event_rejects_text_update(db_session):
+    event = _record_backup(db_session)
+
+    with pytest.raises(RuntimeError, match="append-only"):
+        db_session.execute(
+            text(
+                "UPDATE backup_assurance_events "
+                "SET provider = 'changed-provider' WHERE id = :event_id"
+            ),
+            {"event_id": event.id},
+        )
+    db_session.rollback()
+
+
+def test_persisted_backup_event_rejects_text_delete(db_session):
+    event = _record_backup(db_session)
+
+    with pytest.raises(RuntimeError, match="append-only"):
+        db_session.execute(
+            text("DELETE FROM backup_assurance_events WHERE id = :event_id"),
+            {"event_id": event.id},
+        )
+    db_session.rollback()
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        update(models.BackupAssuranceEvent.__table__).values(provider="changed"),
+        delete(models.BackupAssuranceEvent.__table__),
+        text("UPDATE backup_assurance_events SET provider = 'changed'"),
+        text("DELETE FROM backup_assurance_events"),
+    ],
+)
+def test_application_engine_rejects_core_and_text_mutation(db_session, statement):
+    _persist_backup(db_session)
+
+    with db_session.get_bind().connect() as connection:
+        with pytest.raises(RuntimeError, match="append-only"):
+            connection.execute(statement)
 
 
 def test_freshness_is_ok_at_24_hours():
