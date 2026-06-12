@@ -110,3 +110,17 @@ La documentacion debe permitir responder siempre:
 - por que existe este trabajo
 - en que epic e historia cae
 - como se conecta con la arquitectura y el valor entregado
+
+## 10. Enterprise readiness authority
+
+Para enterprise readiness, la autoridad es:
+
+1. Control status: `docs/product/ENTERPRISE_CONTROL_REGISTER.md`
+2. Madurez y claim policy: `docs/product/ENTERPRISE_READINESS_PROGRAM.md`
+3. Ejecucion del programa: `docs/product/epics/EPIC-018-enterprise-assurance-and-operational-readiness.md`
+4. Unidades de delivery: historias `US-042` y `US-073` a `US-081`
+5. Secuencia de portafolio: `docs/product/PROGRAM_BACKLOG.md`
+6. Control-to-evidence mapping: `docs/product/TRACEABILITY_MATRIX.md`
+7. Runtime projection: `backend/enterprise_readiness.py`
+
+La proyeccion runtime nunca reemplaza ni eleva el estado del registro de controles.

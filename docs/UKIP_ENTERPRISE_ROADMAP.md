@@ -1,3 +1,8 @@
+> **Status: Historical.** This dated roadmap does not govern current
+> enterprise-readiness scope, priority, or maturity. Use
+> `docs/product/ENTERPRISE_READINESS_PROGRAM.md` and
+> `docs/product/ENTERPRISE_CONTROL_REGISTER.md`.
+
 # 🚀 UKIP Enterprise-Ready Roadmap
 
 **Documento:** Product & Design Specifications  

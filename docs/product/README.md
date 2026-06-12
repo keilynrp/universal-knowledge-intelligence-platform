@@ -10,6 +10,9 @@ Este directorio contiene el sistema operativo de producto y delivery de UKIP.
 - `COMPLIANCE_GAP_REGISTER.md`: baseline de gaps enterprise y de compliance.
 - `TENANT_SCOPING_MODEL.md`: modelo objetivo y olas de migracion para tenant isolation.
 - `TRACEABILITY_MATRIX.md`: relacion entre vision, epicas, historias, sprints y evidencia.
+- `ENTERPRISE_CONTROL_REGISTER.md`: autoridad sobre estado, prioridad, ownership y evidencia de controles enterprise.
+- `ENTERPRISE_READINESS_PROGRAM.md`: autoridad sobre madurez, gates y politica de claims enterprise.
+- `epics/EPIC-018-enterprise-assurance-and-operational-readiness.md`: ejecucion consolidada del programa enterprise.
 - `STORY_MAP.md`: vista funcional resumida del backlog refinado.
 - `epics/`: epicas activas del programa.
 - `stories/`: historias de usuario activas o refinadas.
@@ -44,6 +47,20 @@ Ninguna iniciativa nueva deberia entrar directamente al codigo sin pasar por:
 - historia
 - sprint
 - trazabilidad
+
+## Enterprise readiness
+
+La fuente de verdad sigue este orden:
+
+1. Control status: `docs/product/ENTERPRISE_CONTROL_REGISTER.md`
+2. Programa y madurez: `docs/product/ENTERPRISE_READINESS_PROGRAM.md`
+3. Ejecucion: `docs/product/epics/EPIC-018-enterprise-assurance-and-operational-readiness.md`
+4. Portfolio: `docs/product/PROGRAM_BACKLOG.md`
+5. Evidencia: `docs/product/TRACEABILITY_MATRIX.md`
+
+La Runtime projection en `backend/enterprise_readiness.py` es una vista validada
+del registro, no una fuente paralela. Los roadmaps historicos no gobiernan
+prioridad ni madurez actual.
 
 ## Relacion con la capa historica
 

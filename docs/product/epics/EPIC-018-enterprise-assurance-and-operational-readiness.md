@@ -48,6 +48,26 @@ spec-driven lifecycles, operational exercises, and exportable evidence.
 | US-080 | Capacity, load, and degradation envelope | P1 | Planned |
 | US-081 | Independent assurance and enterprise pilot exit gate | P0 | Planned |
 
+## 6.1 Control mapping
+
+| Control | Delivery | Current maturity | Target |
+| --- | --- | --- | --- |
+| ER-CTRL-001 | EPIC-018 governance | specified | auditable |
+| ER-OPS-001 | US-042 | specified | operated |
+| ER-BCP-001 | US-073 | identified | auditable |
+| ER-SDLC-001 | US-074 | implemented | operated |
+| ER-AUD-001 | US-075 | identified | auditable |
+| ER-PRIV-001 | US-076 | specified | auditable |
+| ER-IAM-001 | US-077 | identified | operated |
+| ER-DEP-001 | US-078 | identified | auditable |
+| ER-IR-001 | US-079 | identified | operated |
+| ER-PERF-001 | US-080 | identified | operated |
+| ER-ASSURE-001 | US-081 | identified | auditable |
+
+Delivery sequence: governance; BCP/SDLC/incident response; background-job
+separation; audit/privacy/residency packaging; identity lifecycle; capacity and
+independent assurance. Story completion and control maturity remain separate.
+
 ## 7. Governance
 
 All stories follow `docs/product/ENTERPRISE_READINESS_PROGRAM.md` and update

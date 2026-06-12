@@ -7,6 +7,18 @@ on:
     branches: [main]
 
 jobs:
+  enterprise-readiness-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Enforce enterprise readiness source of truth
+        run: python scripts/lint_enterprise_readiness.py
+
   # ── Domain scope contract lint (blocking) ─────────────────────────────────
   domain-scope-lint:
     runs-on: ubuntu-latest

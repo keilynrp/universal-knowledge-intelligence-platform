@@ -1,6 +1,6 @@
 # UKIP Enterprise Control Register
 
-Updated: 2026-06-07
+Updated: 2026-06-12
 
 This register is stricter than `backend/enterprise_readiness.py`. That endpoint
 tracks known commercial gaps; this register tracks whether controls are
@@ -29,6 +29,25 @@ specified, implemented, verified, operated, and auditable.
 | ER-IR-001 | Security incidents are detected, classified, contained, and evidenced | P0 | identified | operated | Security/operations owner | Incident plan, severity model, tabletop exercise, notification workflow |
 | ER-PERF-001 | Capacity and degradation behavior are known for supported workloads | P1 | identified | operated | Platform owner | Load model, performance tests, saturation alerts, capacity envelope |
 | ER-ASSURE-001 | Independent assessment validates security posture before broad GA | P0 | identified | auditable | Executive/security owner | External pentest and closure report |
+
+## Control detail and next gates
+
+| ID | Delivery | Implementation owner | Operational owner | Next gate | Observation / evidence requirement |
+| --- | --- | --- | --- | --- | --- |
+| ER-CTRL-001 | EPIC-018 governance | Product owner | Security owner | Operate the register on a release candidate | Versioned release evidence index and owner attestation |
+| ER-OPS-001 | US-042 | Platform owner | Operations owner | Implement durable queue runtime and recovery tests | 14-day window with job SLO, retry, replay, and saturation evidence |
+| ER-BCP-001 | US-073 | Platform owner | Operations owner | Approve RTO/RPO and backup/restore design | Two backup cycles and one successful restore drill; retain 12 months |
+| ER-SDLC-001 | US-074 | Platform owner | Security owner | Enable required checks and push protection | 30 days of blocking gate operation and retained SBOM/security artifacts |
+| ER-AUD-001 | US-075 | Backend owner | Security/compliance owner | Approve evidence schema, integrity, redaction, and retention | Independently verifiable tenant-scoped evidence export |
+| ER-PRIV-001 | US-076 | Privacy owner | Legal/privacy owner | Complete external legal review | Approved versioned pack with annual review ownership |
+| ER-IAM-001 | US-077 | Platform owner | Security owner | Specify MFA, provisioning, revocation, and break-glass | Joiner/mover/leaver and emergency-access drills |
+| ER-DEP-001 | US-078 | Architecture owner | Operations owner | Approve topology matrix and region policy | Versioned data-flow, residency, subprocessor, and exit evidence |
+| ER-IR-001 | US-079 | Security owner | Security/operations owner | Approve severity and notification workflow | Tabletop exercise, timeline, decisions, and corrective actions |
+| ER-PERF-001 | US-080 | Platform owner | Operations owner | Approve workload profiles and performance objectives | Repeatable load report, saturation alerts, and supported envelope |
+| ER-ASSURE-001 | US-081 | Security owner | Executive owner | Approve pentest and pilot-exit scope | Independent report, remediation/retest, pilot record, executive decision |
+
+Control maturity remains the lowest state supported by evidence. This
+documentation update does not advance any control.
 
 ## Existing controls requiring continued evidence
 

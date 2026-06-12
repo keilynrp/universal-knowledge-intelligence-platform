@@ -25,7 +25,17 @@ Cada fila debe poder seguir este hilo:
 | Credibilidad comercial y tecnica | EPIC-013 | US-046, US-047, US-048 | SPRINT-104 | `README.md`, `backend/routers/onboarding.py`, `backend/enterprise_readiness.py`, `backend/routers/analytics.py`, `frontend/app/components/OnboardingChecklist.tsx`, `frontend/app/components/WelcomeModal.tsx`, `docs/product/COMMERCIAL_MVP.md`, `docs/product/COMPLIANCE_GAP_REGISTER.md`, `docs/product/epics/EPIC-013-commercial-readiness-and-credibility.md` | Foco comercial, onboarding real y baseline de readiness enterprise definidos con evidencia reutilizable | Done |
 | Frontend mantenible | EPIC-014 | US-049 | SPRINT-TBD | `EntityTable.tsx`, `Sidebar.tsx`, `RAGChatInterface.tsx`, `docs/product/epics/EPIC-014-frontend-decomposition-and-maintainability.md` | Menor complejidad de UI y mejor velocidad de iteracion | Planned |
 | Observabilidad y operacion | EPIC-015 | US-051, US-052, US-053 | SPRINT-104 | `backend/logging_utils.py`, `backend/telemetry.py`, `backend/ops_checks.py`, `backend/routers/analytics.py`, `backend/routers/scheduled_imports.py`, `backend/routers/scheduled_reports.py`, `docs/product/epics/EPIC-015-observability-and-operations.md` | Mejor visibilidad operativa y readiness de producto serio | Done |
-| Assurance enterprise verificable | EPIC-018 | US-042, US-073..US-081 | SPRINT-TBD | `docs/product/ENTERPRISE_READINESS_PROGRAM.md`, `docs/product/ENTERPRISE_CONTROL_REGISTER.md`, `openspec/changes/external-background-job-runtime/` | Controles P0/P1 operados, auditables y defendibles ante procurement | In progress |
+| Gobierno de controles | EPIC-018 | ER-CTRL-001 | Unscheduled | `ENTERPRISE_READINESS_PROGRAM.md`, `ENTERPRISE_CONTROL_REGISTER.md` | Registro operado y evidence index versionado | specified |
+| Jobs durables | EPIC-018 | US-042 / ER-OPS-001 | Unscheduled | `openspec/changes/external-background-job-runtime/` | 14 dias de SLO, recovery y replay | specified |
+| Recovery medido | EPIC-018 | US-073 / ER-BCP-001 | Unscheduled | `docker-compose.prod.yml`, runbooks operativos | Restore drill y RTO/RPO medidos | identified |
+| Secure SDLC | EPIC-018 | US-074 / ER-SDLC-001 | Unscheduled | `.github/workflows/security.yml`, `.github/workflows/codeql.yml`, SBOM | 30 dias de gates bloqueantes | implemented |
+| Evidencia auditable | EPIC-018 | US-075 / ER-AUD-001 | Unscheduled | `backend/audit.py`, lifecycle events | Pack tenant-scoped verificable | identified |
+| Privacy assurance | EPIC-018 | US-076 / ER-PRIV-001 | Unscheduled | `docs/legal/` | Legal review y pack aprobado | specified |
+| Identity lifecycle | EPIC-018 | US-077 / ER-IAM-001 | Unscheduled | auth, SSO, API keys, tenant isolation | Offboarding y break-glass drills | identified |
+| Residency governance | EPIC-018 | US-078 / ER-DEP-001 | Unscheduled | production compose, topology docs | Region, data-flow y exit evidence | identified |
+| Incident response | EPIC-018 | US-079 / ER-IR-001 | Unscheduled | telemetry, ops checks, audit | Tabletop y notification workflow | identified |
+| Capacity envelope | EPIC-018 | US-080 / ER-PERF-001 | Unscheduled | load scripts and metrics | Repeatable load report and alerts | identified |
+| Independent assurance | EPIC-018 | US-081 / ER-ASSURE-001 | Unscheduled | control evidence packs | Pentest, retest, pilot and exit decision | identified |
 
 ## Regla de mantenimiento
 

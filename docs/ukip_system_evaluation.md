@@ -1,3 +1,8 @@
+> **Status: Historical.** This dated assessment does not govern current
+> enterprise-readiness scope, priority, or maturity. Use
+> `docs/product/ENTERPRISE_READINESS_PROGRAM.md` and
+> `docs/product/ENTERPRISE_CONTROL_REGISTER.md`.
+
 # 🏆 Evaluación del Sistema UKIP — Universal Knowledge Intelligence Platform
 
 **Fecha:** 2026-03-16  

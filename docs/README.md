@@ -20,6 +20,13 @@ Documentos principales:
 - `docs/product/templates/*`
 - `docs/TECHNICAL_ONBOARDING.md`
 
+Enterprise readiness:
+
+- `docs/product/ENTERPRISE_CONTROL_REGISTER.md`
+- `docs/product/ENTERPRISE_READINESS_PROGRAM.md`
+- `docs/product/epics/EPIC-018-enterprise-assurance-and-operational-readiness.md`
+- `docs/product/TRACEABILITY_MATRIX.md`
+
 ### 2. Capa historica y de referencia
 
 Preserva memoria institucional, decisiones base, evaluaciones y material de contexto.

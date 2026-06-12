@@ -1,11 +1,13 @@
 # UKIP Enterprise Readiness Program
 
+Updated: 2026-06-12
+
 ## 1. Purpose
 
 This program turns UKIP's enterprise-readiness gaps into governed, incremental
 delivery lifecycles. It exists to prepare UKIP for serious technical, security,
-legal, and procurement review by private academic institutions and enterprise
-customers.
+legal, and procurement review by regulated institutional customers and
+demanding procurement teams.
 
 Documentation is not evidence that a control works. A PRD, spec, ADR, test, or
 runbook can advance a control, but none of them alone makes UKIP
@@ -108,6 +110,12 @@ Waves describe governance order, not necessarily serial implementation. ER-2
 and ER-3 may start while ER-1 is being built, but UKIP SHALL NOT claim completion
 until dependencies and evidence gates are satisfied.
 
+The implementation order is governance baseline; operational foundations
+(`ER-BCP-001`, `ER-SDLC-001`, `ER-IR-001`); runtime separation
+(`ER-OPS-001`); assurance packaging (`ER-AUD-001`, `ER-PRIV-001`,
+`ER-DEP-001`); enterprise administration (`ER-IAM-001`); and scale plus
+independent validation (`ER-PERF-001`, `ER-ASSURE-001`).
+
 ## 8. Control ownership
 
 Each control records three roles even if one person temporarily holds all three:
@@ -147,4 +155,6 @@ Evidence SHALL be:
 - Behavioral contracts: `openspec/specs/` and active `openspec/changes/`
 - Architecture decisions: ADRs or `design.md` inside the related OpenSpec change
 - Runtime evidence: tests, CI artifacts, operational reports, and evidence packs
+- Machine-readable companion: `backend/enterprise_controls.py`, validated for
+  stable-ID, priority, maturity, and related-work parity with the register
 

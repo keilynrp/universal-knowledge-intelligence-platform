@@ -19,7 +19,9 @@ Fuentes estrategicas relacionadas:
 
 - `docs/EVOLUTION_STRATEGY.md`
 - `docs/ARCHITECTURE.md`
-- `docs/UKIP_ENTERPRISE_ROADMAP.md`
+- `docs/product/ENTERPRISE_READINESS_PROGRAM.md`
+- `docs/product/ENTERPRISE_CONTROL_REGISTER.md`
+- `docs/product/epics/EPIC-018-enterprise-assurance-and-operational-readiness.md`
 
 ## Epicas activas
 
@@ -42,6 +44,21 @@ Fuentes estrategicas relacionadas:
 | EPIC-015 | Observability and Operations | Construir salud operativa, logging y telemetria minima de producto serio | Done | health endpoints, logging, Sentry/telemetry, checks operativos |
 | EPIC-016 | Data Lifecycle and Privacy Controls | Formalizar export, deletion, retention y evidencia de ciclo de vida | Done | data lifecycle events, DSAR, deletion, retention policies |
 | EPIC-018 | Enterprise Assurance and Operational Readiness | Cerrar controles P0/P1 con operacion y evidencia verificable | In progress | jobs externos, BCP/DR, secure SDLC, audit evidence, IAM, privacy, residency |
+
+## Enterprise readiness execution order
+
+| Order | Story | Control | Priority | Dependency | Delivery state | Target maturity |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | US-073 | ER-BCP-001 | P0 | PostgreSQL-first runtime | Planned | auditable |
+| 2 | US-074 | ER-SDLC-001 | P0 | Existing security workflows | In progress | operated |
+| 3 | US-079 | ER-IR-001 | P0 | Observability baseline | Planned | operated |
+| 4 | US-042 | ER-OPS-001 | P1 | Durable job specification | Specifying | operated |
+| 5 | US-075 | ER-AUD-001 | P1 | Audit and lifecycle events | Planned | auditable |
+| 6 | US-076 | ER-PRIV-001 | P1 | Baseline legal pack | In progress | auditable |
+| 7 | US-078 | ER-DEP-001 | P1 | Topology and data-flow inventory | Planned | auditable |
+| 8 | US-077 | ER-IAM-001 | P1 | Tenant isolation and SSO | Planned | operated |
+| 9 | US-080 | ER-PERF-001 | P1 | Durable jobs and supported topology | Planned | operated |
+| 10 | US-081 | ER-ASSURE-001 | P0 | All P0/P1 exit gates | Planned | auditable |
 
 ## Prioridades recomendadas de corto plazo
 
