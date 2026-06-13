@@ -48,9 +48,22 @@ def test_unmarked_remote_target_requires_explicit_override(database_url):
 
 def test_isolated_drill_target_is_accepted():
     validate_target_url(
-        "postgresql://restore_user:secret@drill-db.internal/ukip_restore",
+        "postgresql://restore_user:secret@drill-db.internal/restore_ukip",
         allow_production_target=False,
     )
+
+
+@pytest.mark.parametrize(
+    "database_url",
+    (
+        "postgresql://user:secret@contest-db.internal/restore_ukip",
+        "postgresql://user:secret@customer-test-db.internal/restore_ukip",
+        "postgresql://user:secret@drill-db.internal/customer_test",
+    ),
+)
+def test_incidental_isolation_words_do_not_bypass_target_protection(database_url):
+    with pytest.raises(ValueError, match="isolated drill"):
+        validate_target_url(database_url, allow_production_target=False)
 
 
 def test_missing_required_tables_fails():
@@ -260,7 +273,35 @@ def test_report_redacts_credentials_embedded_in_string_values():
 
     serialized = json.dumps(report)
     assert "top-secret" not in serialized
-    assert "user:***@" in serialized
+    assert "***:***@" in serialized
+
+
+@pytest.mark.parametrize(
+    "secret_text",
+    (
+        "postgresql://user:p@ssword@drill-db/restore_ukip",
+        "password=top-secret",
+        "request failed ?password=top-secret",
+        "token: top-secret",
+    ),
+)
+def test_report_redacts_adversarial_secret_values(secret_text):
+    report = build_report(
+        environment="restore-drill",
+        backup_id="backup-001",
+        operator="ops@example.test",
+        validations=[
+            {
+                "check": "connection",
+                "status": "failed",
+                "reason": secret_text,
+            }
+        ],
+    )
+
+    serialized = json.dumps(report)
+    assert "top-secret" not in serialized
+    assert "p@ssword" not in serialized
 
 
 def test_runtime_failure_writes_structured_failed_report(

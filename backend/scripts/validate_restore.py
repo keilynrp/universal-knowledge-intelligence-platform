@@ -30,7 +30,8 @@ REQUIRED_TABLES = (
     "backup_assurance_events",
 )
 _PRODUCTION_MARKERS = ("prod", "production", "primary", "live")
-_ISOLATED_TARGET_MARKERS = ("drill", "restore", "recovery", "test", "staging")
+_ISOLATED_TARGET_PREFIXES = ("drill-", "restore-", "recovery-")
+_ISOLATED_DATABASE_PREFIXES = ("drill_", "restore_", "recovery_")
 _SECRET_KEY_MARKERS = (
     "secret",
     "password",
@@ -40,8 +41,12 @@ _SECRET_KEY_MARKERS = (
     "connection_string",
 )
 _READ_ONLY_PREFIXES = ("SELECT", "SHOW", "EXPLAIN")
-_URL_CREDENTIALS = re.compile(
-    r"([a-z][a-z0-9+.-]*://[^:/@\s]+):([^@\s]+)@",
+_URL_USERINFO = re.compile(
+    r"([a-z][a-z0-9+.-]*://)([^\s/]+)@",
+    re.IGNORECASE,
+)
+_SECRET_VALUE_MARKERS = re.compile(
+    r"\b(secret|password|token|credential|database[_ -]?url|connection[_ -]?string)\b",
     re.IGNORECASE,
 )
 
@@ -51,19 +56,19 @@ def validate_target_url(
 ) -> None:
     """Reject URLs whose host or database name looks production-like."""
     parsed = urlsplit(database_url)
-    target_identity = " ".join(
-        part for part in (parsed.hostname, unquote(parsed.path.lstrip("/"))) if part
-    ).lower()
+    hostname = (parsed.hostname or "").lower()
+    database_name = unquote(parsed.path.lstrip("/")).lower()
+    target_identity = " ".join(part for part in (hostname, database_name) if part)
     if not target_identity:
         raise ValueError("Database URL must identify a host or database")
     production_like = any(
         marker in target_identity for marker in _PRODUCTION_MARKERS
     )
-    isolated_like = any(
-        marker in target_identity for marker in _ISOLATED_TARGET_MARKERS
-    )
-    local_target = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
-    if not allow_production_target and (production_like or not (isolated_like or local_target)):
+    isolated_host = hostname.startswith(_ISOLATED_TARGET_PREFIXES)
+    isolated_database = database_name.startswith(_ISOLATED_DATABASE_PREFIXES)
+    local_target = hostname in {"localhost", "127.0.0.1", "::1"}
+    clearly_isolated = isolated_database and (isolated_host or local_target)
+    if not allow_production_target and (production_like or not clearly_isolated):
         raise ValueError(
             "Refusing production-like or unmarked target that is not clearly "
             "an isolated drill database; "
@@ -207,7 +212,10 @@ def _redact(value: Any) -> Any:
     if isinstance(value, tuple):
         return [_redact(item) for item in value]
     if isinstance(value, str):
-        return _URL_CREDENTIALS.sub(r"\1:***@", value)
+        sanitized = _URL_USERINFO.sub(r"\1***:***@", value)
+        if _SECRET_VALUE_MARKERS.search(sanitized):
+            return "[REDACTED]"
+        return sanitized
     return value
 
 
