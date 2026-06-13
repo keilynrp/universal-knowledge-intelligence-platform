@@ -47,7 +47,7 @@ ENTERPRISE_CONTROLS = (
         "Backup, restore, and disaster recovery",
         "Restore PostgreSQL and required state within approved and measured objectives.",
         "P0",
-        "implemented",
+        "specified",
         "auditable",
         "Operations owner",
         ("US-073",),

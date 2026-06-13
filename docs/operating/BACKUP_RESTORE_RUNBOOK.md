@@ -147,8 +147,12 @@ Before loading data:
 
 ## 8. Run the Restore Validator
 
-From the repository root, populate the shell variables with non-secret drill
-values and run this exact command:
+From the repository root, populate the drill metadata variables. Set
+`DRILL_DATABASE_URL` only in a controlled operator shell using a short-lived,
+read-only database credential. The URL is secret because it normally contains
+credentials: disable shell tracing, do not place it directly in command
+history, restrict process inspection on the drill host, and unset it
+immediately after validation. Run this exact command:
 
 ```bash
 python -m backend.scripts.validate_restore \
@@ -166,7 +170,9 @@ python -m backend.scripts.validate_restore \
 
 Do not add `--allow-production-target` during a routine drill. A nonzero exit
 means validation failed. Preserve the structured report, calculate its checksum,
-and do not reinterpret a failed required check as a pass.
+and do not reinterpret a failed required check as a pass. After the command,
+run `unset DRILL_DATABASE_URL` and remove any shell-history entry or temporary
+credential material created for the drill.
 
 ## 9. Rebuild Reconstructible Stores
 

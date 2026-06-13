@@ -59,7 +59,7 @@ controllers (*responsables*). One section per activity.
 | Field | Description |
 |-------|-------------|
 | Purpose | Disaster recovery (target RTO 4h / RPO 24h) |
-| Data categories | Encrypted database backups covering all of the above |
+| Data categories | Encrypted database backups covering all of the above, plus encrypted `ukip_static_data` customer branding and persistent static uploads |
 | Data subjects | Same as activities 1–4 |
 | Retention | Per backup retention cycle in `docs/operating/BACKUP_RESTORE_RUNBOOK.md` (EPIC-018) |
 | Security measures | Repository-side backup evidence, freshness monitoring, restore validation, and the operator runbook target RPO 24h and RTO 4h. **Repository controls and runbook implemented; provider configuration, two successful backup cycles, and the first isolated restore drill remain pending.** |

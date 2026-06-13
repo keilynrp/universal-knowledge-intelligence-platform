@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+import subprocess
 
 from backend.enterprise_controls import ENTERPRISE_CONTROLS
 
@@ -47,7 +48,16 @@ def test_backup_claims_use_the_honest_operational_status():
 
 def test_no_restore_drill_is_claimed_as_passed_without_committed_evidence():
     evidence_root = ROOT / "docs/operating/evidence/ER-BCP-001"
-    committed_evidence = tuple(evidence_root.glob("*.md")) if evidence_root.exists() else ()
+    committed_evidence = ()
+    if evidence_root.exists():
+        tracked = subprocess.run(
+            ["git", "ls-files", "--", str(evidence_root.relative_to(ROOT) / "*.md")],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.splitlines()
+        committed_evidence = tuple(path for path in tracked if path)
     passed_claim = re.compile(
         r"(first restore drill (?:completed|passed)|restore drill (?:completed|passed|successful))",
         re.IGNORECASE,
@@ -69,15 +79,15 @@ def test_legal_backup_claims_use_rpo_24h_and_rto_4h():
         assert not re.search(r"RTO(?: target)?:? (?!4h)\d+h", content, re.IGNORECASE), path
 
 
-def test_er_bcp_001_is_implemented_but_not_verified():
+def test_er_bcp_001_remains_specified_until_provider_configuration():
     control = _bcp_control()
-    assert control.current_maturity == "implemented"
+    assert control.current_maturity == "specified"
     assert control.current_maturity != "verified"
 
     register = _read("docs/product/ENTERPRISE_CONTROL_REGISTER.md")
     traceability = _read("docs/product/TRACEABILITY_MATRIX.md")
-    assert re.search(r"\| ER-BCP-001 \|[^\n]*\| implemented \|", register)
-    assert re.search(r"\| Recovery medido \|[^\n]*\| implemented \|", traceability)
+    assert re.search(r"\| ER-BCP-001 \|[^\n]*\| specified \|", register)
+    assert re.search(r"\| Recovery medido \|[^\n]*\| specified \|", traceability)
 
 
 def test_next_gate_requires_two_backup_cycles_and_one_isolated_restore_drill():

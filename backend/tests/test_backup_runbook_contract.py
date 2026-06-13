@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from backend.scripts.validate_restore import _parser
+
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNBOOK = ROOT / "docs" / "operating" / "BACKUP_RESTORE_RUNBOOK.md"
@@ -57,6 +59,35 @@ def test_backup_restore_runbook_contains_operational_contract():
     assert "disable schedulers, webhooks, and notifications" in lowered
     assert "templates/BACKUP_RESTORE_EVIDENCE_TEMPLATE.md" in text
     assert "incident cutover requires separate approval" in lowered
+    assert "short-lived" in lowered
+    assert "read-only database credential" in lowered
+    assert "unset DRILL_DATABASE_URL" in text
+
+
+def test_documented_validator_options_match_the_real_cli_parser():
+    parser_options = {
+        option
+        for action in _parser()._actions
+        for option in action.option_strings
+        if option.startswith("--")
+    }
+    documented_options = {
+        token
+        for token in VALIDATOR_COMMAND.replace("\\", " ").split()
+        if token.startswith("--")
+    }
+
+    assert documented_options <= parser_options
+    assert {
+        "--database-url",
+        "--environment",
+        "--backup-id",
+        "--operator",
+        "--expected-revision",
+        "--backup-completed-at",
+        "--restore-started-at",
+        "--output",
+    } <= documented_options
 
 
 def test_backup_restore_runbook_distinguishes_restorable_and_reconstructible_data():

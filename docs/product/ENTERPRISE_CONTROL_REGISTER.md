@@ -20,7 +20,7 @@ specified, implemented, verified, operated, and auditable.
 | --- | --- | --- | --- | --- | --- | --- |
 | ER-CTRL-001 | Strategic controls have governed lifecycle and evidence | P0 | specified | auditable | Product/security owner | Operational use of register and release evidence index |
 | ER-OPS-001 | Critical jobs execute outside the web process with durable state | P1 | specified | operated | Platform owner | Queue runtime, recovery tests, observation window |
-| ER-BCP-001 | PostgreSQL and required state can be restored within measured objectives | P0 | implemented | auditable | Operations owner | Provider configuration, two successful backup cycles, first isolated restore drill, and approved evidence |
+| ER-BCP-001 | PostgreSQL and required state can be restored within measured objectives | P0 | specified | auditable | Operations owner | Provider configuration, two successful backup cycles, first isolated restore drill, and approved evidence |
 | ER-SDLC-001 | Releases pass enforceable security and supply-chain gates | P0 | implemented | operated | Security/platform owner | Operator: enable push protection + required checks; first month of gate operation |
 | ER-AUD-001 | Tenant-scoped control evidence is integrity-verifiable and exportable | P1 | identified | auditable | Security/compliance owner | Evidence schema, signed export, retention, verification tool |
 | ER-PRIV-001 | Customer privacy review has a maintained legal/operational pack | P1 | specified | auditable | Privacy/legal owner | External legal review of the docs/legal pack |
@@ -48,8 +48,9 @@ specified, implemented, verified, operated, and auditable.
 
 ER-BCP-001 status: **Repository controls and runbook implemented; provider
 configuration, two successful backup cycles, and the first isolated restore
-drill remain pending.** Its maturity is `implemented`, never `verified`, until
-that operational evidence is reviewed.
+drill remain pending.** Its maturity remains `specified` until Dokploy/S3 is
+configured. It must not advance to `verified` until the backup cycles and drill
+evidence are reviewed.
 
 Control maturity remains the lowest state supported by evidence.
 
