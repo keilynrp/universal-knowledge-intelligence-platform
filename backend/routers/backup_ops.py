@@ -84,7 +84,6 @@ def create_backup_event(
     current_user: models.User = Depends(require_role("super_admin", "admin")),
 ):
     values = payload.model_dump()
-    values.pop("operator")
     evidence = values.pop("evidence")
     event = record_event(
         db,

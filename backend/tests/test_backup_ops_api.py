@@ -25,7 +25,6 @@ def _payload(**overrides):
         "encrypted": True,
         "storage_region": "mx-central",
         "retention_class": "daily",
-        "operator": "ops@example.test",
         "evidence": {"provider_state": "completed"},
     }
     payload.update(overrides)
@@ -69,6 +68,16 @@ def test_admin_can_record_backup_metadata(client, auth_headers, db_session):
     persisted = db_session.query(models.BackupAssuranceEvent).one()
     assert persisted.backup_id == "backup-001"
     assert persisted.operator == "testadmin"
+
+
+def test_client_cannot_supply_operator_identity(client, auth_headers):
+    response = client.post(
+        "/ops/backups/events",
+        headers=auth_headers,
+        json=_payload(operator="spoofed-operator"),
+    )
+
+    assert response.status_code == 422
 
 
 def test_secret_like_evidence_keys_are_rejected(client, auth_headers):

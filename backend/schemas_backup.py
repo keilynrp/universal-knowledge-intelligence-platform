@@ -71,14 +71,13 @@ class BackupEventCreate(BaseModel):
     encrypted: bool | None = None
     storage_region: str | None = Field(default=None, max_length=120)
     retention_class: str | None = Field(default=None, max_length=30)
-    operator: str = Field(min_length=1, max_length=120)
     expected_rpo_hours: float | None = Field(default=None, ge=0)
     expected_rto_hours: float | None = Field(default=None, ge=0)
     achieved_rpo_hours: float | None = Field(default=None, ge=0)
     achieved_rto_hours: float | None = Field(default=None, ge=0)
     evidence: dict[str, Any] | None = None
 
-    @field_validator("environment", "provider", "operator")
+    @field_validator("environment", "provider")
     @classmethod
     def validate_non_empty_text(cls, value: str) -> str:
         value = value.strip()
