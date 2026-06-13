@@ -16,6 +16,11 @@ branch_labels = None
 depends_on = None
 
 _TABLE = "backup_assurance_events"
+_SQLITE_UPDATE_TRIGGER = "trg_backup_assurance_events_no_update"
+_SQLITE_DELETE_TRIGGER = "trg_backup_assurance_events_no_delete"
+_POSTGRES_FUNCTION = "reject_backup_assurance_event_mutation"
+_POSTGRES_UPDATE_TRIGGER = "trg_backup_assurance_events_no_update"
+_POSTGRES_DELETE_TRIGGER = "trg_backup_assurance_events_no_delete"
 _INDEX_COLUMNS = (
     "id",
     "event_type",
@@ -25,6 +30,60 @@ _INDEX_COLUMNS = (
     "completed_at",
     "created_at",
 )
+
+
+def _create_append_only_triggers(bind) -> None:
+    if bind.dialect.name == "sqlite":
+        op.execute(f"""
+            CREATE TRIGGER {_SQLITE_UPDATE_TRIGGER}
+            BEFORE UPDATE ON {_TABLE}
+            BEGIN
+                SELECT RAISE(ABORT, '{_TABLE} is append-only');
+            END
+        """)
+        op.execute(f"""
+            CREATE TRIGGER {_SQLITE_DELETE_TRIGGER}
+            BEFORE DELETE ON {_TABLE}
+            BEGIN
+                SELECT RAISE(ABORT, '{_TABLE} is append-only');
+            END
+        """)
+    elif bind.dialect.name == "postgresql":
+        op.execute(f"""
+            CREATE FUNCTION {_POSTGRES_FUNCTION}()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $$
+            BEGIN
+                RAISE EXCEPTION '{_TABLE} is append-only';
+                RETURN OLD;
+            END;
+            $$
+        """)
+        op.execute(f"""
+            CREATE TRIGGER {_POSTGRES_UPDATE_TRIGGER}
+            BEFORE UPDATE ON {_TABLE}
+            FOR EACH ROW EXECUTE FUNCTION {_POSTGRES_FUNCTION}()
+        """)
+        op.execute(f"""
+            CREATE TRIGGER {_POSTGRES_DELETE_TRIGGER}
+            BEFORE DELETE ON {_TABLE}
+            FOR EACH ROW EXECUTE FUNCTION {_POSTGRES_FUNCTION}()
+        """)
+
+
+def _drop_append_only_triggers(bind) -> None:
+    if bind.dialect.name == "sqlite":
+        op.execute(f"DROP TRIGGER IF EXISTS {_SQLITE_UPDATE_TRIGGER}")
+        op.execute(f"DROP TRIGGER IF EXISTS {_SQLITE_DELETE_TRIGGER}")
+    elif bind.dialect.name == "postgresql":
+        op.execute(
+            f"DROP TRIGGER IF EXISTS {_POSTGRES_UPDATE_TRIGGER} ON {_TABLE}"
+        )
+        op.execute(
+            f"DROP TRIGGER IF EXISTS {_POSTGRES_DELETE_TRIGGER} ON {_TABLE}"
+        )
+        op.execute(f"DROP FUNCTION IF EXISTS {_POSTGRES_FUNCTION}()")
 
 
 def _has_table(bind, table_name: str) -> bool:
@@ -63,12 +122,14 @@ def upgrade() -> None:
     )
     for column in _INDEX_COLUMNS:
         op.create_index(f"ix_{_TABLE}_{column}", _TABLE, [column], unique=False)
+    _create_append_only_triggers(bind)
 
 
 def downgrade() -> None:
     bind = op.get_bind()
     if not _has_table(bind, _TABLE):
         return
+    _drop_append_only_triggers(bind)
     for column in reversed(_INDEX_COLUMNS):
         op.drop_index(f"ix_{_TABLE}_{column}", table_name=_TABLE)
     op.drop_table(_TABLE)

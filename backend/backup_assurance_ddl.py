@@ -1,0 +1,21 @@
+"""Database DDL constants for append-only backup assurance evidence."""
+
+BACKUP_ASSURANCE_TABLE = "backup_assurance_events"
+SQLITE_UPDATE_TRIGGER = "trg_backup_assurance_events_no_update"
+SQLITE_DELETE_TRIGGER = "trg_backup_assurance_events_no_delete"
+
+SQLITE_CREATE_UPDATE_TRIGGER = f"""
+CREATE TRIGGER {SQLITE_UPDATE_TRIGGER}
+BEFORE UPDATE ON {BACKUP_ASSURANCE_TABLE}
+BEGIN
+    SELECT RAISE(ABORT, '{BACKUP_ASSURANCE_TABLE} is append-only');
+END
+"""
+
+SQLITE_CREATE_DELETE_TRIGGER = f"""
+CREATE TRIGGER {SQLITE_DELETE_TRIGGER}
+BEFORE DELETE ON {BACKUP_ASSURANCE_TABLE}
+BEGIN
+    SELECT RAISE(ABORT, '{BACKUP_ASSURANCE_TABLE} is append-only');
+END
+"""

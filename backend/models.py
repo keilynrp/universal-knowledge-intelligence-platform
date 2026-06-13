@@ -1,7 +1,11 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, Column, ForeignKey, Integer, String, Boolean, DateTime, Text, Float, UniqueConstraint, Index, event
+from sqlalchemy import BigInteger, Column, ForeignKey, Integer, String, Boolean, DateTime, Text, Float, UniqueConstraint, Index, event, DDL
 from sqlalchemy.orm import Session
+from .backup_assurance_ddl import (
+    SQLITE_CREATE_DELETE_TRIGGER,
+    SQLITE_CREATE_UPDATE_TRIGGER,
+)
 from .database import Base
 
 
@@ -1243,6 +1247,18 @@ class BackupAssuranceEvent(Base):
         default=utc_now_naive,
         index=True,
     )
+
+
+event.listen(
+    BackupAssuranceEvent.__table__,
+    "after_create",
+    DDL(SQLITE_CREATE_UPDATE_TRIGGER).execute_if(dialect="sqlite"),
+)
+event.listen(
+    BackupAssuranceEvent.__table__,
+    "after_create",
+    DDL(SQLITE_CREATE_DELETE_TRIGGER).execute_if(dialect="sqlite"),
+)
 
 
 def _reject_backup_assurance_mutation(*_args):

@@ -3,6 +3,7 @@ Shared pytest fixtures for UKIP backend tests.
 Supports both SQLite (local dev) and PostgreSQL (CI / production parity).
 """
 import os
+from contextlib import contextmanager
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
@@ -61,7 +62,6 @@ else:
     )
 
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
-database.install_backup_assurance_sql_guard(test_engine)
 
 
 def override_get_db():
@@ -314,6 +314,33 @@ _TABLES_TO_CLEAN = [
 ]
 
 
+@contextmanager
+def _sqlite_backup_assurance_cleanup(db):
+    """Temporarily suspend SQLite triggers for pytest full-table cleanup only."""
+    from backend.backup_assurance_ddl import (
+        SQLITE_CREATE_DELETE_TRIGGER,
+        SQLITE_CREATE_UPDATE_TRIGGER,
+        SQLITE_DELETE_TRIGGER,
+        SQLITE_UPDATE_TRIGGER,
+    )
+
+    db.execute(text(f"DROP TRIGGER IF EXISTS {SQLITE_UPDATE_TRIGGER}"))
+    db.execute(text(f"DROP TRIGGER IF EXISTS {SQLITE_DELETE_TRIGGER}"))
+    try:
+        yield
+    finally:
+        db.execute(text(SQLITE_CREATE_UPDATE_TRIGGER))
+        db.execute(text(SQLITE_CREATE_DELETE_TRIGGER))
+
+
+def _delete_test_table(db, table):
+    if table == "backup_assurance_events" and not _IS_POSTGRES:
+        with _sqlite_backup_assurance_cleanup(db):
+            db.execute(text(f"DELETE FROM {table}"))
+        return
+    db.execute(text(f"DELETE FROM {table}"))
+
+
 def _reset_test_state(db):
     if _IS_POSTGRES:
         # Ensure we start with a clean transaction (prior test may have left it aborted)
@@ -325,12 +352,7 @@ def _reset_test_state(db):
         for table in _TABLES_TO_CLEAN:
             try:
                 nested = db.begin_nested()
-                statement = (
-                    database.backup_assurance_test_cleanup_statement()
-                    if table == "backup_assurance_events"
-                    else text(f"DELETE FROM {table}")
-                )
-                db.execute(statement)
+                _delete_test_table(db, table)
                 nested.commit()
             except Exception:
                 nested.rollback()
@@ -344,12 +366,7 @@ def _reset_test_state(db):
     else:
         # SQLite: all tables exist (StaticPool in-memory), no need for savepoints
         for table in _TABLES_TO_CLEAN:
-            statement = (
-                database.backup_assurance_test_cleanup_statement()
-                if table == "backup_assurance_events"
-                else text(f"DELETE FROM {table}")
-            )
-            db.execute(statement)
+            _delete_test_table(db, table)
         db.execute(text("UPDATE users SET org_id = NULL"))
         db.commit()
 

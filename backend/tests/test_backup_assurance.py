@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import BigInteger, delete, text, update
+from sqlalchemy.exc import DBAPIError
 
 from backend import models
 from backend.backup_assurance import (
@@ -277,7 +278,7 @@ def test_persisted_backup_event_rejects_core_delete(db_session):
 def test_persisted_backup_event_rejects_text_update(db_session):
     event = _record_backup(db_session)
 
-    with pytest.raises(RuntimeError, match="append-only"):
+    with pytest.raises(DBAPIError, match="append-only"):
         db_session.execute(
             text(
                 "UPDATE backup_assurance_events "
@@ -291,7 +292,7 @@ def test_persisted_backup_event_rejects_text_update(db_session):
 def test_persisted_backup_event_rejects_text_delete(db_session):
     event = _record_backup(db_session)
 
-    with pytest.raises(RuntimeError, match="append-only"):
+    with pytest.raises(DBAPIError, match="append-only"):
         db_session.execute(
             text("DELETE FROM backup_assurance_events WHERE id = :event_id"),
             {"event_id": event.id},
@@ -312,8 +313,45 @@ def test_application_engine_rejects_core_and_text_mutation(db_session, statement
     _persist_backup(db_session)
 
     with db_session.get_bind().connect() as connection:
-        with pytest.raises(RuntimeError, match="append-only"):
+        with pytest.raises(DBAPIError, match="append-only"):
             connection.execute(statement)
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "UPDATE /* append-only bypass */ backup_assurance_events "
+        "SET provider = 'changed'",
+        "DELETE /* append-only bypass */ FROM backup_assurance_events",
+    ],
+)
+def test_commented_text_sql_cannot_bypass_append_only_triggers(
+    db_session,
+    statement,
+):
+    _persist_backup(db_session)
+
+    with pytest.raises(DBAPIError, match="append-only"):
+        db_session.execute(text(statement))
+    db_session.rollback()
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "UPDATE backup_assurance_events SET provider = 'changed'",
+        "DELETE FROM backup_assurance_events",
+    ],
+)
+def test_exec_driver_sql_cannot_bypass_append_only_triggers(
+    db_session,
+    statement,
+):
+    _persist_backup(db_session)
+
+    with db_session.get_bind().connect() as connection:
+        with pytest.raises(DBAPIError, match="append-only"):
+            connection.exec_driver_sql(statement)
 
 
 def test_freshness_is_ok_at_24_hours():
