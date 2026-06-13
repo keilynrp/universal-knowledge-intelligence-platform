@@ -170,3 +170,44 @@ def latest_completed_backup(
         )
         .first()
     )
+
+
+def latest_failed_backup(
+    db: Session,
+    environment: str,
+) -> BackupAssuranceEvent | None:
+    return (
+        db.query(BackupAssuranceEvent)
+        .filter(
+            BackupAssuranceEvent.event_type == "backup",
+            BackupAssuranceEvent.status == "failed",
+            BackupAssuranceEvent.environment == environment,
+        )
+        .order_by(
+            BackupAssuranceEvent.created_at.desc(),
+            BackupAssuranceEvent.id.desc(),
+        )
+        .first()
+    )
+
+
+def parse_event_evidence(
+    event: BackupAssuranceEvent | None,
+) -> dict[str, Any] | None:
+    if event is None or not event.evidence_json:
+        return None
+    try:
+        evidence = json.loads(event.evidence_json)
+    except (TypeError, ValueError):
+        return None
+    return evidence if isinstance(evidence, dict) else None
+
+
+def failure_reason_from_event(
+    event: BackupAssuranceEvent | None,
+) -> str | None:
+    evidence = parse_event_evidence(event)
+    if evidence is None:
+        return None
+    reason = evidence.get("failure_reason")
+    return reason if isinstance(reason, str) and reason.strip() else None

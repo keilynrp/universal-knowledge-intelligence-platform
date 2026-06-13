@@ -2,6 +2,7 @@ import json
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import BigInteger, create_mock_engine, delete, text, update
@@ -10,6 +11,7 @@ from sqlalchemy.exc import DBAPIError
 from backend import models
 from backend.backup_assurance import (
     evaluate_backup_freshness,
+    failure_reason_from_event,
     latest_completed_backup,
     record_event,
 )
@@ -573,3 +575,9 @@ def test_latest_completed_backup_ignores_events_without_completion_time(db_sessi
     result = latest_completed_backup(db_session, "production")
 
     assert result is None
+
+
+def test_failure_reason_from_event_tolerates_invalid_evidence_json():
+    event = SimpleNamespace(evidence_json="{not-json")
+
+    assert failure_reason_from_event(event) is None

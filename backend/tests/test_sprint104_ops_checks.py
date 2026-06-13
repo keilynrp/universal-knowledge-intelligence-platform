@@ -143,6 +143,23 @@ def test_backup_freshness_is_critical_without_production_backup(
     )
 
 
+def test_backup_freshness_disabled_does_not_query_latest_backup(
+    db_session,
+    monkeypatch,
+):
+    monkeypatch.setenv("UKIP_BACKUP_MONITOR_ENABLED", "0")
+
+    def _unexpected_query(*_args, **_kwargs):
+        raise AssertionError("latest_completed_backup must not be called")
+
+    monkeypatch.setattr(ops_checks, "latest_completed_backup", _unexpected_query)
+
+    report = ops_checks.run_operational_checks(db_session)
+
+    check = next(item for item in report["checks"] if item["id"] == "backup_freshness")
+    assert check["status"] == "skipped"
+
+
 def test_backup_freshness_warns_at_25_hours(db_session, monkeypatch):
     monkeypatch.setenv("UKIP_BACKUP_MONITOR_ENABLED", "1")
     monkeypatch.setenv("UKIP_BACKUP_ENVIRONMENT", "production")

@@ -136,4 +136,7 @@ class BackupStatusResponse(BaseModel):
     rpo_hours: int
     critical_after_hours: int
     reason_codes: list[str]
+    evidence_collected_at: datetime | None
+    last_failure_at: datetime | None
+    last_failure_reason: str | None
     latest_backup: BackupEventResponse | None

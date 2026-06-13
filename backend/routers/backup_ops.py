@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from datetime import datetime, timezone
 
@@ -13,7 +12,10 @@ from backend import models
 from backend.auth import require_role
 from backend.backup_assurance import (
     evaluate_backup_freshness,
+    failure_reason_from_event,
     latest_completed_backup,
+    latest_failed_backup,
+    parse_event_evidence,
     record_event,
 )
 from backend.database import get_db
@@ -31,8 +33,15 @@ router = APIRouter(
 )
 
 
+def backup_event_ordering():
+    return (
+        models.BackupAssuranceEvent.completed_at.desc().nullslast(),
+        models.BackupAssuranceEvent.created_at.desc(),
+        models.BackupAssuranceEvent.id.desc(),
+    )
+
+
 def _event_response(event: models.BackupAssuranceEvent) -> BackupEventResponse:
-    evidence = json.loads(event.evidence_json) if event.evidence_json else None
     return BackupEventResponse(
         id=event.id,
         event_type=event.event_type,
@@ -54,7 +63,7 @@ def _event_response(event: models.BackupAssuranceEvent) -> BackupEventResponse:
         expected_rto_hours=event.expected_rto_hours,
         achieved_rpo_hours=event.achieved_rpo_hours,
         achieved_rto_hours=event.achieved_rto_hours,
-        evidence=evidence,
+        evidence=parse_event_evidence(event),
         created_at=event.created_at,
     )
 
@@ -83,10 +92,7 @@ def list_backup_events(
     query = db.query(models.BackupAssuranceEvent)
     if environment is not None:
         query = query.filter(models.BackupAssuranceEvent.environment == environment)
-    events = query.order_by(
-        models.BackupAssuranceEvent.completed_at.desc(),
-        models.BackupAssuranceEvent.id.desc(),
-    ).limit(limit).all()
+    events = query.order_by(*backup_event_ordering()).limit(limit).all()
     return [_event_response(event) for event in events]
 
 
@@ -102,6 +108,7 @@ def backup_status(
     db: Session = Depends(get_db),
 ):
     latest = latest_completed_backup(db, environment)
+    latest_failure = latest_failed_backup(db, environment)
     result = evaluate_backup_freshness(
         latest_completed_at=latest.completed_at if latest else None,
         now=datetime.now(timezone.utc),
@@ -115,5 +122,19 @@ def backup_status(
     return {
         "environment": environment,
         **result,
+        "evidence_collected_at": max(
+            (
+                event.created_at
+                for event in (latest, latest_failure)
+                if event is not None
+            ),
+            default=None,
+        ),
+        "last_failure_at": (
+            latest_failure.completed_at or latest_failure.created_at
+            if latest_failure
+            else None
+        ),
+        "last_failure_reason": failure_reason_from_event(latest_failure),
         "latest_backup": _event_response(latest) if latest else None,
     }

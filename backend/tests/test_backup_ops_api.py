@@ -1,5 +1,11 @@
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import select
+from sqlalchemy.dialects import postgresql
+
+from backend import models
+from backend.routers.backup_ops import backup_event_ordering
+
 
 def _payload(**overrides):
     now = datetime.now(timezone.utc)
@@ -97,6 +103,53 @@ def test_backup_events_are_returned_newest_first(client, auth_headers):
     ]
 
 
+def test_backup_events_put_incomplete_events_after_completed_events(
+    client,
+    auth_headers,
+):
+    incomplete = _payload(
+        backup_id="backup-incomplete",
+        completed_at=None,
+    )
+    completed = _payload(
+        backup_id="backup-completed",
+        completed_at="2026-06-12T11:05:00Z",
+    )
+    assert client.post(
+        "/ops/backups/events",
+        headers=auth_headers,
+        json=incomplete,
+    ).status_code == 201
+    assert client.post(
+        "/ops/backups/events",
+        headers=auth_headers,
+        json=completed,
+    ).status_code == 201
+
+    response = client.get(
+        "/ops/backups?environment=production",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert [item["backup_id"] for item in response.json()] == [
+        "backup-completed",
+        "backup-incomplete",
+    ]
+
+
+def test_backup_event_ordering_compiles_to_postgres_nulls_last():
+    statement = select(models.BackupAssuranceEvent).order_by(
+        *backup_event_ordering()
+    )
+
+    sql = str(statement.compile(dialect=postgresql.dialect()))
+
+    assert "completed_at DESC NULLS LAST" in sql
+    assert "created_at DESC" in sql
+    assert "id DESC" in sql
+
+
 def test_backup_status_uses_requested_environment(client, auth_headers):
     assert client.post(
         "/ops/backups/events",
@@ -116,3 +169,43 @@ def test_backup_status_uses_requested_environment(client, auth_headers):
     assert body["rpo_hours"] == 24
     assert body["critical_after_hours"] == 26
     assert body["latest_backup"]["backup_id"] == "backup-001"
+    assert body["evidence_collected_at"] == body["latest_backup"]["created_at"]
+    assert body["last_failure_at"] is None
+    assert body["last_failure_reason"] is None
+
+
+def test_backup_status_includes_latest_failure_metadata(client, auth_headers):
+    failed = _payload(
+        status="failed",
+        backup_id="backup-failed",
+        completed_at="2026-06-12T11:05:00Z",
+        evidence={
+            "provider_state": "failed",
+            "failure_reason": "upload timeout",
+        },
+    )
+    completed = _payload(
+        backup_id="backup-completed",
+        completed_at=datetime.now(timezone.utc).isoformat(),
+    )
+    assert client.post(
+        "/ops/backups/events",
+        headers=auth_headers,
+        json=failed,
+    ).status_code == 201
+    assert client.post(
+        "/ops/backups/events",
+        headers=auth_headers,
+        json=completed,
+    ).status_code == 201
+
+    response = client.get(
+        "/ops/backups/status?environment=production",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["evidence_collected_at"] == body["latest_backup"]["created_at"]
+    assert body["last_failure_at"] == "2026-06-12T11:05:00"
+    assert body["last_failure_reason"] == "upload timeout"
