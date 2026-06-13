@@ -1,8 +1,10 @@
 import json
+import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
-from sqlalchemy import BigInteger, delete, text, update
+from sqlalchemy import BigInteger, create_mock_engine, delete, text, update
 from sqlalchemy.exc import DBAPIError
 
 from backend import models
@@ -11,6 +13,80 @@ from backend.backup_assurance import (
     latest_completed_backup,
     record_event,
 )
+
+
+def _backend_test_fixtures():
+    expected = Path(__file__).with_name("conftest.py").resolve()
+    for module in sys.modules.values():
+        module_file = getattr(module, "__file__", None)
+        if module_file and Path(module_file).resolve() == expected:
+            return module
+    raise AssertionError("backend/tests/conftest.py is not loaded")
+
+
+def test_postgres_create_all_registers_append_only_function_and_triggers():
+    statements = []
+    engine = create_mock_engine(
+        "postgresql+psycopg2://",
+        lambda sql, *_args, **_kwargs: statements.append(str(sql)),
+    )
+
+    models.BackupAssuranceEvent.__table__.create(engine)
+
+    rendered = "\n".join(statements)
+    assert "CREATE FUNCTION reject_backup_assurance_event_mutation" in rendered
+    assert rendered.count("CREATE TRIGGER trg_backup_assurance_events_no_") == 2
+    assert "BEFORE UPDATE ON backup_assurance_events" in rendered
+    assert "BEFORE DELETE ON backup_assurance_events" in rendered
+
+
+def test_postgres_test_cleanup_drops_deletes_and_recreates_triggers(monkeypatch):
+    test_fixtures = _backend_test_fixtures()
+    statements = []
+
+    class RecordingSession:
+        def execute(self, statement):
+            rendered = " ".join(str(statement).split())
+            statements.append(rendered)
+            if rendered == "DELETE FROM backup_assurance_events":
+                return None
+
+    monkeypatch.setattr(test_fixtures, "_IS_POSTGRES", True)
+    test_fixtures._delete_test_table(
+        RecordingSession(),
+        "backup_assurance_events",
+    )
+
+    assert statements == [
+        "DROP TRIGGER IF EXISTS trg_backup_assurance_events_no_update "
+        "ON backup_assurance_events",
+        "DROP TRIGGER IF EXISTS trg_backup_assurance_events_no_delete "
+        "ON backup_assurance_events",
+        "DELETE FROM backup_assurance_events",
+        "CREATE TRIGGER trg_backup_assurance_events_no_update "
+        "BEFORE UPDATE ON backup_assurance_events FOR EACH ROW "
+        "EXECUTE FUNCTION reject_backup_assurance_event_mutation()",
+        "CREATE TRIGGER trg_backup_assurance_events_no_delete "
+        "BEFORE DELETE ON backup_assurance_events FOR EACH ROW "
+        "EXECUTE FUNCTION reject_backup_assurance_event_mutation()",
+    ]
+
+
+def test_postgres_test_cleanup_does_not_swallow_delete_failure(monkeypatch):
+    test_fixtures = _backend_test_fixtures()
+
+    class FailingSession:
+        def execute(self, statement):
+            if str(statement) == "DELETE FROM backup_assurance_events":
+                raise RuntimeError("cleanup failed")
+
+    monkeypatch.setattr(test_fixtures, "_IS_POSTGRES", True)
+
+    with pytest.raises(RuntimeError, match="cleanup failed"):
+        test_fixtures._delete_test_table(
+            FailingSession(),
+            "backup_assurance_events",
+        )
 
 
 def _record_backup(db_session, **overrides):

@@ -3,6 +3,8 @@
 Revision ID: a8b9c0d1e2f3
 Revises: e5f6a7b8c0d1
 Create Date: 2026-06-12
+
+UNRELEASED: this revision must not be considered released before feature merge.
 """
 from __future__ import annotations
 

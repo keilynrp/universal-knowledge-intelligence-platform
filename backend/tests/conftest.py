@@ -315,27 +315,50 @@ _TABLES_TO_CLEAN = [
 
 
 @contextmanager
-def _sqlite_backup_assurance_cleanup(db):
-    """Temporarily suspend SQLite triggers for pytest full-table cleanup only."""
+def _backup_assurance_test_cleanup(db):
+    """Suspend append-only triggers only for pytest full-table cleanup."""
     from backend.backup_assurance_ddl import (
+        POSTGRES_CREATE_DELETE_TRIGGER,
+        POSTGRES_CREATE_UPDATE_TRIGGER,
+        POSTGRES_DROP_DELETE_TRIGGER,
+        POSTGRES_DROP_UPDATE_TRIGGER,
         SQLITE_CREATE_DELETE_TRIGGER,
         SQLITE_CREATE_UPDATE_TRIGGER,
         SQLITE_DELETE_TRIGGER,
         SQLITE_UPDATE_TRIGGER,
     )
 
-    db.execute(text(f"DROP TRIGGER IF EXISTS {SQLITE_UPDATE_TRIGGER}"))
-    db.execute(text(f"DROP TRIGGER IF EXISTS {SQLITE_DELETE_TRIGGER}"))
+    if _IS_POSTGRES:
+        drop_statements = (
+            POSTGRES_DROP_UPDATE_TRIGGER,
+            POSTGRES_DROP_DELETE_TRIGGER,
+        )
+        create_statements = (
+            POSTGRES_CREATE_UPDATE_TRIGGER,
+            POSTGRES_CREATE_DELETE_TRIGGER,
+        )
+    else:
+        drop_statements = (
+            f"DROP TRIGGER IF EXISTS {SQLITE_UPDATE_TRIGGER}",
+            f"DROP TRIGGER IF EXISTS {SQLITE_DELETE_TRIGGER}",
+        )
+        create_statements = (
+            SQLITE_CREATE_UPDATE_TRIGGER,
+            SQLITE_CREATE_DELETE_TRIGGER,
+        )
+
+    for statement in drop_statements:
+        db.execute(text(statement))
     try:
         yield
     finally:
-        db.execute(text(SQLITE_CREATE_UPDATE_TRIGGER))
-        db.execute(text(SQLITE_CREATE_DELETE_TRIGGER))
+        for statement in create_statements:
+            db.execute(text(statement))
 
 
 def _delete_test_table(db, table):
-    if table == "backup_assurance_events" and not _IS_POSTGRES:
-        with _sqlite_backup_assurance_cleanup(db):
+    if table == "backup_assurance_events":
+        with _backup_assurance_test_cleanup(db):
             db.execute(text(f"DELETE FROM {table}"))
         return
     db.execute(text(f"DELETE FROM {table}"))
@@ -349,7 +372,14 @@ def _reset_test_state(db):
         except Exception:
             pass
         # PostgreSQL: use savepoints so a missing table doesn't abort the tx
+        backup_table = "backup_assurance_events"
+        nested = db.begin_nested()
+        _delete_test_table(db, backup_table)
+        nested.commit()
+
         for table in _TABLES_TO_CLEAN:
+            if table == backup_table:
+                continue
             try:
                 nested = db.begin_nested()
                 _delete_test_table(db, table)

@@ -3,6 +3,12 @@ from datetime import datetime, timezone
 from sqlalchemy import BigInteger, Column, ForeignKey, Integer, String, Boolean, DateTime, Text, Float, UniqueConstraint, Index, event, DDL
 from sqlalchemy.orm import Session
 from .backup_assurance_ddl import (
+    POSTGRES_CREATE_DELETE_TRIGGER,
+    POSTGRES_CREATE_FUNCTION,
+    POSTGRES_CREATE_UPDATE_TRIGGER,
+    POSTGRES_DROP_DELETE_TRIGGER,
+    POSTGRES_DROP_FUNCTION,
+    POSTGRES_DROP_UPDATE_TRIGGER,
     SQLITE_CREATE_DELETE_TRIGGER,
     SQLITE_CREATE_UPDATE_TRIGGER,
 )
@@ -1258,6 +1264,36 @@ event.listen(
     BackupAssuranceEvent.__table__,
     "after_create",
     DDL(SQLITE_CREATE_DELETE_TRIGGER).execute_if(dialect="sqlite"),
+)
+event.listen(
+    BackupAssuranceEvent.__table__,
+    "after_create",
+    DDL(POSTGRES_CREATE_FUNCTION).execute_if(dialect="postgresql"),
+)
+event.listen(
+    BackupAssuranceEvent.__table__,
+    "after_create",
+    DDL(POSTGRES_CREATE_UPDATE_TRIGGER).execute_if(dialect="postgresql"),
+)
+event.listen(
+    BackupAssuranceEvent.__table__,
+    "after_create",
+    DDL(POSTGRES_CREATE_DELETE_TRIGGER).execute_if(dialect="postgresql"),
+)
+event.listen(
+    BackupAssuranceEvent.__table__,
+    "before_drop",
+    DDL(POSTGRES_DROP_UPDATE_TRIGGER).execute_if(dialect="postgresql"),
+)
+event.listen(
+    BackupAssuranceEvent.__table__,
+    "before_drop",
+    DDL(POSTGRES_DROP_DELETE_TRIGGER).execute_if(dialect="postgresql"),
+)
+event.listen(
+    BackupAssuranceEvent.__table__,
+    "before_drop",
+    DDL(POSTGRES_DROP_FUNCTION).execute_if(dialect="postgresql"),
 )
 
 
