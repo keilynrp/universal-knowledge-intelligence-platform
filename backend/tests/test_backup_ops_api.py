@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
 
 from backend import models
+from backend.routers import backup_ops
 from backend.routers.backup_ops import backup_event_ordering
 
 
@@ -150,7 +151,13 @@ def test_backup_event_ordering_compiles_to_postgres_nulls_last():
     assert "id DESC" in sql
 
 
-def test_backup_status_uses_requested_environment(client, auth_headers):
+def test_backup_status_uses_current_utc_as_evidence_collection_time(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    evaluated_at = datetime(2026, 6, 13, 2, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(backup_ops, "utc_now", lambda: evaluated_at)
     assert client.post(
         "/ops/backups/events",
         headers=auth_headers,
@@ -169,9 +176,29 @@ def test_backup_status_uses_requested_environment(client, auth_headers):
     assert body["rpo_hours"] == 24
     assert body["critical_after_hours"] == 26
     assert body["latest_backup"]["backup_id"] == "backup-001"
-    assert body["evidence_collected_at"] == body["latest_backup"]["created_at"]
+    assert body["evidence_collected_at"] == "2026-06-13T02:30:00Z"
     assert body["last_failure_at"] is None
     assert body["last_failure_reason"] is None
+
+
+def test_backup_status_collects_evidence_time_even_without_backups(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    evaluated_at = datetime(2026, 6, 13, 3, 45, tzinfo=timezone.utc)
+    monkeypatch.setattr(backup_ops, "utc_now", lambda: evaluated_at)
+
+    response = client.get(
+        "/ops/backups/status?environment=empty-environment",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "critical"
+    assert body["latest_backup"] is None
+    assert body["evidence_collected_at"] == "2026-06-13T03:45:00Z"
 
 
 def test_backup_status_includes_latest_failure_metadata(client, auth_headers):
@@ -206,6 +233,44 @@ def test_backup_status_includes_latest_failure_metadata(client, auth_headers):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["evidence_collected_at"] == body["latest_backup"]["created_at"]
+    assert body["evidence_collected_at"] is not None
     assert body["last_failure_at"] == "2026-06-12T11:05:00"
     assert body["last_failure_reason"] == "upload timeout"
+
+
+def test_backup_status_uses_failure_completion_time_not_delayed_ingestion(
+    client,
+    auth_headers,
+):
+    chronologically_newer = _payload(
+        status="failed",
+        backup_id="failed-newer",
+        completed_at="2026-06-12T12:05:00Z",
+        evidence={"failure_reason": "newer failure"},
+    )
+    delayed_older = _payload(
+        status="failed",
+        backup_id="failed-older-delayed",
+        completed_at="2026-06-12T10:05:00Z",
+        evidence={"failure_reason": "older delayed failure"},
+    )
+    assert client.post(
+        "/ops/backups/events",
+        headers=auth_headers,
+        json=chronologically_newer,
+    ).status_code == 201
+    assert client.post(
+        "/ops/backups/events",
+        headers=auth_headers,
+        json=delayed_older,
+    ).status_code == 201
+
+    response = client.get(
+        "/ops/backups/status?environment=production",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["last_failure_at"] == "2026-06-12T12:05:00"
+    assert body["last_failure_reason"] == "newer failure"

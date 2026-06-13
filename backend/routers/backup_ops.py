@@ -33,6 +33,10 @@ router = APIRouter(
 )
 
 
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def backup_event_ordering():
     return (
         models.BackupAssuranceEvent.completed_at.desc().nullslast(),
@@ -107,11 +111,12 @@ def backup_status(
     ),
     db: Session = Depends(get_db),
 ):
+    evaluated_at = utc_now()
     latest = latest_completed_backup(db, environment)
     latest_failure = latest_failed_backup(db, environment)
     result = evaluate_backup_freshness(
         latest_completed_at=latest.completed_at if latest else None,
-        now=datetime.now(timezone.utc),
+        now=evaluated_at,
         size_bytes=latest.size_bytes if latest else None,
         integrity_ref=latest.integrity_ref if latest else None,
         provider_reachable=os.environ.get(
@@ -122,14 +127,7 @@ def backup_status(
     return {
         "environment": environment,
         **result,
-        "evidence_collected_at": max(
-            (
-                event.created_at
-                for event in (latest, latest_failure)
-                if event is not None
-            ),
-            default=None,
-        ),
+        "evidence_collected_at": evaluated_at,
         "last_failure_at": (
             latest_failure.completed_at or latest_failure.created_at
             if latest_failure

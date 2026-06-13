@@ -5,14 +5,17 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import BigInteger, create_mock_engine, delete, text, update
+from sqlalchemy import BigInteger, create_mock_engine, delete, select, text, update
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import DBAPIError
 
 from backend import models
 from backend.backup_assurance import (
     evaluate_backup_freshness,
+    failed_backup_ordering,
     failure_reason_from_event,
     latest_completed_backup,
+    latest_failed_backup,
     record_event,
 )
 
@@ -575,6 +578,40 @@ def test_latest_completed_backup_ignores_events_without_completion_time(db_sessi
     result = latest_completed_backup(db_session, "production")
 
     assert result is None
+
+
+def test_latest_failed_backup_prefers_completion_time_over_ingestion_order(
+    db_session,
+):
+    newer = _record_backup(
+        db_session,
+        status="failed",
+        backup_id="newer",
+        completed_at=datetime(2026, 6, 12, 12, tzinfo=timezone.utc),
+    )
+    delayed_older = _record_backup(
+        db_session,
+        status="failed",
+        backup_id="delayed-older",
+        completed_at=datetime(2026, 6, 12, 10, tzinfo=timezone.utc),
+    )
+
+    result = latest_failed_backup(db_session, "production")
+
+    assert newer.id < delayed_older.id
+    assert result.id == newer.id
+
+
+def test_failed_backup_ordering_compiles_to_postgres_nulls_last():
+    statement = select(models.BackupAssuranceEvent).order_by(
+        *failed_backup_ordering()
+    )
+
+    sql = str(statement.compile(dialect=postgresql.dialect()))
+
+    assert "completed_at DESC NULLS LAST" in sql
+    assert "created_at DESC" in sql
+    assert "id DESC" in sql
 
 
 def test_failure_reason_from_event_tolerates_invalid_evidence_json():

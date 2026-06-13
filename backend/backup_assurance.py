@@ -183,11 +183,16 @@ def latest_failed_backup(
             BackupAssuranceEvent.status == "failed",
             BackupAssuranceEvent.environment == environment,
         )
-        .order_by(
-            BackupAssuranceEvent.created_at.desc(),
-            BackupAssuranceEvent.id.desc(),
-        )
+        .order_by(*failed_backup_ordering())
         .first()
+    )
+
+
+def failed_backup_ordering():
+    return (
+        BackupAssuranceEvent.completed_at.desc().nullslast(),
+        BackupAssuranceEvent.created_at.desc(),
+        BackupAssuranceEvent.id.desc(),
     )
 
 
