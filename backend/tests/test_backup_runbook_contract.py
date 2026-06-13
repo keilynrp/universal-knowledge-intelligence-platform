@@ -27,6 +27,8 @@ VALIDATOR_COMMAND = """python -m backend.scripts.validate_restore \\
   --restore-started-at "$RESTORE_STARTED_AT" \\
   --tenant-a "$TENANT_A" \\
   --tenant-b "$TENANT_B" \\
+  --expected-target-host "$DRILL_DATABASE_HOST" \\
+  --expected-target-database "$DRILL_DATABASE_NAME" \\
   --output "$VALIDATION_REPORT\""""
 
 

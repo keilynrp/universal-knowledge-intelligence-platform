@@ -30,8 +30,6 @@ REQUIRED_TABLES = (
     "backup_assurance_events",
 )
 _PRODUCTION_MARKERS = ("prod", "production", "primary", "live")
-_ISOLATED_TARGET_PREFIXES = ("drill-", "restore-", "recovery-")
-_ISOLATED_DATABASE_PREFIXES = ("drill_", "restore_", "recovery_")
 _SECRET_KEY_MARKERS = (
     "secret",
     "password",
@@ -46,15 +44,19 @@ _URL_USERINFO = re.compile(
     re.IGNORECASE,
 )
 _SECRET_VALUE_MARKERS = re.compile(
-    r"\b(secret|password|token|credential|database[_ -]?url|connection[_ -]?string)\b",
+    r"(access[_ -]?token|api[_ -]?key|authorization|bearer|pwd|passwd|secret|"
+    r"password|token|credential|database[_ -]?url|connection[_ -]?string)",
     re.IGNORECASE,
 )
 
 
 def validate_target_url(
-    database_url: str, allow_production_target: bool
+    database_url: str,
+    allow_production_target: bool,
+    expected_host: str | None = None,
+    expected_database: str | None = None,
 ) -> None:
-    """Reject URLs whose host or database name looks production-like."""
+    """Require the restored target to match the approved isolated identity."""
     parsed = urlsplit(database_url)
     hostname = (parsed.hostname or "").lower()
     database_name = unquote(parsed.path.lstrip("/")).lower()
@@ -64,14 +66,19 @@ def validate_target_url(
     production_like = any(
         marker in target_identity for marker in _PRODUCTION_MARKERS
     )
-    isolated_host = hostname.startswith(_ISOLATED_TARGET_PREFIXES)
-    isolated_database = database_name.startswith(_ISOLATED_DATABASE_PREFIXES)
     local_target = hostname in {"localhost", "127.0.0.1", "::1"}
-    clearly_isolated = isolated_database and (isolated_host or local_target)
-    if not allow_production_target and (production_like or not clearly_isolated):
+    identity_matches = (
+        expected_host is not None
+        and expected_database is not None
+        and hostname == expected_host.strip().lower()
+        and database_name == expected_database.strip().lower()
+    )
+    if not allow_production_target and (
+        production_like or not (identity_matches or local_target)
+    ):
         raise ValueError(
-            "Refusing production-like or unmarked target that is not clearly "
-            "an isolated drill database; "
+            "Refusing production-like target or target outside the exact "
+            "isolated drill allowlist; "
             "use --allow-production-target only with separate incident approval"
         )
 
@@ -291,6 +298,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--tenant-a", type=int, required=True)
     parser.add_argument("--tenant-b", type=int, required=True)
+    parser.add_argument("--expected-target-host", required=True)
+    parser.add_argument("--expected-target-database", required=True)
     parser.add_argument("--allow-production-target", action="store_true")
     return parser
 
@@ -305,7 +314,12 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError(
                 f"Database URL environment variable {args.database_url_env!r} is unset"
             )
-        validate_target_url(database_url, args.allow_production_target)
+        validate_target_url(
+            database_url,
+            args.allow_production_target,
+            expected_host=args.expected_target_host,
+            expected_database=args.expected_target_database,
+        )
         engine = create_engine(database_url, pool_pre_ping=True)
         install_read_only_guard(engine)
         with engine.connect() as connection:

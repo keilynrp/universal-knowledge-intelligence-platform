@@ -50,7 +50,19 @@ def test_isolated_drill_target_is_accepted():
     validate_target_url(
         "postgresql://restore_user:secret@drill-db.internal/restore_ukip",
         allow_production_target=False,
+        expected_host="drill-db.internal",
+        expected_database="restore_ukip",
     )
+
+
+def test_remote_target_must_match_exact_allowlist():
+    with pytest.raises(ValueError, match="exact isolated drill allowlist"):
+        validate_target_url(
+            "postgresql://user:secret@drill-db.internal/restore_ukip",
+            allow_production_target=False,
+            expected_host="approved-drill-db.internal",
+            expected_database="restore_ukip",
+        )
 
 
 @pytest.mark.parametrize(
@@ -283,6 +295,11 @@ def test_report_redacts_credentials_embedded_in_string_values():
         "password=top-secret",
         "request failed ?password=top-secret",
         "token: top-secret",
+        "access_token=abc123",
+        "api_key=abc123",
+        "authorization: Bearer abc123",
+        "pwd=hunter2",
+        "passwd=hunter2",
     ),
 )
 def test_report_redacts_adversarial_secret_values(secret_text):
@@ -302,6 +319,8 @@ def test_report_redacts_adversarial_secret_values(secret_text):
     serialized = json.dumps(report)
     assert "top-secret" not in serialized
     assert "p@ssword" not in serialized
+    assert "abc123" not in serialized
+    assert "hunter2" not in serialized
 
 
 def test_runtime_failure_writes_structured_failed_report(
@@ -331,6 +350,10 @@ def test_runtime_failure_writes_structured_failed_report(
             "1",
             "--tenant-b",
             "2",
+            "--expected-target-host",
+            "drill-db.internal",
+            "--expected-target-database",
+            "restore_ukip",
             "--output",
             str(output),
         ]
