@@ -76,8 +76,16 @@ def test_documented_validator_options_match_the_real_cli_parser():
         for token in VALIDATOR_COMMAND.replace("\\", " ").split()
         if token.startswith("--")
     }
+    required_parser_options = {
+        option
+        for action in _parser()._actions
+        if action.required
+        for option in action.option_strings
+        if option.startswith("--")
+    }
 
     assert documented_options <= parser_options
+    assert required_parser_options <= documented_options
     assert {
         "--database-url",
         "--environment",

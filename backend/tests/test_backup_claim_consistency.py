@@ -51,7 +51,15 @@ def test_no_restore_drill_is_claimed_as_passed_without_committed_evidence():
     committed_evidence = ()
     if evidence_root.exists():
         tracked = subprocess.run(
-            ["git", "ls-files", "--", str(evidence_root.relative_to(ROOT) / "*.md")],
+            [
+                "git",
+                "ls-tree",
+                "-r",
+                "--name-only",
+                "HEAD",
+                "--",
+                str(evidence_root.relative_to(ROOT)),
+            ],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -68,6 +76,10 @@ def test_no_restore_drill_is_claimed_as_passed_without_committed_evidence():
         if passed_claim.search(_read(path))
     ]
     assert not claims or committed_evidence, claims
+    if claims:
+        for claim_path in claims:
+            claim = _read(claim_path)
+            assert any(Path(evidence).name in claim for evidence in committed_evidence)
 
 
 def test_legal_backup_claims_use_rpo_24h_and_rto_4h():
