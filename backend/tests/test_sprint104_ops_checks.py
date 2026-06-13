@@ -143,6 +143,62 @@ def test_backup_freshness_is_critical_without_production_backup(
     )
 
 
+def test_backup_freshness_defaults_provider_reachability_to_unknown(
+    db_session,
+    monkeypatch,
+):
+    monkeypatch.setenv("UKIP_BACKUP_MONITOR_ENABLED", "1")
+    monkeypatch.delenv("UKIP_BACKUP_PROVIDER_REACHABLE", raising=False)
+    _persist_backup(
+        db_session,
+        completed_at=datetime.now(timezone.utc) - timedelta(hours=1),
+    )
+
+    report = ops_checks.run_operational_checks(db_session)
+
+    check = next(item for item in report["checks"] if item["id"] == "backup_freshness")
+    assert check["status"] == "critical"
+    assert check["details"]["provider_reachable"] is False
+    assert check["details"]["provider_reachability_source"] == "unknown_default"
+
+
+def test_backup_freshness_labels_explicit_provider_reachability(
+    db_session,
+    monkeypatch,
+):
+    monkeypatch.setenv("UKIP_BACKUP_MONITOR_ENABLED", "1")
+    monkeypatch.setenv("UKIP_BACKUP_PROVIDER_REACHABLE", "1")
+    _persist_backup(
+        db_session,
+        completed_at=datetime.now(timezone.utc) - timedelta(hours=1),
+    )
+
+    report = ops_checks.run_operational_checks(db_session)
+
+    check = next(item for item in report["checks"] if item["id"] == "backup_freshness")
+    assert check["status"] == "ok"
+    assert check["details"]["provider_reachability_source"] == "environment_assertion"
+
+
+def test_backup_freshness_query_failure_returns_critical_check(
+    db_session,
+    monkeypatch,
+):
+    monkeypatch.setenv("UKIP_BACKUP_MONITOR_ENABLED", "1")
+
+    def _query_failure(*_args, **_kwargs):
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(ops_checks, "latest_completed_backup", _query_failure)
+
+    report = ops_checks.run_operational_checks(db_session)
+
+    check = next(item for item in report["checks"] if item["id"] == "backup_freshness")
+    assert check["status"] == "critical"
+    assert check["details"]["reason_codes"] == ["backup_query_failed"]
+    assert "database unavailable" in check["details"]["error"]
+
+
 def test_backup_freshness_disabled_does_not_query_latest_backup(
     db_session,
     monkeypatch,

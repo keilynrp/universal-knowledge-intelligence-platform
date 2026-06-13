@@ -23,6 +23,7 @@ _SQLITE_DELETE_TRIGGER = "trg_backup_assurance_events_no_delete"
 _POSTGRES_FUNCTION = "reject_backup_assurance_event_mutation"
 _POSTGRES_UPDATE_TRIGGER = "trg_backup_assurance_events_no_update"
 _POSTGRES_DELETE_TRIGGER = "trg_backup_assurance_events_no_delete"
+_STATUS_LOOKUP_INDEX = "ix_backup_assurance_status_lookup"
 _INDEX_COLUMNS = (
     "id",
     "event_type",
@@ -124,6 +125,12 @@ def upgrade() -> None:
     )
     for column in _INDEX_COLUMNS:
         op.create_index(f"ix_{_TABLE}_{column}", _TABLE, [column], unique=False)
+    op.create_index(
+        _STATUS_LOOKUP_INDEX,
+        _TABLE,
+        ["environment", "event_type", "status", "completed_at", "id"],
+        unique=False,
+    )
     _create_append_only_triggers(bind)
 
 
@@ -132,6 +139,7 @@ def downgrade() -> None:
     if not _has_table(bind, _TABLE):
         return
     _drop_append_only_triggers(bind)
+    op.drop_index(_STATUS_LOOKUP_INDEX, table_name=_TABLE)
     for column in reversed(_INDEX_COLUMNS):
         op.drop_index(f"ix_{_TABLE}_{column}", table_name=_TABLE)
     op.drop_table(_TABLE)

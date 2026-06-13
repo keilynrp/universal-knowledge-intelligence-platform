@@ -80,8 +80,18 @@ def _event_response(event: models.BackupAssuranceEvent) -> BackupEventResponse:
 def create_backup_event(
     payload: BackupEventCreate,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin")),
 ):
-    event = record_event(db, **payload.model_dump())
+    values = payload.model_dump()
+    provider_reported_operator = values.pop("operator")
+    evidence = dict(values.pop("evidence") or {})
+    evidence["provider_reported_operator"] = provider_reported_operator
+    event = record_event(
+        db,
+        **values,
+        operator=current_user.username,
+        evidence=evidence,
+    )
     db.commit()
     db.refresh(event)
     return _event_response(event)
@@ -114,19 +124,25 @@ def backup_status(
     evaluated_at = utc_now()
     latest = latest_completed_backup(db, environment)
     latest_failure = latest_failed_backup(db, environment)
+    reachability_value = os.environ.get("UKIP_BACKUP_PROVIDER_REACHABLE")
+    provider_reachable = reachability_value == "1"
+    provider_reachability_source = (
+        "environment_assertion"
+        if reachability_value is not None
+        else "unknown_default"
+    )
     result = evaluate_backup_freshness(
         latest_completed_at=latest.completed_at if latest else None,
         now=evaluated_at,
         size_bytes=latest.size_bytes if latest else None,
         integrity_ref=latest.integrity_ref if latest else None,
-        provider_reachable=os.environ.get(
-            "UKIP_BACKUP_PROVIDER_REACHABLE",
-            "1",
-        ) == "1",
+        provider_reachable=provider_reachable,
     )
     return {
         "environment": environment,
         **result,
+        "provider_reachable": provider_reachable,
+        "provider_reachability_source": provider_reachability_source,
         "evidence_collected_at": evaluated_at,
         "last_failure_at": (
             latest_failure.completed_at or latest_failure.created_at

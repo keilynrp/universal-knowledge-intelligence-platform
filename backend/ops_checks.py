@@ -26,7 +26,11 @@ def _startup_side_effects_enabled() -> bool:
 
 
 def _serialize_dt(value: datetime | None) -> str | None:
-    return value.isoformat() if value else None
+    if value is None:
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _make_check(check_id: str, status: str, summary: str, details: dict) -> dict:
@@ -346,10 +350,30 @@ def _backup_freshness_check(db: Session, *, now: datetime) -> dict:
         )
 
     environment = os.environ.get("UKIP_BACKUP_ENVIRONMENT", "production")
-    provider_reachable = (
-        os.environ.get("UKIP_BACKUP_PROVIDER_REACHABLE", "1") == "1"
+    reachability_value = os.environ.get("UKIP_BACKUP_PROVIDER_REACHABLE")
+    provider_reachable = reachability_value == "1"
+    provider_reachability_source = (
+        "environment_assertion"
+        if reachability_value is not None
+        else "unknown_default"
     )
-    latest = latest_completed_backup(db, environment)
+    try:
+        latest = latest_completed_backup(db, environment)
+    except Exception as exc:
+        logger.exception("ops_check_backup_freshness_query_failed")
+        return _make_check(
+            "backup_freshness",
+            "critical",
+            "Backup freshness evidence could not be queried.",
+            {
+                "monitor_enabled": True,
+                "environment": environment,
+                "provider_reachable": provider_reachable,
+                "provider_reachability_source": provider_reachability_source,
+                "reason_codes": ["backup_query_failed"],
+                "error": str(exc),
+            },
+        )
     result = evaluate_backup_freshness(
         latest_completed_at=latest.completed_at if latest else None,
         now=now,
@@ -362,6 +386,7 @@ def _backup_freshness_check(db: Session, *, now: datetime) -> dict:
         "monitor_enabled": True,
         "environment": environment,
         "provider_reachable": provider_reachable,
+        "provider_reachability_source": provider_reachability_source,
         "latest_backup_id": latest.backup_id if latest else None,
         "latest_completed_at": _serialize_dt(latest.completed_at) if latest else None,
     }

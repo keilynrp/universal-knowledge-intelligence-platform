@@ -1254,6 +1254,17 @@ class BackupAssuranceEvent(Base):
         index=True,
     )
 
+    __table_args__ = (
+        Index(
+            "ix_backup_assurance_status_lookup",
+            "environment",
+            "event_type",
+            "status",
+            "completed_at",
+            "id",
+        ),
+    )
+
 
 event.listen(
     BackupAssuranceEvent.__table__,

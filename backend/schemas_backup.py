@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 
 EventType = Literal["backup", "restore_drill"]
@@ -24,6 +31,14 @@ _SECRET_KEY_MARKERS = {
     "database_url",
     "connection_string",
 }
+
+
+def _serialize_utc(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _contains_secret_key(value: Any) -> bool:
@@ -101,6 +116,12 @@ class BackupEventCreate(BaseModel):
             raise ValueError(
                 f"status {self.status!r} is invalid for event_type {self.event_type!r}"
             )
+        if self.completed_at is None:
+            raise ValueError("terminal events require completed_at")
+        if self.completed_at < self.started_at:
+            raise ValueError("completed_at must be greater than or equal to started_at")
+        if self.completed_at > datetime.now(timezone.utc) + timedelta(minutes=5):
+            raise ValueError("completed_at cannot be more than five minutes in the future")
         return self
 
 
@@ -128,6 +149,10 @@ class BackupEventResponse(BaseModel):
     evidence: dict[str, Any] | None
     created_at: datetime
 
+    @field_serializer("started_at", "completed_at", "created_at")
+    def serialize_datetimes(self, value: datetime | None) -> str | None:
+        return _serialize_utc(value)
+
 
 class BackupStatusResponse(BaseModel):
     environment: str
@@ -136,7 +161,13 @@ class BackupStatusResponse(BaseModel):
     rpo_hours: int
     critical_after_hours: int
     reason_codes: list[str]
+    provider_reachable: bool
+    provider_reachability_source: str
     evidence_collected_at: datetime | None
     last_failure_at: datetime | None
     last_failure_reason: str | None
     latest_backup: BackupEventResponse | None
+
+    @field_serializer("evidence_collected_at", "last_failure_at")
+    def serialize_datetimes(self, value: datetime | None) -> str | None:
+        return _serialize_utc(value)

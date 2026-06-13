@@ -464,6 +464,21 @@ def test_freshness_warns_between_24_and_26_hours():
     assert result["reason_codes"] == ["backup_approaching_critical_threshold"]
 
 
+def test_freshness_is_critical_for_future_backup():
+    now = datetime(2026, 6, 12, 12, tzinfo=timezone.utc)
+    result = evaluate_backup_freshness(
+        latest_completed_at=now + timedelta(minutes=1),
+        now=now,
+        size_bytes=100,
+        integrity_ref="etag:abc",
+        provider_reachable=True,
+    )
+
+    assert result["status"] == "critical"
+    assert result["age_hours"] < 0
+    assert "backup_from_future" in result["reason_codes"]
+
+
 @pytest.mark.parametrize(
     ("latest_completed_at", "size_bytes", "integrity_ref", "provider_reachable", "reason"),
     [

@@ -125,6 +125,8 @@ def evaluate_backup_freshness(
         completed_utc = _utc_naive(latest_completed_at)
         now_utc = _utc_naive(now)
         age_hours = (now_utc - completed_utc).total_seconds() / 3600
+        if age_hours < 0:
+            reasons.append("backup_from_future")
         if age_hours > BACKUP_CRITICAL_AFTER_HOURS:
             reasons.append("backup_stale")
 
