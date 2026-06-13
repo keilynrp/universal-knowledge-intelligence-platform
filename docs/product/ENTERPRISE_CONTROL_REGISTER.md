@@ -20,7 +20,7 @@ specified, implemented, verified, operated, and auditable.
 | --- | --- | --- | --- | --- | --- | --- |
 | ER-CTRL-001 | Strategic controls have governed lifecycle and evidence | P0 | specified | auditable | Product/security owner | Operational use of register and release evidence index |
 | ER-OPS-001 | Critical jobs execute outside the web process with durable state | P1 | specified | operated | Platform owner | Queue runtime, recovery tests, observation window |
-| ER-BCP-001 | PostgreSQL and required state can be restored within measured objectives | P0 | identified | auditable | Operations owner | Approved RTO/RPO, automated backups, restore drill reports |
+| ER-BCP-001 | PostgreSQL and required state can be restored within measured objectives | P0 | specified | auditable | Operations owner | Provider configuration, two successful backup cycles, first isolated restore drill, and approved evidence |
 | ER-SDLC-001 | Releases pass enforceable security and supply-chain gates | P0 | implemented | operated | Security/platform owner | Operator: enable push protection + required checks; first month of gate operation |
 | ER-AUD-001 | Tenant-scoped control evidence is integrity-verifiable and exportable | P1 | identified | auditable | Security/compliance owner | Evidence schema, signed export, retention, verification tool |
 | ER-PRIV-001 | Customer privacy review has a maintained legal/operational pack | P1 | specified | auditable | Privacy/legal owner | External legal review of the docs/legal pack |
@@ -36,7 +36,7 @@ specified, implemented, verified, operated, and auditable.
 | --- | --- | --- | --- | --- | --- |
 | ER-CTRL-001 | EPIC-018 governance | Product owner | Security owner | Operate the register on a release candidate | Versioned release evidence index and owner attestation |
 | ER-OPS-001 | US-042 | Platform owner | Operations owner | Implement durable queue runtime and recovery tests | 14-day window with job SLO, retry, replay, and saturation evidence |
-| ER-BCP-001 | US-073 | Platform owner | Operations owner | Approve RTO/RPO and backup/restore design | Two backup cycles and one successful restore drill; retain 12 months |
+| ER-BCP-001 | US-073 | Platform owner | Operations owner | Configure the provider, observe two successful backup cycles, and complete the first isolated restore drill. | Retain approved backup and drill evidence for 12 months |
 | ER-SDLC-001 | US-074 | Platform owner | Security owner | Enable required checks and push protection | 30 days of blocking gate operation and retained SBOM/security artifacts |
 | ER-AUD-001 | US-075 | Backend owner | Security/compliance owner | Approve evidence schema, integrity, redaction, and retention | Independently verifiable tenant-scoped evidence export |
 | ER-PRIV-001 | US-076 | Privacy owner | Legal/privacy owner | Complete external legal review | Approved versioned pack with annual review ownership |
@@ -46,8 +46,13 @@ specified, implemented, verified, operated, and auditable.
 | ER-PERF-001 | US-080 | Platform owner | Operations owner | Approve workload profiles and performance objectives | Repeatable load report, saturation alerts, and supported envelope |
 | ER-ASSURE-001 | US-081 | Security owner | Executive owner | Approve pentest and pilot-exit scope | Independent report, remediation/retest, pilot record, executive decision |
 
-Control maturity remains the lowest state supported by evidence. This
-documentation update does not advance any control.
+ER-BCP-001 status: **Repository controls and runbook implemented; provider
+configuration, two successful backup cycles, and the first isolated restore
+drill remain pending.** Its maturity remains `specified` until Dokploy/S3 is
+configured. It must not advance to `verified` until the backup cycles and drill
+evidence are reviewed.
+
+Control maturity remains the lowest state supported by evidence.
 
 ## Existing controls requiring continued evidence
 

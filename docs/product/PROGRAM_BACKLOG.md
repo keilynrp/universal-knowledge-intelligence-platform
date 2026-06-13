@@ -49,7 +49,7 @@ Fuentes estrategicas relacionadas:
 
 | Order | Story | Control | Priority | Dependency | Delivery state | Target maturity |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | US-073 | ER-BCP-001 | P0 | PostgreSQL-first runtime | Planned | auditable |
+| 1 | US-073 | ER-BCP-001 | P0 | PostgreSQL-first runtime | Repository specified; operator provisioning pending | auditable |
 | 2 | US-074 | ER-SDLC-001 | P0 | Existing security workflows | In progress | operated |
 | 3 | US-079 | ER-IR-001 | P0 | Observability baseline | Planned | operated |
 | 4 | US-042 | ER-OPS-001 | P1 | Durable job specification | Specifying | operated |

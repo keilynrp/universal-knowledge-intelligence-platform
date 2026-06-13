@@ -3,6 +3,7 @@ Shared pytest fixtures for UKIP backend tests.
 Supports both SQLite (local dev) and PostgreSQL (CI / production parity).
 """
 import os
+from contextlib import contextmanager
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
@@ -257,6 +258,8 @@ def viewer_headers():
 # ── DB cleanup (function-scoped) ────────────────────────────────────────────
 
 _TABLES_TO_CLEAN = [
+    # Backup and restore assurance evidence (append-only outside tests)
+    "backup_assurance_events",
     # EPIC-017: secret rotation evidence — clean first (no FK deps)
     "secret_rotation_events",
     # EPIC-016: lifecycle + retention — clean before organizations
@@ -311,6 +314,56 @@ _TABLES_TO_CLEAN = [
 ]
 
 
+@contextmanager
+def _backup_assurance_test_cleanup(db):
+    """Suspend append-only triggers only for pytest full-table cleanup."""
+    from backend.backup_assurance_ddl import (
+        POSTGRES_CREATE_DELETE_TRIGGER,
+        POSTGRES_CREATE_UPDATE_TRIGGER,
+        POSTGRES_DROP_DELETE_TRIGGER,
+        POSTGRES_DROP_UPDATE_TRIGGER,
+        SQLITE_CREATE_DELETE_TRIGGER,
+        SQLITE_CREATE_UPDATE_TRIGGER,
+        SQLITE_DELETE_TRIGGER,
+        SQLITE_UPDATE_TRIGGER,
+    )
+
+    if _IS_POSTGRES:
+        drop_statements = (
+            POSTGRES_DROP_UPDATE_TRIGGER,
+            POSTGRES_DROP_DELETE_TRIGGER,
+        )
+        create_statements = (
+            POSTGRES_CREATE_UPDATE_TRIGGER,
+            POSTGRES_CREATE_DELETE_TRIGGER,
+        )
+    else:
+        drop_statements = (
+            f"DROP TRIGGER IF EXISTS {SQLITE_UPDATE_TRIGGER}",
+            f"DROP TRIGGER IF EXISTS {SQLITE_DELETE_TRIGGER}",
+        )
+        create_statements = (
+            SQLITE_CREATE_UPDATE_TRIGGER,
+            SQLITE_CREATE_DELETE_TRIGGER,
+        )
+
+    for statement in drop_statements:
+        db.execute(text(statement))
+    try:
+        yield
+    finally:
+        for statement in create_statements:
+            db.execute(text(statement))
+
+
+def _delete_test_table(db, table):
+    if table == "backup_assurance_events":
+        with _backup_assurance_test_cleanup(db):
+            db.execute(text(f"DELETE FROM {table}"))
+        return
+    db.execute(text(f"DELETE FROM {table}"))
+
+
 def _reset_test_state(db):
     if _IS_POSTGRES:
         # Ensure we start with a clean transaction (prior test may have left it aborted)
@@ -319,10 +372,17 @@ def _reset_test_state(db):
         except Exception:
             pass
         # PostgreSQL: use savepoints so a missing table doesn't abort the tx
+        backup_table = "backup_assurance_events"
+        nested = db.begin_nested()
+        _delete_test_table(db, backup_table)
+        nested.commit()
+
         for table in _TABLES_TO_CLEAN:
+            if table == backup_table:
+                continue
             try:
                 nested = db.begin_nested()
-                db.execute(text(f"DELETE FROM {table}"))
+                _delete_test_table(db, table)
                 nested.commit()
             except Exception:
                 nested.rollback()
@@ -336,7 +396,7 @@ def _reset_test_state(db):
     else:
         # SQLite: all tables exist (StaticPool in-memory), no need for savepoints
         for table in _TABLES_TO_CLEAN:
-            db.execute(text(f"DELETE FROM {table}"))
+            _delete_test_table(db, table)
         db.execute(text("UPDATE users SET org_id = NULL"))
         db.commit()
 

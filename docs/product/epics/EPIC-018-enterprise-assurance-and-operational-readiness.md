@@ -54,7 +54,7 @@ spec-driven lifecycles, operational exercises, and exportable evidence.
 | --- | --- | --- | --- |
 | ER-CTRL-001 | EPIC-018 governance | specified | auditable |
 | ER-OPS-001 | US-042 | specified | operated |
-| ER-BCP-001 | US-073 | identified | auditable |
+| ER-BCP-001 | US-073 | specified | auditable |
 | ER-SDLC-001 | US-074 | implemented | operated |
 | ER-AUD-001 | US-075 | identified | auditable |
 | ER-PRIV-001 | US-076 | specified | auditable |

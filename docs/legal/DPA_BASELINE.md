@@ -81,15 +81,16 @@ operating documentation, except where explicitly marked otherwise.
 | Retention | Configurable per-org retention policies with purge mechanism (purge execution is currently operator-triggered, not scheduled) | EPIC-016 Slice 4; `docs/operating/DATA_LIFECYCLE_POLICY.md` |
 | Secrets rotation | Staged dual-key zero-downtime rotation for encryption and JWT keys; 90-day cadence; rotation evidence table; first production rotation executed 2026-06-06 | EPIC-017, PRs #48–#51; `docs/operating/SECRETS_ROTATION_RUNBOOK.md`; `secret_rotation_events` table; `GET /ops/secrets` |
 | Operational health checks | Automated checks including secrets posture (insecure defaults, stale keys) exposed to operators | `GET /ops/checks` |
-| Backups & recovery | Program defined with RTO 4h / RPO 24h (daily encrypted backups to S3-compatible storage + CI freshness monitor + restore-drill procedure). **Status: program defined; first operational configuration and restore drill pending.** | EPIC-018; `docs/operating/BACKUP_RESTORE_RUNBOOK.md` (pending merge from `ops/epic018-backup-restore`) |
-| Supply-chain / CI security gates | CodeQL SAST, gitleaks secret scanning, pip-audit, npm-audit, Trivy image scanning, SBOM generation. **Status: implemented in CI; operator enforcement steps pending (EPIC-019, PR #63 pending merge).** | `.github/workflows/` (EPIC-019 commits) |
+| Backups & recovery | RPO 24h / RTO 4h repository controls, backup evidence, freshness monitoring, restore validation, and operator procedure. **Repository controls and runbook implemented; provider configuration, two successful backup cycles, and the first isolated restore drill remain pending.** | US-073 / ER-BCP-001; `docs/operating/BACKUP_RESTORE_RUNBOOK.md`; backup assurance tests |
+| Supply-chain / CI security gates | CodeQL SAST, gitleaks secret scanning, pip-audit, npm-audit, Trivy image scanning, SBOM generation. **Status: implemented in CI; operator enforcement steps pending (EPIC-019).** | `.github/workflows/` |
 | Data minimization — optional telemetry/LLM egress disabled by default | Sentry error telemetry gated by `SENTRY_ENABLED` (default false); LLM providers (OpenAI) engaged only via customer-activated AI integration (opt-in) | `backend/telemetry.py`; see Section 8 and [SUBPROCESSOR_REGISTER.md](SUBPROCESSOR_REGISTER.md) |
 
 **Known open measures (disclosed, not represented as in place):** formal
 incident response plan (ER-IR-001), external penetration test (ER-ASSURE-001),
-contractual data-residency commitments (ER-DEP-001), first backup operational
-configuration and restore drill (EPIC-018), and CI security-gate operator
-enforcement steps (EPIC-019). See
+contractual data-residency commitments (ER-DEP-001), backup provider
+configuration, two successful backup cycles, and the first isolated restore
+drill (US-073 / ER-BCP-001), and CI security-gate operator enforcement steps
+(EPIC-019). See
 [PRIVACY_CONTROLS_OVERVIEW.md](PRIVACY_CONTROLS_OVERVIEW.md) for the full
 open-item register.
 

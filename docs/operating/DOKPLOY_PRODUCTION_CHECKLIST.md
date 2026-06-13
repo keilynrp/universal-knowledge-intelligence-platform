@@ -6,9 +6,14 @@ For the full step-by-step rollout path, use:
 - [D:\universal-knowledge-intelligence-platform\docs\operating\DOKPLOY_STEP_BY_STEP_SETUP.md](D:\universal-knowledge-intelligence-platform\docs\operating\DOKPLOY_STEP_BY_STEP_SETUP.md)
 - [D:\universal-knowledge-intelligence-platform\.env.dokploy.example](D:\universal-knowledge-intelligence-platform\.env.dokploy.example)
 - [D:\universal-knowledge-intelligence-platform\docs\operating\DOKPLOY_PILOT_DEPLOYMENT_VALUES.md](D:\universal-knowledge-intelligence-platform\docs\operating\DOKPLOY_PILOT_DEPLOYMENT_VALUES.md)
+- [BACKUP_RESTORE_RUNBOOK.md](BACKUP_RESTORE_RUNBOOK.md)
 
 This guide defines the minimum operational bar for a UKIP "pilot production"
 deployment on a VPS managed with Dokploy.
+
+The repository procedure is implemented. Provider provisioning, two successful
+backup cycles, and the first isolated restore drill remain pending operator
+actions. They require provider-side execution and approved evidence.
 
 ## Target Topology
 
@@ -98,7 +103,9 @@ true:
 
 - backend and frontend run from GHCR images
 - PostgreSQL persistence is active
-- backup and restore were both tested successfully
+- provider provisioning and two successful backup cycles are evidenced
+- the first isolated restore drill is approved under
+  [BACKUP_RESTORE_RUNBOOK.md](BACKUP_RESTORE_RUNBOOK.md)
 - Dokploy health checks are green for at least 24 hours
 - backend logs show no repeating scheduler loop errors
 - one realistic bulk import finished successfully

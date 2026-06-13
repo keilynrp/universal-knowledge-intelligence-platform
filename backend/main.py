@@ -48,6 +48,7 @@ from backend.routers import (
     authority_institutions,
     authority_records,
     branding,
+    backup_ops,
     catalogs,
     coauthorship,
     context,
@@ -469,6 +470,7 @@ app.include_router(domains.router)
 app.include_router(analytics.router)
 app.include_router(analytics_analyzers.router)
 app.include_router(analytics_ops.router)
+app.include_router(backup_ops.router)
 app.include_router(derived_status.router)
 app.include_router(enrichment_schedule.router)
 app.include_router(quality.router)
