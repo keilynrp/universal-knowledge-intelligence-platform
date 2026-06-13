@@ -62,8 +62,8 @@ controllers (*responsables*). One section per activity.
 | Data categories | Encrypted database backups covering all of the above |
 | Data subjects | Same as activities 1–4 |
 | Retention | Per backup retention cycle in `docs/operating/BACKUP_RESTORE_RUNBOOK.md` (EPIC-018) |
-| Security measures | Daily Dokploy-driven backups to S3-compatible storage, CI freshness monitoring, documented restore drills. **Honest status: program defined and runbook approved; first operational configuration and restore drill pending** |
-| Recipients / transfers | Backup storage provider `[TO FILL when EPIC-018 bucket provisioned]` (see register) |
+| Security measures | Repository-side backup evidence, freshness monitoring, restore validation, and the operator runbook target RPO 24h and RTO 4h. **Repository controls and runbook implemented; provider configuration, two successful backup cycles, and the first isolated restore drill remain pending.** |
+| Recipients / transfers | Backup storage provider `[OPERATOR TO FILL: S3 backup provider]` in `[OPERATOR TO FILL: backup storage region]` (see register) |
 
 ---
 

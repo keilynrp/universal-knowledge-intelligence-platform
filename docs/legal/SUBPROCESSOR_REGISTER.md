@@ -16,7 +16,7 @@ customer enables the corresponding feature.
 | `[OPERATOR TO FILL: VPS/hosting provider name]` | Hosting of the production VPS (Dokploy, FastAPI backend, Next.js frontend, Rust engine (optional acceleration component, disabled when ENGINE_GRPC_URL is not configured), PostgreSQL, ChromaDB, Redis) | All customer data processed by the platform | `[OPERATOR TO FILL: region]` | Active — core infrastructure |
 | Cloudflare | DNS and TLS reverse proxy in front of the origin | Traffic metadata (IP addresses, request headers); payloads transit encrypted through the proxy | Global edge network | Active — core infrastructure |
 | GitHub / GHCR (Microsoft) | Source code hosting, CI/CD, container image registry | Source code and container images only — **no customer data** | United States (global) | Active — development infrastructure |
-| `[TO FILL when EPIC-018 bucket provisioned: S3 backup provider + region]` | Off-site storage of encrypted database backups (EPIC-018 program) | Encrypted database backups (all customer data, encrypted) | `[TO FILL: region]` | Pending — backup program defined, bucket not yet provisioned |
+| `[OPERATOR TO FILL: S3 backup provider]` | Off-site storage of encrypted database backups for the RPO 24h / RTO 4h recovery objective | Encrypted database backups (all customer data, encrypted) | `[OPERATOR TO FILL: backup storage region]` | Pending — provider and region not yet provisioned |
 | Sentry | Error telemetry for the backend | Error events and stack traces; may incidentally include request metadata | United States / EU (per DSN configuration) | **Optional — flag-gated, default OFF** (`SENTRY_ENABLED`, default false; see `backend/telemetry.py`) |
 | OpenAI | LLM features (AI enrichment / RAG answering) when the customer configures an OpenAI integration | Text snippets submitted to LLM features (may include research-entity data the customer chooses to process) | United States | **Optional — default OFF**; engaged only if the customer creates and activates an AI integration |
 
@@ -30,6 +30,8 @@ Notes:
   [ROPA.md](ROPA.md) activity 2 for transparency.
 - No entry in this register is invented: provider-specific values the
   engineering team cannot attest to are left as `[OPERATOR TO FILL]`.
+- **Repository controls and runbook implemented; provider configuration, two
+  successful backup cycles, and the first isolated restore drill remain pending.**
 
 ## Review and change management
 

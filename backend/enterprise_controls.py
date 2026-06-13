@@ -42,7 +42,20 @@ class EnterpriseControl:
 ENTERPRISE_CONTROLS = (
     EnterpriseControl("ER-CTRL-001", "Governed control lifecycle", "Keep control status, ownership, evidence, and claims governed.", "P0", "specified", "auditable", "Product/security owner", (), "Operate the register on a release candidate and publish a versioned evidence index."),
     EnterpriseControl("ER-OPS-001", "Durable background jobs", "Run critical jobs outside the web lifecycle with durable tenant-scoped state.", "P1", "specified", "operated", "Platform owner", ("US-042",), "Implement the queue-backed runtime and complete its recovery test and observation window."),
-    EnterpriseControl("ER-BCP-001", "Backup, restore, and disaster recovery", "Restore PostgreSQL and required state within approved and measured objectives.", "P0", "identified", "auditable", "Operations owner", ("US-073",), "Approve RTO/RPO and complete an automated backup plus restore design."),
+    EnterpriseControl(
+        "ER-BCP-001",
+        "Backup, restore, and disaster recovery",
+        "Restore PostgreSQL and required state within approved and measured objectives.",
+        "P0",
+        "implemented",
+        "auditable",
+        "Operations owner",
+        ("US-073",),
+        "Configure the provider, observe two successful backup cycles, and complete the first isolated restore drill.",
+        (
+            "Repository controls and runbook implemented; provider configuration, two successful backup cycles, and the first isolated restore drill remain pending.",
+        ),
+    ),
     EnterpriseControl("ER-SDLC-001", "Secure software supply chain", "Enforce release security, dependency, image, and provenance gates.", "P0", "implemented", "operated", "Security/platform owner", ("US-074",), "Enable required repository checks and preserve 30 days of gate operation evidence.", ("CodeQL, Gitleaks, dependency audits, Trivy, and SBOM workflows exist.",)),
     EnterpriseControl("ER-AUD-001", "Audit evidence pack", "Export tenant-scoped, integrity-verifiable control evidence.", "P1", "identified", "auditable", "Security/compliance owner", ("US-075",), "Specify the evidence schema, signing model, retention, and verification command."),
     EnterpriseControl("ER-PRIV-001", "Privacy and legal assurance", "Maintain a professionally reviewed privacy and subprocessor assurance pack.", "P1", "specified", "auditable", "Privacy/legal owner", ("US-076",), "Complete external legal review and record approved versions and owners.", ("Baseline DPA, ROPA, subprocessor register, privacy overview, and Mexico annex exist.",)),
