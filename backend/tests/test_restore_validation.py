@@ -9,8 +9,11 @@ from sqlalchemy.orm import sessionmaker
 
 from backend import models
 from backend.scripts.validate_restore import (
+    _parser,
     build_report,
+    configure_read_only_connection,
     install_read_only_guard,
+    main,
     validate_alembic_revision,
     validate_required_tables,
     validate_target_url,
@@ -28,6 +31,25 @@ def test_production_like_url_requires_explicit_override():
     validate_target_url(
         "postgresql://restore_user:top-secret@prod-db.internal/ukip_production",
         allow_production_target=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "database_url",
+    (
+        "postgresql://restore_user:secret@db.internal/ukip",
+        "postgresql://restore_user:secret@10.0.0.8/ukip",
+    ),
+)
+def test_unmarked_remote_target_requires_explicit_override(database_url):
+    with pytest.raises(ValueError, match="isolated drill"):
+        validate_target_url(database_url, allow_production_target=False)
+
+
+def test_isolated_drill_target_is_accepted():
+    validate_target_url(
+        "postgresql://restore_user:secret@drill-db.internal/ukip_restore",
+        allow_production_target=False,
     )
 
 
@@ -135,6 +157,39 @@ def test_report_includes_achieved_rpo_and_rto():
     assert report["objectives"]["achieved_rto_hours"] == 2.0
 
 
+def test_report_fails_when_rpo_or_rto_objective_is_missed():
+    report = build_report(
+        environment="restore-drill",
+        backup_id="backup-001",
+        operator="ops@example.test",
+        validations=[{"check": "required_tables", "status": "passed"}],
+        backup_completed_at=datetime(2026, 6, 11, 12, tzinfo=timezone.utc),
+        restore_started_at=datetime(2026, 6, 13, 2, tzinfo=timezone.utc),
+        restore_completed_at=datetime(2026, 6, 13, 7, tzinfo=timezone.utc),
+    )
+
+    assert report["status"] == "failed"
+    objectives = {
+        item["check"]: item["status"] for item in report["validations"]
+    }
+    assert objectives["rpo_objective"] == "failed"
+    assert objectives["rto_objective"] == "failed"
+
+
+def test_report_fails_for_negative_recovery_duration():
+    report = build_report(
+        environment="restore-drill",
+        backup_id="backup-001",
+        operator="ops@example.test",
+        validations=[{"check": "required_tables", "status": "passed"}],
+        backup_completed_at=datetime(2026, 6, 13, 3, tzinfo=timezone.utc),
+        restore_started_at=datetime(2026, 6, 13, 2, tzinfo=timezone.utc),
+        restore_completed_at=datetime(2026, 6, 13, 1, tzinfo=timezone.utc),
+    )
+
+    assert report["status"] == "failed"
+
+
 def test_read_only_guard_rejects_mutating_sql():
     engine = create_engine("sqlite:///:memory:")
     install_read_only_guard(engine)
@@ -152,3 +207,95 @@ def test_read_only_guard_rejects_mutating_sql():
             )
         with pytest.raises(RuntimeError, match="read-only"):
             connection.execute(text("PRAGMA user_version = 1"))
+
+
+def test_database_connection_is_put_in_database_enforced_read_only_mode():
+    engine = create_engine("sqlite:///:memory:")
+    install_read_only_guard(engine)
+
+    with engine.connect() as connection:
+        configure_read_only_connection(connection)
+        assert connection.exec_driver_sql("PRAGMA query_only").scalar_one() == 1
+
+
+def test_cli_requires_tenant_fixture_ids_and_uses_environment_url():
+    parser = _parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                "--database-url-env",
+                "DRILL_DATABASE_URL",
+                "--environment",
+                "isolated-drill",
+                "--backup-id",
+                "backup-001",
+                "--operator",
+                "operator",
+                "--expected-revision",
+                "head",
+                "--backup-completed-at",
+                "2026-06-12T08:00:00Z",
+                "--restore-started-at",
+                "2026-06-13T02:00:00Z",
+                "--output",
+                "report.json",
+            ]
+        )
+
+
+def test_report_redacts_credentials_embedded_in_string_values():
+    report = build_report(
+        environment="restore-drill",
+        backup_id="backup-001",
+        operator="ops@example.test",
+        validations=[
+            {
+                "check": "connection",
+                "status": "failed",
+                "reason": "postgresql://user:top-secret@drill-db/ukip_restore",
+            }
+        ],
+    )
+
+    serialized = json.dumps(report)
+    assert "top-secret" not in serialized
+    assert "user:***@" in serialized
+
+
+def test_runtime_failure_writes_structured_failed_report(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.delenv("MISSING_DRILL_URL", raising=False)
+    output = tmp_path / "restore-report.json"
+
+    exit_code = main(
+        [
+            "--database-url-env",
+            "MISSING_DRILL_URL",
+            "--environment",
+            "isolated-drill",
+            "--backup-id",
+            "backup-001",
+            "--operator",
+            "operator",
+            "--expected-revision",
+            "head",
+            "--backup-completed-at",
+            "2026-06-12T08:00:00Z",
+            "--restore-started-at",
+            "2026-06-13T02:00:00Z",
+            "--tenant-a",
+            "1",
+            "--tenant-b",
+            "2",
+            "--output",
+            str(output),
+        ]
+    )
+
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert exit_code == 1
+    assert report["status"] == "failed"
+    assert report["validations"][0]["check"] == "validator_execution"

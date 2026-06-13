@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -28,6 +30,7 @@ REQUIRED_TABLES = (
     "backup_assurance_events",
 )
 _PRODUCTION_MARKERS = ("prod", "production", "primary", "live")
+_ISOLATED_TARGET_MARKERS = ("drill", "restore", "recovery", "test", "staging")
 _SECRET_KEY_MARKERS = (
     "secret",
     "password",
@@ -36,7 +39,11 @@ _SECRET_KEY_MARKERS = (
     "database_url",
     "connection_string",
 )
-_READ_ONLY_PREFIXES = ("SELECT", "SHOW")
+_READ_ONLY_PREFIXES = ("SELECT", "SHOW", "EXPLAIN")
+_URL_CREDENTIALS = re.compile(
+    r"([a-z][a-z0-9+.-]*://[^:/@\s]+):([^@\s]+)@",
+    re.IGNORECASE,
+)
 
 
 def validate_target_url(
@@ -49,13 +56,18 @@ def validate_target_url(
     ).lower()
     if not target_identity:
         raise ValueError("Database URL must identify a host or database")
-    if (
-        any(marker in target_identity for marker in _PRODUCTION_MARKERS)
-        and not allow_production_target
-    ):
+    production_like = any(
+        marker in target_identity for marker in _PRODUCTION_MARKERS
+    )
+    isolated_like = any(
+        marker in target_identity for marker in _ISOLATED_TARGET_MARKERS
+    )
+    local_target = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+    if not allow_production_target and (production_like or not (isolated_like or local_target)):
         raise ValueError(
-            "Refusing production-like restore target without "
-            "--allow-production-target"
+            "Refusing production-like or unmarked target that is not clearly "
+            "an isolated drill database; "
+            "use --allow-production-target only with separate incident approval"
         )
 
 
@@ -73,10 +85,23 @@ def install_read_only_guard(engine: Engine) -> None:
     ):
         normalized = statement.lstrip().upper()
         is_read_only = normalized.startswith(_READ_ONLY_PREFIXES)
-        if normalized.startswith("PRAGMA"):
-            is_read_only = "=" not in normalized and ";" not in normalized.rstrip(";")
+        if normalized in {"PRAGMA QUERY_ONLY", "PRAGMA QUERY_ONLY = ON"}:
+            is_read_only = True
+        if normalized == "SET TRANSACTION READ ONLY":
+            is_read_only = True
         if not is_read_only or ";" in normalized.rstrip(";"):
             raise RuntimeError("Restore validation connection is strictly read-only")
+
+
+def configure_read_only_connection(connection) -> None:
+    """Ask the database itself to enforce a read-only validation session."""
+    dialect = connection.dialect.name
+    if dialect == "postgresql":
+        connection.exec_driver_sql("SET TRANSACTION READ ONLY")
+    elif dialect == "sqlite":
+        connection.exec_driver_sql("PRAGMA query_only = ON")
+    else:
+        raise RuntimeError(f"Unsupported restore-validation dialect: {dialect}")
 
 
 def validate_required_tables(inspector) -> list[dict[str, Any]]:
@@ -181,6 +206,8 @@ def _redact(value: Any) -> Any:
         return [_redact(item) for item in value]
     if isinstance(value, tuple):
         return [_redact(item) for item in value]
+    if isinstance(value, str):
+        return _URL_CREDENTIALS.sub(r"\1:***@", value)
     return value
 
 
@@ -194,19 +221,35 @@ def build_report(
     restore_started_at: datetime | None = None,
     restore_completed_at: datetime | None = None,
 ) -> dict[str, Any]:
-    sanitized_validations = _redact(validations)
+    objective_validations: list[dict[str, Any]] = []
+    objectives: dict[str, float] = {}
+    if backup_completed_at and restore_started_at:
+        achieved_rpo = _hours_between(backup_completed_at, restore_started_at)
+        objectives["achieved_rpo_hours"] = achieved_rpo
+        objective_validations.append(
+            {
+                "check": "rpo_objective",
+                "status": "passed" if 0 <= achieved_rpo <= 24 else "failed",
+                "target_hours": 24,
+                "achieved_hours": achieved_rpo,
+            }
+        )
+    if restore_started_at and restore_completed_at:
+        achieved_rto = _hours_between(restore_started_at, restore_completed_at)
+        objectives["achieved_rto_hours"] = achieved_rto
+        objective_validations.append(
+            {
+                "check": "rto_objective",
+                "status": "passed" if 0 <= achieved_rto <= 4 else "failed",
+                "target_hours": 4,
+                "achieved_hours": achieved_rto,
+            }
+        )
+
+    sanitized_validations = _redact(validations + objective_validations)
     passed = bool(sanitized_validations) and all(
         result.get("status") == "passed" for result in sanitized_validations
     )
-    objectives: dict[str, float] = {}
-    if backup_completed_at and restore_started_at:
-        objectives["achieved_rpo_hours"] = _hours_between(
-            backup_completed_at, restore_started_at
-        )
-    if restore_started_at and restore_completed_at:
-        objectives["achieved_rto_hours"] = _hours_between(
-            restore_started_at, restore_completed_at
-        )
 
     return {
         "schema_version": 1,
@@ -226,7 +269,11 @@ def _parse_datetime(value: str) -> datetime:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--database-url", required=True)
+    parser.add_argument(
+        "--database-url-env",
+        required=True,
+        help="Environment variable containing the database URL",
+    )
     parser.add_argument("--environment", required=True)
     parser.add_argument("--backup-id", required=True)
     parser.add_argument("--operator", required=True)
@@ -234,47 +281,51 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--backup-completed-at", required=True, type=_parse_datetime)
     parser.add_argument("--restore-started-at", required=True, type=_parse_datetime)
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--tenant-a", type=int)
-    parser.add_argument("--tenant-b", type=int)
+    parser.add_argument("--tenant-a", type=int, required=True)
+    parser.add_argument("--tenant-b", type=int, required=True)
     parser.add_argument("--allow-production-target", action="store_true")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    validate_target_url(args.database_url, args.allow_production_target)
-
-    engine = create_engine(args.database_url, pool_pre_ping=True)
-    install_read_only_guard(engine)
     validations: list[dict[str, Any]] = []
+    database_url = os.environ.get(args.database_url_env)
+    engine = None
     try:
+        if not database_url:
+            raise ValueError(
+                f"Database URL environment variable {args.database_url_env!r} is unset"
+            )
+        validate_target_url(database_url, args.allow_production_target)
+        engine = create_engine(database_url, pool_pre_ping=True)
+        install_read_only_guard(engine)
         with engine.connect() as connection:
+            configure_read_only_connection(connection)
             validations.extend(validate_required_tables(inspect(connection)))
             validations.append(
                 validate_alembic_revision(connection, args.expected_revision)
             )
-
-        if args.tenant_a is not None or args.tenant_b is not None:
-            if args.tenant_a is None or args.tenant_b is None:
+            session_factory = sessionmaker(
+                bind=connection, autoflush=False, expire_on_commit=False
+            )
+            with session_factory() as session:
                 validations.append(
-                    {
-                        "check": "tenant_isolation",
-                        "status": "failed",
-                        "reason": "both_tenant_ids_required",
-                    }
-                )
-            else:
-                session_factory = sessionmaker(
-                    bind=engine, autoflush=False, expire_on_commit=False
-                )
-                with session_factory() as session:
-                    validations.append(
-                        validate_tenant_isolation(
-                            session, args.tenant_a, args.tenant_b
-                        )
+                    validate_tenant_isolation(
+                        session, args.tenant_a, args.tenant_b
                     )
+                )
+    except Exception as exc:
+        validations.append(
+            {
+                "check": "validator_execution",
+                "status": "failed",
+                "reason": f"{type(exc).__name__}: {exc}",
+            }
+        )
     finally:
-        engine.dispose()
+        if engine is not None:
+            engine.dispose()
 
     report = build_report(
         environment=args.environment,

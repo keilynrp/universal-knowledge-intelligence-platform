@@ -18,7 +18,7 @@ DOKPLOY_DOCS = (
 )
 
 VALIDATOR_COMMAND = """python -m backend.scripts.validate_restore \\
-  --database-url "$DRILL_DATABASE_URL" \\
+  --database-url-env "DRILL_DATABASE_URL" \\
   --environment "isolated-drill" \\
   --backup-id "$BACKUP_ID" \\
   --operator "$OPERATOR" \\
@@ -87,7 +87,7 @@ def test_documented_validator_options_match_the_real_cli_parser():
     assert documented_options <= parser_options
     assert required_parser_options <= documented_options
     assert {
-        "--database-url",
+        "--database-url-env",
         "--environment",
         "--backup-id",
         "--operator",

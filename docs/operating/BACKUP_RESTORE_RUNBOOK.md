@@ -156,7 +156,7 @@ immediately after validation. Run this exact command:
 
 ```bash
 python -m backend.scripts.validate_restore \
-  --database-url "$DRILL_DATABASE_URL" \
+  --database-url-env "DRILL_DATABASE_URL" \
   --environment "isolated-drill" \
   --backup-id "$BACKUP_ID" \
   --operator "$OPERATOR" \
