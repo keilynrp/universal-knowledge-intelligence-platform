@@ -1,4 +1,7 @@
+from datetime import datetime, timedelta, timezone
+
 from backend import ops_checks
+from backend.backup_assurance import record_event
 
 
 def _create_ops_alert_channel(db_session):
@@ -29,7 +32,7 @@ def test_ops_checks_returns_repeatable_summary(client, auth_headers):
     check_ids = {check["id"] for check in body["checks"]}
     assert check_ids == {
         "database", "migrations", "scheduled_imports", "scheduled_reports", "ops_alerting",
-        "secrets",
+        "secrets", "backup_freshness",
     }
 
     database_check = next(check for check in body["checks"] if check["id"] == "database")
@@ -43,6 +46,8 @@ def test_ops_checks_returns_repeatable_summary(client, auth_headers):
     report_check = next(check for check in body["checks"] if check["id"] == "scheduled_reports")
     assert import_check["status"] == "skipped"
     assert report_check["status"] == "skipped"
+    backup_check = next(check for check in body["checks"] if check["id"] == "backup_freshness")
+    assert backup_check["status"] == "skipped"
 
     alerting_check = next(check for check in body["checks"] if check["id"] == "ops_alerting")
     assert alerting_check["status"] == "warning"
@@ -50,7 +55,7 @@ def test_ops_checks_returns_repeatable_summary(client, auth_headers):
     # != insecure default, ENCRYPTION_KEY set, no rotation events, no retiring keys),
     # so it adds no warning/skipped — the counts below stay valid.
     assert body["summary"]["warning"] == 1
-    assert body["summary"]["skipped"] == 3
+    assert body["summary"]["skipped"] == 4
 
 
 def test_ops_checks_turn_ok_when_ops_alert_channel_exists(client, auth_headers, db_session):
@@ -97,3 +102,77 @@ def test_alert_catalogue_exposes_ops_check_failed_event(client, auth_headers):
     assert response.status_code == 200
     event_ids = {event["id"] for event in response.json()}
     assert "ops.check_failed" in event_ids
+
+
+def _persist_backup(db_session, *, completed_at: datetime):
+    event = record_event(
+        db_session,
+        event_type="backup",
+        status="completed",
+        environment="production",
+        provider="dokploy",
+        backup_id="backup-ops-check",
+        started_at=completed_at - timedelta(minutes=5),
+        completed_at=completed_at,
+        size_bytes=2048,
+        integrity_ref="etag:abc",
+        encrypted=True,
+        operator="ops@example.test",
+        evidence={"provider_state": "completed"},
+    )
+    db_session.commit()
+    return event
+
+
+def test_backup_freshness_is_critical_without_production_backup(
+    db_session,
+    monkeypatch,
+):
+    monkeypatch.setenv("UKIP_BACKUP_MONITOR_ENABLED", "1")
+    monkeypatch.setenv("UKIP_BACKUP_ENVIRONMENT", "production")
+    monkeypatch.setenv("UKIP_BACKUP_PROVIDER_REACHABLE", "1")
+
+    report = ops_checks.run_operational_checks(db_session)
+
+    check = next(item for item in report["checks"] if item["id"] == "backup_freshness")
+    assert check["status"] == "critical"
+    assert "backup_missing" in check["details"]["reason_codes"]
+    assert any(
+        "BACKUP_RESTORE_RUNBOOK.md" in action
+        for action in report["recommended_actions"]
+    )
+
+
+def test_backup_freshness_warns_at_25_hours(db_session, monkeypatch):
+    monkeypatch.setenv("UKIP_BACKUP_MONITOR_ENABLED", "1")
+    monkeypatch.setenv("UKIP_BACKUP_ENVIRONMENT", "production")
+    monkeypatch.setenv("UKIP_BACKUP_PROVIDER_REACHABLE", "1")
+    _persist_backup(
+        db_session,
+        completed_at=datetime.now(timezone.utc) - timedelta(hours=25),
+    )
+
+    report = ops_checks.run_operational_checks(db_session)
+
+    check = next(item for item in report["checks"] if item["id"] == "backup_freshness")
+    assert check["status"] == "warning"
+    assert any(
+        "26-hour critical threshold" in action
+        for action in report["recommended_actions"]
+    )
+
+
+def test_backup_freshness_is_ok_for_fresh_valid_backup(db_session, monkeypatch):
+    monkeypatch.setenv("UKIP_BACKUP_MONITOR_ENABLED", "1")
+    monkeypatch.setenv("UKIP_BACKUP_ENVIRONMENT", "production")
+    monkeypatch.setenv("UKIP_BACKUP_PROVIDER_REACHABLE", "1")
+    _persist_backup(
+        db_session,
+        completed_at=datetime.now(timezone.utc) - timedelta(hours=1),
+    )
+
+    report = ops_checks.run_operational_checks(db_session)
+
+    check = next(item for item in report["checks"] if item["id"] == "backup_freshness")
+    assert check["status"] == "ok"
+    assert check["details"]["latest_backup_id"] == "backup-ops-check"

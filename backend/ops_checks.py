@@ -7,6 +7,10 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.backup_assurance import (
+    evaluate_backup_freshness,
+    latest_completed_backup,
+)
 from backend.db_revision import migration_drift
 from backend.notifications.alert_sender import dispatch_event
 from backend.routers import scheduled_imports, scheduled_reports
@@ -265,6 +269,16 @@ def _recommended_actions(checks: list[dict]) -> list[str]:
             actions.append("Set JWT_SECRET_KEY and ENCRYPTION_KEY to strong unique values; see docs/operating/SECRETS_ROTATION_RUNBOOK.md.")
         if check["id"] == "secrets" and check["status"] == "warning":
             actions.append("Rotate stale secrets and/or run the re-encrypt script then drop retiring keys; see the secrets rotation runbook.")
+        if check["id"] == "backup_freshness" and check["status"] == "warning":
+            actions.append(
+                "Verify the current backup job and confirm a successful recovery "
+                "point before the 26-hour critical threshold."
+            )
+        if check["id"] == "backup_freshness" and check["status"] == "critical":
+            actions.append(
+                "Treat backup protection as unavailable: restore provider access "
+                "or complete a valid backup, then follow BACKUP_RESTORE_RUNBOOK.md."
+            )
 
     # Preserve order while dropping duplicates
     seen = set()
@@ -322,6 +336,48 @@ def _secrets_check(db: Session) -> dict:
     return _make_check("secrets", "ok", "Secret keys are non-default and rotations are current.", details)
 
 
+def _backup_freshness_check(db: Session, *, now: datetime) -> dict:
+    if os.environ.get("UKIP_BACKUP_MONITOR_ENABLED", "0") != "1":
+        return _make_check(
+            "backup_freshness",
+            "skipped",
+            "Backup freshness monitoring is disabled.",
+            {"monitor_enabled": False},
+        )
+
+    environment = os.environ.get("UKIP_BACKUP_ENVIRONMENT", "production")
+    provider_reachable = (
+        os.environ.get("UKIP_BACKUP_PROVIDER_REACHABLE", "1") == "1"
+    )
+    latest = latest_completed_backup(db, environment)
+    result = evaluate_backup_freshness(
+        latest_completed_at=latest.completed_at if latest else None,
+        now=now,
+        size_bytes=latest.size_bytes if latest else None,
+        integrity_ref=latest.integrity_ref if latest else None,
+        provider_reachable=provider_reachable,
+    )
+    details = {
+        **result,
+        "monitor_enabled": True,
+        "environment": environment,
+        "provider_reachable": provider_reachable,
+        "latest_backup_id": latest.backup_id if latest else None,
+        "latest_completed_at": _serialize_dt(latest.completed_at) if latest else None,
+    }
+    summaries = {
+        "ok": "The latest backup satisfies the configured recovery point objective.",
+        "warning": "The latest backup is outside the RPO and approaching the critical threshold.",
+        "critical": "Backup protection is unavailable, stale, or invalid.",
+    }
+    return _make_check(
+        "backup_freshness",
+        result["status"],
+        summaries[result["status"]],
+        details,
+    )
+
+
 def run_operational_checks(db: Session) -> dict:
     now = datetime.now(timezone.utc)
     checks = [
@@ -345,6 +401,7 @@ def run_operational_checks(db: Session) -> dict:
         ),
         _alert_channel_check(db),
         _secrets_check(db),
+        _backup_freshness_check(db, now=now),
     ]
     status, summary = _aggregate_status(checks)
     return {

@@ -1,0 +1,118 @@
+from datetime import datetime, timedelta, timezone
+
+
+def _payload(**overrides):
+    now = datetime.now(timezone.utc)
+    payload = {
+        "event_type": "backup",
+        "status": "completed",
+        "environment": "production",
+        "provider": "dokploy",
+        "backup_id": "backup-001",
+        "started_at": (now - timedelta(minutes=5)).isoformat(),
+        "completed_at": now.isoformat(),
+        "release": "sha-abc",
+        "alembic_revision": "head-1",
+        "size_bytes": 2048,
+        "integrity_ref": "etag:abc",
+        "encrypted": True,
+        "storage_region": "mx-central",
+        "retention_class": "daily",
+        "operator": "ops@example.test",
+        "evidence": {"provider_state": "completed"},
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_backup_events_require_admin(client, viewer_headers):
+    response = client.post(
+        "/ops/backups/events",
+        headers=viewer_headers,
+        json=_payload(),
+    )
+
+    assert response.status_code == 403
+
+
+def test_admin_can_record_backup_metadata(client, auth_headers, db_session):
+    response = client.post(
+        "/ops/backups/events",
+        headers=auth_headers,
+        json=_payload(),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["backup_id"] == "backup-001"
+    assert body["evidence"] == {"provider_state": "completed"}
+
+    from backend import models
+
+    persisted = db_session.query(models.BackupAssuranceEvent).one()
+    assert persisted.backup_id == "backup-001"
+
+
+def test_secret_like_evidence_keys_are_rejected(client, auth_headers):
+    response = client.post(
+        "/ops/backups/events",
+        headers=auth_headers,
+        json=_payload(evidence={"nested": {"access_token": "do-not-store"}}),
+    )
+
+    assert response.status_code == 422
+
+
+def test_invalid_event_status_combination_is_rejected(client, auth_headers):
+    response = client.post(
+        "/ops/backups/events",
+        headers=auth_headers,
+        json=_payload(status="passed"),
+    )
+
+    assert response.status_code == 422
+
+
+def test_backup_events_are_returned_newest_first(client, auth_headers):
+    older = _payload(
+        backup_id="backup-older",
+        completed_at="2026-06-12T10:05:00Z",
+    )
+    newer = _payload(
+        backup_id="backup-newer",
+        completed_at="2026-06-12T11:05:00Z",
+    )
+    assert client.post("/ops/backups/events", headers=auth_headers, json=older).status_code == 201
+    assert client.post("/ops/backups/events", headers=auth_headers, json=newer).status_code == 201
+
+    response = client.get(
+        "/ops/backups?environment=production",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert [item["backup_id"] for item in response.json()] == [
+        "backup-newer",
+        "backup-older",
+    ]
+
+
+def test_backup_status_uses_requested_environment(client, auth_headers):
+    assert client.post(
+        "/ops/backups/events",
+        headers=auth_headers,
+        json=_payload(environment="production"),
+    ).status_code == 201
+
+    response = client.get(
+        "/ops/backups/status?environment=production",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["environment"] == "production"
+    assert body["status"] == "ok"
+    assert body["rpo_hours"] == 24
+    assert body["critical_after_hours"] == 26
+    assert body["latest_backup"]["backup_id"] == "backup-001"
