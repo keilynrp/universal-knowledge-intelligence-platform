@@ -66,7 +66,6 @@ def validate_target_url(
     production_like = any(
         marker in target_identity for marker in _PRODUCTION_MARKERS
     )
-    local_target = hostname in {"localhost", "127.0.0.1", "::1"}
     identity_matches = (
         expected_host is not None
         and expected_database is not None
@@ -74,7 +73,7 @@ def validate_target_url(
         and database_name == expected_database.strip().lower()
     )
     if not allow_production_target and (
-        production_like or not (identity_matches or local_target)
+        production_like or not identity_matches
     ):
         raise ValueError(
             "Refusing production-like target or target outside the exact "
