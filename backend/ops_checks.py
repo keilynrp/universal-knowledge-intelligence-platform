@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.backup_assurance import (
     evaluate_backup_freshness,
+    evaluate_provider_reachability,
     latest_completed_backup,
 )
 from backend.db_revision import migration_drift
@@ -350,13 +351,12 @@ def _backup_freshness_check(db: Session, *, now: datetime) -> dict:
         )
 
     environment = os.environ.get("UKIP_BACKUP_ENVIRONMENT", "production")
-    reachability_value = os.environ.get("UKIP_BACKUP_PROVIDER_REACHABLE")
-    provider_reachable = reachability_value == "1"
-    provider_reachability_source = (
-        "environment_assertion"
-        if reachability_value is not None
-        else "unknown_default"
+    reachability = evaluate_provider_reachability(
+        reported_reachable=os.environ.get("UKIP_BACKUP_PROVIDER_REACHABLE"),
+        observed_at=os.environ.get("UKIP_BACKUP_PROVIDER_REACHABLE_AT"),
+        now=now,
     )
+    provider_reachable = reachability["reachable"]
     try:
         latest = latest_completed_backup(db, environment)
     except Exception as exc:
@@ -369,7 +369,7 @@ def _backup_freshness_check(db: Session, *, now: datetime) -> dict:
                 "monitor_enabled": True,
                 "environment": environment,
                 "provider_reachable": provider_reachable,
-                "provider_reachability_source": provider_reachability_source,
+                "provider_reachability_source": reachability["source"],
                 "reason_codes": ["backup_query_failed"],
                 "error": str(exc),
             },
@@ -386,7 +386,7 @@ def _backup_freshness_check(db: Session, *, now: datetime) -> dict:
         "monitor_enabled": True,
         "environment": environment,
         "provider_reachable": provider_reachable,
-        "provider_reachability_source": provider_reachability_source,
+        "provider_reachability_source": reachability["source"],
         "latest_backup_id": latest.backup_id if latest else None,
         "latest_completed_at": _serialize_dt(latest.completed_at) if latest else None,
     }

@@ -12,6 +12,7 @@ from backend import models
 from backend.auth import require_role
 from backend.backup_assurance import (
     evaluate_backup_freshness,
+    evaluate_provider_reachability,
     failure_reason_from_event,
     latest_completed_backup,
     latest_failed_backup,
@@ -83,9 +84,8 @@ def create_backup_event(
     current_user: models.User = Depends(require_role("super_admin", "admin")),
 ):
     values = payload.model_dump()
-    provider_reported_operator = values.pop("operator")
-    evidence = dict(values.pop("evidence") or {})
-    evidence["provider_reported_operator"] = provider_reported_operator
+    values.pop("operator")
+    evidence = values.pop("evidence")
     event = record_event(
         db,
         **values,
@@ -124,13 +124,12 @@ def backup_status(
     evaluated_at = utc_now()
     latest = latest_completed_backup(db, environment)
     latest_failure = latest_failed_backup(db, environment)
-    reachability_value = os.environ.get("UKIP_BACKUP_PROVIDER_REACHABLE")
-    provider_reachable = reachability_value == "1"
-    provider_reachability_source = (
-        "environment_assertion"
-        if reachability_value is not None
-        else "unknown_default"
+    reachability = evaluate_provider_reachability(
+        reported_reachable=os.environ.get("UKIP_BACKUP_PROVIDER_REACHABLE"),
+        observed_at=os.environ.get("UKIP_BACKUP_PROVIDER_REACHABLE_AT"),
+        now=evaluated_at,
     )
+    provider_reachable = reachability["reachable"]
     result = evaluate_backup_freshness(
         latest_completed_at=latest.completed_at if latest else None,
         now=evaluated_at,
@@ -142,7 +141,7 @@ def backup_status(
         "environment": environment,
         **result,
         "provider_reachable": provider_reachable,
-        "provider_reachability_source": provider_reachability_source,
+        "provider_reachability_source": reachability["source"],
         "evidence_collected_at": evaluated_at,
         "last_failure_at": (
             latest_failure.completed_at or latest_failure.created_at

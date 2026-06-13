@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -13,6 +13,7 @@ from backend.models import BackupAssuranceEvent
 
 BACKUP_RPO_HOURS = 24
 BACKUP_CRITICAL_AFTER_HOURS = 26
+PROVIDER_REACHABILITY_MAX_AGE_MINUTES = 15
 
 _VALID_EVENT_STATUSES = {
     "backup": {"completed", "failed"},
@@ -26,6 +27,55 @@ _SECRET_KEY_MARKERS = {
     "database_url",
     "connection_string",
 }
+
+
+def evaluate_provider_reachability(
+    *,
+    reported_reachable: str | None,
+    observed_at: str | None,
+    now: datetime,
+) -> dict[str, Any]:
+    if reported_reachable != "1":
+        return {
+            "reachable": False,
+            "source": (
+                "explicit_unreachable"
+                if reported_reachable is not None
+                else "unknown_default"
+            ),
+        }
+    if not observed_at:
+        return {
+            "reachable": False,
+            "source": "environment_assertion_missing_timestamp",
+        }
+    try:
+        observed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+        if observed.tzinfo is None or observed.utcoffset() is None:
+            raise ValueError("timezone required")
+    except (TypeError, ValueError):
+        return {
+            "reachable": False,
+            "source": "invalid_environment_assertion",
+        }
+
+    observed_utc = observed.astimezone(timezone.utc)
+    now_utc = now.astimezone(timezone.utc)
+    age = now_utc - observed_utc
+    if age < -timedelta(minutes=5):
+        return {
+            "reachable": False,
+            "source": "future_environment_assertion",
+        }
+    if age > timedelta(minutes=PROVIDER_REACHABILITY_MAX_AGE_MINUTES):
+        return {
+            "reachable": False,
+            "source": "stale_environment_assertion",
+        }
+    return {
+        "reachable": True,
+        "source": "timestamped_environment_assertion",
+    }
 
 
 def _utc_naive(value: datetime | None) -> datetime | None:

@@ -166,18 +166,53 @@ def test_backup_freshness_labels_explicit_provider_reachability(
     db_session,
     monkeypatch,
 ):
+    observed_at = datetime.now(timezone.utc)
     monkeypatch.setenv("UKIP_BACKUP_MONITOR_ENABLED", "1")
     monkeypatch.setenv("UKIP_BACKUP_PROVIDER_REACHABLE", "1")
+    monkeypatch.setenv(
+        "UKIP_BACKUP_PROVIDER_REACHABLE_AT",
+        observed_at.isoformat(),
+    )
     _persist_backup(
         db_session,
-        completed_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        completed_at=observed_at - timedelta(hours=1),
     )
 
     report = ops_checks.run_operational_checks(db_session)
 
     check = next(item for item in report["checks"] if item["id"] == "backup_freshness")
     assert check["status"] == "ok"
-    assert check["details"]["provider_reachability_source"] == "environment_assertion"
+    assert (
+        check["details"]["provider_reachability_source"]
+        == "timestamped_environment_assertion"
+    )
+
+
+def test_backup_freshness_rejects_stale_provider_reachability(
+    db_session,
+    monkeypatch,
+):
+    now = datetime.now(timezone.utc)
+    monkeypatch.setenv("UKIP_BACKUP_MONITOR_ENABLED", "1")
+    monkeypatch.setenv("UKIP_BACKUP_PROVIDER_REACHABLE", "1")
+    monkeypatch.setenv(
+        "UKIP_BACKUP_PROVIDER_REACHABLE_AT",
+        (now - timedelta(minutes=16)).isoformat(),
+    )
+    _persist_backup(
+        db_session,
+        completed_at=now - timedelta(hours=1),
+    )
+
+    report = ops_checks.run_operational_checks(db_session)
+
+    check = next(item for item in report["checks"] if item["id"] == "backup_freshness")
+    assert check["status"] == "critical"
+    assert check["details"]["provider_reachable"] is False
+    assert (
+        check["details"]["provider_reachability_source"]
+        == "stale_environment_assertion"
+    )
 
 
 def test_backup_freshness_query_failure_returns_critical_check(
@@ -217,12 +252,17 @@ def test_backup_freshness_disabled_does_not_query_latest_backup(
 
 
 def test_backup_freshness_warns_at_25_hours(db_session, monkeypatch):
+    observed_at = datetime.now(timezone.utc)
     monkeypatch.setenv("UKIP_BACKUP_MONITOR_ENABLED", "1")
     monkeypatch.setenv("UKIP_BACKUP_ENVIRONMENT", "production")
     monkeypatch.setenv("UKIP_BACKUP_PROVIDER_REACHABLE", "1")
+    monkeypatch.setenv(
+        "UKIP_BACKUP_PROVIDER_REACHABLE_AT",
+        observed_at.isoformat(),
+    )
     _persist_backup(
         db_session,
-        completed_at=datetime.now(timezone.utc) - timedelta(hours=25),
+        completed_at=observed_at - timedelta(hours=25),
     )
 
     report = ops_checks.run_operational_checks(db_session)
@@ -236,12 +276,17 @@ def test_backup_freshness_warns_at_25_hours(db_session, monkeypatch):
 
 
 def test_backup_freshness_is_ok_for_fresh_valid_backup(db_session, monkeypatch):
+    observed_at = datetime.now(timezone.utc)
     monkeypatch.setenv("UKIP_BACKUP_MONITOR_ENABLED", "1")
     monkeypatch.setenv("UKIP_BACKUP_ENVIRONMENT", "production")
     monkeypatch.setenv("UKIP_BACKUP_PROVIDER_REACHABLE", "1")
+    monkeypatch.setenv(
+        "UKIP_BACKUP_PROVIDER_REACHABLE_AT",
+        observed_at.isoformat(),
+    )
     _persist_backup(
         db_session,
-        completed_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        completed_at=observed_at - timedelta(hours=1),
     )
 
     report = ops_checks.run_operational_checks(db_session)

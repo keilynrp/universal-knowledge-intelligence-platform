@@ -62,10 +62,7 @@ def test_admin_can_record_backup_metadata(client, auth_headers, db_session):
     body = response.json()
     assert body["backup_id"] == "backup-001"
     assert body["operator"] == "testadmin"
-    assert body["evidence"] == {
-        "provider_reported_operator": "ops@example.test",
-        "provider_state": "completed",
-    }
+    assert body["evidence"] == {"provider_state": "completed"}
 
     from backend import models
 
@@ -219,6 +216,10 @@ def test_backup_status_uses_current_utc_as_evidence_collection_time(
     evaluated_at = datetime(2026, 6, 13, 2, 30, tzinfo=timezone.utc)
     monkeypatch.setattr(backup_ops, "utc_now", lambda: evaluated_at)
     monkeypatch.setenv("UKIP_BACKUP_PROVIDER_REACHABLE", "1")
+    monkeypatch.setenv(
+        "UKIP_BACKUP_PROVIDER_REACHABLE_AT",
+        evaluated_at.isoformat(),
+    )
     assert client.post(
         "/ops/backups/events",
         headers=auth_headers,
@@ -288,6 +289,50 @@ def test_backup_status_defaults_provider_reachability_to_unknown(
     assert body["provider_reachable"] is False
     assert body["provider_reachability_source"] == "unknown_default"
     assert "provider_unreachable" in body["reason_codes"]
+
+
+def test_backup_status_rejects_untimestamped_reachability_assertion(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    monkeypatch.setenv("UKIP_BACKUP_PROVIDER_REACHABLE", "1")
+    monkeypatch.delenv("UKIP_BACKUP_PROVIDER_REACHABLE_AT", raising=False)
+    assert client.post(
+        "/ops/backups/events",
+        headers=auth_headers,
+        json=_payload(),
+    ).status_code == 201
+
+    response = client.get(
+        "/ops/backups/status?environment=production",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "critical"
+    assert body["provider_reachable"] is False
+    assert (
+        body["provider_reachability_source"]
+        == "environment_assertion_missing_timestamp"
+    )
+
+
+def test_backup_event_preserves_fifty_evidence_keys(
+    client,
+    auth_headers,
+):
+    evidence = {f"key_{index}": index for index in range(50)}
+
+    response = client.post(
+        "/ops/backups/events",
+        headers=auth_headers,
+        json=_payload(evidence=evidence),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["evidence"] == evidence
 
 
 def test_backup_response_datetimes_are_normalized_to_utc_z(
