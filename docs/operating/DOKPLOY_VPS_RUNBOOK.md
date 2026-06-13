@@ -31,6 +31,13 @@ still intentionally conservative:
 - Step-by-step setup: [D:\universal-knowledge-intelligence-platform\docs\operating\DOKPLOY_STEP_BY_STEP_SETUP.md](D:\universal-knowledge-intelligence-platform\docs\operating\DOKPLOY_STEP_BY_STEP_SETUP.md)
 - Current pilot values: [D:\universal-knowledge-intelligence-platform\docs\operating\DOKPLOY_PILOT_DEPLOYMENT_VALUES.md](D:\universal-knowledge-intelligence-platform\docs\operating\DOKPLOY_PILOT_DEPLOYMENT_VALUES.md)
 - High-level checklist: [D:\universal-knowledge-intelligence-platform\docs\operating\DOKPLOY_PRODUCTION_CHECKLIST.md](D:\universal-knowledge-intelligence-platform\docs\operating\DOKPLOY_PRODUCTION_CHECKLIST.md)
+- Backup, restore, and disaster recovery procedure:
+  [BACKUP_RESTORE_RUNBOOK.md](BACKUP_RESTORE_RUNBOOK.md)
+
+The repository procedure is implemented. Provider provisioning, two successful
+backup cycles, and the first isolated restore drill remain pending operator
+actions. Do not treat this document or a configured checkbox as completed
+recovery evidence.
 
 ## Before Touching the VPS
 
@@ -239,5 +246,7 @@ We can call the Dokploy VPS deployment healthy when:
 - at least one realistic import succeeds
 - at least one catalog portal is created from a real batch
 - one report is generated successfully
-- backup and restore were both tested
+- provider provisioning and two successful backup cycles are evidenced
+- the first isolated restore drill is approved using
+  [BACKUP_RESTORE_RUNBOOK.md](BACKUP_RESTORE_RUNBOOK.md)
 - no recurring scheduler errors appear in backend logs
