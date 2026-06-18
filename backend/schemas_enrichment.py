@@ -22,6 +22,20 @@ class AuthorAffiliation(BaseModel):
     institutions: List[CanonicalAffiliation] = Field(default_factory=list)
 
 
+class JournalMetrics(BaseModel):
+    """Journal/source-level metrics resolved during enrichment."""
+    issn_l: Optional[str] = Field(default=None, description="Linking ISSN")
+    source_id: Optional[str] = Field(default=None, description="OpenAlex source ID")
+    display_name: Optional[str] = Field(default=None, description="Journal name")
+    two_yr_mean_citedness: Optional[float] = Field(default=None, description="Open IF proxy (OpenAlex 2yr mean citedness)")
+    h_index: Optional[int] = Field(default=None, description="Source h-index")
+    apc_usd: Optional[int] = Field(default=None, description="Article Processing Charge in USD")
+    apc_currency: Optional[str] = Field(default=None, description="APC currency when from DOAJ")
+    apc_source: Optional[str] = Field(default=None, description="'openalex' | 'doaj'")
+    is_in_doaj: Optional[bool] = Field(default=None, description="Indexed in DOAJ")
+    normalized_impact_factor: Optional[float] = Field(default=None, description="Field-normalized IF (filled by batch)")
+
+
 class EnrichedRecord(BaseModel):
     """
     Normalized Data Object (NDO) for scientometric/bibliometric enrichment.
@@ -51,3 +65,4 @@ class EnrichedRecord(BaseModel):
     license: Optional[str] = Field(default=None, description="License URL or identifier")
     mesh_terms: Optional[List[str]] = Field(default=None, description="MeSH descriptors (PubMed)")
     venue: Optional[str] = Field(default=None, description="Publication venue (journal/conference name)")
+    journal: Optional[JournalMetrics] = Field(default=None, description="Resolved journal-level metrics")

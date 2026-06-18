@@ -262,6 +262,8 @@ _TABLES_TO_CLEAN = [
     "backup_assurance_events",
     # EPIC-017: secret rotation evidence — clean first (no FK deps)
     "secret_rotation_events",
+    # Journal NIF + APC metrics — clean before organizations (org_id FK)
+    "journal_metrics",
     # EPIC-016: lifecycle + retention — clean before organizations
     "retention_policies",
     "data_lifecycle_events",

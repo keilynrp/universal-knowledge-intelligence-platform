@@ -630,6 +630,34 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
                 attrs["license"] = enriched_data.license
             if enriched_data.venue:
                 attrs["venue"] = enriched_data.venue
+
+            # Journal-level metrics (NIF base + APC) — non-essential add-on; a
+            # journal sub-step failure (e.g. OpenAlex /sources timeout) must NEVER
+            # abort persistence of the work's primary enrichment, so wrap it all.
+            try:
+                from backend.schemas_enrichment import JournalMetrics as _JournalMetrics
+                journal = getattr(enriched_data, "journal", None)
+                if isinstance(journal, _JournalMetrics) and journal.source_id:
+                    full = adapter_openalex.fetch_source_metrics(journal.source_id) or journal
+                    if not full.issn_l:
+                        full.issn_l = journal.issn_l
+                    doaj_apc = None
+                    if full.is_in_doaj and full.issn_l:
+                        try:
+                            from backend.adapters.enrichment.doaj import DoajAdapter
+                            doaj_apc = DoajAdapter().fetch_apc(full.issn_l)
+                        except Exception:
+                            doaj_apc = None
+                    if full.issn_l:
+                        from backend.services.journal_metrics_service import upsert_journal_metric
+                        upsert_journal_metric(db, full, org_id=entity.org_id, doaj=doaj_apc)
+                        attrs["issn_l"] = full.issn_l
+            except Exception:
+                logger.warning(
+                    "Journal metric enrichment failed for entity %s; continuing with work enrichment",
+                    entity.id, exc_info=True,
+                )
+
             entity.attributes_json = json.dumps(attrs, ensure_ascii=False)
 
             # Extract and cache country from affiliation data

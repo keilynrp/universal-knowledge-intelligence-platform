@@ -32,6 +32,7 @@ from backend.analyzers.concept_hierarchy import (
     build_concept_tree,
     materialize_domain_concepts,
 )
+from backend.analyzers.journal_normalization import normalize_impact_factors
 from backend.analyzers.domain_health import compute_health_metrics
 from backend.analyzers.epistemic_classifier import classify_batch
 from backend.auth import get_current_user, require_role
@@ -434,6 +435,19 @@ def epistemic_distribution(
         ],
         "by_year": temporal,
     }
+
+
+# ── Journal NIF normalization ────────────────────────────────────────────────
+
+@router.post("/journals/normalize")
+def trigger_journal_normalization(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_role("super_admin", "admin")),
+):
+    """Recompute field-normalized Impact Factor across journal_metrics."""
+    updated = normalize_impact_factors(db, org_id=user.org_id)
+    db.commit()
+    return {"updated": updated}
 
 
 # ── Domain health (community metrics) endpoints ─────────────────────────────
