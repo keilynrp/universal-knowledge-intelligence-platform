@@ -105,7 +105,7 @@ EMPTY — 0 fixable CRITICALs across the 3 images at gate introduction (2026-06-
 
 ### 7e. pip-audit baseline (`--ignore-vuln` flags in `.github/workflows/security.yml`)
 
-24 vulnerability IDs ignored at introduction. Owner: platform owner. SLA: next dependency-upgrade window (review by 2026-07-10).
+32 vulnerability IDs ignored at introduction. Owner: platform owner. SLA: next dependency-upgrade window (review by 2026-07-10). The 8 entries added 2026-06-18 (cryptography GHSA-537c-gmf6-5ccf; python-multipart CVE-2026-53538/53539/53540; starlette CVE-2026-48817/48818/54282/54283) are newly-disclosed CVEs in already-pinned deps — fix versions are known (see table) but starlette requires a major 0.52→1.x bump, deferred to the upgrade sprint.
 
 | ID | Package (pinned) | Fix version if known | Review date |
 | --- | --- | --- | --- |
@@ -133,6 +133,14 @@ EMPTY — 0 fixable CRITICALs across the 3 images at gate introduction (2026-06-
 | PYSEC-2026-161 | starlette==0.52.1 | unknown at introduction | 2026-07-10 |
 | PYSEC-2026-142 | urllib3==2.6.3 | unknown at introduction | 2026-07-10 |
 | PYSEC-2026-141 | urllib3==2.6.3 | unknown at introduction | 2026-07-10 |
+| GHSA-537c-gmf6-5ccf | cryptography==46.0.5 | 48.0.1 | 2026-07-10 |
+| CVE-2026-53540 | python-multipart==0.0.22 | 0.0.31 | 2026-07-10 |
+| CVE-2026-53539 | python-multipart==0.0.22 | 0.0.30 | 2026-07-10 |
+| CVE-2026-53538 | python-multipart==0.0.22 | 0.0.30 | 2026-07-10 |
+| CVE-2026-48818 | starlette==0.52.1 | 1.1.0 | 2026-07-10 |
+| CVE-2026-48817 | starlette==0.52.1 | 1.1.0 | 2026-07-10 |
+| CVE-2026-54283 | starlette==0.52.1 | 1.3.1 | 2026-07-10 |
+| CVE-2026-54282 | starlette==0.52.1 | 1.3.0 | 2026-07-10 |
 
 ---
 
@@ -141,4 +149,4 @@ EMPTY — 0 fixable CRITICALs across the 3 images at gate introduction (2026-06-
 - Cache the Trivy vulnerability DB (`actions/cache` on `~/.cache/trivy`) to reduce network flakiness; a Trivy CDN outage currently blocks deploys (accepted trade-off for a hard gate).
 - Consider registry layer cache (`cache-from`/`cache-to`) to avoid the double image build per job (scan build + push build).
 - `gitleaks-action` requires a `GITLEAKS_LICENSE` secret if the repo ever moves to a GitHub organization; free for personal accounts.
-- Dependency upgrades to burn down the 24-entry pip-audit baseline (§7e) need their own test pass before landing; plan as a dedicated upgrade sprint.
+- Dependency upgrades to burn down the 32-entry pip-audit baseline (§7e) need their own test pass before landing; plan as a dedicated upgrade sprint. Priority targets: starlette 0.52→1.x (4 CVEs; major bump, verify FastAPI compat), python-multipart →0.0.31 (3 CVEs), cryptography →48.0.1.
