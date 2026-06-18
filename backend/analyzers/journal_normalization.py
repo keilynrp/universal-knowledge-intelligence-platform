@@ -19,6 +19,10 @@ def normalize_impact_factors(db: Session, org_id: Optional[int]) -> int:
         q = q.filter(JournalMetric.org_id == org_id)
     rows = q.all()
 
+    # NOTE: the pipeline does not yet populate `nif_field`, so every journal
+    # currently falls into the single "all" bucket — i.e. normalization is global,
+    # not per-subfield, for now. Capturing the OpenAlex subfield into `nif_field`
+    # (so this bucketing becomes truly field-normalized) is a planned follow-up.
     buckets: dict[str, list[JournalMetric]] = defaultdict(list)
     for r in rows:
         buckets[r.nif_field or "all"].append(r)
