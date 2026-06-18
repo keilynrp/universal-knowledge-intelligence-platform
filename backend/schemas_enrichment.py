@@ -33,6 +33,7 @@ class JournalMetrics(BaseModel):
     apc_currency: Optional[str] = Field(default=None, description="APC currency when from DOAJ")
     apc_source: Optional[str] = Field(default=None, description="'openalex' | 'doaj'")
     is_in_doaj: Optional[bool] = Field(default=None, description="Indexed in DOAJ")
+    nif_field: Optional[str] = Field(default=None, description="OpenAlex primary subfield — normalization bucket for the NIF")
     normalized_impact_factor: Optional[float] = Field(default=None, description="Field-normalized IF (filled by batch)")
 
 
