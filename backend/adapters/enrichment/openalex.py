@@ -4,8 +4,14 @@ from typing import Dict, List, Optional
 import httpx
 import re
 
-from backend.schemas_enrichment import AuthorAffiliation, CanonicalAffiliation, EnrichedRecord
+from backend.schemas_enrichment import AuthorAffiliation, CanonicalAffiliation, EnrichedRecord, JournalMetrics
 from backend.adapters.enrichment.base import BaseScientometricAdapter
+from backend.cache import get_cache, make_key
+
+# Module-level cache: one week TTL, keyed by OpenAlex source ID.
+# InProcessBackend stores raw Python objects (no serializer needed).
+# RedisBackend receives plain JSON-safe dicts (str/float/int/bool/None) — safe.
+_SOURCE_CACHE = get_cache("enrichment:openalex_source", ttl=7 * 24 * 3600, maxsize=20_000)
 
 class OpenAlexAdapter(BaseScientometricAdapter):
     """
@@ -13,8 +19,9 @@ class OpenAlexAdapter(BaseScientometricAdapter):
     Good practice: Includes an etiquette email `mailto:` param to use the fast lane.
     Rate Limit: 100,000 reqs/day, heavily throttled on loops unless polite.
     """
-    
+
     BASE_URL = "https://api.openalex.org/works"
+    SOURCES_URL = "https://api.openalex.org/sources"
 
     def __init__(self, polite_email: Optional[str] = "research@ukip.dev"):
         self.client = httpx.Client(timeout=10.0)
@@ -36,6 +43,37 @@ class OpenAlexAdapter(BaseScientometricAdapter):
         if self.polite_email:
             params["mailto"] = self.polite_email
         return params
+
+    def fetch_source_metrics(self, source_id: str) -> Optional[JournalMetrics]:
+        """Fetch /sources/{id} metrics (2yr_mean_citedness, h_index, apc_usd), cached by source_id.
+
+        Returns a JournalMetrics with source-level bibliometric data, or None if
+        source_id is empty or the API returns a non-200 response. Results are
+        cached for one week via the module-level _SOURCE_CACHE (keyed on source_id).
+        """
+        if not source_id:
+            return None
+
+        def _load():
+            params = self._build_params({})
+            resp = self.client.get(f"{self.SOURCES_URL}/{source_id}", params=params)
+            if resp.status_code != 200:
+                return None
+            body = resp.json()
+            stats = body.get("summary_stats") or {}
+            return {
+                "issn_l": body.get("issn_l"),
+                "source_id": source_id,
+                "display_name": body.get("display_name"),
+                "two_yr_mean_citedness": stats.get("2yr_mean_citedness"),
+                "h_index": stats.get("h_index"),
+                "apc_usd": body.get("apc_usd"),
+                "apc_source": "openalex" if body.get("apc_usd") is not None else None,
+                "is_in_doaj": body.get("is_in_doaj"),
+            }
+
+        cached = _SOURCE_CACHE.get_or_load(make_key(("source", source_id)), _load)
+        return JournalMetrics(**cached) if cached else None
 
     def _parse_record(self, raw_openalex: dict) -> EnrichedRecord:
         """
@@ -130,13 +168,21 @@ class OpenAlexAdapter(BaseScientometricAdapter):
                     concept_list.append(kw_name)
                     concept_id_list.append(None)
 
-        # 5. Get publisher / venue
+        # 5. Get publisher / venue and journal identity
         publisher = None
-        host_venue = raw_openalex.get("primary_location", {})
+        journal = None
+        host_venue = raw_openalex.get("primary_location") or {}
         if host_venue:
-            source = host_venue.get("source", {})
+            source = host_venue.get("source") or {}
             if source:
-                 publisher = source.get("display_name")
+                publisher = source.get("display_name")
+                raw_sid = source.get("id")
+                source_id = raw_sid.replace("https://openalex.org/", "") if raw_sid else None
+                journal = JournalMetrics(
+                    issn_l=source.get("issn_l"),
+                    source_id=source_id,
+                    display_name=source.get("display_name"),
+                )
 
         return EnrichedRecord(
             id=id_str,
@@ -157,7 +203,8 @@ class OpenAlexAdapter(BaseScientometricAdapter):
             canonical_affiliations=list(canonical_affiliations_by_key.values()),
             author_affiliations=author_affiliations,
             source_api="OpenAlex",
-            raw_response=raw_openalex # Attach whole tree for potential late parsing rules
+            raw_response=raw_openalex,  # Attach whole tree for potential late parsing rules
+            journal=journal,
         )
 
     def search_by_doi(self, doi: str) -> Optional[EnrichedRecord]:
