@@ -99,6 +99,20 @@ def test_upsert_persists_nif_field(db_session):
     assert row.nif_field == "Artificial Intelligence"
 
 
+def test_upsert_upgrades_all_bucket_to_real_subfield(db_session):
+    # A subfield-less journal gets nif_field="all" written by the normalizer;
+    # a later enrichment that discovers the real subfield must replace "all".
+    db_session.add(JournalMetric(issn_l="0028-0836", two_yr_mean_citedness=4.0))
+    db_session.commit()
+    normalize_impact_factors(db_session, org_id=None)
+    stuck = db_session.query(JournalMetric).filter_by(issn_l="0028-0836").one()
+    assert stuck.nif_field == "all"
+
+    row = upsert_journal_metric(db_session, JournalMetrics(
+        issn_l="0028-0836", source_id="S77", nif_field="Artificial Intelligence"), org_id=None)
+    assert row.nif_field == "Artificial Intelligence"
+
+
 def test_upsert_does_not_clobber_existing_nif_field_with_none(db_session):
     upsert_journal_metric(db_session, JournalMetrics(
         issn_l="0028-0836", source_id="S77", nif_field="Artificial Intelligence"), org_id=None)
