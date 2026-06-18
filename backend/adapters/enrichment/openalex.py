@@ -13,6 +13,21 @@ from backend.cache import MISS, get_cache, make_key
 # RedisBackend receives plain JSON-safe dicts (str/float/int/bool/None) — safe.
 _SOURCE_CACHE = get_cache("enrichment:openalex_source", ttl=7 * 24 * 3600, maxsize=20_000)
 
+
+def _primary_subfield(body: dict) -> Optional[str]:
+    """Display name of the source's primary OpenAlex subfield.
+
+    A source's ``topics`` are ordered by count descending, so ``topics[0]`` is
+    the dominant research area. We use its subfield as the NIF normalization
+    bucket. Returns None when topics or the subfield are absent.
+    """
+    topics = body.get("topics") or []
+    if not topics:
+        return None
+    subfield = (topics[0] or {}).get("subfield") or {}
+    return subfield.get("display_name")
+
+
 class OpenAlexAdapter(BaseScientometricAdapter):
     """
     Adapter for OpenAlex API. Free, enormous, and highly interconnected.
@@ -77,6 +92,7 @@ class OpenAlexAdapter(BaseScientometricAdapter):
             "apc_usd": body.get("apc_usd"),
             "apc_source": "openalex" if body.get("apc_usd") is not None else None,
             "is_in_doaj": body.get("is_in_doaj"),
+            "nif_field": _primary_subfield(body),
         }
         _SOURCE_CACHE.set(key, data)
         return JournalMetrics(**data)
