@@ -1286,7 +1286,10 @@ class JournalMetric(Base):
     h_index = Column(Integer, nullable=True)
     if_metric_kind = Column(String, default="openalex_2yr_mean_citedness")
 
-    # Article Processing Charge
+    # Article Processing Charge.
+    # apc_usd holds the raw source amount in apc_currency units (USD for the
+    # OpenAlex baseline; the original currency when overridden by DOAJ) — it is
+    # not always literal USD. Read it together with apc_currency/apc_source.
     apc_usd = Column(Integer, nullable=True)
     apc_currency = Column(String, nullable=True)
     apc_source = Column(String, nullable=True)  # "openalex" | "doaj"
@@ -1297,6 +1300,8 @@ class JournalMetric(Base):
     nif_field = Column(String, nullable=True)  # OpenAlex subfield used as denominator
     nif_updated_at = Column(DateTime, nullable=True)
 
+    # Set explicitly by the upsert service / batch normalizer; no auto-default
+    # so a NULL value distinguishes a row that was never written.
     updated_at = Column(DateTime, nullable=True)
 
     __table_args__ = (UniqueConstraint("org_id", "issn_l", name="uq_journal_metric_org_issn"),)
