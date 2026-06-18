@@ -15,16 +15,17 @@ _SOURCE_CACHE = get_cache("enrichment:openalex_source", ttl=7 * 24 * 3600, maxsi
 
 
 def _primary_subfield(body: dict) -> Optional[str]:
-    """Display name of the source's primary OpenAlex subfield.
+    """Display name of the source's dominant OpenAlex subfield.
 
-    A source's ``topics`` are ordered by count descending, so ``topics[0]`` is
-    the dominant research area. We use its subfield as the NIF normalization
-    bucket. Returns None when topics or the subfield are absent.
+    We pick the subfield of the highest-``count`` topic (rather than trusting the
+    API's ordering) and use it as the NIF normalization bucket. Returns None when
+    topics or the subfield are absent.
     """
-    topics = body.get("topics") or []
+    topics = [t for t in (body.get("topics") or []) if t]
     if not topics:
         return None
-    subfield = (topics[0] or {}).get("subfield") or {}
+    top = max(topics, key=lambda t: t.get("count") or 0)
+    subfield = top.get("subfield") or {}
     return subfield.get("display_name")
 
 

@@ -50,6 +50,23 @@ def test_fetch_source_metrics_captures_primary_subfield(monkeypatch):
     assert jm.nif_field == "Artificial Intelligence"  # top topic (highest count) wins
 
 
+def test_fetch_source_metrics_picks_highest_count_subfield_regardless_of_order(monkeypatch):
+    _clear("S77b")
+    adapter = OpenAlexAdapter()
+    body = _source_body([
+        {"display_name": "Genomics", "count": 100,
+         "subfield": {"display_name": "Genetics"}},
+        {"display_name": "Deep learning", "count": 900,  # highest count, listed second
+         "subfield": {"display_name": "Artificial Intelligence"}},
+    ])
+    body["id"] = "https://openalex.org/S77b"
+    fake = MagicMock(status_code=200)
+    fake.json.return_value = body
+    monkeypatch.setattr(adapter.client, "get", lambda *a, **k: fake)
+    jm = adapter.fetch_source_metrics("S77b")
+    assert jm.nif_field == "Artificial Intelligence"
+
+
 def test_fetch_source_metrics_subfield_none_when_no_topics(monkeypatch):
     _clear("S78")
     adapter = OpenAlexAdapter()
