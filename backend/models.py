@@ -1266,6 +1266,42 @@ class BackupAssuranceEvent(Base):
     )
 
 
+class JournalMetric(Base):
+    """Journal/source-level scientometric metrics, keyed by ISSN-L.
+
+    One row per journal, reused across many RawEntity works. APC and the
+    open Impact-Factor proxy (2yr_mean_citedness) come from OpenAlex/DOAJ;
+    normalized_impact_factor is filled by the batch normalizer.
+    """
+    __tablename__ = "journal_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
+    issn_l = Column(String, index=True, nullable=False)
+    source_id = Column(String, nullable=True, index=True)  # OpenAlex S-id
+    display_name = Column(String, nullable=True)
+
+    # Open IF proxy (NOT Clarivate JIF)
+    two_yr_mean_citedness = Column(Float, nullable=True)
+    h_index = Column(Integer, nullable=True)
+    if_metric_kind = Column(String, default="openalex_2yr_mean_citedness")
+
+    # Article Processing Charge
+    apc_usd = Column(Integer, nullable=True)
+    apc_currency = Column(String, nullable=True)
+    apc_source = Column(String, nullable=True)  # "openalex" | "doaj"
+    is_in_doaj = Column(Boolean, nullable=True)
+
+    # Field-normalized impact (filled by batch)
+    normalized_impact_factor = Column(Float, nullable=True, index=True)
+    nif_field = Column(String, nullable=True)  # OpenAlex subfield used as denominator
+    nif_updated_at = Column(DateTime, nullable=True)
+
+    updated_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (UniqueConstraint("org_id", "issn_l", name="uq_journal_metric_org_issn"),)
+
+
 event.listen(
     BackupAssuranceEvent.__table__,
     "after_create",
