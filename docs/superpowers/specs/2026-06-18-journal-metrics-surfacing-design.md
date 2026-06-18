@@ -22,6 +22,7 @@ But there is **no read path**: the only journal endpoint is `POST /journals/norm
 - FX→USD conversion for DOAJ APC (stored as nominal amount + currency).
 - Editing/curating journal metrics from the UI (read-only surface; recompute is the only action).
 - Wiring the normalizer into the scheduler (manual/endpoint trigger stays).
+- Per-journal work-count in the ranking table (needs a JOIN over `raw_entities.attributes_json->issn_l`; deferred).
 
 ## Locked decisions
 
@@ -51,11 +52,13 @@ journal_metrics (DB) ──> backend/routers/journals.py ──> GET /journals/{
 - `GET /journals/{issn_l}` → `JournalMetricResponse`. 404 when no row for `(org_id, issn_l)`.
 - `GET /journals` → paginated list. Query params: `limit` (`Query(ge=1, le=200)`, default 50), `offset` (`ge=0`), `sort_by` ∈ {`nif`, `citedness`, `apc`, `h_index`} (default `nif`), `order` ∈ {`asc`, `desc`} (default `desc`), optional `field` (filter by `nif_field`). Emits `X-Total-Count` header (pattern from `/entities`). Invalid `sort_by`/`order` → 422.
 - `GET /journals/stats` → aggregates:
-  - `apc_distribution`: list of `{currency, count, min, max, median}` grouped by `apc_currency` (only rows with `apc_usd` not null).
+  - `apc_distribution`: list of `{currency, count, min, max, median}` grouped by `apc_currency` (only rows with `apc_usd` not null). **Median is computed Python-side** (fetch ordered values per currency group and take the middle) — SQLite has no native `MEDIAN()` aggregate.
   - `open_access_share`: `{in_doaj, total, pct}`.
   - `nif_by_field`: list of `{nif_field, journal_count, mean_nif}` grouped by `nif_field` (excluding null NIF), ordered by `mean_nif` desc.
 
-**New schema:** `JournalMetricResponse` in `backend/schemas.py` — `issn_l`, `display_name`, `source_id`, `two_yr_mean_citedness`, `h_index`, `normalized_impact_factor`, `nif_field`, `apc_usd`, `apc_currency`, `apc_source`, `is_in_doaj`, `nif_updated_at`. Plus an `if_metric_kind` passthrough so the provenance label can read the metric kind.
+**Route ordering (critical):** in `journals.py`, register `GET /journals/stats` BEFORE `GET /journals/{issn_l}` — otherwise FastAPI binds `issn_l="stats"` and `/journals/stats` 404s (same shadowing class as the Sprint 15 authority-records bug).
+
+**New schema:** `JournalMetricResponse` in `backend/schemas.py` — `issn_l`, `display_name`, `source_id`, `two_yr_mean_citedness`, `h_index`, `normalized_impact_factor`, `nif_field`, `apc_usd` (**`Optional[int]`** — the model stores whole currency units, not float), `apc_currency`, `apc_source`, `is_in_doaj`, `nif_updated_at`. Plus an `if_metric_kind` passthrough so the provenance label can read the metric kind.
 
 **Contract fix:** add `issn_l: str` to `EntityAttributesDict` in `backend/schemas.py` (the worker writes it but it was never documented — the metadata-contract test would catch it once the journal path runs).
 
@@ -78,7 +81,7 @@ journal_metrics (DB) ──> backend/routers/journals.py ──> GET /journals/{
 
 **New:** `frontend/app/analytics/journals/page.tsx` + components under `frontend/app/analytics/journals/`.
 
-- **Ranking table** from `GET /journals`: columns journal, subfield, NIF, citedness, h-index, APC, OA, work-count; client controls map to `sort_by`/`order`/pagination (URL-state for shareability per repo web rules).
+- **Ranking table** from `GET /journals`: columns journal, subfield, NIF, citedness, h-index, APC, OA; client controls map to `sort_by`/`order`/pagination (URL-state for shareability per repo web rules). (A per-journal work-count column is **deferred** — it would require a JOIN/count over `raw_entities.attributes_json->issn_l`, out of scope for v1.)
 - **APC distribution chart** (Recharts) from `/journals/stats` `apc_distribution` + OA share.
 - **NIF-by-discipline chart** (Recharts bar) from `/journals/stats` `nif_by_field`.
 - **Admin "Recompute NIF" button** → `POST /journals/normalize`; visible only for admin+ (reuse the existing role-aware `useAuth`/role gate). Shows updated-count toast on success.
