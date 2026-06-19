@@ -20,7 +20,7 @@ _SORT_BY = {"nif", "citedness", "apc", "h_index"}
 _ORDER = {"asc", "desc"}
 
 
-@router.get("/journals/stats")
+@router.get("/journals/stats", response_model=schemas.JournalStatsResponse)
 def get_journal_stats(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),

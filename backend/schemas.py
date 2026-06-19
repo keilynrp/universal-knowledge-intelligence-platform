@@ -973,4 +973,3 @@ class JournalStatsResponse(BaseModel):
     apc_distribution: list[JournalApcBucket]
     open_access_share: dict   # {"in_doaj": int, "total": int, "pct": float}
     nif_by_field: list[JournalNifByField]
-    events: list[SecretRotationEventResponse]
