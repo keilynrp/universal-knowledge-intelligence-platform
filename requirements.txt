@@ -16,7 +16,7 @@ duckdb
 cssselect
 pytest
 pytest-asyncio
-httpx<0.28.0
+httpx<0.29.0
 # scholarly is installed separately via requirements-scholar.txt
 # only when SCHOLAR_ENABLED=1 (it pulls sphinx/selenium/heavy deps)
 requests
