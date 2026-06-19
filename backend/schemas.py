@@ -969,7 +969,13 @@ class JournalNifByField(BaseModel):
     mean_nif: float
 
 
+class JournalOAShare(BaseModel):
+    in_doaj: int
+    total: int
+    pct: float
+
+
 class JournalStatsResponse(BaseModel):
     apc_distribution: list[JournalApcBucket]
-    open_access_share: dict   # {"in_doaj": int, "total": int, "pct": float}
+    open_access_share: JournalOAShare
     nif_by_field: list[JournalNifByField]

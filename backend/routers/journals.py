@@ -29,7 +29,7 @@ def get_journal_stats(
     return journal_stats(db, org_id)
 
 
-@router.get("/journals")
+@router.get("/journals", response_model=list[schemas.JournalMetricResponse])
 def list_journals(
     response: Response,
     sort_by: str = Query("nif"),

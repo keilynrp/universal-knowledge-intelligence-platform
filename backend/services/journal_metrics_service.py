@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from typing import Optional
+from statistics import median as _median
+from typing import Optional, Tuple
 from sqlalchemy.orm import Session
 
 from backend.models import JournalMetric
@@ -66,9 +67,6 @@ def upsert_journal_metric(
 # ---------------------------------------------------------------------------
 # Read helpers
 # ---------------------------------------------------------------------------
-from statistics import median as _median
-from typing import Tuple
-
 _SORT_COLUMNS = {
     "nif": JournalMetric.normalized_impact_factor,
     "citedness": JournalMetric.two_yr_mean_citedness,
