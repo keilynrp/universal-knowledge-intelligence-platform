@@ -9,17 +9,19 @@
  * misrepresentation.
  */
 
+import Badge from "./ui/Badge";
+
 const TOOLTIP =
   "Open proxy: OpenAlex 2-yr mean citedness, field-normalized — not Clarivate JIF.";
 
 export function JournalProvenanceBadge(): JSX.Element {
+  // Wrap the governed Badge primitive (token-based colors) so we don't add
+  // direct palette classes; the wrapper carries the explanatory tooltip.
   return (
-    <span
-      className="inline-flex items-center font-medium rounded border bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-500/30 px-1.5 py-0.5 text-[10px] gap-1"
-      title={TOOLTIP}
-      aria-label={TOOLTIP}
-    >
-      open proxy
+    <span title={TOOLTIP} aria-label={TOOLTIP} className="inline-flex">
+      <Badge variant="warning" size="sm">
+        open proxy
+      </Badge>
     </span>
   );
 }
