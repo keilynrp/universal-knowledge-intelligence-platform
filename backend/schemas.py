@@ -931,6 +931,7 @@ class SecretsCheckResponse(BaseModel):
 
 class SecretsOverviewResponse(BaseModel):
     check: SecretsCheckResponse
+    events: list[SecretRotationEventResponse]
 
 
 # ---------------------------------------------------------------------------
