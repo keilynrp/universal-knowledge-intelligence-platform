@@ -56,3 +56,31 @@ def test_stats_aggregates(db_session):
     assert s["open_access_share"] == {"in_doaj": 2, "total": 3, "pct": round(2/3*100, 1)}
     ai = next(f for f in s["nif_by_field"] if f["nif_field"] == "AI")
     assert ai["journal_count"] == 2 and ai["mean_nif"] == 1.0
+
+
+def test_get_single_404(client, auth_headers):
+    assert client.get("/journals/NOPE", headers=auth_headers).status_code == 404
+
+
+def test_get_single_ok(client, auth_headers, db_session):
+    db_session.add(JournalMetric(org_id=None, issn_l="0028-0836", normalized_impact_factor=1.5))
+    db_session.commit()
+    r = client.get("/journals/0028-0836", headers=auth_headers)
+    assert r.status_code == 200 and r.json()["normalized_impact_factor"] == 1.5
+
+
+def test_list_pagination_header_and_sort_validation(client, auth_headers, db_session):
+    db_session.add(JournalMetric(org_id=None, issn_l="A", normalized_impact_factor=2.0))
+    db_session.commit()
+    r = client.get("/journals?sort_by=nif&order=desc&limit=10", headers=auth_headers)
+    assert r.status_code == 200 and r.headers["X-Total-Count"] == "1"
+    assert client.get("/journals?sort_by=bogus", headers=auth_headers).status_code == 422
+
+
+def test_stats_route_not_shadowed(client, auth_headers):
+    r = client.get("/journals/stats", headers=auth_headers)
+    assert r.status_code == 200 and "apc_distribution" in r.json()
+
+
+def test_journals_requires_auth(client):
+    assert client.get("/journals/stats").status_code in (401, 403)
