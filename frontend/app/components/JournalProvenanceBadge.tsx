@@ -9,12 +9,13 @@
  * misrepresentation.
  */
 
+import { type ReactElement } from "react";
 import Badge from "./ui/Badge";
 
 const TOOLTIP =
   "Open proxy: OpenAlex 2-yr mean citedness, field-normalized — not Clarivate JIF.";
 
-export function JournalProvenanceBadge(): JSX.Element {
+export function JournalProvenanceBadge(): ReactElement {
   // Wrap the governed Badge primitive (token-based colors) so we don't add
   // direct palette classes; the wrapper carries the explanatory tooltip.
   return (
