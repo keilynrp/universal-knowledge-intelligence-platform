@@ -17,6 +17,19 @@ logger = logging.getLogger(__name__)
 _SOURCE_CACHE = get_cache("enrichment:openalex_source", ttl=7 * 24 * 3600, maxsize=20_000)
 
 
+def clear_source_cache() -> int:
+    """Invalidate every cached ``/sources`` metric and return how many entries
+    were dropped.
+
+    The source cache stores the *computed* ``nif_field`` alongside the raw
+    metrics, so after the field/subfield resolver changes a backfill would
+    otherwise reuse stale values (the cache is Redis-backed and survives
+    deploys). Clearing it forces fresh ``/sources`` fetches that recompute the
+    bucket.
+    """
+    return _SOURCE_CACHE.invalidate_prefix()
+
+
 def _primary_field(body: dict) -> Optional[str]:
     """Display name of the source's dominant OpenAlex *field*, used as the NIF
     normalization bucket.
