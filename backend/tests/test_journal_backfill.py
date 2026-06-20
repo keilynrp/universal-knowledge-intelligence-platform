@@ -42,6 +42,26 @@ def _completed(label, doi, org_id=None, issn=None):
     )
 
 
+def test_backfill_all_refresh_clears_source_cache(db_session, monkeypatch):
+    """`refresh=True` invalidates the cached OpenAlex /sources metrics before the
+    run, so a changed resolver (e.g. nif_field) is recomputed instead of reusing
+    stale cached values."""
+    cleared = {"n": 0}
+    monkeypatch.setattr(journal_backfill, "clear_source_cache",
+                        lambda: (cleared.__setitem__("n", cleared["n"] + 1), 5)[1])
+    oa = _FakeOpenAlex()  # no works → nothing processed, but refresh still runs
+    backfill_all(db_session, openalex=oa, only_missing=True, refresh=True)
+    assert cleared["n"] == 1
+
+
+def test_backfill_all_without_refresh_keeps_cache(db_session, monkeypatch):
+    cleared = {"n": 0}
+    monkeypatch.setattr(journal_backfill, "clear_source_cache",
+                        lambda: (cleared.__setitem__("n", cleared["n"] + 1), 0)[1])
+    backfill_all(db_session, openalex=_FakeOpenAlex(), only_missing=True)
+    assert cleared["n"] == 0
+
+
 def test_backfill_entity_writes_journal_metric(db_session):
     entity = _completed("Tara Oceans", "10.1/abc")
     db_session.add(entity)

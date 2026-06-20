@@ -44,6 +44,10 @@ def main() -> None:
     parser.add_argument("--delay", type=float, default=0.2,
                         help="Seconds to sleep between works (polite-pool throttle "
                              "to avoid OpenAlex 429s; default 0.2).")
+    parser.add_argument("--refresh", action="store_true",
+                        help="Clear the cached OpenAlex /sources metrics first so a "
+                             "changed nif_field resolver is recomputed (the source "
+                             "cache is Redis-backed and survives deploys).")
     args = parser.parse_args()
 
     _configure_logging()
@@ -51,7 +55,7 @@ def main() -> None:
     db = SessionLocal()
     try:
         result = backfill_all(db, only_missing=not args.all, limit=args.limit,
-                              delay=args.delay)
+                              delay=args.delay, refresh=args.refresh)
     finally:
         db.close()
 

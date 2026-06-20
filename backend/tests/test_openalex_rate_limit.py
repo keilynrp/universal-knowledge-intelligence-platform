@@ -3,8 +3,20 @@ than silently dropping the call (which made the journal backfill skip works)."""
 from unittest.mock import MagicMock
 
 import backend.adapters.enrichment.openalex as oa_mod
-from backend.adapters.enrichment.openalex import OpenAlexAdapter, _SOURCE_CACHE
-from backend.cache import make_key
+from backend.adapters.enrichment.openalex import (
+    OpenAlexAdapter,
+    _SOURCE_CACHE,
+    clear_source_cache,
+)
+from backend.cache import MISS, make_key
+
+
+def test_clear_source_cache_invalidates_cached_sources():
+    key = make_key(("source", "Sclear"))
+    _SOURCE_CACHE.set(key, {"issn_l": "x"})
+    assert _SOURCE_CACHE.get(key) is not MISS
+    clear_source_cache()
+    assert _SOURCE_CACHE.get(key) is MISS
 
 
 def _resp(status, json_body=None, headers=None):

@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.adapters.enrichment.doaj import DoajAdapter
-from backend.adapters.enrichment.openalex import OpenAlexAdapter
+from backend.adapters.enrichment.openalex import OpenAlexAdapter, clear_source_cache
 from backend.services.journal_metrics_service import upsert_journal_metric
 
 logger = logging.getLogger(__name__)
@@ -86,17 +86,24 @@ def backfill_all(
     only_missing: bool = True,
     limit: Optional[int] = None,
     delay: float = 0.0,
+    refresh: bool = False,
 ) -> dict:
     """Backfill journal metrics for completed works that have a DOI.
 
     Commits per entity so one failure never discards prior progress. ``delay``
     sleeps that many seconds between works (polite-pool throttle to avoid
     OpenAlex 429s on large runs); the library default is 0 (no throttle) and the
-    operator script opts into a delay. Returns
+    operator script opts into a delay. ``refresh`` clears the cached OpenAlex
+    ``/sources`` metrics first, so a changed ``nif_field`` resolver recomputes
+    instead of reusing stale (Redis-persisted) values. Returns
     ``{processed, written, skipped, errors}``.
     """
     openalex = openalex or _get_openalex()
     doaj_adapter = doaj_adapter or DoajAdapter()
+
+    if refresh:
+        cleared = clear_source_cache()
+        logger.info("journal backfill: cleared %d cached OpenAlex source entries (refresh)", cleared)
 
     q = (
         db.query(models.RawEntity)
