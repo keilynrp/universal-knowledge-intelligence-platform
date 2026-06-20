@@ -14,6 +14,7 @@ Idempotent: ``only_missing=True`` skips works that already carry
 from __future__ import annotations
 
 import logging
+import time
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -84,10 +85,14 @@ def backfill_all(
     doaj_adapter: Optional[DoajAdapter] = None,
     only_missing: bool = True,
     limit: Optional[int] = None,
+    delay: float = 0.0,
 ) -> dict:
     """Backfill journal metrics for completed works that have a DOI.
 
-    Commits per entity so one failure never discards prior progress. Returns
+    Commits per entity so one failure never discards prior progress. ``delay``
+    sleeps that many seconds between works (polite-pool throttle to avoid
+    OpenAlex 429s on large runs); the library default is 0 (no throttle) and the
+    operator script opts into a delay. Returns
     ``{processed, written, skipped, errors}``.
     """
     openalex = openalex or _get_openalex()
@@ -103,7 +108,9 @@ def backfill_all(
         q = q.limit(limit)
 
     processed = written = skipped = errors = 0
-    for entity in q.all():
+    for index, entity in enumerate(q.all()):
+        if delay and index:
+            time.sleep(delay)
         processed += 1
         try:
             if backfill_entity_journal(

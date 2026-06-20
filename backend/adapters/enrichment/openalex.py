@@ -69,6 +69,32 @@ class OpenAlexAdapter(BaseScientometricAdapter):
             params["mailto"] = self.polite_email
         return params
 
+    # Rate-limit/transient statuses worth retrying (OpenAlex returns 429 on
+    # bursts even within the polite pool; 503 is a transient upstream error).
+    _RETRY_STATUSES = frozenset({429, 503})
+    _MAX_RETRIES = 3
+    _MAX_BACKOFF = 8.0  # seconds
+
+    def _get(self, url: str, params: dict):
+        """GET with bounded retry on rate-limit/transient statuses.
+
+        Honors the ``Retry-After`` header when present, otherwise backs off
+        exponentially. Returns the final response (caller still inspects
+        ``status_code``); only 429/503 are retried so genuine 4xx/5xx fail fast.
+        """
+        resp = self.client.get(url, params=params)
+        for attempt in range(1, self._MAX_RETRIES + 1):
+            if resp.status_code not in self._RETRY_STATUSES:
+                return resp
+            retry_after = resp.headers.get("Retry-After") if hasattr(resp, "headers") else None
+            try:
+                wait = float(retry_after) if retry_after else min(2.0 ** attempt, self._MAX_BACKOFF)
+            except (TypeError, ValueError):
+                wait = min(2.0 ** attempt, self._MAX_BACKOFF)
+            time.sleep(wait)
+            resp = self.client.get(url, params=params)
+        return resp
+
     def fetch_source_metrics(self, source_id: str) -> Optional[JournalMetrics]:
         """Fetch /sources/{id} metrics (2yr_mean_citedness, h_index, apc_usd), cached by source_id.
 
@@ -87,7 +113,7 @@ class OpenAlexAdapter(BaseScientometricAdapter):
             return JournalMetrics(**cached)
 
         params = self._build_params({})
-        resp = self.client.get(f"{self.SOURCES_URL}/{source_id}", params=params)
+        resp = self._get(f"{self.SOURCES_URL}/{source_id}", params=params)
         if resp.status_code != 200:
             return None  # transient failure — do NOT cache
 
@@ -246,11 +272,11 @@ class OpenAlexAdapter(BaseScientometricAdapter):
         # OpenAlex expects https://doi.org/10.xyz format inside the API paths sometimes
         # We enforce searching with `filter=doi:xxxxx` to be safe against URL encoding weirdness
         params = self._build_params({"filter": f"doi:{doi}"})
-        response = self.client.get(self.BASE_URL, params=params)
-        
+        response = self._get(self.BASE_URL, params=params)
+
         if response.status_code != 200:
             return None
-            
+
         json_resp = response.json()
         results = json_resp.get("results", [])
         if not results:

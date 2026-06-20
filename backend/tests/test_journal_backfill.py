@@ -7,6 +7,7 @@ violates ``uq_entity_relationships_pair_global`` on re-run).
 """
 from backend.models import RawEntity, JournalMetric
 from backend.schemas_enrichment import EnrichedRecord, JournalMetrics
+import backend.services.journal_backfill as journal_backfill
 from backend.services.journal_backfill import (
     backfill_entity_journal,
     backfill_all,
@@ -105,6 +106,45 @@ def test_backfill_entity_falls_back_to_record_issn_when_source_metrics_missing(d
     assert db_session.query(JournalMetric).filter_by(issn_l="1234-5678").count() == 1
     db_session.refresh(entity)
     assert entity.enrichment_issn_l == "1234-5678"
+
+
+def test_backfill_all_throttles_between_entities(db_session, monkeypatch):
+    """A positive `delay` sleeps between works (polite-pool throttle to avoid 429s)."""
+    db_session.add(_completed("a", "10.1/a"))
+    db_session.add(_completed("b", "10.1/b"))
+    db_session.commit()
+    oa = _FakeOpenAlex(
+        by_doi={
+            "10.1/a": EnrichedRecord(title="a", journal=JournalMetrics(issn_l="0028-0836", source_id="S1")),
+            "10.1/b": EnrichedRecord(title="b", journal=JournalMetrics(issn_l="1111-2222", source_id="S2")),
+        },
+        source_metrics={
+            "S1": JournalMetrics(issn_l="0028-0836", source_id="S1", two_yr_mean_citedness=1.0, is_in_doaj=False),
+            "S2": JournalMetrics(issn_l="1111-2222", source_id="S2", two_yr_mean_citedness=1.0, is_in_doaj=False),
+        },
+    )
+    slept: list[float] = []
+    monkeypatch.setattr(journal_backfill.time, "sleep", lambda s: slept.append(s))
+
+    backfill_all(db_session, openalex=oa, only_missing=True, delay=0.2)
+
+    assert slept and all(s == 0.2 for s in slept)
+
+
+def test_backfill_all_default_has_no_delay(db_session, monkeypatch):
+    """The library default is no throttle (fast, pure); the script opts into a delay."""
+    db_session.add(_completed("a", "10.1/a"))
+    db_session.commit()
+    oa = _FakeOpenAlex(
+        by_doi={"10.1/a": EnrichedRecord(title="a", journal=JournalMetrics(issn_l="0028-0836", source_id="S1"))},
+        source_metrics={"S1": JournalMetrics(issn_l="0028-0836", source_id="S1", two_yr_mean_citedness=1.0, is_in_doaj=False)},
+    )
+    slept: list[float] = []
+    monkeypatch.setattr(journal_backfill.time, "sleep", lambda s: slept.append(s))
+
+    backfill_all(db_session, openalex=oa, only_missing=True)
+
+    assert slept == []
 
 
 def test_backfill_all_only_missing(db_session):
