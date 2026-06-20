@@ -108,6 +108,17 @@ def test_backfill_entity_falls_back_to_record_issn_when_source_metrics_missing(d
     assert entity.enrichment_issn_l == "1234-5678"
 
 
+def test_script_configure_logging_quiets_httpx():
+    """The operator script quiets httpx's per-request INFO lines (the 429s the
+    adapter already retries) while keeping warnings/errors."""
+    import logging
+    from backend.scripts.backfill_journal_metrics import _configure_logging
+
+    logging.getLogger("httpx").setLevel(logging.INFO)  # arrange: noisy default
+    _configure_logging()
+    assert logging.getLogger("httpx").level == logging.WARNING
+
+
 def test_backfill_all_throttles_between_entities(db_session, monkeypatch):
     """A positive `delay` sleeps between works (polite-pool throttle to avoid 429s)."""
     db_session.add(_completed("a", "10.1/a"))

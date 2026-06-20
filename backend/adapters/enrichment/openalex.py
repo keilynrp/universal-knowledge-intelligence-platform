@@ -1,3 +1,4 @@
+import logging
 import time
 import urllib.parse
 from typing import Dict, List, Optional
@@ -7,6 +8,8 @@ import re
 from backend.schemas_enrichment import AuthorAffiliation, CanonicalAffiliation, EnrichedRecord, JournalMetrics
 from backend.adapters.enrichment.base import BaseScientometricAdapter
 from backend.cache import MISS, get_cache, make_key
+
+logger = logging.getLogger(__name__)
 
 # Module-level cache: one week TTL, keyed by OpenAlex source ID.
 # InProcessBackend stores raw Python objects (no serializer needed).
@@ -91,6 +94,10 @@ class OpenAlexAdapter(BaseScientometricAdapter):
                 wait = float(retry_after) if retry_after else min(2.0 ** attempt, self._MAX_BACKOFF)
             except (TypeError, ValueError):
                 wait = min(2.0 ** attempt, self._MAX_BACKOFF)
+            logger.info(
+                "OpenAlex %s (rate-limited) — retrying in %.1fs (attempt %d/%d)",
+                resp.status_code, wait, attempt, self._MAX_RETRIES,
+            )
             time.sleep(wait)
             resp = self.client.get(url, params=params)
         return resp

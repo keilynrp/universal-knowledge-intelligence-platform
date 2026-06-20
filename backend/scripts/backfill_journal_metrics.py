@@ -24,6 +24,16 @@ from backend.services.journal_backfill import backfill_all
 logger = logging.getLogger(__name__)
 
 
+def _configure_logging() -> None:
+    """Operator-friendly logging: keep our INFO output, but quiet httpx's
+    per-request INFO lines (e.g. the 429s the OpenAlex adapter already retries),
+    which otherwise look alarming. Warnings/errors still surface, and the adapter
+    logs its own clear "rate-limited — retrying" message when a retry happens.
+    """
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Backfill journal metrics from stored DOIs.")
     parser.add_argument("--limit", type=int, default=None,
@@ -36,7 +46,7 @@ def main() -> None:
                              "to avoid OpenAlex 429s; default 0.2).")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    _configure_logging()
 
     db = SessionLocal()
     try:
