@@ -58,3 +58,21 @@ def test_migration_backfills_issn_from_attributes(tmp_path):
             mig.downgrade()
         cols = [c["name"] for c in sa.inspect(conn).get_columns("raw_entities")]
         assert "enrichment_issn_l" not in cols
+
+
+def test_worker_sets_enrichment_issn_l(db_session, monkeypatch):
+    from backend import enrichment_worker
+    from backend.schemas_enrichment import EnrichedRecord, JournalMetrics
+    entity = RawEntity(primary_label="Some Paper", domain="science", enrichment_status="pending")
+    db_session.add(entity); db_session.commit()
+    enriched = EnrichedRecord(title="Some Paper", citation_count=1,
+                              journal=JournalMetrics(issn_l="0028-0836", source_id="S77"))
+    monkeypatch.setattr(enrichment_worker, "_ACTIVE_CASCADE", ["openalex"])
+    monkeypatch.setattr(enrichment_worker.adapter_openalex, "search_by_title",
+                        lambda query, limit=1: [enriched])
+    monkeypatch.setattr(enrichment_worker.adapter_openalex, "fetch_source_metrics",
+                        lambda sid: JournalMetrics(issn_l="0028-0836", source_id=sid,
+                                                   two_yr_mean_citedness=1.0, is_in_doaj=False))
+    enrichment_worker.enrich_single_record(db_session, entity)
+    db_session.refresh(entity)
+    assert entity.enrichment_issn_l == "0028-0836"
