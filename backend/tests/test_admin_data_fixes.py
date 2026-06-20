@@ -364,7 +364,9 @@ class TestCoauthorBackfillBehavior:
                 .filter(models.EntityRelationship.relation_type == "CO_AUTHOR")
                 .count()
             )
-            assert count >= 3  # ≥ 3 pairs from one 3-author + one 2-author paper
+            # One consolidated self-edge row per work (pairs live in notes), so
+            # two seeded papers → two rows.
+            assert count == 2
 
     def test_dry_run_does_not_write(self, client, auth_headers, session_factory):
         with session_factory() as db:
