@@ -73,8 +73,12 @@ def test_single_alembic_head_after_migration():
         t = f.read_text(encoding="utf-8")
         for m in re.finditer(r'^revision\s*(?::[^=]*)?=\s*["\']([^"\']+)', t, re.M):
             revs.add(m.group(1))
-        for m in re.finditer(r'down_revision[^=]*=\s*["\(]?["\']?([^"\'\),\s]+)', t, re.M):
-            downs.add(m.group(1))
+        # Capture ALL revision ids on each down_revision line — handles plain
+        # strings, typed annotations, AND tuple forms like ("x","y") present in
+        # the repo (e.g. e5f6a7b8c9da merges two heads).
+        for m in re.finditer(r"down_revision[^=]*=.*?$", t, re.M):
+            for rid in re.findall(r'["\']([a-f0-9]{12,})["\']', m.group(0)):
+                downs.add(rid)
     heads = revs - downs
     assert heads == {"c5e6f7a8b9c0"}, f"expected single head c5e6f7a8b9c0, got {heads}"
 ```
@@ -322,7 +326,7 @@ test("renders the works count", () => {
 - [ ] **Step 2: Run → FAIL** — `cd frontend && npx vitest run __tests__/JournalsRankingTable.test.tsx`.
 - [ ] **Step 3: Implement**
   - `JournalsRankingTable.tsx`: add `works_count: number | null;` to `interface JournalRow`; add a **non-sortable** "Works" `<th>` (plain header, matching the non-sortable Subfield/OA header style — NOT a `<button>`) and a cell rendering `journal.works_count ?? "—"`. Governed token classes only.
-  - `page.tsx`: add `works_count: number | null;` to its journal row type so the data flows through.
+  - `page.tsx`: it **reuses** `type JournalRow` imported from `JournalsRankingTable.tsx` (no separate type of its own), so adding `works_count` to `JournalRow` there already covers it — verify `page.tsx` compiles and the API response cast still type-checks; no separate type edit is expected.
   - `JournalMetricsSection.tsx`: add `works_count?: number | null` to its local `JournalMetricResponse` interface and render a small line like `{data.works_count} works in your catalog` when present (governed classes).
 - [ ] **Step 4: Verify**
   - `npx vitest run __tests__/JournalsRankingTable.test.tsx` → pass; `npx vitest run` → full suite green.
