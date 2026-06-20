@@ -14,19 +14,28 @@ from backend.cache import MISS, get_cache, make_key
 _SOURCE_CACHE = get_cache("enrichment:openalex_source", ttl=7 * 24 * 3600, maxsize=20_000)
 
 
-def _primary_subfield(body: dict) -> Optional[str]:
-    """Display name of the source's dominant OpenAlex subfield.
+def _primary_field(body: dict) -> Optional[str]:
+    """Display name of the source's dominant OpenAlex *field*, used as the NIF
+    normalization bucket.
 
-    We pick the subfield of the highest-``count`` topic (rather than trusting the
-    API's ordering) and use it as the NIF normalization bucket. Returns None when
-    topics or the subfield are absent.
+    We sum each topic's ``count`` per field and return the highest-scoring field
+    (ties broken alphabetically for determinism). Field — not subfield — because
+    multidisciplinary and medical megajournals carry a few enormous spurious
+    subfield topics (e.g. health-economics → "Economics and Econometrics") that
+    dominate single-top-topic and per-subfield selection; rolling up to the field
+    level (e.g. "Medicine") is robust to that and yields denser, more meaningful
+    normalization buckets. Returns None when topics or their fields are absent.
     """
-    topics = [t for t in (body.get("topics") or []) if t]
-    if not topics:
+    totals: dict[str, int] = {}
+    for topic in (body.get("topics") or []):
+        if not topic:
+            continue
+        field = (topic.get("field") or {}).get("display_name")
+        if field:
+            totals[field] = totals.get(field, 0) + (topic.get("count") or 0)
+    if not totals:
         return None
-    top = max(topics, key=lambda t: t.get("count") or 0)
-    subfield = top.get("subfield") or {}
-    return subfield.get("display_name")
+    return sorted(totals.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
 
 
 class OpenAlexAdapter(BaseScientometricAdapter):
@@ -93,7 +102,7 @@ class OpenAlexAdapter(BaseScientometricAdapter):
             "apc_usd": body.get("apc_usd"),
             "apc_source": "openalex" if body.get("apc_usd") is not None else None,
             "is_in_doaj": body.get("is_in_doaj"),
-            "nif_field": _primary_subfield(body),
+            "nif_field": _primary_field(body),
         }
         _SOURCE_CACHE.set(key, data)
         return JournalMetrics(**data)

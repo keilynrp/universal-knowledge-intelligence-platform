@@ -1298,7 +1298,7 @@ class JournalMetric(Base):
 
     # Field-normalized impact (filled by batch)
     normalized_impact_factor = Column(Float, nullable=True, index=True)
-    nif_field = Column(String, nullable=True)  # OpenAlex subfield used as denominator
+    nif_field = Column(String, nullable=True)  # OpenAlex field used as NIF denominator bucket
     nif_updated_at = Column(DateTime, nullable=True)
 
     # Set explicitly by the upsert service / batch normalizer; no auto-default
