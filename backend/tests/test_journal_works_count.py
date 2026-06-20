@@ -76,3 +76,23 @@ def test_worker_sets_enrichment_issn_l(db_session, monkeypatch):
     enrichment_worker.enrich_single_record(db_session, entity)
     db_session.refresh(entity)
     assert entity.enrichment_issn_l == "0028-0836"
+
+
+from backend.services.journal_metrics_service import works_count_by_issn
+
+
+def test_works_count_by_issn_org_scoped(db_session):
+    db_session.add(RawEntity(primary_label="a", org_id=1, enrichment_issn_l="X"))
+    db_session.add(RawEntity(primary_label="b", org_id=1, enrichment_issn_l="X"))
+    db_session.add(RawEntity(primary_label="c", org_id=1, enrichment_issn_l="Y"))
+    db_session.add(RawEntity(primary_label="d", org_id=2, enrichment_issn_l="X"))  # other org
+    db_session.commit()
+    counts = works_count_by_issn(db_session, 1)
+    assert counts == {"X": 2, "Y": 1}
+
+
+def test_works_count_filtered_by_issns(db_session):
+    db_session.add(RawEntity(primary_label="a", org_id=None, enrichment_issn_l="X"))
+    db_session.add(RawEntity(primary_label="b", org_id=None, enrichment_issn_l="Z"))
+    db_session.commit()
+    assert works_count_by_issn(db_session, None, issns=["X"]) == {"X": 1}

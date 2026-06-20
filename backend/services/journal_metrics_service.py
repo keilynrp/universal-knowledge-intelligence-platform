@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
 from statistics import median as _median
 from typing import Optional, Tuple
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from backend.models import JournalMetric
+from backend.models import JournalMetric, RawEntity
 from backend.schemas_enrichment import JournalMetrics
 
 
@@ -148,3 +149,19 @@ def journal_stats(db: Session, org_id: Optional[int]) -> dict:
         "open_access_share": open_access_share,
         "nif_by_field": nif_by_field,
     }
+
+
+def works_count_by_issn(db: Session, org_id: Optional[int],
+                        issns: Optional[list[str]] = None) -> dict[str, int]:
+    """Count works (raw_entities) per journal ISSN, org-scoped.
+
+    Mirrors the read scoping of the journal endpoints: filters
+    raw_entities.org_id == org_id (IS NULL when org_id is None). Optional
+    `issns` narrows the count to a specific set of journals (e.g. one page).
+    """
+    q = (db.query(RawEntity.enrichment_issn_l, func.count(RawEntity.id))
+           .filter(RawEntity.enrichment_issn_l.isnot(None))
+           .filter(RawEntity.org_id == org_id))
+    if issns:
+        q = q.filter(RawEntity.enrichment_issn_l.in_(issns))
+    return {issn: cnt for issn, cnt in q.group_by(RawEntity.enrichment_issn_l).all()}
