@@ -445,7 +445,11 @@ def trigger_journal_normalization(
     user: models.User = Depends(require_role("super_admin", "admin")),
 ):
     """Recompute field-normalized Impact Factor across journal_metrics."""
-    updated = normalize_impact_factors(db, org_id=user.org_id)
+    # Scope the write the same way the journal READ endpoints do, so an admin
+    # never normalizes another org's rows (a legacy admin with org_id=None maps
+    # to LEGACY_GLOBAL_ORG_ID, not "all orgs").
+    org_id = resolve_request_org_id(db, user)
+    updated = normalize_impact_factors(db, org_id=org_id)
     db.commit()
     return {"updated": updated}
 
