@@ -952,6 +952,7 @@ class JournalMetricResponse(BaseModel):
     is_in_doaj: Optional[bool] = None
     if_metric_kind: Optional[str] = None
     nif_updated_at: Optional[datetime] = None
+    works_count: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 

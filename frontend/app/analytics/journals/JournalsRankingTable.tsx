@@ -21,6 +21,7 @@ export interface JournalRow {
   apc_usd: number | null;
   apc_currency: string | null;
   is_in_doaj: boolean | null;
+  works_count: number | null;
 }
 
 export interface JournalsRankingTableProps {
@@ -164,6 +165,11 @@ export function JournalsRankingTable({
                 </Button>
               </th>
 
+              {/* Works — non-sortable */}
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--ukip-muted)]">
+                Works
+              </th>
+
               {/* OA — non-sortable */}
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--ukip-muted)]">
                 OA
@@ -198,6 +204,9 @@ export function JournalsRankingTable({
                 </td>
                 <td className="px-4 py-3 text-sm text-[var(--ukip-text)]">
                   {formatApc(journal.apc_usd, journal.apc_currency)}
+                </td>
+                <td className="px-4 py-3 text-sm text-[var(--ukip-text)]">
+                  {journal.works_count ?? "—"}
                 </td>
                 <td className="px-4 py-3 text-sm">
                   {journal.is_in_doaj ? (

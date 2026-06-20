@@ -16,4 +16,4 @@ def test_single_alembic_head():
                 for id_match in re.finditer(r'["\']([A-Za-z0-9]{4,})["\']', line):
                     downs.add(id_match.group(1))
     heads = revisions - downs
-    assert heads == {"c4d5e6f7a8b9"}, f"expected single head c4d5e6f7a8b9, got {heads}"
+    assert heads == {"c5e6f7a8b9c0"}, f"expected single head c5e6f7a8b9c0, got {heads}"

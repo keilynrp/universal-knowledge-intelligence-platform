@@ -652,6 +652,7 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
                         from backend.services.journal_metrics_service import upsert_journal_metric
                         upsert_journal_metric(db, full, org_id=entity.org_id, doaj=doaj_apc)
                         attrs["issn_l"] = full.issn_l
+                        entity.enrichment_issn_l = full.issn_l
             except Exception:
                 logger.warning(
                     "Journal metric enrichment failed for entity %s; continuing with work enrichment",

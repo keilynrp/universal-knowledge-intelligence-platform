@@ -12,6 +12,7 @@ from backend.services.journal_metrics_service import (
     get_journal_metric,
     list_journal_metrics,
     journal_stats,
+    works_count_by_issn,
 )
 
 router = APIRouter(tags=["journals"])
@@ -47,7 +48,11 @@ def list_journals(
     org_id = resolve_request_org_id(db, user)
     rows, total = list_journal_metrics(db, org_id, sort_by, order, limit, offset, field)
     response.headers["X-Total-Count"] = str(total)
-    return [schemas.JournalMetricResponse.model_validate(r) for r in rows]
+    items = [schemas.JournalMetricResponse.model_validate(r) for r in rows]
+    counts = works_count_by_issn(db, org_id, issns=[r.issn_l for r in rows])
+    for it in items:
+        it.works_count = counts.get(it.issn_l, 0)
+    return items
 
 
 @router.get("/journals/{issn_l}", response_model=schemas.JournalMetricResponse)
@@ -60,4 +65,6 @@ def get_journal(
     row = get_journal_metric(db, org_id, issn_l)
     if row is None:
         raise HTTPException(404, "journal not found")
-    return row
+    resp = schemas.JournalMetricResponse.model_validate(row)
+    resp.works_count = works_count_by_issn(db, org_id, issns=[issn_l]).get(issn_l, 0)
+    return resp
