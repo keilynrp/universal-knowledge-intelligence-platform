@@ -43,6 +43,7 @@ entity.enrichment_issn_l = full.issn_l
 This is inside the journal try/except block, so a failure here still can't abort the work's enrichment.
 
 ### 4. Count service — `backend/services/journal_metrics_service.py`
+> New imports required at the top of this file: `from sqlalchemy import func` and add `RawEntity` to the `from backend.models import ...` line (currently only `JournalMetric` is imported).
 ```python
 def works_count_by_issn(db, org_id, issns=None) -> dict[str, int]:
     q = (db.query(RawEntity.enrichment_issn_l, func.count(RawEntity.id))
@@ -57,7 +58,7 @@ Org-scoped via `RawEntity.org_id == org_id` (the same value the journal_metrics 
 ### 5. Schema & API
 - `JournalMetricResponse` (`backend/schemas.py`): add `works_count: Optional[int] = None`. (It is NOT an ORM column, so it's populated after `model_validate`.)
 - `GET /journals` (`backend/routers/journals.py`): after building the page rows, call `works_count_by_issn(db, org_id, issns=[r.issn_l for r in rows])`, then for each response set `resp.works_count = counts.get(r.issn_l, 0)`.
-- `GET /journals/{issn_l}`: build the response from the row and set `works_count = works_count_by_issn(db, org_id, issns=[issn_l]).get(issn_l, 0)`.
+- `GET /journals/{issn_l}`: the current handler does `return row` (raw ORM row → FastAPI serializes via `response_model`), which gives no chance to attach `works_count`. **Change it to build the model explicitly:** `resp = schemas.JournalMetricResponse.model_validate(row); resp.works_count = works_count_by_issn(db, org_id, issns=[issn_l]).get(issn_l, 0); return resp`. (Otherwise `works_count` silently serializes as `null`.)
 - `/journals/stats` is unchanged.
 
 ### 6. Frontend
