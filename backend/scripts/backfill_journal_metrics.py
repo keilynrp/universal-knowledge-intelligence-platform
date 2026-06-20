@@ -31,13 +31,17 @@ def main() -> None:
     parser.add_argument("--all", action="store_true",
                         help="Re-process works that already have enrichment_issn_l "
                              "(default: only works still missing it).")
+    parser.add_argument("--delay", type=float, default=0.2,
+                        help="Seconds to sleep between works (polite-pool throttle "
+                             "to avoid OpenAlex 429s; default 0.2).")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
     db = SessionLocal()
     try:
-        result = backfill_all(db, only_missing=not args.all, limit=args.limit)
+        result = backfill_all(db, only_missing=not args.all, limit=args.limit,
+                              delay=args.delay)
     finally:
         db.close()
 
