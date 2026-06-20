@@ -22,6 +22,7 @@ interface JournalMetricResponse {
   is_in_doaj: boolean | null;
   if_metric_kind: string | null;
   nif_updated_at: string | null;
+  works_count: number | null;
 }
 
 type FetchState =
@@ -158,6 +159,12 @@ export function JournalMetricsSection({ issnL }: JournalMetricsSectionProps): Re
           />
         )}
       </div>
+
+      {data.works_count != null && data.works_count > 0 && (
+        <p className="mt-3 text-xs text-[var(--ukip-muted)]">
+          {data.works_count} works in your catalog
+        </p>
+      )}
     </section>
   );
 }
