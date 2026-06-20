@@ -13,7 +13,6 @@ from collections import defaultdict
 from itertools import combinations
 from typing import Any
 
-from sqlalchemy import or_
 from sqlalchemy import text
 
 from backend.analyzers.topic_modeling import _validate_domain
@@ -99,7 +98,15 @@ def extract_coauthor_edges(
 ) -> int:
     """
     Generate CO_AUTHOR edges for a multi-author entity.
-    Returns number of edges created/updated.
+    Returns number of pairs recorded.
+
+    All of a work's pairs are stored in a SINGLE ``(entity_id, entity_id,
+    CO_AUTHOR)`` self-edge row, with the pairs newline-joined in ``notes``
+    (each line ``"A||B"``). The ``uq_entity_relationships_pair*`` unique indexes
+    key on ``(source_id, target_id, relation_type)`` and ignore ``notes``, so one
+    row per pair would collide; one consolidated row per work does not. This also
+    makes the write idempotent — re-enriching the same work just replaces the
+    row's pair set instead of crashing on a duplicate key.
     """
     from backend import models
 
@@ -107,45 +114,31 @@ def extract_coauthor_edges(
     if not pairs:
         return 0
 
-    source = db_session.get(models.RawEntity, entity_id)
-    source_domain = getattr(source, "domain", None)
-    notes = [f"{a}||{b}" for a, b in pairs]
+    notes_blob = "\n".join(f"{a}||{b}" for a, b in pairs)
 
-    existing_query = (
-        db_session.query(models.EntityRelationship)
-        .join(models.RawEntity, models.RawEntity.id == models.EntityRelationship.source_id)
-        .filter(
-            models.EntityRelationship.relation_type == "CO_AUTHOR",
-            models.EntityRelationship.notes.in_(notes),
-        )
+    existing_query = db_session.query(models.EntityRelationship).filter(
+        models.EntityRelationship.source_id == entity_id,
+        models.EntityRelationship.target_id == entity_id,
+        models.EntityRelationship.relation_type == "CO_AUTHOR",
     )
     if org_id is None:
         existing_query = existing_query.filter(models.EntityRelationship.org_id.is_(None))
     else:
         existing_query = existing_query.filter(models.EntityRelationship.org_id == org_id)
-    if source_domain in (None, "default"):
-        existing_query = existing_query.filter(
-            or_(models.RawEntity.domain == "default", models.RawEntity.domain.is_(None))
-        )
+
+    existing = existing_query.first()
+    if existing is not None:
+        existing.notes = notes_blob
+        existing.weight = 1.0
     else:
-        existing_query = existing_query.filter(models.RawEntity.domain == source_domain)
-
-    existing_by_note = {row.notes: row for row in existing_query.all()}
-
-    for a, b in pairs:
-        note = f"{a}||{b}"
-        existing = existing_by_note.get(note)
-        if existing:
-            existing.weight = (existing.weight or 1.0) + 1.0
-        else:
-            db_session.add(models.EntityRelationship(
-                source_id=entity_id,
-                target_id=entity_id,  # self-ref placeholder; real IDs would need author entity lookup
-                relation_type="CO_AUTHOR",
-                weight=1.0,
-                notes=note,
-                org_id=org_id,
-            ))
+        db_session.add(models.EntityRelationship(
+            source_id=entity_id,
+            target_id=entity_id,  # self-ref placeholder; real IDs would need author entity lookup
+            relation_type="CO_AUTHOR",
+            weight=1.0,
+            notes=notes_blob,
+            org_id=org_id,
+        ))
 
     return len(pairs)
 
@@ -232,18 +225,22 @@ def coauthorship_network(
 
     edges_raw = _load_coauthor_edges(domain_id, org_id=org_id)
 
-    # Parse edges from notes field (format: "Author A||Author B")
+    # Parse edges from the notes field. A row holds one or more pairs, one per
+    # line (format: "Author A||Author B"). Single-pair rows (legacy data) have
+    # no newline and parse as a single line, so this stays backward-compatible.
     edge_weights: dict[tuple[str, str], float] = defaultdict(float)
     for row in edges_raw:
-        notes = row.get("notes", "")
-        if "||" not in notes:
-            continue
-        parts = notes.split("||", 1)
-        a, b = parts[0].strip(), parts[1].strip()
-        if not a or not b:
-            continue
-        key = (min(a, b), max(a, b))
-        edge_weights[key] += row.get("weight", 1.0)
+        notes = row.get("notes") or ""
+        weight = row.get("weight", 1.0) or 1.0
+        for line in notes.split("\n"):
+            if "||" not in line:
+                continue
+            parts = line.split("||", 1)
+            a, b = parts[0].strip(), parts[1].strip()
+            if not a or not b:
+                continue
+            key = (min(a, b), max(a, b))
+            edge_weights[key] += weight
 
     # Filter by min_weight
     filtered_edges = {k: w for k, w in edge_weights.items() if w >= min_weight}

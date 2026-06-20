@@ -221,7 +221,13 @@ class TestEnrichmentHook:
                 .filter(models.EntityRelationship.source_id == entity.id)
                 .all()
             )
-            assert len(rows) == 3  # 3 pairs from 3 authors
+            # All pairs are consolidated into ONE self-edge row (see
+            # extract_coauthor_edges) so it stays within the unique index.
+            assert len(rows) == 1
+            notes = rows[0].notes
+            assert "Alice||Bob" in notes
+            assert "Alice||Carol" in notes
+            assert "Bob||Carol" in notes
         finally:
             db.close()
 
@@ -278,7 +284,8 @@ class TestEnrichmentHook:
                 .filter(models.EntityRelationship.source_id == entity.id)
                 .count()
             )
-            assert count == 3
+            # 3 pairs consolidated into a single self-edge row.
+            assert count == 1
         finally:
             db.close()
 
