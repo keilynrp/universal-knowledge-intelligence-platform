@@ -108,11 +108,12 @@ class TestKnownAttributeKeys:
             "affiliations",
             "canonical_affiliations",
             "author_affiliations",
+            "issn_l",
         }
         assert expected == KNOWN_ATTRIBUTE_KEYS
 
     def test_has_documented_key_count(self):
-        assert len(KNOWN_ATTRIBUTE_KEYS) == 15
+        assert len(KNOWN_ATTRIBUTE_KEYS) == 16
 
     def test_all_keys_are_strings(self):
         assert all(isinstance(k, str) for k in KNOWN_ATTRIBUTE_KEYS)

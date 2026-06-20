@@ -39,6 +39,7 @@ from backend.routers import (
     analytics,
     analytics_analyzers,
     analytics_ops,
+    journals,
     annotations,
     api_keys,
     artifacts,
@@ -470,6 +471,7 @@ app.include_router(domains.router)
 app.include_router(analytics.router)
 app.include_router(analytics_analyzers.router)
 app.include_router(analytics_ops.router)
+app.include_router(journals.router)
 app.include_router(backup_ops.router)
 app.include_router(derived_status.router)
 app.include_router(enrichment_schedule.router)

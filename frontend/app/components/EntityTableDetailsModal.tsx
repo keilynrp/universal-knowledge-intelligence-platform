@@ -8,6 +8,7 @@ import { EnrichmentFailureDetails, parseEnrichmentFailure, FailureReasonBadge } 
 import { apiFetch } from "@/lib/api";
 import type { Entity } from "./EntityTable.types";
 import { EntityConcept } from "./ui";
+import { JournalMetricsSection } from "./JournalMetricsSection";
 
 export interface EntityTableDetailsModalProps {
     entity: Entity | null;
@@ -953,6 +954,9 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
 
     const normalizedAttributes = parseJsonObject(entity.normalized_json);
     const sourceAttributes = parseJsonObject(entity.attributes_json);
+    const issnL = typeof sourceAttributes.issn_l === "string" && sourceAttributes.issn_l.trim()
+        ? sourceAttributes.issn_l.trim()
+        : null;
     const mergedExtendedAttributes = { ...sourceAttributes, ...normalizedAttributes };
     const abstractMapping = resolveAbstractMapping(normalizedAttributes, sourceAttributes);
     const attributeSources = [mergedExtendedAttributes, sourceAttributes, normalizedAttributes];
@@ -1142,6 +1146,12 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
                             </section>
                         )}
                     </div>
+                    {issnL && (
+                        <section>
+                            <h3 className="mb-4 text-sm font-semibold text-gray-900 dark:text-white">Journal</h3>
+                            <JournalMetricsSection issnL={issnL} />
+                        </section>
+                    )}
                     {entity.enrichment_status === "failed" && (() => {
                         const failure = parseEnrichmentFailure(entity.attributes_json);
                         return (

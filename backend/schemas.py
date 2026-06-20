@@ -64,6 +64,7 @@ class EntityAttributesDict(TypedDict, total=False):
     enrichment_license: "str | None"
     enrichment_venue: "str | None"
     enrichment_failure: str
+    issn_l: str
 
 
 KNOWN_ATTRIBUTE_KEYS: frozenset = frozenset(EntityAttributesDict.__annotations__.keys())
@@ -931,3 +932,51 @@ class SecretsCheckResponse(BaseModel):
 class SecretsOverviewResponse(BaseModel):
     check: SecretsCheckResponse
     events: list[SecretRotationEventResponse]
+
+
+# ---------------------------------------------------------------------------
+# Journal metrics schemas
+# ---------------------------------------------------------------------------
+
+class JournalMetricResponse(BaseModel):
+    issn_l: str
+    display_name: Optional[str] = None
+    source_id: Optional[str] = None
+    two_yr_mean_citedness: Optional[float] = None
+    h_index: Optional[int] = None
+    normalized_impact_factor: Optional[float] = None
+    nif_field: Optional[str] = None
+    apc_usd: Optional[int] = None          # whole currency units, not float
+    apc_currency: Optional[str] = None
+    apc_source: Optional[str] = None
+    is_in_doaj: Optional[bool] = None
+    if_metric_kind: Optional[str] = None
+    nif_updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class JournalApcBucket(BaseModel):
+    currency: Optional[str] = None
+    count: int
+    min: Optional[int] = None
+    max: Optional[int] = None
+    median: Optional[float] = None
+
+
+class JournalNifByField(BaseModel):
+    nif_field: Optional[str] = None
+    journal_count: int
+    mean_nif: float
+
+
+class JournalOAShare(BaseModel):
+    in_doaj: int
+    total: int
+    pct: float
+
+
+class JournalStatsResponse(BaseModel):
+    apc_distribution: list[JournalApcBucket]
+    open_access_share: JournalOAShare
+    nif_by_field: list[JournalNifByField]
