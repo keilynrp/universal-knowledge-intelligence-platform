@@ -103,9 +103,9 @@ export function JournalsRankingTable({
                 Journal
               </th>
 
-              {/* Subfield — non-sortable */}
+              {/* Discipline (OpenAlex field) — non-sortable */}
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--ukip-muted)]">
-                Subfield
+                Discipline
               </th>
 
               {/* NIF — sortable */}

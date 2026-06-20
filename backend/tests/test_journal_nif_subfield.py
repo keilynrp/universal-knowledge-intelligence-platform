@@ -34,40 +34,65 @@ def test_journal_metrics_ndo_has_nif_field():
     assert JournalMetrics().nif_field is None
 
 
-# ── OpenAlex extraction ──────────────────────────────────────────────────────
-def test_fetch_source_metrics_captures_primary_subfield(monkeypatch):
+# ── OpenAlex extraction (field-level aggregation) ────────────────────────────
+def _topic(name, count, subfield, field):
+    return {"display_name": name, "count": count,
+            "subfield": {"display_name": subfield},
+            "field": {"display_name": field}}
+
+
+def test_fetch_source_metrics_captures_primary_field(monkeypatch):
     _clear("S77")
     adapter = OpenAlexAdapter()
     fake = MagicMock(status_code=200)
     fake.json.return_value = _source_body([
-        {"display_name": "Deep learning", "count": 500,
-         "subfield": {"id": "https://openalex.org/subfields/1702", "display_name": "Artificial Intelligence"}},
-        {"display_name": "Genomics", "count": 100,
-         "subfield": {"id": "https://openalex.org/subfields/1311", "display_name": "Genetics"}},
+        _topic("Deep learning", 500, "Artificial Intelligence", "Computer Science"),
+        _topic("Genomics", 100, "Genetics", "Biochemistry, Genetics and Molecular Biology"),
     ])
     monkeypatch.setattr(adapter.client, "get", lambda *a, **k: fake)
     jm = adapter.fetch_source_metrics("S77")
-    assert jm.nif_field == "Artificial Intelligence"  # top topic (highest count) wins
+    assert jm.nif_field == "Computer Science"  # dominant field by summed topic count
 
 
-def test_fetch_source_metrics_picks_highest_count_subfield_regardless_of_order(monkeypatch):
+def test_fetch_source_metrics_aggregates_count_across_topics_per_field(monkeypatch):
+    # The single biggest TOPIC is CS, but two medium Medicine topics sum higher —
+    # field-level aggregation (not single-top-topic) must win.
     _clear("S77b")
     adapter = OpenAlexAdapter()
     body = _source_body([
-        {"display_name": "Genomics", "count": 100,
-         "subfield": {"display_name": "Genetics"}},
-        {"display_name": "Deep learning", "count": 900,  # highest count, listed second
-         "subfield": {"display_name": "Artificial Intelligence"}},
+        _topic("Deep learning", 900, "Artificial Intelligence", "Computer Science"),
+        _topic("Cardiology", 600, "Cardiology", "Medicine"),
+        _topic("Oncology", 600, "Oncology", "Medicine"),
     ])
     body["id"] = "https://openalex.org/S77b"
     fake = MagicMock(status_code=200)
     fake.json.return_value = body
     monkeypatch.setattr(adapter.client, "get", lambda *a, **k: fake)
     jm = adapter.fetch_source_metrics("S77b")
-    assert jm.nif_field == "Artificial Intelligence"
+    assert jm.nif_field == "Medicine"  # 1200 summed > 900
 
 
-def test_fetch_source_metrics_subfield_none_when_no_topics(monkeypatch):
+def test_fetch_source_metrics_field_beats_spurious_subfield(monkeypatch):
+    # Regression for NEJM/JAMA: one enormous health-economics topic maps to the
+    # "Economics and Econometrics" subfield and dominates subfield/max-topic
+    # selection, but the journal is overwhelmingly Medicine at the field level.
+    _clear("Snejm")
+    adapter = OpenAlexAdapter()
+    body = _source_body([
+        _topic("Cost-effectiveness analysis", 13000,
+               "Economics and Econometrics", "Economics, Econometrics and Finance"),
+        _topic("Clinical medicine", 9000, "General Health Professions", "Medicine"),
+        _topic("Cardiology", 9000, "Cardiology", "Medicine"),
+    ])
+    body["id"] = "https://openalex.org/Snejm"
+    fake = MagicMock(status_code=200)
+    fake.json.return_value = body
+    monkeypatch.setattr(adapter.client, "get", lambda *a, **k: fake)
+    jm = adapter.fetch_source_metrics("Snejm")
+    assert jm.nif_field == "Medicine"  # 18000 summed Medicine > 13000 Economics
+
+
+def test_fetch_source_metrics_field_none_when_no_topics(monkeypatch):
     _clear("S78")
     adapter = OpenAlexAdapter()
     body = _source_body([])
@@ -79,10 +104,10 @@ def test_fetch_source_metrics_subfield_none_when_no_topics(monkeypatch):
     assert jm.nif_field is None
 
 
-def test_fetch_source_metrics_subfield_none_when_topic_lacks_subfield(monkeypatch):
+def test_fetch_source_metrics_field_none_when_topic_lacks_field(monkeypatch):
     _clear("S79")
     adapter = OpenAlexAdapter()
-    body = _source_body([{"display_name": "Mystery", "count": 5}])  # no "subfield" key
+    body = _source_body([{"display_name": "Mystery", "count": 5}])  # no "field" key
     body["id"] = "https://openalex.org/S79"
     fake = MagicMock(status_code=200)
     fake.json.return_value = body
