@@ -48,6 +48,21 @@ def test_search_by_doi_gives_up_after_max_retries(monkeypatch):
     assert adapter.search_by_doi("10.1/x") is None  # persistent 429 → None, no crash
 
 
+def test_get_logs_clear_message_on_retry(monkeypatch, caplog):
+    """A retried 429 emits an intentional, readable log line, so the raw httpx
+    429 noise can be quieted without hiding that a retry happened."""
+    import logging
+    monkeypatch.setattr(oa_mod.time, "sleep", lambda *_: None)
+    adapter = OpenAlexAdapter()
+    monkeypatch.setattr(adapter.client, "get",
+                        _seq_get([_resp(429, headers={"Retry-After": "1"}),
+                                  _resp(200, {"results": []})]))
+    with caplog.at_level(logging.INFO, logger="backend.adapters.enrichment.openalex"):
+        adapter.search_by_doi("10.1/x")
+    msgs = " ".join(r.getMessage().lower() for r in caplog.records)
+    assert "429" in msgs and "retry" in msgs
+
+
 def test_non_rate_limit_error_is_not_retried(monkeypatch):
     """A 404 must NOT trigger retries — only 429/503 do."""
     monkeypatch.setattr(oa_mod.time, "sleep", lambda *_: None)
