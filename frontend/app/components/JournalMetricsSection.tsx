@@ -41,8 +41,10 @@ export function JournalMetricsSection({ issnL }: JournalMetricsSectionProps): Re
   useEffect(() => {
     if (!issnL) return;
 
+    // No synchronous setState here: the initial "idle" state already renders the
+    // loading skeleton (see render below), so resetting to "loading" up-front would
+    // just trigger an extra cascading render (flagged by react-hooks lint).
     let cancelled = false;
-    setState({ status: "loading" });
 
     apiFetch(`/journals/${encodeURIComponent(issnL)}`)
       .then(async (res) => {
