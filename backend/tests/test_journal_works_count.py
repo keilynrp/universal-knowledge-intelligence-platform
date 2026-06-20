@@ -2,7 +2,7 @@ import json
 import pathlib
 import re
 
-from backend.models import RawEntity
+from backend.models import JournalMetric, RawEntity
 
 
 def test_raw_entity_has_enrichment_issn_l(db_session):
@@ -96,3 +96,30 @@ def test_works_count_filtered_by_issns(db_session):
     db_session.add(RawEntity(primary_label="b", org_id=None, enrichment_issn_l="Z"))
     db_session.commit()
     assert works_count_by_issn(db_session, None, issns=["X"]) == {"X": 1}
+
+
+def test_list_includes_works_count(client, auth_headers, db_session):
+    db_session.add(JournalMetric(org_id=None, issn_l="0028-0836", normalized_impact_factor=1.5))
+    db_session.add(RawEntity(primary_label="w1", org_id=None, enrichment_issn_l="0028-0836"))
+    db_session.add(RawEntity(primary_label="w2", org_id=None, enrichment_issn_l="0028-0836"))
+    db_session.commit()
+    r = client.get("/journals", headers=auth_headers)
+    assert r.status_code == 200
+    row = next(j for j in r.json() if j["issn_l"] == "0028-0836")
+    assert row["works_count"] == 2
+
+
+def test_list_works_count_zero_when_no_entities(client, auth_headers, db_session):
+    db_session.add(JournalMetric(org_id=None, issn_l="1111-2222", normalized_impact_factor=1.0))
+    db_session.commit()
+    r = client.get("/journals", headers=auth_headers)
+    row = next(j for j in r.json() if j["issn_l"] == "1111-2222")
+    assert row["works_count"] == 0
+
+
+def test_single_includes_works_count(client, auth_headers, db_session):
+    db_session.add(JournalMetric(org_id=None, issn_l="0028-0836"))
+    db_session.add(RawEntity(primary_label="w1", org_id=None, enrichment_issn_l="0028-0836"))
+    db_session.commit()
+    r = client.get("/journals/0028-0836", headers=auth_headers)
+    assert r.status_code == 200 and r.json()["works_count"] == 1
