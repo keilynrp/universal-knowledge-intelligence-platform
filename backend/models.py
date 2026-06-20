@@ -48,6 +48,7 @@ class UniversalEntity(Base):
     enrichment_source = Column(String, nullable=True)
     enrichment_status = Column(String, default="none", index=True)
     enrichment_failure_reason = Column(String(30), nullable=True)
+    enrichment_issn_l = Column(String, nullable=True, index=True)
 
     # Sprint 72 — Quality Score
     quality_score = Column(Float, nullable=True, index=True)
