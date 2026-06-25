@@ -3,6 +3,8 @@
 Revision ID: d6e7f8a9b0c1
 Revises: c5e6f7a8b9c0
 """
+from __future__ import annotations
+
 import sqlalchemy as sa
 from alembic import op
 
@@ -35,6 +37,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_journal_metrics_nif_bayes", table_name="journal_metrics")
+    bind = op.get_bind()
+    existing_idx = {i["name"] for i in sa.inspect(bind).get_indexes("journal_metrics")}
+    if "ix_journal_metrics_nif_bayes" in existing_idx:
+        op.drop_index("ix_journal_metrics_nif_bayes", table_name="journal_metrics")
     for name, _ in _COLS:
-        op.drop_column("journal_metrics", name)
+        if _has_column(bind, "journal_metrics", name):
+            op.drop_column("journal_metrics", name)
