@@ -65,11 +65,11 @@ def _works_last_2_complete_years(counts) -> Optional[int]:
     complete = [
         c for c in counts
         if isinstance(c.get("year"), int) and c["year"] < current_year
-        and c.get("works_count") is not None
+        and isinstance(c.get("works_count"), (int, float))
     ]
     if not complete:
         return None
-    complete.sort(key=lambda c: c["year"], reverse=True)
+    complete.sort(key=lambda row: row["year"], reverse=True)
     return sum(int(c["works_count"]) for c in complete[:2])
 
 

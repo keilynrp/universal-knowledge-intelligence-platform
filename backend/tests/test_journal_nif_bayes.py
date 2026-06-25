@@ -1,5 +1,8 @@
+import datetime as _dt
+
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+from backend.adapters.enrichment.openalex import _works_last_2_complete_years
 
 
 def test_single_head_is_nif_bayes():
@@ -13,10 +16,6 @@ def test_journalmetric_has_bayes_columns():
     cols = set(JournalMetric.__table__.columns.keys())
     assert {"works_2yr", "nif_bayes", "nif_ci_low",
             "nif_ci_high", "nif_bayes_updated_at"} <= cols
-
-
-import datetime as _dt
-from backend.adapters.enrichment.openalex import _works_last_2_complete_years
 
 
 def test_works_last_2_complete_years_basic():
@@ -34,6 +33,17 @@ def test_works_last_2_complete_years_empty_or_missing():
     assert _works_last_2_complete_years([]) is None
     assert _works_last_2_complete_years(None) is None
     assert _works_last_2_complete_years([{"year": "x"}]) is None
+
+
+def test_works_last_2_complete_years_filters_non_numeric_works_count():
+    yr = _dt.datetime.now(_dt.timezone.utc).year
+    # string works_count is filtered out (→ None when it's the only entry)
+    assert _works_last_2_complete_years([{"year": yr - 1, "works_count": "bad"}]) is None
+    # float works_count is accepted and cast
+    assert _works_last_2_complete_years([
+        {"year": yr - 1, "works_count": 40.0},
+        {"year": yr - 2, "works_count": 30},
+    ]) == 70
 
 
 def test_upsert_persists_works_2yr(db_session):
