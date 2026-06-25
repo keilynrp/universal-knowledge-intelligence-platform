@@ -516,7 +516,7 @@ def test_journals_api_exposes_nif_bayes(client, auth_headers, db_session):
 
 - [ ] **Step 3: Add the response fields**
 
-In `backend/schemas.py`, in `JournalMetricResponse`, after `nif_updated_at` (line 954):
+In `backend/schemas.py`, in `JournalMetricResponse`, after `works_count` (line 955, the last field):
 ```python
     nif_bayes: Optional[float] = None
     nif_ci_low: Optional[float] = None
