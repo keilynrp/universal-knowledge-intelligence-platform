@@ -1301,6 +1301,16 @@ class JournalMetric(Base):
     nif_field = Column(String, nullable=True)  # OpenAlex field used as NIF denominator bucket
     nif_updated_at = Column(DateTime, nullable=True)
 
+    # Sampling size for the Bayesian model: OpenAlex 2yr paper count.
+    works_2yr = Column(Integer, nullable=True)
+
+    # Bayesian (Empirical-Bayes Gamma-Poisson) companion to the NIF —
+    # written by normalize_impact_factors_bayes, sibling of normalized_impact_factor.
+    nif_bayes = Column(Float, nullable=True, index=True)
+    nif_ci_low = Column(Float, nullable=True)
+    nif_ci_high = Column(Float, nullable=True)
+    nif_bayes_updated_at = Column(DateTime, nullable=True)
+
     # Set explicitly by the upsert service / batch normalizer; no auto-default
     # so a NULL value distinguishes a row that was never written.
     updated_at = Column(DateTime, nullable=True)
