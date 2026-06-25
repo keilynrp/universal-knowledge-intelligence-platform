@@ -72,9 +72,16 @@ The `nif_bayes*` columns are written only by the batch (§5), never by the upser
 
 **Eligibility:** journals with `two_yr_mean_citedness` AND `works_2yr` not null. Rows missing `works_2yr` are skipped → `nif_bayes` stays null (graceful degradation; renders without a band until re-enriched).
 
-**Per `nif_field` bucket:**
+**Bucketing** mirrors `normalize_impact_factors` exactly: group by `r.nif_field or "all"` (journals with null `nif_field` fall into a shared `"all"` bucket rather than being skipped), so the two metrics partition journals identically.
+
+**Per bucket:**
 1. For each journal: `n_j = works_2yr`; implied citations `C_j = round(rate_j * n_j)` where `rate_j = two_yr_mean_citedness`.
-2. **Gamma prior `(α, β)` by method of moments** over the bucket's rates: prior mean `m`, between-journal variance `v` (descended of the mean sampling component); `α = m²/v`, `β = m/v`, with guards (`v > ε`, `m > 0`).
+2. **Gamma prior `(α, β)` by method of moments**, with the Poisson sampling component removed from the between-journal variance so the prior reflects *true* between-journal dispersion, not noise:
+   - Prior mean (pooled rate): `m = Σ_j C_j / Σ_j n_j`.
+   - Each journal rate `rate_j = C_j/n_j` has Poisson sampling variance ≈ `m / n_j`. The raw `Var_j(rate_j)` therefore overstates the prior variance; subtract the mean sampling component:
+     `v = max( Var_j(rate_j) − mean_j(m / n_j), ε )`.
+     (This is exactly the POC's `tau2 = max(var_y − mean_s2, ε)`; a naive `np.var(rates)` would overstate `v` and under-shrink.)
+   - `α = m²/v`, `β = m/v`, with guards (`m > 0`; `v` floored at `ε`).
 3. **Small buckets** (`len < K`, default `K = 5` → e.g. Materials n=1, Mathematics n=2, Chemistry n=3) use a **global prior** pooled over all eligible journals instead of an unstable 1–2-point prior.
 
 **Per journal (conjugate update):**
