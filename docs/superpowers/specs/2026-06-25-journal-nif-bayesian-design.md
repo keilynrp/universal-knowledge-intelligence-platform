@@ -57,7 +57,7 @@ In `fetch_source_metrics` (~line 141), the full OpenAlex source `body` is alread
 ```
 New helper `_works_last_2_complete_years(counts)`: sum `works_count` over the two most recent **complete** calendar years present (exclude the current partial year). Returns `None` when the data is absent/empty. Add `works_2yr: Optional[int] = None` to the `JournalMetrics` object (`backend/schemas_enrichment.py`).
 
-**Cache note:** `_SOURCE_CACHE` stores the parsed `data` dict; pre-existing entries won't carry `works_2yr` → `.get("works_2yr")` defaults `None`, and the `--refresh` flag (#89) re-fetches. No cache-version bump needed.
+**Cache note:** `_SOURCE_CACHE` is **Redis-backed** (survives across processes) and stores the parsed `data` dict; pre-existing entries won't carry `works_2yr` → `body.get("works_2yr")` defaults `None`. To repopulate, the backfill (§6) calls `clear_source_cache()` (the cache-buster #89 added, used by `journal_backfill.py`) before re-fetching. No cache-version bump needed.
 
 ### 4. Upsert — `backend/services/journal_metrics_service.py`
 In the JournalMetric upsert (the block around line 36 that copies `two_yr_mean_citedness`), persist the new size field when present:

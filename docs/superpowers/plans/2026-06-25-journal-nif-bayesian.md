@@ -447,19 +447,19 @@ git commit -m "feat(journals): empirical-Bayes Gamma-Poisson NIF shrinkage batch
 
 ```python
 # add to backend/tests/test_journal_nif_bayes.py
-def test_recompute_returns_both_counters(client, admin_headers, db_session):
+def test_recompute_returns_both_counters(client, auth_headers, db_session):
     from backend.models import JournalMetric
     for i in range(6):
         db_session.add(JournalMetric(org_id=None, issn_l=f"R-{i}", nif_field="Medicine",
                                      two_yr_mean_citedness=5.0, works_2yr=400))
     db_session.commit()
-    resp = client.post("/journals/normalize", headers=admin_headers)
+    resp = client.post("/journals/normalize", headers=auth_headers)
     assert resp.status_code == 200
     body = resp.json()
     assert "updated" in body and "updated_bayes" in body
     assert body["updated_bayes"] == 6
 ```
-> Use whatever admin-auth fixture the repo's conftest provides (e.g. `admin_headers`); match the pattern used by the other analytics_ops tests.
+> **Fixture:** use `auth_headers` — the conftest's **super_admin** token (there is no `admin_headers` fixture; `test_journal_normalization_endpoint.py` authenticates this same endpoint with `auth_headers`). This is **load-bearing, not cosmetic**: super_admin resolves to `org_id=None`, so the batch's scope matches the seeded `org_id=None` rows and `updated_bayes == 6`. A non-super-admin "admin" would resolve to `LEGACY_GLOBAL_ORG_ID = -1`, the batch would filter `org_id == -1`, miss the rows, and assert `0`. Do not substitute a differently-scoped fixture.
 
 - [ ] **Step 2: Run — expect FAIL** (`updated_bayes` missing).
 
@@ -499,13 +499,13 @@ git commit -m "feat(journals): recompute writes nif_bayes alongside NIF"
 
 ```python
 # add to backend/tests/test_journal_nif_bayes.py
-def test_journals_api_exposes_nif_bayes(client, admin_headers, db_session):
+def test_journals_api_exposes_nif_bayes(client, auth_headers, db_session):
     from backend.models import JournalMetric
     db_session.add(JournalMetric(org_id=None, issn_l="X-1", nif_field="Medicine",
                                  two_yr_mean_citedness=5.0, works_2yr=400,
                                  nif_bayes=1.02, nif_ci_low=0.8, nif_ci_high=1.25))
     db_session.commit()
-    resp = client.get("/journals", headers=admin_headers)
+    resp = client.get("/journals", headers=auth_headers)
     assert resp.status_code == 200
     row = next(r for r in resp.json() if r["issn_l"] == "X-1")
     assert row["nif_bayes"] == 1.02
@@ -545,27 +545,27 @@ git commit -m "feat(journals): expose nif_bayes + credible interval on read API"
 
 ```python
 # add to backend/tests/test_journal_nif_bayes.py
-def test_backfill_populates_and_runs_batch(db_session, monkeypatch):
+def test_backfill_populates_and_runs_batch(db_session):
     from backend.models import JournalMetric
-    import backend.scripts.backfill_nif_bayes as bf
+    from backend.schemas_enrichment import JournalMetrics
+    from backend.scripts.backfill_nif_bayes import run_backfill
     for i in range(6):
         db_session.add(JournalMetric(org_id=None, issn_l=f"BF-{i}", source_id=f"S{i}",
                                      nif_field="Medicine", two_yr_mean_citedness=5.0))
     db_session.commit()
 
-    # Stub the per-source fetch to return a works_2yr without hitting OpenAlex.
-    def fake_fetch(source_id, refresh=False):
-        from backend.schemas_enrichment import JournalMetrics
-        return JournalMetrics(issn_l=None, source_id=source_id, works_2yr=400)
-    monkeypatch.setattr(bf, "_fetch_works_2yr", lambda sid, refresh: 400)
+    # Fake adapter: returns a JournalMetrics with works_2yr, no network.
+    class _FakeAdapter:
+        def fetch_source_metrics(self, source_id):
+            return JournalMetrics(issn_l=None, source_id=source_id, works_2yr=400)
 
-    updated = bf.run_backfill(db_session, org_id=None, refresh=False)
+    updated = run_backfill(db_session, org_id=None, refresh=False, adapter=_FakeAdapter())
     assert updated == 6
     rows = db_session.query(JournalMetric).all()
     assert all(r.works_2yr == 400 for r in rows)
     assert all(r.nif_bayes is not None for r in rows)
 ```
-> Adjust the monkeypatch seam (`_fetch_works_2yr`) to match the function name you implement in Step 3.
+> `run_backfill` takes an injectable `adapter` so the test never hits OpenAlex (no monkeypatch). With `refresh=False` the test also never calls `clear_source_cache()` (Redis).
 
 - [ ] **Step 2: Run — expect FAIL** (module does not exist).
 
@@ -575,44 +575,47 @@ def test_backfill_populates_and_runs_batch(db_session, monkeypatch):
 # backend/scripts/backfill_nif_bayes.py
 """Backfill works_2yr for existing journals, then recompute nif_bayes.
 
-Usage: python -m backend.scripts.backfill_nif_bayes [--org-id N] [--refresh]
+Usage: python -m backend.scripts.backfill_nif_bayes [--org-id N] [--refresh] [--delay 0.1]
 
-Re-fetches each journal's OpenAlex source to populate works_2yr (honoring the
-adapter's existing 429/503 retry+throttle), then runs the Empirical-Bayes batch.
-Idempotent and org-scoped.
+Iterates journal_metrics rows directly (one OpenAlex /sources fetch per journal,
+not per work), populates works_2yr, then runs the Empirical-Bayes batch.
+Idempotent and org-scoped. With --refresh, clears the Redis-backed source cache
+first (via clear_source_cache, #89) so stale cached dicts lacking works_2yr are
+re-fetched. --delay throttles between fetches to stay in OpenAlex's polite pool.
 """
 import argparse
+import time
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
 from backend.database import SessionLocal
 from backend.models import JournalMetric
+from backend.adapters.enrichment.openalex import OpenAlexAdapter, clear_source_cache
 from backend.analyzers.journal_normalization_bayes import normalize_impact_factors_bayes
 
 
-def _fetch_works_2yr(source_id: str, refresh: bool) -> Optional[int]:
-    """Fetch the OpenAlex source and return its 2yr works count, or None."""
-    from backend.adapters.enrichment.openalex import OpenAlexEnricher
-    enr = OpenAlexEnricher()
-    jm = enr.fetch_source_metrics(source_id, refresh=refresh) if _supports_refresh(enr) \
-        else enr.fetch_source_metrics(source_id)
-    return getattr(jm, "works_2yr", None) if jm else None
+def run_backfill(db: Session, org_id: Optional[int], refresh: bool = False,
+                 adapter=None, delay: float = 0.0) -> int:
+    """Populate works_2yr from OpenAlex per journal, then recompute nif_bayes.
 
+    `adapter` is injectable for testing (must expose `fetch_source_metrics(source_id)`
+    returning a JournalMetrics with `works_2yr`). Returns rows updated by the batch.
+    """
+    if refresh:
+        clear_source_cache()                       # Redis: drop stale pre-works_2yr dicts
+    adapter = adapter or OpenAlexAdapter()
 
-def _supports_refresh(enr) -> bool:
-    import inspect
-    return "refresh" in inspect.signature(enr.fetch_source_metrics).parameters
-
-
-def run_backfill(db: Session, org_id: Optional[int], refresh: bool) -> int:
     q = db.query(JournalMetric).filter(JournalMetric.source_id.isnot(None))
     if org_id is not None:
         q = q.filter(JournalMetric.org_id == org_id)
-    for row in q.all():
-        w = _fetch_works_2yr(row.source_id, refresh)
-        if w is not None:
-            row.works_2yr = w
+
+    for i, row in enumerate(q.all()):
+        if delay and i:
+            time.sleep(delay)
+        jm = adapter.fetch_source_metrics(row.source_id)
+        if jm is not None and getattr(jm, "works_2yr", None) is not None:
+            row.works_2yr = jm.works_2yr
     db.flush()
     updated = normalize_impact_factors_bayes(db, org_id=org_id)
     db.commit()
@@ -623,10 +626,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--org-id", type=int, default=None)
     ap.add_argument("--refresh", action="store_true")
+    ap.add_argument("--delay", type=float, default=0.0)
     args = ap.parse_args()
     db = SessionLocal()
     try:
-        n = run_backfill(db, org_id=args.org_id, refresh=args.refresh)
+        n = run_backfill(db, org_id=args.org_id, refresh=args.refresh, delay=args.delay)
         print(f"nif_bayes recomputed for {n} journals")
     finally:
         db.close()
@@ -635,7 +639,7 @@ def main():
 if __name__ == "__main__":
     main()
 ```
-> Verify the real adapter class/method name (`OpenAlexEnricher.fetch_source_metrics`) against `backend/adapters/enrichment/openalex.py` and adjust the import/call if the class is named differently. The `_supports_refresh` shim tolerates whether `--refresh` (#89) is a kwarg.
+> Uses the real adapter API: `OpenAlexAdapter` + `clear_source_cache` (both already exported from `backend/adapters/enrichment/openalex.py`, used by `backend/services/journal_backfill.py`). `fetch_source_metrics(source_id)` is single-arg (no `refresh` kwarg); cache-busting is the separate `clear_source_cache()` call.
 
 - [ ] **Step 4: Run — expect PASS**
 
