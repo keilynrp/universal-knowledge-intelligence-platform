@@ -35,6 +35,7 @@ class JournalMetrics(BaseModel):
     is_in_doaj: Optional[bool] = Field(default=None, description="Indexed in DOAJ")
     nif_field: Optional[str] = Field(default=None, description="OpenAlex primary field — normalization bucket for the NIF")
     normalized_impact_factor: Optional[float] = Field(default=None, description="Field-normalized IF (filled by batch)")
+    works_2yr: Optional[int] = Field(default=None, description="OpenAlex 2yr paper count (Bayesian model sample size)")
 
 
 class EnrichedRecord(BaseModel):

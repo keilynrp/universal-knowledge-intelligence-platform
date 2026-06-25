@@ -37,6 +37,8 @@ def upsert_journal_metric(
         row.two_yr_mean_citedness = jm.two_yr_mean_citedness
     if jm.h_index is not None:
         row.h_index = jm.h_index
+    if jm.works_2yr is not None:
+        row.works_2yr = jm.works_2yr
     if jm.nif_field:
         # OpenAlex primary subfield → the NIF normalization bucket. Only overwrite
         # when present so a later cached/pre-subfield upsert can't wipe it.

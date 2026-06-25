@@ -13,3 +13,32 @@ def test_journalmetric_has_bayes_columns():
     cols = set(JournalMetric.__table__.columns.keys())
     assert {"works_2yr", "nif_bayes", "nif_ci_low",
             "nif_ci_high", "nif_bayes_updated_at"} <= cols
+
+
+import datetime as _dt
+from backend.adapters.enrichment.openalex import _works_last_2_complete_years
+
+
+def test_works_last_2_complete_years_basic():
+    yr = _dt.datetime.now(_dt.timezone.utc).year
+    counts = [
+        {"year": yr,     "works_count": 50},   # current (partial) — excluded
+        {"year": yr - 1, "works_count": 40},
+        {"year": yr - 2, "works_count": 30},
+        {"year": yr - 3, "works_count": 20},   # older — excluded
+    ]
+    assert _works_last_2_complete_years(counts) == 70   # 40 + 30
+
+
+def test_works_last_2_complete_years_empty_or_missing():
+    assert _works_last_2_complete_years([]) is None
+    assert _works_last_2_complete_years(None) is None
+    assert _works_last_2_complete_years([{"year": "x"}]) is None
+
+
+def test_upsert_persists_works_2yr(db_session):
+    from backend.services.journal_metrics_service import upsert_journal_metric
+    from backend.schemas_enrichment import JournalMetrics
+    jm = JournalMetrics(issn_l="1234-5678", two_yr_mean_citedness=3.0, works_2yr=120)
+    row = upsert_journal_metric(db_session, jm, org_id=None)
+    assert row.works_2yr == 120
