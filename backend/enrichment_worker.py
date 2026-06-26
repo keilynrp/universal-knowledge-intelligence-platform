@@ -581,6 +581,7 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
         if enriched_data:
             entity.enrichment_doi = enriched_data.doi
             entity.enrichment_citation_count = enriched_data.citation_count
+            entity.enrichment_work_type = enriched_data.work_type
             entity.enrichment_concepts = (
                 ", ".join(enriched_data.concepts) if enriched_data.concepts else None
             )
