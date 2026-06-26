@@ -953,6 +953,9 @@ class JournalMetricResponse(BaseModel):
     if_metric_kind: Optional[str] = None
     nif_updated_at: Optional[datetime] = None
     works_count: Optional[int] = None
+    nif_bayes: Optional[float] = None
+    nif_ci_low: Optional[float] = None
+    nif_ci_high: Optional[float] = None
 
     model_config = ConfigDict(from_attributes=True)
 

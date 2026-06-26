@@ -128,3 +128,16 @@ def test_recompute_returns_both_counters(client, auth_headers, db_session):
     body = resp.json()
     assert "updated" in body and "updated_bayes" in body
     assert body["updated_bayes"] == 6
+
+
+def test_journals_api_exposes_nif_bayes(client, auth_headers, db_session):
+    from backend.models import JournalMetric
+    db_session.add(JournalMetric(org_id=None, issn_l="X-1", nif_field="Medicine",
+                                 two_yr_mean_citedness=5.0, works_2yr=400,
+                                 nif_bayes=1.02, nif_ci_low=0.8, nif_ci_high=1.25))
+    db_session.commit()
+    resp = client.get("/journals", headers=auth_headers)
+    assert resp.status_code == 200
+    row = next(r for r in resp.json() if r["issn_l"] == "X-1")
+    assert row["nif_bayes"] == 1.02
+    assert row["nif_ci_low"] == 0.8 and row["nif_ci_high"] == 1.25
