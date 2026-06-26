@@ -382,9 +382,17 @@ Add `ft_work_type: Optional[str] = None,` to the `get_list` signature (end). In 
 ```
 (Add `import sqlalchemy as sa` at top if not present, or use `from sqlalchemy import false`.)
 
-- [ ] **Step 6: Router params**
+- [ ] **Step 6: Router params + default facet fields (REQUIRED)**
 
-In `backend/routers/entities.py`, add `ft_work_type: Optional[str] = Query(default=None)` to BOTH the entities-list route and the `/entities/facets` route, and pass `ft_work_type=ft_work_type` into the corresponding `EntityService.get_list(...)` / `get_facets(...)` calls.
+In `backend/routers/entities.py`:
+- Add `ft_work_type: Optional[str] = Query(default=None)` to BOTH the entities-list route and the `/entities/facets` route, and pass `ft_work_type=ft_work_type` into the corresponding `EntityService.get_list(...)` / `get_facets(...)` calls.
+- **Add `work_type` to the facets route's default `fields` string** (currently
+  `fields: str = Query(default="entity_type,domain,validation_status,enrichment_status,source")`):
+  ```python
+  fields: str = Query(default="entity_type,domain,validation_status,enrichment_status,source,work_type")
+  ```
+  Without this the facet never appears in the response — `FacetPanel` sends no
+  `fields` param, so the route default is what's used.
 
 - [ ] **Step 7: Run — expect PASS**
 
