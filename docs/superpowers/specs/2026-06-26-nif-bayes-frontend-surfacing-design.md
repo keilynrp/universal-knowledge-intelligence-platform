@@ -55,8 +55,16 @@ every surface must degrade silently to `—` / hidden.
 
 - `backend/routers/journals.py`: add `"nif_bayes"` to `_SORT_BY`.
 - `backend/services/journal_metrics_service.py`: map `"nif_bayes"` →
-  `JournalMetric.nif_bayes` in `_SORT_COLUMNS`, keeping the existing NULLS-last
-  ordering behavior used by the other numeric sorts.
+  `JournalMetric.nif_bayes` in `_SORT_COLUMNS`.
+- **NULLs ordering (required fix):** `list_journal_metrics` currently orders with a
+  bare `col.desc()`/`col.asc()` and **no** NULLs handling
+  (`journal_metrics_service.py:103`). On Postgres (prod), `DESC` sorts NULLs
+  *first* — and pre-backfill **every** `nif_bayes` is NULL, so the new column would
+  lead with a wall of `—`. Fix: wrap the ordering so NULLs always sort last,
+  regardless of column or direction — `q.order_by(nullslast(direction))` (import
+  `from sqlalchemy import nullslast`). Applying it to all sorts (not just
+  `nif_bayes`) is intentional: it is the correct behavior for every numeric column
+  and keeps the code path uniform.
 
 ## Data Flow
 
@@ -86,6 +94,9 @@ column header updates the param. The backend whitelist addition is what lets
 **Backend (pytest):**
 - Extend the journals-endpoint test: `sort_by=nif_bayes` returns 200 with correct
   ordering; an invalid `sort_by` still returns 422.
+- NULLs-last test: with a mix of populated and NULL `nif_bayes` rows, `order=desc`
+  returns the populated rows first and the NULL rows last (guards the prod
+  pre-backfill UX).
 
 **Repo gates:** pre-push (`scripts/pre-push-check.sh`, ESLint `--max-warnings=0`),
 Design System gate (governed `ui/` primitives only, no direct palette classes).
