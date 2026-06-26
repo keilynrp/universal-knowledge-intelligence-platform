@@ -160,8 +160,9 @@ today — then map the raw value to a category code (`workType.ts`) and localize
   round-trips; unknown raw → "Otro".
 - Adapter: `_parse_record` captures `type` into `EnrichedRecord.work_type`.
 - `get_facets`: raw counts fold into category buckets incl. "Sin clasificar".
-- Filter: `ft_work_type=Libro` returns only book-family rows; `=Sin clasificar`
-  returns null rows; invalid category → empty/ignored (define explicitly).
+- Filter: `ft_work_type=book` returns only book-family rows; `=unclassified`
+  returns NULL rows; an unknown code → empty result set. (Filter values are
+  category **codes**, never display labels.)
 - Backfill: populates `enrichment_work_type` from an injected adapter.
 
 **Frontend (Vitest):**
