@@ -231,6 +231,7 @@ class TestAttributeKeyContract:
         mock_result.doi = "10.9999/meta"
         mock_result.citation_count = 5
         mock_result.concepts = ["AI", "Metadata"]
+        mock_result.work_type = "article"
         mock_result.authors = ["Jane Doe"]
         mock_result.author_orcids = [None]
         mock_result.concept_ids = []
