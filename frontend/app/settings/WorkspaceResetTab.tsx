@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useLanguage } from "../contexts/LanguageContext";
 import type { ToastVariant } from "../components/ui";
@@ -28,10 +28,13 @@ export default function WorkspaceResetTab({
   toast: (msg: string, v?: ToastVariant) => void;
 }) {
   const { t } = useLanguage();
-  const tr = (key: string, fallback: string) => {
-    const value = t(key);
-    return value === key ? fallback : value;
-  };
+  const tr = useCallback(
+    (key: string, fallback: string) => {
+      const value = t(key);
+      return value === key ? fallback : value;
+    },
+    [t],
+  );
 
   const [preview, setPreview] = useState<ResetPreview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,7 +69,7 @@ export default function WorkspaceResetTab({
     return () => {
       active = false;
     };
-  }, [toast, t]);
+  }, [toast, tr]);
 
   const confirmationToken = preview?.confirmation_text ?? "RESET";
   const canSubmit = confirmationText.trim().toUpperCase() === confirmationToken;

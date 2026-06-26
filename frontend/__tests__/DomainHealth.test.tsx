@@ -3,14 +3,14 @@ import { render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
 vi.mock("recharts", () => ({
-  LineChart: ({ children }: any) => <div data-testid="line-chart">{children}</div>,
+  LineChart: ({ children }: { children?: React.ReactNode }) => <div data-testid="line-chart">{children}</div>,
   Line: () => <div />,
   XAxis: () => <div />,
   YAxis: () => <div />,
   CartesianGrid: () => <div />,
   Tooltip: () => <div />,
   Legend: () => <div />,
-  ResponsiveContainer: ({ children }: any) => <div>{children}</div>,
+  ResponsiveContainer: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
 }));
 
 vi.mock("../app/contexts/DomainContext", () => ({
@@ -21,7 +21,7 @@ vi.mock("../app/contexts/DomainContext", () => ({
 
 const mockApiFetch = vi.fn();
 vi.mock("@/lib/api", () => ({
-  apiFetch: (...args: any[]) => mockApiFetch(...args),
+  apiFetch: (...args: unknown[]) => mockApiFetch(...args),
 }));
 
 import DomainHealthPage from "../app/analytics/domain-health/page";

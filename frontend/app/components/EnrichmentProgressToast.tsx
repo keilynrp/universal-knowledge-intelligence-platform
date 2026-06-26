@@ -36,6 +36,9 @@ export function EnrichmentProgressToast({
 
     useEffect(() => {
         if (!batch || batch.ids.length === 0) {
+            // Intentional reset inside an effect that also sets up polling below;
+            // not purely derivable, so suppress the set-state-in-effect rule here.
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setPhase("hidden");
             return;
         }

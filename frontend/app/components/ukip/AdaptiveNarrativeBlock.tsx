@@ -120,8 +120,6 @@ function IconFromPath({ path, className = "h-7 w-7" }: { path: string; className
 
 export default function AdaptiveNarrativeBlock({
   progress,
-  currentStep,
-  totalSteps,
   recommendedActionLabel,
   recommendedActionHref,
   recommendedActionTitle,
@@ -133,8 +131,6 @@ export default function AdaptiveNarrativeBlock({
   quickActions,
 }: AdaptiveNarrativeBlockProps) {
   const safeProgress = clampPercent(progress);
-  const safeTotalSteps = Math.max(1, totalSteps);
-  const safeCurrentStep = Math.max(1, Math.min(currentStep, safeTotalSteps));
   const ctaHref = recommendedActionHref || stages.find((stage) => stage.status === "current")?.href || "/";
   const ctaLabel = recommendedActionLabel || copy.nextActionEyebrow;
   const actionTitle = recommendedActionTitle || ctaLabel;

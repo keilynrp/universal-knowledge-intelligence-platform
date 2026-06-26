@@ -144,6 +144,8 @@ export default function OrganizationsPage() {
 
   useEffect(() => {
     if (!selectedOrg) {
+      // Reset guard inside a data-fetching effect; suppress set-state-in-effect.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setBenchmarkProfiles([]);
       return;
     }
@@ -162,6 +164,9 @@ export default function OrganizationsPage() {
 
   useEffect(() => {
     if (!selectedOrg) {
+      // Reset guard inside an effect that derives editing rules below; suppress
+      // set-state-in-effect for this intentional clear.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditingRules({});
       return;
     }

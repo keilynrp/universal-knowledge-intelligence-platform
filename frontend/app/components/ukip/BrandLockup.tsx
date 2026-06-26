@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import type { BrandingSettings } from "@/app/contexts/BrandingContext";
 
 type BrandLockupSize = "sm" | "md" | "lg";
@@ -75,16 +75,20 @@ export default function BrandLockup({
 }: BrandLockupProps) {
   const logoSrc = resolveLogoUrl(branding.logo_url);
   const [logoFailed, setLogoFailed] = useState(false);
+  // Reset the failed flag when the source changes, the React-recommended way:
+  // adjust state during render via a previous-value sentinel instead of an effect
+  // (avoids the set-state-in-effect cascading-render lint rule).
+  const [prevLogoSrc, setPrevLogoSrc] = useState(logoSrc);
+  if (prevLogoSrc !== logoSrc) {
+    setPrevLogoSrc(logoSrc);
+    setLogoFailed(false);
+  }
   const classes = sizeClasses[size];
   const platformName = branding.platform_name?.trim() || "UKIP";
   const subtitle = branding.footer_text?.trim();
   const markStyle = {
     "--ukip-brand-accent": branding.accent_color || "var(--ukip-primary)",
   } as CSSProperties;
-
-  useEffect(() => {
-    setLogoFailed(false);
-  }, [logoSrc]);
 
   return (
     <div className={`flex min-w-0 items-center ${classes.gap} ${className}`}>
