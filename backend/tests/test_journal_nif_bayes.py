@@ -141,3 +141,23 @@ def test_journals_api_exposes_nif_bayes(client, auth_headers, db_session):
     row = next(r for r in resp.json() if r["issn_l"] == "X-1")
     assert row["nif_bayes"] == 1.02
     assert row["nif_ci_low"] == 0.8 and row["nif_ci_high"] == 1.25
+
+
+def test_backfill_populates_and_runs_batch(db_session):
+    from backend.models import JournalMetric
+    from backend.schemas_enrichment import JournalMetrics
+    from backend.scripts.backfill_nif_bayes import run_backfill
+    for i in range(6):
+        db_session.add(JournalMetric(org_id=None, issn_l=f"BF-{i}", source_id=f"S{i}",
+                                     nif_field="Medicine", two_yr_mean_citedness=5.0))
+    db_session.commit()
+
+    class _FakeAdapter:
+        def fetch_source_metrics(self, source_id):
+            return JournalMetrics(issn_l=None, source_id=source_id, works_2yr=400)
+
+    updated = run_backfill(db_session, org_id=None, refresh=False, adapter=_FakeAdapter())
+    assert updated == 6
+    rows = db_session.query(JournalMetric).all()
+    assert all(r.works_2yr == 400 for r in rows)
+    assert all(r.nif_bayes is not None for r in rows)
