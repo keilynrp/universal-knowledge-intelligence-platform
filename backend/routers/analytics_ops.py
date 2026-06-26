@@ -33,6 +33,7 @@ from backend.analyzers.concept_hierarchy import (
     materialize_domain_concepts,
 )
 from backend.analyzers.journal_normalization import normalize_impact_factors
+from backend.analyzers.journal_normalization_bayes import normalize_impact_factors_bayes
 from backend.analyzers.domain_health import compute_health_metrics
 from backend.analyzers.epistemic_classifier import classify_batch
 from backend.auth import get_current_user, require_role
@@ -450,8 +451,9 @@ def trigger_journal_normalization(
     # to LEGACY_GLOBAL_ORG_ID, not "all orgs").
     org_id = resolve_request_org_id(db, user)
     updated = normalize_impact_factors(db, org_id=org_id)
+    updated_bayes = normalize_impact_factors_bayes(db, org_id=org_id)
     db.commit()
-    return {"updated": updated}
+    return {"updated": updated, "updated_bayes": updated_bayes}
 
 
 # ── Domain health (community metrics) endpoints ─────────────────────────────

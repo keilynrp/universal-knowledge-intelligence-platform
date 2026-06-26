@@ -1,6 +1,7 @@
 import logging
 import time
 import urllib.parse
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 import httpx
 import re
@@ -52,6 +53,24 @@ def _primary_field(body: dict) -> Optional[str]:
     if not totals:
         return None
     return sorted(totals.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+
+
+def _works_last_2_complete_years(counts) -> Optional[int]:
+    """Sum works_count over the two most recent COMPLETE calendar years in
+    OpenAlex counts_by_year (the current, partial year is excluded). Returns
+    None when the data is absent/unusable."""
+    if not counts:
+        return None
+    current_year = datetime.now(timezone.utc).year
+    complete = [
+        c for c in counts
+        if isinstance(c.get("year"), int) and c["year"] < current_year
+        and isinstance(c.get("works_count"), (int, float))
+    ]
+    if not complete:
+        return None
+    complete.sort(key=lambda row: row["year"], reverse=True)
+    return sum(int(c["works_count"]) for c in complete[:2])
 
 
 class OpenAlexAdapter(BaseScientometricAdapter):
@@ -149,6 +168,7 @@ class OpenAlexAdapter(BaseScientometricAdapter):
             "apc_source": "openalex" if body.get("apc_usd") is not None else None,
             "is_in_doaj": body.get("is_in_doaj"),
             "nif_field": _primary_field(body),
+            "works_2yr": _works_last_2_complete_years(body.get("counts_by_year")),
         }
         _SOURCE_CACHE.set(key, data)
         return JournalMetrics(**data)
