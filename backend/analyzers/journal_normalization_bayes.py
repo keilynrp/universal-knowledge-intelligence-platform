@@ -28,6 +28,8 @@ def _fit_prior(rates: np.ndarray, ns: np.ndarray) -> tuple[float, float]:
     raw_var = float(np.var(rates))                  # observed between-journal var
     sampling = float(np.mean(m / ns))               # mean Poisson sampling var ≈ m/n
     v = max(raw_var - sampling, _EPS)
+    # Single-element input → var=0 → v=EPS → very tight prior. Acceptable edge
+    # case (e.g. an org with exactly one journal); the global prior usually covers it.
     return m * m / v, m / v
 
 

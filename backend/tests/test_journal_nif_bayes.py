@@ -3,6 +3,7 @@ import datetime as _dt
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from backend.adapters.enrichment.openalex import _works_last_2_complete_years
+from backend.models import JournalMetric
 
 
 def test_single_head_is_nif_bayes():
@@ -54,9 +55,6 @@ def test_upsert_persists_works_2yr(db_session):
     assert row.works_2yr == 120
 
 
-from backend.models import JournalMetric
-
-
 def _mk(db, **kw):
     row = JournalMetric(org_id=None, **kw)
     db.add(row); db.flush(); return row
@@ -71,7 +69,8 @@ def test_bayes_shrinks_small_journal_toward_field(db_session):
                two_yr_mean_citedness=0.2, works_2yr=5)
     n = normalize_impact_factors_bayes(db_session, org_id=None)
     assert n == 7
-    assert tiny.nif_bayes > 0.2 / (5.0)            # moved up from its raw ratio
+    raw_nif = tiny.two_yr_mean_citedness / 5.0     # 0.04 — the unshrunk ratio
+    assert tiny.nif_bayes > raw_nif                 # shrunk UP toward the field average
     assert tiny.nif_ci_low >= 0.0
     assert tiny.nif_ci_high > tiny.nif_bayes
 
@@ -85,6 +84,7 @@ def test_bayes_large_journal_barely_moves(db_session):
               two_yr_mean_citedness=9.0, works_2yr=2000)
     normalize_impact_factors_bayes(db_session, org_id=None)
     assert big.nif_ci_high - big.nif_ci_low < big.nif_bayes  # tight-ish CI
+    assert big.nif_bayes > 1.0   # rate 9 is above the field's pooled mean → stays >1
 
 
 def test_bayes_skips_rows_without_works_2yr(db_session):
