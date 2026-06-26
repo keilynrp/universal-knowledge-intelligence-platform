@@ -23,6 +23,9 @@ interface JournalMetricResponse {
   if_metric_kind: string | null;
   nif_updated_at: string | null;
   works_count: number | null;
+  nif_bayes: number | null;
+  nif_ci_low: number | null;
+  nif_ci_high: number | null;
 }
 
 type FetchState =
@@ -128,6 +131,23 @@ export function JournalMetricsSection({ issnL }: JournalMetricsSectionProps): Re
             }
             value={data.normalized_impact_factor.toFixed(2)}
             description="Field-normalized impact factor"
+            tone="violet"
+          />
+        )}
+
+        {data.nif_bayes != null && (
+          <Metric
+            label={
+              <span className="flex items-center gap-1.5">
+                NIF (Bayes) <JournalProvenanceBadge />
+              </span>
+            }
+            value={data.nif_bayes.toFixed(2)}
+            description={
+              data.nif_ci_low != null && data.nif_ci_high != null
+                ? `95% CI: ${data.nif_ci_low.toFixed(2)}–${data.nif_ci_high.toFixed(2)}`
+                : "Shrinkage-adjusted"
+            }
             tone="violet"
           />
         )}

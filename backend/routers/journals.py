@@ -17,7 +17,7 @@ from backend.services.journal_metrics_service import (
 
 router = APIRouter(tags=["journals"])
 
-_SORT_BY = {"nif", "citedness", "apc", "h_index"}
+_SORT_BY = {"nif", "citedness", "apc", "h_index", "nif_bayes"}
 _ORDER = {"asc", "desc"}
 
 
