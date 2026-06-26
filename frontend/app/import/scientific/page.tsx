@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useAssistantContextRegistration } from "@/app/contexts/AssistantContext";
@@ -107,43 +107,6 @@ function ImportProgressBar({
   );
 }
 
-/* ── Preview results table (shared) ──────────────────────────────────── */
-
-function PreviewTable({ records }: { records: PreviewRecord[] }) {
-  const { t } = useLanguage();
-  return (
-    <div className="overflow-auto rounded-xl border border-gray-200 dark:border-gray-700">
-      <table className="min-w-full text-xs">
-        <thead className="bg-gray-50 dark:bg-gray-800">
-          <tr>
-            {[
-              t("page.import.scientific.table.title"),
-              t("page.import.scientific.table.authors"),
-              t("page.import.scientific.table.year"),
-              t("page.import.scientific.table.doi"),
-            ].map((h) => (
-              <th key={h} className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-400">{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-          {records.map((r, i) => (
-            <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-              <td className="px-3 py-2 max-w-xs truncate" title={r.title}>{r.title}</td>
-              <td className="px-3 py-2 text-gray-500">
-                {(r.authors || []).slice(0, 2).join("; ")}
-                {(r.authors?.length ?? 0) > 2 ? " …" : ""}
-              </td>
-              <td className="px-3 py-2 text-gray-500">{r.year ?? "—"}</td>
-              <td className="px-3 py-2 font-mono text-gray-500 max-w-[160px] truncate">{r.doi ?? "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 /* ── OpenAlex Tab ────────────────────────────────────────────────────── */
 
 function OpenAlexTab() {
@@ -155,41 +118,10 @@ function OpenAlexTab() {
   const [issn, setIssn] = useState("");
   const [limit, setLimit] = useState(100);
   const [step, setStep] = useState<"form" | "preview" | "importing" | "done">("form");
-  const [preview, setPreview] = useState<PreviewRecord[]>([]);
   const [jobId, setJobId] = useState("");
   const [imported, setImported] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const handlePreview = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const filters: Record<string, string> = {};
-      if (author) filters.author = author;
-      if (issn) filters.issn = issn;
-
-      const resp = await apiFetch("/import/openalex", {
-        method: "POST",
-        body: JSON.stringify({ query: keyword, limit: 10, filters, preview: true }),
-      });
-      const data = await readJsonOrThrow<ImportJobResponse>(resp);
-      // For preview, fetch from entities or use a separate preview approach
-      // The endpoint returns record_count; we re-fetch using search for preview display
-      const previewResp = await apiFetch("/import/openalex", {
-        method: "POST",
-        body: JSON.stringify({ query: keyword, limit: 10, filters, preview: true }),
-      });
-      // Preview doesn't give us records back directly — use the count
-      // Actually let's adapt: do a lightweight call just for the preview table
-      setPreview([]); // We show count-based preview
-      setStep("preview");
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : tr("page.import.api.error.preview", "Preview failed"));
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleImport = async () => {
     setLoading(true);
@@ -215,7 +147,6 @@ function OpenAlexTab() {
 
   const reset = () => {
     setStep("form");
-    setPreview([]);
     setJobId("");
     setImported(0);
     setError(null);

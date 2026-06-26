@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import React from "react";
 import EpistemicAnalysisPage from "../app/analytics/epistemic/page";
 import { LanguageProvider } from "../app/contexts/LanguageContext";

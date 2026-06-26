@@ -41,8 +41,8 @@ export default function ExternalAttentionImport() {
         throw new Error(body?.detail || `HTTP ${resp.status}`);
       }
       setResult(await resp.json());
-    } catch (e: any) {
-      setError(e.message || "Import failed");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Import failed");
     } finally {
       setLoading(false);
     }
@@ -68,8 +68,8 @@ export default function ExternalAttentionImport() {
         throw new Error(body?.detail || `HTTP ${resp.status}`);
       }
       setResult(await resp.json());
-    } catch (e: any) {
-      setError(e.message || "Import failed");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Import failed");
     } finally {
       setLoading(false);
     }
