@@ -201,9 +201,22 @@ git commit -m "feat(journals): NIF (Bayes) card + credible interval in entity mo
 - Modify: `frontend/app/analytics/journals/JournalsRankingTable.tsx`
 - Test: `frontend/__tests__/JournalsRankingTable.test.tsx`
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Fix the now-ambiguous existing matcher (REQUIRED)**
 
-Append to `frontend/__tests__/JournalsRankingTable.test.tsx`. First extend the shared `rows` fixture object (line 6-8) with Bayes fields by adding a second test-local fixture to avoid disturbing existing tests:
+Adding a "Sort by NIF (Bayes)" button makes the existing test's
+`screen.getByRole("button", { name: /NIF/i })` match **two** buttons →
+`getByRole` throws. In `frontend/__tests__/JournalsRankingTable.test.tsx`, tighten
+the existing assertion (currently around line 20):
+```typescript
+  fireEvent.click(screen.getByRole("button", { name: "Sort by NIF" }));
+```
+(exact string, not `/NIF/i`). The NIF header's `aria-label` is `"Sort by NIF"`, so
+this remains unambiguous after the new column is added.
+
+- [ ] **Step 2: Write the failing tests**
+
+Append to `frontend/__tests__/JournalsRankingTable.test.tsx`. Add a test-local
+fixture with Bayes fields to avoid disturbing existing tests:
 
 ```typescript
 const bayesRows = [
@@ -234,12 +247,12 @@ test("clicking the NIF (Bayes) header calls onSort('nif_bayes')", () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect FAIL**
+- [ ] **Step 3: Run — expect FAIL**
 
 Run: `cd frontend && npx vitest run __tests__/JournalsRankingTable.test.tsx`
 Expected: FAIL (no "1.421", no "Sort by NIF (Bayes)" button).
 
-- [ ] **Step 3: Extend the `JournalRow` interface**
+- [ ] **Step 4: Extend the `JournalRow` interface**
 
 In `JournalsRankingTable.tsx`, add to `JournalRow` (after `works_count`):
 ```typescript
@@ -248,7 +261,7 @@ In `JournalsRankingTable.tsx`, add to `JournalRow` (after `works_count`):
   nif_ci_high: number | null;
 ```
 
-- [ ] **Step 4: Add the sortable header**
+- [ ] **Step 5: Add the sortable header**
 
 In `<thead>`, immediately after the NIF `<th>` block (the one whose Button calls `onSort("nif")`), add:
 ```tsx
@@ -268,7 +281,7 @@ In `<thead>`, immediately after the NIF `<th>` block (the one whose Button calls
               </th>
 ```
 
-- [ ] **Step 5: Add the cell**
+- [ ] **Step 6: Add the cell**
 
 In `<tbody>`, immediately after the NIF `<td>` (the `normalized_impact_factor` cell), add:
 ```tsx
@@ -288,14 +301,14 @@ In `<tbody>`, immediately after the NIF `<td>` (the `normalized_impact_factor` c
                 </td>
 ```
 
-- [ ] **Step 6: Run — expect PASS**
+- [ ] **Step 7: Run — expect PASS**
 
 Run: `cd frontend && npx vitest run __tests__/JournalsRankingTable.test.tsx`
 Expected: PASS.
 
 > Note: the CI text is split across two adjacent text nodes (`0.80`, `–`, `1.25`). The test matcher `/0\.80.*1\.25/` works because Testing Library's default text normalization concatenates within the parent `<span>`. If the matcher fails on node boundaries, switch to `screen.getByText((_, el) => el?.textContent === "0.80–1.25")`.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add frontend/app/analytics/journals/JournalsRankingTable.tsx frontend/__tests__/JournalsRankingTable.test.tsx
