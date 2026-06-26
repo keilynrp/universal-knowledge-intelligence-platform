@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from statistics import median as _median
 from typing import Optional, Tuple
-from sqlalchemy import func
+from sqlalchemy import func, nullslast
 from sqlalchemy.orm import Session
 
 from backend.models import JournalMetric, RawEntity
@@ -75,6 +75,7 @@ _SORT_COLUMNS = {
     "citedness": JournalMetric.two_yr_mean_citedness,
     "apc": JournalMetric.apc_usd,
     "h_index": JournalMetric.h_index,
+    "nif_bayes": JournalMetric.nif_bayes,
 }
 
 
@@ -101,7 +102,7 @@ def list_journal_metrics(
         q = q.filter(JournalMetric.nif_field == field)
     total = q.count()
     direction = col.desc() if order == "desc" else col.asc()
-    rows = q.order_by(direction).offset(offset).limit(limit).all()
+    rows = q.order_by(nullslast(direction)).offset(offset).limit(limit).all()
     return rows, total
 
 

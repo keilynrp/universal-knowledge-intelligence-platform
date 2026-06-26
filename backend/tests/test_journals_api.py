@@ -84,3 +84,31 @@ def test_stats_route_not_shadowed(client, auth_headers):
 
 def test_journals_requires_auth(client):
     assert client.get("/journals/stats").status_code in (401, 403)
+
+
+def test_list_sort_by_nif_bayes(db_session):
+    db_session.add(JournalMetric(org_id=None, issn_l="A", nif_bayes=0.5))
+    db_session.add(JournalMetric(org_id=None, issn_l="B", nif_bayes=2.0))
+    db_session.commit()
+    rows, total = list_journal_metrics(db_session, None, sort_by="nif_bayes",
+                                       order="desc", limit=10, offset=0)
+    assert total == 2 and [r.issn_l for r in rows] == ["B", "A"]
+
+
+def test_list_nif_bayes_nulls_sort_last(db_session):
+    db_session.add(JournalMetric(org_id=None, issn_l="HAS", nif_bayes=1.0))
+    db_session.add(JournalMetric(org_id=None, issn_l="NULL1", nif_bayes=None))
+    db_session.add(JournalMetric(org_id=None, issn_l="NULL2", nif_bayes=None))
+    db_session.commit()
+    rows, _ = list_journal_metrics(db_session, None, sort_by="nif_bayes",
+                                   order="desc", limit=10, offset=0)
+    assert rows[0].issn_l == "HAS"
+    assert rows[-1].nif_bayes is None
+
+
+def test_endpoint_accepts_nif_bayes_sort(client, auth_headers, db_session):
+    db_session.add(JournalMetric(org_id=None, issn_l="A", nif_bayes=2.0))
+    db_session.commit()
+    r = client.get("/journals?sort_by=nif_bayes&order=desc", headers=auth_headers)
+    assert r.status_code == 200
+    assert client.get("/journals?sort_by=bogus", headers=auth_headers).status_code == 422
