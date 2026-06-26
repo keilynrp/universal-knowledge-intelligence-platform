@@ -22,6 +22,9 @@ export interface JournalRow {
   apc_currency: string | null;
   is_in_doaj: boolean | null;
   works_count: number | null;
+  nif_bayes: number | null;
+  nif_ci_low: number | null;
+  nif_ci_high: number | null;
 }
 
 export interface JournalsRankingTableProps {
@@ -123,6 +126,21 @@ export function JournalsRankingTable({
                 </Button>
               </th>
 
+              {/* NIF (Bayes) — sortable */}
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--ukip-muted)]">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onSort("nif_bayes")}
+                  aria-label="Sort by NIF (Bayes)"
+                  className="gap-1 px-1 uppercase tracking-wider text-xs font-semibold"
+                >
+                  NIF (Bayes)
+                  <JournalProvenanceBadge />
+                  <SortIcon active={sortBy === "nif_bayes"} order={order} />
+                </Button>
+              </th>
+
               {/* Citedness — sortable */}
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--ukip-muted)]">
                 <Button
@@ -193,6 +211,20 @@ export function JournalsRankingTable({
                   {journal.normalized_impact_factor != null
                     ? journal.normalized_impact_factor.toFixed(3)
                     : "—"}
+                </td>
+                <td className="px-4 py-3 text-sm text-[var(--ukip-text)]">
+                  {journal.nif_bayes != null ? (
+                    <span className="flex flex-col">
+                      <span>{journal.nif_bayes.toFixed(3)}</span>
+                      {journal.nif_ci_low != null && journal.nif_ci_high != null && (
+                        <span className="text-xs text-[var(--ukip-muted)]">
+                          {journal.nif_ci_low.toFixed(2)}{"–"}{journal.nif_ci_high.toFixed(2)}
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 <td className="px-4 py-3 text-sm text-[var(--ukip-text)]">
                   {journal.two_yr_mean_citedness != null
