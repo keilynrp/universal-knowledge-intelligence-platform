@@ -115,3 +115,16 @@ def test_bayes_small_bucket_uses_global_prior(db_session):
                two_yr_mean_citedness=3.0, works_2yr=50)
     n = normalize_impact_factors_bayes(db_session, org_id=None)
     assert lone.nif_bayes is not None   # computed via global-prior fallback, not skipped
+
+
+def test_recompute_returns_both_counters(client, auth_headers, db_session):
+    from backend.models import JournalMetric
+    for i in range(6):
+        db_session.add(JournalMetric(org_id=None, issn_l=f"R-{i}", nif_field="Medicine",
+                                     two_yr_mean_citedness=5.0, works_2yr=400))
+    db_session.commit()
+    resp = client.post("/journals/normalize", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "updated" in body and "updated_bayes" in body
+    assert body["updated_bayes"] == 6
