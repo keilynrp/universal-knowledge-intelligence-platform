@@ -43,19 +43,26 @@ OpenAlex differentiates these clearly via `work.type`; we don't capture it today
 New module `backend/services/work_type.py` — single source of truth, used by the
 facet aggregation, the filter, and (mirrored in TS) the badges.
 
-| Category | Raw OpenAlex `type` values |
-|----------|----------------------------|
-| **Artículo** | article, review, letter, editorial |
-| **Libro** | book, monograph, book-chapter, reference-entry |
-| **Tesis/Disertación** | dissertation |
-| **Preprint** | preprint |
-| **Dataset** | dataset |
-| **Otro** | any other non-null value (report, standard, grant, peer-review, paratext, erratum, …) |
-| **Sin clasificar** | `null` (not yet captured / not backfilled) |
+**Categories are stable string codes** (locale-independent), localized to display
+labels in the frontend (i18n keys `page.work_type.<code>`, EN+ES). The backend
+never returns Spanish; it returns codes. The badges + facet labels translate them.
 
-`work_type.py` exposes: `category_for(raw: str | None) -> str` and
-`raw_values_for(category: str) -> list[str] | None` (None ⇒ the IS NULL bucket).
-The category↔raw mapping is mirrored in a small TS helper for the badges.
+| Category code | Raw OpenAlex `type` values | ES label | EN label |
+|---------------|----------------------------|----------|----------|
+| `article` | article, review, letter, editorial | Artículo | Article |
+| `book` | book, monograph, book-chapter, reference-entry | Libro | Book |
+| `thesis` | dissertation | Tesis/Disertación | Thesis |
+| `preprint` | preprint | Preprint | Preprint |
+| `dataset` | dataset | Dataset | Dataset |
+| `other` | any other non-null value (report, standard, grant, peer-review, paratext, erratum, …) | Otro | Other |
+| `unclassified` | `null` (not yet captured / not backfilled) | Sin clasificar | Unclassified |
+
+`work_type.py` exposes: `category_for(raw: str | None) -> str` (returns a code;
+`None`/unknown handled — `None`→`"unclassified"`, unmapped→`"other"`) and
+`raw_values_for(code: str) -> list[str] | None` (`None` ⇒ the IS NULL /
+`unclassified` bucket). The code↔raw mapping is mirrored in a small TS helper
+(`workType.ts`); a backend test asserts the two category-code sets match to guard
+drift.
 
 ## Components & Changes
 
@@ -71,24 +78,46 @@ The category↔raw mapping is mirrored in a small TS helper for the badges.
   `enrichment_work_type = Column(String, nullable=True, index=True)` on
   `RawEntity`.
 - Alembic migration: add the column + index (single new head).
+- **Entity response schema (REQUIRED for badges):** `backend/schemas.py` — add
+  `enrichment_work_type: Optional[str] = None` to the entity response model
+  (`EntityBase`/`Entity`, the one serialized by `GET /entities`). The frontend
+  `Entity` TypeScript interface (`frontend/app/components/EntityTable.types.ts`)
+  gains the same field. Without these two, the column is never returned and badges
+  read `undefined`. (Note: this is a first-class column, NOT an `attributes_json`
+  key — do not add it to `EntityAttributesDict`/`KNOWN_ATTRIBUTE_KEYS`.)
 
 ### 2. Facet (filter)
 - `backend/services/entity_service.py`:
   - `_FACET_FIELDS` gains `"work_type": models.RawEntity.enrichment_work_type`.
-  - `get_facets` special-cases `work_type`: aggregate raw counts, then fold into
-    categories via `work_type.category_for`, returning
-    `[{value: "Libro", count: N}, …, {value: "Sin clasificar", count: M}]`.
-  - Add `ft_work_type` to the filter signature; when present, translate the
-    category to a WHERE clause: `raw_values_for(cat)` → `IN (...)`, or
-    `enrichment_work_type IS NULL` for "Sin clasificar".
+  - `get_facets` **special-cases** `work_type` (the generic path won't work — see
+    below): run a SQL `GROUP BY enrichment_work_type` **including NULL** (do NOT
+    apply the existing `col != None`/`col != ""` filter for this field), then in
+    Python fold the raw-value rows into category codes via `category_for` and **sum
+    counts per code** — NULL rows roll into `unclassified`. Return
+    `[{value: "book", count: N}, …, {value: "unclassified", count: M}]` (codes,
+    not labels). This null bypass is REQUIRED: the generic path strips NULLs, which
+    would make `unclassified` always 0.
+  - Add `ft_work_type` to **both** `get_facets` and `get_list` signatures. When
+    present, translate the code to a WHERE clause: `raw_values_for(code)` →
+    `enrichment_work_type IN (...)`, or `enrichment_work_type IS NULL` for
+    `unclassified`. An unknown code yields an empty result set (define explicitly).
+  - Apply the existing cross-filter guard pattern so the work_type facet's own
+    counts aren't filtered by `ft_work_type` (`if ft_work_type and field !=
+    "work_type": ...`).
 - `backend/routers/entities.py`: add `ft_work_type: Optional[str]` query param to
-  the entities list and facets routes; thread it through.
+  the entities list AND facets routes; thread it through to the service.
 
 ### 3. Frontend facet
 - `frontend/app/components/FacetPanel.tsx`: add `work_type` to `FIELD_LABELS`
   (i18n key `page.import.field.work_type`), `FIELD_COLORS`, `FIELD_ORDER` (after
-  `entity_type`), and the `ft_work_type` query-param wiring. No structural change —
-  the panel already renders any field in `FIELD_ORDER`.
+  `entity_type`), and the `ft_work_type` query-param wiring. Two easily-missed
+  details:
+  - The `fetchFacets` `useCallback` **dependency array must include
+    `activeFacets.work_type`** (it hard-codes each facet's active value), else the
+    filter won't react to work_type changes.
+  - `translateFacetValue` has per-field branches; add a `work_type` branch that
+    maps the category **code** (`book`, `article`, …) to the i18n label key
+    `page.work_type.<code>`. (Backend returns codes, not display strings.)
 
 ### 4. Badges
 - New TS helper (e.g. `frontend/app/lib/workType.ts`): `categoryFor(raw)` mirroring
@@ -111,8 +140,10 @@ The category↔raw mapping is mirrored in a small TS helper for the badges.
 
 No new endpoints. Capture rides the existing enrichment write path. The facet
 reuses `GET /entities/facets` and the entities list filter; `ft_work_type` maps a
-display category to raw values server-side. Badges read `enrichment_work_type`
-already returned with the entity and map to a category client-side.
+category code to raw values server-side. Badges read `enrichment_work_type` from
+the entity payload — which requires adding the field to the entity response schema
+(`schemas.py`) and the TS `Entity` type (see Components §1); it is NOT returned
+today — then map the raw value to a category code (`workType.ts`) and localize.
 
 ## Null / Edge Handling
 
