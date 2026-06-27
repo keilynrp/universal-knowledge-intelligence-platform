@@ -214,8 +214,37 @@ describe("EntityTableDetailsModal — work type badge in header", () => {
       />
     );
 
-    // The modal should contain the localized label for "book"
-    expect(screen.getByText("Book")).toBeInTheDocument();
+    // "Book" appears in both the header badge and the Core Fields row
+    expect(screen.getAllByText("Book").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows a 'Work type' row in the Core Fields card when enrichment_work_type is 'book'", () => {
+    const entity = makeEntity({ enrichment_work_type: "book" });
+    renderWithLang(
+      <EntityTableDetailsModal
+        entity={entity}
+        activeDomain={null}
+        onClose={vi.fn()}
+      />
+    );
+
+    // The Core Fields card gains a "Work type" label (page.import.field.work_type, EN)
+    expect(screen.getByText("Work type")).toBeInTheDocument();
+    // …with the localized "book" value rendered (header badge + core row)
+    expect(screen.getAllByText("Book").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("does NOT show a 'Work type' core-field row when enrichment_work_type is null", () => {
+    const entity = makeEntity({ enrichment_work_type: null });
+    renderWithLang(
+      <EntityTableDetailsModal
+        entity={entity}
+        activeDomain={null}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText("Work type")).not.toBeInTheDocument();
   });
 
   it("does NOT show a work-type badge when enrichment_work_type is null", () => {
