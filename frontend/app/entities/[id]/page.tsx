@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { categoryFor } from "@/app/lib/workType";
+import { JournalMetricsSection } from "@/app/components/JournalMetricsSection";
 import { Badge, useToast } from "../../components/ui";
 import MonteCarloChart from "../../components/MonteCarloChart";
 import AnnotationThread from "../../components/AnnotationThread";
@@ -1960,6 +1961,9 @@ export default function EntityDetailPage() {
 
     const sourceAttributes = parseJsonObject(entity.attributes_json);
     const normalizedAttributes = parseJsonObject(entity.normalized_json);
+    const issnL = typeof sourceAttributes.issn_l === "string" && sourceAttributes.issn_l.trim()
+        ? sourceAttributes.issn_l.trim()
+        : null;
     const mergedAttributes: Record<string, unknown> = {
         ...sourceAttributes,
         ...normalizedAttributes,
@@ -2907,6 +2911,20 @@ export default function EntityDetailPage() {
                             ) : null}
                         </section>
                     </div>
+
+                    {issnL && (
+                        <section className={`${DETAIL_CARD} p-6 md:p-8`}>
+                            <div className="mb-7 flex items-center gap-4">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-200">
+                                    <IconGlyph name="file" className="h-6 w-6" />
+                                </div>
+                                <h2 className="text-sm font-black uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
+                                    {tr("entities.detail.section.journal", "Revista")}
+                                </h2>
+                            </div>
+                            <JournalMetricsSection issnL={issnL} />
+                        </section>
+                    )}
 
                     {abstractMapping && (
                         <section className={`${DETAIL_CARD} p-6 md:p-8`}>
