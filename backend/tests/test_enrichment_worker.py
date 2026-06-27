@@ -148,6 +148,7 @@ def test_enrich_marks_completed_on_openalex_success(db_session):
     mock_result.doi = "10.1234/test"
     mock_result.citation_count = 42
     mock_result.concepts = ["Biology", "Genetics"]
+    mock_result.work_type = "article"
     mock_result.authors = ["Alice Smith", "Bob Jones"]
     mock_result.author_orcids = ["0000-0001-2345-6789", None]
     mock_result.concept_ids = []
@@ -191,6 +192,7 @@ def test_enrich_completion_syncs_dashboard_workflows_and_rag(db_session):
     mock_result.doi = "10.5555/sync"
     mock_result.citation_count = 7
     mock_result.concepts = ["Knowledge Graphs"]
+    mock_result.work_type = "article"
     mock_result.authors = []
     mock_result.author_orcids = []
     mock_result.concept_ids = []
