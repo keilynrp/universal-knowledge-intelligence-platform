@@ -11,6 +11,7 @@ export interface ActiveFacets { [field: string]: string | null; }
 
 const FIELD_LABELS: Record<string, string> = {
   entity_type:       "page.import.field.entity_type",
+  work_type:         "page.import.field.work_type",
   domain:            "page.import.field.domain",
   validation_status: "page.entity_table.review_status",
   enrichment_status: "page.entity_table.system_status",
@@ -19,6 +20,7 @@ const FIELD_LABELS: Record<string, string> = {
 
 const FIELD_COLORS: Record<string, string> = {
   entity_type:       "text-violet-700 dark:text-violet-200",
+  work_type:         "text-fuchsia-700 dark:text-fuchsia-200",
   domain:            "text-blue-700 dark:text-blue-200",
   validation_status: "text-amber-700 dark:text-amber-200",
   enrichment_status: "text-emerald-700 dark:text-emerald-200",
@@ -36,7 +38,7 @@ interface FacetPanelProps {
   facetsData?: FacetData | null;
 }
 
-const FIELD_ORDER = ["entity_type", "domain", "validation_status", "enrichment_status", "source"];
+const FIELD_ORDER = ["entity_type", "work_type", "domain", "validation_status", "enrichment_status", "source"];
 
 export default function FacetPanel({ activeFacets, onFacetChange, search, minQuality, refreshKey, facetsData }: FacetPanelProps) {
   const { t } = useLanguage();
@@ -50,6 +52,7 @@ export default function FacetPanel({ activeFacets, onFacetChange, search, minQua
       if (search) queryParams.append("search", search);
       if (minQuality) queryParams.append("min_quality", minQuality);
       if (activeFacets.entity_type) queryParams.append("ft_entity_type", activeFacets.entity_type);
+      if (activeFacets.work_type) queryParams.append("ft_work_type", activeFacets.work_type);
       if (activeFacets.domain) queryParams.append("ft_domain", activeFacets.domain);
       if (activeFacets.validation_status) queryParams.append("ft_validation_status", activeFacets.validation_status);
       if (activeFacets.enrichment_status) queryParams.append("ft_enrichment_status", activeFacets.enrichment_status);
@@ -59,7 +62,7 @@ export default function FacetPanel({ activeFacets, onFacetChange, search, minQua
     } catch { /* non-critical */ } finally {
       setLoading(false);
     }
-  }, [activeFacets.domain, activeFacets.enrichment_status, activeFacets.entity_type, activeFacets.source, activeFacets.validation_status, minQuality, search]);
+  }, [activeFacets.domain, activeFacets.enrichment_status, activeFacets.entity_type, activeFacets.source, activeFacets.validation_status, activeFacets.work_type, minQuality, search]);
 
   useEffect(() => {
     if (facetsData) {
@@ -114,6 +117,8 @@ export default function FacetPanel({ activeFacets, onFacetChange, search, minQua
       },
     };
     if (valueMap[field]?.[value]) return valueMap[field][value];
+
+    if (field === "work_type") return t(`page.work_type.${value}`);
 
     if (field === "entity_type") {
       const translated = t(`page.authority.entity_type_${value}`);

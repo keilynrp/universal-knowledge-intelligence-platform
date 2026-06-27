@@ -68,3 +68,4 @@ class EnrichedRecord(BaseModel):
     mesh_terms: Optional[List[str]] = Field(default=None, description="MeSH descriptors (PubMed)")
     venue: Optional[str] = Field(default=None, description="Publication venue (journal/conference name)")
     journal: Optional[JournalMetrics] = Field(default=None, description="Resolved journal-level metrics")
+    work_type: Optional[str] = Field(default=None, description="OpenAlex raw work type (article, book, ...)")

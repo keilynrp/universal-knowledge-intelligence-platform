@@ -86,6 +86,7 @@ class EntityBase(BaseModel):
     enrichment_concepts: Optional[str] = None
     enrichment_source: Optional[str] = None
     enrichment_status: Optional[str] = EnrichmentStatus.none
+    enrichment_work_type: Optional[str] = None
     quality_score: Optional[float] = None
 
 class Entity(EntityBase):

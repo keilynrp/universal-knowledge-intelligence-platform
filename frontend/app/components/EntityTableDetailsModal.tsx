@@ -7,8 +7,9 @@ import MonteCarloChart from "./MonteCarloChart";
 import { EnrichmentFailureDetails, parseEnrichmentFailure, FailureReasonBadge } from "./EnrichmentFailurePanel";
 import { apiFetch } from "@/lib/api";
 import type { Entity } from "./EntityTable.types";
-import { EntityConcept } from "./ui";
+import { Badge, EntityConcept } from "./ui";
 import { JournalMetricsSection } from "./JournalMetricsSection";
+import { categoryFor } from "@/app/lib/workType";
 
 export interface EntityTableDetailsModalProps {
     entity: Entity | null;
@@ -1056,7 +1057,14 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
                 <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4 dark:border-gray-800">
                     <div>
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white">{entity.primary_label}</h2>
-                        <p className="text-sm text-gray-500">{t("page.entity_table.full_details")}</p>
+                        <div className="mt-1 flex items-center gap-2">
+                            <p className="text-sm text-gray-500">{t("page.entity_table.full_details")}</p>
+                            {entity.enrichment_work_type ? (
+                                <Badge variant="info">
+                                    {t(`page.work_type.${categoryFor(entity.enrichment_work_type)}`)}
+                                </Badge>
+                            ) : null}
+                        </div>
                     </div>
                     <button onClick={onClose} className="rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-gray-800">
                         <svg className="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

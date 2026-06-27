@@ -9,6 +9,7 @@ import RecordResultCard from "./RecordResultCard";
 import RecordListRow from "./RecordListRow";
 import { EnrichmentFailureIcon, EnrichmentFailureDetails, parseEnrichmentFailure } from "./EnrichmentFailurePanel";
 import type { EntityTableDomain, EditableFields, Entity } from "./EntityTable.types";
+import { categoryFor } from "@/app/lib/workType";
 
 function parseNormalizedJson(normalizedJson: string | null): Record<string, unknown> {
     if (!normalizedJson) return {};
@@ -406,6 +407,7 @@ export default function EntityTableContent({
                                                     )}
                                                     <QualityBadge score={entity.quality_score} />
                                                     {entity.entity_type ? <Badge variant="default">{entity.entity_type}</Badge> : null}
+                                                    {entity.enrichment_work_type ? <Badge variant="info">{t(`page.work_type.${categoryFor(entity.enrichment_work_type)}`)}</Badge> : null}
                                                 </>
                                             }
                                             primaryMeta={[

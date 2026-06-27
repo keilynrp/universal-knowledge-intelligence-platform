@@ -2001,6 +2001,7 @@ export const translations = {
         'page.import.field.secondary_label': 'Secondary Label (author / institution / source)',
         'page.import.field.canonical_id': 'Canonical ID (DOI / ORCID / ROR / local ID)',
         'page.import.field.entity_type': 'Entity Type',
+        'page.import.field.work_type': 'Work type',
         'page.import.field.domain': 'Domain',
         'page.import.field.enrichment_doi': 'DOI',
         'page.import.field.enrichment_citation_count': 'Citation Count',
@@ -2982,6 +2983,16 @@ export const translations = {
         'page.facets.clear_all': 'Clear all ({count})',
         'page.facets.loading': 'Loading facets…',
         'page.facets.read_more': '+{count} more',
+
+        // Work type facet values
+        'page.work_type.article': 'Article',
+        'page.work_type.book': 'Book',
+        'page.work_type.thesis': 'Thesis',
+        'page.work_type.preprint': 'Preprint',
+        'page.work_type.dataset': 'Dataset',
+        'page.work_type.other': 'Other',
+        'page.work_type.unclassified': 'Unclassified',
+
         'page.widgets.title': 'Widget SDK',
         'page.widgets.subtitle': 'Embeddable data widgets with public tokens — no auth required for consumers.',
         'page.widgets.new_widget': 'New Widget',
@@ -5411,6 +5422,7 @@ export const translations = {
         'page.import.field.secondary_label': 'Etiqueta secundaria (autor / institución / fuente)',
         'page.import.field.canonical_id': 'ID canónico (DOI / ORCID / ROR / ID local)',
         'page.import.field.entity_type': 'Tipo de Entidad',
+        'page.import.field.work_type': 'Tipo de obra',
         'page.import.field.domain': 'Dominio',
         'page.import.field.enrichment_doi': 'DOI',
         'page.import.field.enrichment_citation_count': 'Conteo de Citas',
@@ -6413,6 +6425,16 @@ export const translations = {
         'page.facets.clear_all': 'Limpiar todo ({count})',
         'page.facets.loading': 'Cargando facetas…',
         'page.facets.read_more': '+{count} más',
+
+        // Valores del facet de tipo de obra
+        'page.work_type.article': 'Artículo',
+        'page.work_type.book': 'Libro',
+        'page.work_type.thesis': 'Tesis',
+        'page.work_type.preprint': 'Preprint',
+        'page.work_type.dataset': 'Dataset',
+        'page.work_type.other': 'Otro',
+        'page.work_type.unclassified': 'Sin clasificar',
+
         'page.widgets.title': 'SDK de Widgets',
         'page.widgets.subtitle': 'Widgets de datos embebibles con tokens públicos; los consumidores no necesitan autenticación.',
         'page.widgets.new_widget': 'Nuevo widget',

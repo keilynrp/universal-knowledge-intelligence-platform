@@ -303,6 +303,7 @@ class OpenAlexAdapter(BaseScientometricAdapter):
             source_api="OpenAlex",
             raw_response=raw_openalex,  # Attach whole tree for potential late parsing rules
             journal=journal,
+            work_type=raw_openalex.get("type"),
         )
 
     def search_by_doi(self, doi: str) -> Optional[EnrichedRecord]:

@@ -1,11 +1,12 @@
-from collections import defaultdict
+from collections import Counter, defaultdict
 from typing import Optional
 
-from sqlalchemy import func, or_
+from sqlalchemy import false as sa_false, func, or_
 from sqlalchemy.orm import Session
 
 from backend import models
 from backend.quality_scorer import _fetch_lookups, score_entity
+from backend.services import work_type as work_type_mod
 from backend.tenant_access import scope_query_to_org
 
 
@@ -21,6 +22,7 @@ class EntityService:
         "validation_status":  models.RawEntity.validation_status,
         "enrichment_status":  models.RawEntity.enrichment_status,
         "source":             models.RawEntity.source,
+        "work_type":          models.RawEntity.enrichment_work_type,
     }
 
     @classmethod
@@ -37,6 +39,7 @@ class EntityService:
         ft_enrichment_status: Optional[str] = None,
         ft_source: Optional[str] = None,
         concept: Optional[str] = None,
+        ft_work_type: Optional[str] = None,
         org_id: int | None = None,
     ) -> dict:
         requested = [f.strip() for f in fields_raw.split(",") if f.strip()]
@@ -79,6 +82,21 @@ class EntityService:
                 query = query.filter(models.RawEntity.enrichment_status == ft_enrichment_status)
             if ft_source and field != "source":
                 query = query.filter(models.RawEntity.source == ft_source)
+            if ft_work_type and field != "work_type":
+                expr = work_type_mod.work_type_filter(models.RawEntity.enrichment_work_type, ft_work_type)
+                if expr is not None:
+                    query = query.filter(expr)
+
+            if field == "work_type":
+                raw_rows = query.group_by(col).all()  # includes NULLs (no strip)
+                buckets: Counter = Counter()
+                for raw_val, cnt in raw_rows:
+                    buckets[work_type_mod.category_for(raw_val)] += cnt
+                result[field] = sorted(
+                    ({"value": code, "count": n} for code, n in buckets.items()),
+                    key=lambda d: -d["count"],
+                )
+                continue
 
             rows = (
                 query
@@ -105,6 +123,7 @@ class EntityService:
         ft_enrichment_status: Optional[str],
         ft_source: Optional[str],
         concept: Optional[str] = None,
+        ft_work_type: Optional[str] = None,
         org_id: int | None = None,
     ) -> tuple[int, list[models.RawEntity]]:
         query = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
@@ -135,6 +154,9 @@ class EntityService:
             query = query.filter(models.RawEntity.enrichment_status == ft_enrichment_status)
         if ft_source:
             query = query.filter(models.RawEntity.source == ft_source)
+        if ft_work_type:
+            expr = work_type_mod.work_type_filter(models.RawEntity.enrichment_work_type, ft_work_type)
+            query = query.filter(expr) if expr is not None else query.filter(sa_false())
 
         sort_col = {
             "id": models.RawEntity.id,
