@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
+import { categoryFor } from "@/app/lib/workType";
 import { Badge, useToast } from "../../components/ui";
 import MonteCarloChart from "../../components/MonteCarloChart";
 import AnnotationThread from "../../components/AnnotationThread";
@@ -106,6 +107,7 @@ interface Entity {
     enrichment_citation_count: number | null;
     enrichment_concepts: string | null;
     enrichment_source: string | null;
+    enrichment_work_type: string | null;
     quality_score: number | null;
     source: string | null;
     attributes_json: string | null;
@@ -2036,6 +2038,7 @@ export default function EntityDetailPage() {
         normalizeIdentifier(entity.canonical_id) === normalizeIdentifier(resolvedDoi)
     );
     const canonicalDisplayValue = canonicalDuplicatesDoi ? null : entity.canonical_id;
+    const workTypeRaw = typeof entity.enrichment_work_type === "string" ? entity.enrichment_work_type : null;
     const primaryFields: Array<{
         key: string;
         label: string;
@@ -2110,6 +2113,21 @@ export default function EntityDetailPage() {
                 ),
             },
         },
+        ...(workTypeRaw
+            ? [{
+                key: "work_type",
+                label: tr("page.import.field.work_type", "Tipo de obra"),
+                value: tr(`page.work_type.${categoryFor(workTypeRaw)}`, workTypeRaw),
+                icon: "file",
+                hint: {
+                    title: tr("page.import.field.work_type", "Tipo de obra"),
+                    body: tr(
+                        "entities.detail.fields.work_type_hint",
+                        "Tipo de obra según OpenAlex (artículo, libro, tesis, preprint, dataset…), derivado del campo work.type."
+                    ),
+                },
+              }]
+            : []),
     ];
     const systemFields: Array<{
         key: string;
