@@ -12,6 +12,27 @@ Siguiendo los principios de **Arquitectura Pragmática**, se ha adoptado una est
 
 ---
 
+## 1.b Indicadores implementados (estado actual)
+
+> `Operational` — refleja capacidades ya desplegadas. Para el detalle de releases ver `CHANGELOG.md`.
+
+| Indicador | Campo | Descripción | Nota |
+| --- | --- | --- | --- |
+| **NIF (Open Proxy)** | `normalized_impact_factor` | Factor de impacto normalizado por campo, derivado del `2yr_mean_citedness` de OpenAlex y normalizado contra la mediana del campo (`nif_field`). | Es un **proxy abierto**, **no** el JIF de Clarivate. Etiquetado como "open proxy" en toda la UI. |
+| **NIF Bayes (Open Proxy)** | `nif_bayes`, `nif_ci_low`, `nif_ci_high` | Companion bayesiano del NIF: shrinkage Empirical-Bayes Gamma-Poisson hacia la media del campo, con intervalo de credibilidad del 95%. Encoge revistas con muestra pequeña/ruidosa. | Se muestra **junto** al NIF (no lo reemplaza). `n` = conteo de works 2-años de OpenAlex. |
+| **APC** | `apc_usd`, `apc_currency` | Cargo por procesamiento de artículo (article processing charge) desde OpenAlex/DOAJ. | |
+| **Open Access (DOAJ)** | `is_in_doaj` | Indicador de revista en DOAJ. | |
+| **Works count (revista)** | `works_count` | Conteo de works por ISSN (local, org-scoped). | ⚠️ distinto del conteo global 2-años de OpenAlex usado como `n` del bayes. |
+| **Tipo de obra** | `enrichment_work_type` | `work.type` de OpenAlex (article, book, monograph, dissertation, dataset, preprint, …) agrupado en categorías y expuesto como facet filtrable. | |
+
+Implementación clave:
+- Normalización NIF / NIF Bayes: `backend/analyzers/journal_normalization.py` y `backend/analyzers/journal_normalization_bayes.py`.
+- Mapeo de tipo de obra: `backend/services/work_type.py` (+ espejo `frontend/app/lib/workType.ts`).
+- Backfills idempotentes: `backend/scripts/backfill_nif_bayes.py`, `backend/scripts/backfill_work_type.py` (ver `docs/operating/BACKFILL_RUNBOOK.md`).
+- Superficies: dashboard `/analytics/journals`, modal de entidad, y ficha de detalle `/entities/[id]` (sección Revista + fila Tipo de obra).
+
+---
+
 ## 2. Estrategia de Implementación Escalonada (Tiers)
 
 Para prevenir el "Anti-Patrón de Sobre-Ingeniería", la asimilación de fuentes se prioriza por accesibilidad, restricciones transaccionales y viabilidad técnica:

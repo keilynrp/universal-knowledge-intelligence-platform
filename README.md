@@ -10,8 +10,8 @@
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-gRPC_Engine-000000?logo=rust&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/Tests-2530_passing-28A745?logo=pytest&logoColor=white)
-![Routes](https://img.shields.io/badge/API_Routes-388-blue)
+![Tests](https://img.shields.io/badge/Tests-2857_passing-28A745?logo=pytest&logoColor=white)
+![Routes](https://img.shields.io/badge/API_Routes-396-blue)
 
 UKIP is a research intelligence platform for ingesting, normalizing, enriching, reconciling, exploring, and reporting on knowledge datasets. It is built around a governed semantic canonical layer: source data is profiled, mapped into canonical entities, resolved against authority registries, enriched with evidence, and surfaced through dashboards, graph analytics, and executive reports.
 
@@ -56,16 +56,17 @@ flowchart LR
 
 ```text
 backend/                 FastAPI API server
-  routers/               64 route modules, 388 endpoints
+  routers/               66 route modules, 396 endpoints
   services/              45+ domain services
   authority/             19 modules: resolution, scoring, normalization, caching, benchmarking, 5 resolver plugins
-  analyzers/             13 analyzers: topics, correlation, coauthorship, geographic, trends, etc.
+  analyzers/             13 analyzers: topics, correlation, coauthorship, geographic, trends, journal normalization (NIF / Bayesian NIF)
   adapters/enrichment/   8 adapters: OpenAlex, Crossref, PubMed, WoS, Scopus, Semantic Scholar, DBLP, Scholar
   cache/                 distributed cache layer: Redis backend + in-process fallback, fail-open
   domains/               3 configurable schemas: default, science, healthcare
-  tests/                 182 test files, 2537 tests
+  scripts/               maintenance + backfills (nif_bayes, work_type)
+  tests/                 228 test files, 2864 tests
 frontend/                Next.js 16 App Router
-  app/                   61 pages, 93 components, 8 context providers
+  app/                   62 pages, 90+ components, 8 context providers
   i18n/                  EN / ES localization
 engine/                  Rust gRPC engine for high-throughput graph and text operations
 alembic/                 Database migrations
@@ -97,11 +98,12 @@ UKIP manages major product and implementation decisions as architecture decision
 | --- | --- |
 | **Ingestion** | Imports CSV, Excel, BibTeX, RIS, API, demo, and connector-oriented records with source profiling and AI-assisted field mapping. |
 | **Canonical Data** | Stores universal entities with labels, domain, entity type, canonical IDs, attributes, quality scores, provenance, and enrichment state. |
-| **Scientific Enrichment** | Uses OpenAlex as primary provider plus Crossref, PubMed, Web of Science, Scopus, Semantic Scholar, DBLP, and controlled Scholar fallback. Circuit breaker protection on all external calls. |
+| **Scientific Enrichment** | Uses OpenAlex as primary provider plus Crossref, PubMed, Web of Science, Scopus, Semantic Scholar, DBLP, and controlled Scholar fallback. Captures DOI, citations, concepts, authors/ORCIDs, affiliations, open-access status, **work type** (`work.type`), and journal-level metrics. Circuit breaker protection on all external calls. |
+| **Scientometrics** | Journal **NIF** (Normalized Impact Factor — an open-proxy of OpenAlex 2-year mean citedness, field-normalized; **not** a Clarivate JIF) and a Bayesian companion **NIF Bayes** (Empirical-Bayes Gamma-Poisson shrinkage with a 95% credible interval), plus APC, DOAJ open-access flag, and per-journal works count. Work-type classification (Article / Book / Thesis / Preprint / Dataset / …) captured from OpenAlex and exposed as a filterable facet. |
 | **Authority Resolution** | Resolves authors, institutions, affiliations, and publications against Wikidata, VIAF, ORCID, OpenAlex, DBpedia, and ROR. Weighted scoring engine with configurable thresholds. NIL detection and coauthor signals. |
 | **Disambiguation** | Blocking-based entity disambiguation with semantic clustering and AI-assisted resolution. Eval harness with F1=0.909. |
 | **Graph Intelligence** | Materializes bibliometric and semantic relationships: authorship, same-as, related-to, co-word, semantic-neighbor, and emerging-from. Coauthorship network analysis. |
-| **Analytics** | Executive dashboards, topic modeling, OLAP-style cross-tabulations, researcher analytics, trend analysis, geographic distribution, domain health scoring. |
+| **Analytics** | Executive dashboards, topic modeling, OLAP-style cross-tabulations, researcher analytics, trend analysis, geographic distribution, domain health scoring, and a journals ranking dashboard (`/analytics/journals`) with NIF / NIF Bayes. |
 | **Reporting** | HTML, PDF (WeasyPrint), Excel, and PowerPoint exports. Stakeholder-oriented summaries and evidence-traceable intelligence narratives. |
 | **Governance** | Source profiling, field correspondence rules, mapping suggestions, readiness assessments, JSON-LD export, and OpenSpec-driven architecture governance. |
 | **Distributed Cache** | Optional Redis-backed cache (authority resolver, thresholds, feedback priors, derived-status, analytics) — cross-worker coherent and deploy-surviving, fail-open, with automatic in-process fallback when `REDIS_URL` is unset. |
@@ -121,7 +123,7 @@ UKIP manages major product and implementation decisions as architecture decision
 | Frontend | Next.js 16, React 19, TypeScript 5, Tailwind CSS 4, Recharts, D3 |
 | Engine | Rust, Tokio, tonic gRPC, sqlx |
 | Analytics | pandas, DuckDB, PyArrow, NumPy, SciPy |
-| Testing | pytest (2537 tests), Vitest, Playwright |
+| Testing | pytest (2864 tests), Vitest, Playwright |
 | Deployment | Docker Compose, GHCR images, Dokploy-oriented production compose |
 | Monitoring | Sentry (opt-in), structured logging |
 
@@ -221,13 +223,13 @@ cd frontend && npm run e2e
 cd frontend && npx tsc --noEmit
 ```
 
-**Current test stats:** 2537 backend tests across 182 test files (2530 passing, 7 skipped).
+**Current test stats:** 2864 backend tests across 228 test files (2857 passing, 7 skipped). Frontend: 273 Vitest tests.
 
 ---
 
 ## API Overview
 
-388 endpoints organized across 64 route modules:
+396 endpoints organized across 66 route modules:
 
 | Module Group | Routes | Description |
 | --- | --- | --- |
@@ -250,7 +252,7 @@ cd frontend && npx tsc --noEmit
 
 ## Product Surfaces
 
-### Frontend Pages (61 pages)
+### Frontend Pages (62 pages)
 
 | Surface | Path | Description |
 | --- | --- | --- |
@@ -260,8 +262,9 @@ cd frontend && npx tsc --noEmit
 | Topic Analysis | `/analytics/topics` | Co-occurrence, clusters, correlations |
 | OLAP Explorer | `/analytics/olap` | Dimensional cross-tabulation |
 | Researcher Analytics | `/analytics/researchers` | Author metrics, collaboration networks |
-| Entity Browser | `/entities` | Filterable entity list with grouped view |
-| Entity Detail | `/entities/[id]` | Provenance, enrichment, authority, relationships |
+| Journals Ranking | `/analytics/journals` | Journal NIF / NIF Bayes ranking, charts, admin recompute |
+| Entity Browser | `/entities` | Filterable entity list (grouped view) with side-panel facets incl. work type |
+| Entity Detail | `/entities/[id]` | Provenance, enrichment, authority, relationships, work type, and journal metrics (NIF / NIF Bayes) |
 | Import Wizard | `/import` | Guided data ingestion with mapping |
 | Domain Registry | `/domains` | Schema designer for custom domains |
 | Reports | `/reports` | Multi-format report generation |
@@ -355,6 +358,10 @@ Custom domains can be created through the Domain Registry UI (`/domains`).
 | CORS | Configurable allowed origins |
 | Input Validation | Pydantic v2 schema validation on all endpoints |
 | SQL Safety | Parameterized queries, identifier whitelisting for DuckDB OLAP |
+| Multi-Tenancy | Per-organization (`org_id`) data isolation across entities, catalogs, and analytics surfaces |
+| Secrets Rotation | MultiFernet dual-key encryption + multi-key JWT verification with zero-downtime rotation script and ops checks |
+| Data Lifecycle | Retention/purge controls and GDPR-style subject-data deletion |
+| CI Security Gates | gitleaks, pip-audit, npm-audit, CodeQL, and Trivy/SBOM scanning in CI |
 
 ---
 
@@ -363,6 +370,8 @@ Custom domains can be created through the Domain Registry UI (`/domains`).
 | Document | Description |
 | --- | --- |
 | [Architecture](docs/ARCHITECTURE.md) | System architecture overview |
+| [Scientometrics](docs/SCIENTOMETRICS.md) | Scientometric enrichment strategy (NIF, NIF Bayes, journal metrics, work type) |
+| [Backfill Runbook](docs/operating/BACKFILL_RUNBOOK.md) | Operator playbook for the `nif_bayes` and `work_type` backfills |
 | [Technical Onboarding](docs/TECHNICAL_ONBOARDING.md) | Developer getting-started guide |
 | [API Notes](docs/API.md) | API design decisions and conventions |
 | [Contributing](docs/CONTRIBUTING.md) | Contribution guidelines |

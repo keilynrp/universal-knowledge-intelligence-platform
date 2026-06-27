@@ -6,7 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
-### Added 
+### Added
+- **Journal NIF + APC enrichment:** OpenAlex journal-level metrics captured per entity — Normalized Impact Factor (**NIF**, an open-proxy of 2-year mean citedness, field-normalized — explicitly **not** a Clarivate JIF), APC (article processing charge), DOAJ open-access flag, and per-journal works count. Surfaced in the entity-detail "Journal" section and the `/analytics/journals` ranking dashboard (sortable table + charts + admin recompute). (PRs #77, #82, #83)
+- **Bayesian NIF (`nif_bayes`):** Uncertainty-aware companion to NIF using closed-form Empirical-Bayes Gamma-Poisson shrinkage toward the field mean, with a 95% credible interval (`nif_ci_low`/`nif_ci_high`). Shown alongside NIF (never replacing it) in the modal card and as a sortable, NULLs-last column in the journals ranking table. Optional backfill: `backend/scripts/backfill_nif_bayes.py`. (PRs #90, #91)
+- **Work-type facet (OpenAlex `work.type`):** Captured into `enrichment_work_type` and exposed as a grouped sidebar facet (Article / Book / Thesis / Preprint / Dataset / Other / Unclassified) with an `ft_work_type` filter on `GET /entities`, plus type badges in the entity table and detail views. Optional backfill: `backend/scripts/backfill_work_type.py`. (PRs #93, #94, #96)
+- **Entity detail-page parity:** The dedicated `/entities/[id]` detail page now surfaces the same enrichment as the table modal — a "Work type" row in *Core Fields* and a "Journal" section with NIF + NIF Bayes (open proxy). (PRs #96, #97)
+- **Backfill operations runbook:** `docs/operating/BACKFILL_RUNBOOK.md` — Dokploy playbook for the idempotent `nif_bayes` and `work_type` backfills. (PR #95)
 - **Error Boundaries (Sprint 101):** Root `app/error.tsx` component, shared `RouteError`, and route-level wrappers for `entities`, `analytics`, `rag`, `settings`, and `import-export`.
 - **Infrastructure:** Docker Compose multi-stage builds initialized for production (`Dockerfile.backend`, `frontend/Dockerfile` non-root user).
 - **Automated Testing (Sprint 100):** Frontend testing setup with Vitest and React Testing Library (52 tests across 6 suites covering UI state components, AuthContext, and EntityTable). CI integration to `lint.yml` added.
