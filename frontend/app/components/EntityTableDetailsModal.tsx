@@ -998,6 +998,17 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
             { key: "domain", label: t("page.import.field.domain"), value: entity.domain },
         ];
 
+    const coreFieldsWithType = entity.enrichment_work_type
+        ? [
+            ...coreFields,
+            {
+                key: "work_type",
+                label: t("page.import.field.work_type"),
+                value: t(`page.work_type.${categoryFor(entity.enrichment_work_type)}`),
+            },
+          ]
+        : coreFields;
+
     const systemFields = SYSTEM_FIELDS.map((field) => ({
         label: t(field.labelKey),
         value: entity[field.key],
@@ -1077,7 +1088,7 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
                         <section>
                             <h3 className="mb-4 text-sm font-semibold text-gray-900 dark:text-white">{t("page.entity_table.section_core")}</h3>
                             <div className="grid grid-cols-1 gap-x-8 gap-y-4 md:grid-cols-2">
-                                {coreFields.map((field) => (
+                                {coreFieldsWithType.map((field) => (
                                     <div key={field.key} className="flex flex-col gap-1 border-b border-gray-50 pb-2 dark:border-gray-800/50">
                                         <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
                                             {field.key === "entity_type" ? <EntityConcept>{field.label}</EntityConcept> : field.label}
