@@ -26,6 +26,7 @@ export function useEntityTableController({ toast, activeDomainId = "all" }: UseE
     const searchParams = useSearchParams();
     const readFacetParams = useCallback((): ActiveFacets => ({
         entity_type: searchParams.get("ft_entity_type"),
+        work_type: searchParams.get("ft_work_type"),
         domain: searchParams.get("ft_domain"),
         validation_status: searchParams.get("ft_validation_status"),
         enrichment_status: searchParams.get("ft_enrichment_status"),
@@ -105,6 +106,7 @@ export function useEntityTableController({ toast, activeDomainId = "all" }: UseE
             if (minQuality) queryParams.append("min_quality", minQuality);
             if (conceptFilter) queryParams.append("concept", conceptFilter);
             if (activeFacets.entity_type) queryParams.append("ft_entity_type", activeFacets.entity_type);
+            if (activeFacets.work_type) queryParams.append("ft_work_type", activeFacets.work_type);
             const effectiveDomain = activeFacets.domain || (activeDomainId !== "all" ? activeDomainId : null);
             if (effectiveDomain) queryParams.append("ft_domain", effectiveDomain);
             if (activeFacets.validation_status) queryParams.append("ft_validation_status", activeFacets.validation_status);

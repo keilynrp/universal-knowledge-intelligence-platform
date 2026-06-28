@@ -5,6 +5,7 @@ import type { ActiveFacets } from "./FacetPanel";
 
 const FIELD_LABELS: Record<string, string> = {
     entity_type: "page.import.field.entity_type",
+    work_type: "page.import.field.work_type",
     domain: "page.import.field.domain",
     validation_status: "page.entity_table.review_status",
     enrichment_status: "page.entity_table.system_status",
@@ -63,6 +64,7 @@ export default function EntityTableToolbar({
     };
     const formatFacetValue = (field: string, value: string | null) => {
         if (!value) return t("page.entity_table.empty_value");
+        if (field === "work_type") return t(`page.work_type.${value}`);
         if (field === "entity_type") {
             const translated = t(`page.authority.entity_type_${value}`);
             return translated === `page.authority.entity_type_${value}` ? value : translated;
