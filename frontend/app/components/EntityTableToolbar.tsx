@@ -10,6 +10,7 @@ const FIELD_LABELS: Record<string, string> = {
     validation_status: "page.entity_table.review_status",
     enrichment_status: "page.entity_table.system_status",
     source: "page.exec_dashboard.source",
+    journal_metric_signal: "catalogs.facets.journal_metric_signal",
 };
 
 export interface EntityTableToolbarProps {
@@ -65,6 +66,12 @@ export default function EntityTableToolbar({
     const formatFacetValue = (field: string, value: string | null) => {
         if (!value) return t("page.entity_table.empty_value");
         if (field === "work_type") return t(`page.work_type.${value}`);
+        if (field === "journal_metric_signal") {
+            const valueMap: Record<string, string> = {
+                nif_bayes_ready: "NIF + Bayes",
+            };
+            return valueMap[value] ?? value;
+        }
         if (field === "entity_type") {
             const translated = t(`page.authority.entity_type_${value}`);
             return translated === `page.authority.entity_type_${value}` ? value : translated;

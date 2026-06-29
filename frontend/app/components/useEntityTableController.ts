@@ -31,6 +31,7 @@ export function useEntityTableController({ toast, activeDomainId = "all" }: UseE
         validation_status: searchParams.get("ft_validation_status"),
         enrichment_status: searchParams.get("ft_enrichment_status"),
         source: searchParams.get("ft_source"),
+        journal_metric_signal: searchParams.get("ft_journal_metric_signal"),
     }), [searchParams]);
     const [entities, setEntities] = useState<Entity[]>([]);
     const [totalCount, setTotalCount] = useState(0);
@@ -112,6 +113,7 @@ export function useEntityTableController({ toast, activeDomainId = "all" }: UseE
             if (activeFacets.validation_status) queryParams.append("ft_validation_status", activeFacets.validation_status);
             if (activeFacets.enrichment_status) queryParams.append("ft_enrichment_status", activeFacets.enrichment_status);
             if (activeFacets.source) queryParams.append("ft_source", activeFacets.source);
+            if (activeFacets.journal_metric_signal) queryParams.append("ft_journal_metric_signal", activeFacets.journal_metric_signal);
 
             const res = await apiFetch(`/entities?${queryParams}`);
             if (!res.ok) throw new Error(`Server responded with ${res.status}`);

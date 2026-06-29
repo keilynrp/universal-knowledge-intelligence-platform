@@ -59,12 +59,13 @@ export default function FacetPanel({ activeFacets, onFacetChange, search, minQua
       if (activeFacets.validation_status) queryParams.append("ft_validation_status", activeFacets.validation_status);
       if (activeFacets.enrichment_status) queryParams.append("ft_enrichment_status", activeFacets.enrichment_status);
       if (activeFacets.source) queryParams.append("ft_source", activeFacets.source);
+      if (activeFacets.journal_metric_signal) queryParams.append("ft_journal_metric_signal", activeFacets.journal_metric_signal);
       const res = await apiFetch(`/entities/facets${queryParams.size > 0 ? `?${queryParams}` : ""}`);
       if (res.ok) setFacets(await res.json());
     } catch { /* non-critical */ } finally {
       setLoading(false);
     }
-  }, [activeFacets.domain, activeFacets.enrichment_status, activeFacets.entity_type, activeFacets.source, activeFacets.validation_status, activeFacets.work_type, minQuality, search]);
+  }, [activeFacets.domain, activeFacets.enrichment_status, activeFacets.entity_type, activeFacets.journal_metric_signal, activeFacets.source, activeFacets.validation_status, activeFacets.work_type, minQuality, search]);
 
   useEffect(() => {
     if (facetsData) {

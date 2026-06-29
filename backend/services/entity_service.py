@@ -159,6 +159,7 @@ class EntityService:
         ft_source: Optional[str],
         concept: Optional[str] = None,
         ft_work_type: Optional[str] = None,
+        ft_journal_metric_signal: Optional[str] = None,
         org_id: int | None = None,
     ) -> tuple[int, list[models.RawEntity]]:
         query = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
@@ -192,6 +193,8 @@ class EntityService:
         if ft_work_type:
             expr = work_type_mod.work_type_filter(models.RawEntity.enrichment_work_type, ft_work_type)
             query = query.filter(expr) if expr is not None else query.filter(sa_false())
+        if ft_journal_metric_signal:
+            query = EntityService._filter_journal_metric_signal(query, ft_journal_metric_signal, org_id)
 
         sort_col = {
             "id": models.RawEntity.id,

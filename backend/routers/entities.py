@@ -49,7 +49,7 @@ router = APIRouter(tags=["entities"])
 
 @router.get("/entities/facets")
 def get_entity_facets(
-    fields: str = Query(default="entity_type,domain,validation_status,enrichment_status,source,work_type"),
+    fields: str = Query(default="entity_type,domain,validation_status,enrichment_status,source,work_type,journal_metric_signal"),
     search: str | None = Query(default=None),
     min_quality: float | None = Query(default=None, ge=0.0, le=1.0),
     ft_entity_type: Optional[str] = Query(default=None),
@@ -58,6 +58,7 @@ def get_entity_facets(
     ft_enrichment_status: Optional[str] = Query(default=None),
     ft_source: Optional[str] = Query(default=None),
     ft_work_type: Optional[str] = Query(default=None),
+    ft_journal_metric_signal: Optional[str] = Query(default=None),
     concept: Optional[str] = Query(default=None, min_length=1),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
@@ -80,6 +81,7 @@ def get_entity_facets(
         ft_source=ft_source,
         concept=concept,
         ft_work_type=ft_work_type,
+        ft_journal_metric_signal=ft_journal_metric_signal,
         org_id=org_id,
     )
 
@@ -99,6 +101,7 @@ def get_entities(
     ft_enrichment_status: Optional[str] = Query(default=None),
     ft_source:            Optional[str] = Query(default=None),
     ft_work_type:         Optional[str] = Query(default=None),
+    ft_journal_metric_signal: Optional[str] = Query(default=None),
     concept:              Optional[str] = Query(default=None, min_length=1),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
@@ -119,6 +122,7 @@ def get_entities(
         ft_source=ft_source,
         concept=concept,
         ft_work_type=ft_work_type,
+        ft_journal_metric_signal=ft_journal_metric_signal,
         org_id=org_id,
     )
     response.headers["X-Total-Count"] = str(total)
