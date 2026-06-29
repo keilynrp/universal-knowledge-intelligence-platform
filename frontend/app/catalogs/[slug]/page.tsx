@@ -137,6 +137,7 @@ export default function CatalogPortalPage() {
     validation_status: searchParams.get("ft_validation_status") ?? null,
     enrichment_status: searchParams.get("ft_enrichment_status") ?? null,
     source: searchParams.get("ft_source") ?? null,
+    journal_metric_signal: searchParams.get("ft_journal_metric_signal") ?? null,
   });
   const [editForm, setEditForm] = useState({
     title: "",
@@ -194,6 +195,7 @@ export default function CatalogPortalPage() {
         validation_status: "ft_validation_status",
         enrichment_status: "ft_enrichment_status",
         source: "ft_source",
+        journal_metric_signal: "ft_journal_metric_signal",
       };
       Object.entries(activeFacets).forEach(([key, value]) => {
         const paramName = facetParamMap[key];
@@ -253,6 +255,7 @@ export default function CatalogPortalPage() {
       validation_status: "ft_validation_status",
       enrichment_status: "ft_enrichment_status",
       source: "ft_source",
+      journal_metric_signal: "ft_journal_metric_signal",
     };
     Object.entries(activeFacets).forEach(([key, value]) => {
       const paramName = facetParamMap[key];

@@ -16,6 +16,7 @@ const FIELD_LABELS: Record<string, string> = {
   validation_status: "page.entity_table.review_status",
   enrichment_status: "page.entity_table.system_status",
   source:            "page.exec_dashboard.source",
+  journal_metric_signal: "catalogs.facets.journal_metric_signal",
 };
 
 const FIELD_COLORS: Record<string, string> = {
@@ -25,6 +26,7 @@ const FIELD_COLORS: Record<string, string> = {
   validation_status: "text-amber-700 dark:text-amber-200",
   enrichment_status: "text-emerald-700 dark:text-emerald-200",
   source:            "text-slate-600 dark:text-[var(--ukip-muted)]",
+  journal_metric_signal: "text-sky-700 dark:text-sky-200",
 };
 
 interface FacetPanelProps {
@@ -38,7 +40,7 @@ interface FacetPanelProps {
   facetsData?: FacetData | null;
 }
 
-const FIELD_ORDER = ["entity_type", "work_type", "domain", "validation_status", "enrichment_status", "source"];
+const FIELD_ORDER = ["entity_type", "work_type", "domain", "validation_status", "enrichment_status", "source", "journal_metric_signal"];
 
 export default function FacetPanel({ activeFacets, onFacetChange, search, minQuality, refreshKey, facetsData }: FacetPanelProps) {
   const { t } = useLanguage();
@@ -83,6 +85,7 @@ export default function FacetPanel({ activeFacets, onFacetChange, search, minQua
     const explicitLabels: Record<string, string> = {
       entity_type: "Tipo de entidad",
       domain: "Dominio",
+      journal_metric_signal: "Señales métricas",
     };
     if (explicitLabels[field]) return explicitLabels[field];
     const key = FIELD_LABELS[field];
@@ -119,6 +122,13 @@ export default function FacetPanel({ activeFacets, onFacetChange, search, minQua
     if (valueMap[field]?.[value]) return valueMap[field][value];
 
     if (field === "work_type") return t(`page.work_type.${value}`);
+
+    if (field === "journal_metric_signal") {
+      const valueMap: Record<string, string> = {
+        nif_bayes_ready: "NIF + Bayes",
+      };
+      return valueMap[value] ?? value;
+    }
 
     if (field === "entity_type") {
       const translated = t(`page.authority.entity_type_${value}`);

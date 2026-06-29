@@ -68,7 +68,7 @@ def test_catalog_portal_create_and_results_global_scope(client, auth_headers, db
     assert portal["domain_id"] == "science"
     assert portal["source_label"] == "Latest science import"
     assert portal["source_context"]["format"] == "wos_plaintext"
-    assert portal["featured_facets"] == ["entity_type", "enrichment_status", "source"]
+    assert portal["featured_facets"] == ["entity_type", "enrichment_status", "source", "journal_metric_signal"]
 
     summary_resp = client.get("/catalogs/science-catalog", headers=auth_headers)
     assert summary_resp.status_code == 200
@@ -87,6 +87,67 @@ def test_catalog_portal_create_and_results_global_scope(client, auth_headers, db
     detail_resp = client.get(f"/catalogs/science-catalog/records/{record_id}", headers=auth_headers)
     assert detail_resp.status_code == 200
     assert detail_resp.json()["primary_label"] == "Portal Record A"
+
+
+def test_catalog_results_include_journal_metric_signal_facet(client, auth_headers, db_session):
+    db_session.add_all(
+        [
+            models.RawEntity(
+                primary_label="Ready Journal Work",
+                entity_type="publication",
+                domain="science",
+                source="scientific_import",
+                enrichment_issn_l="1234-5678",
+            ),
+            models.RawEntity(
+                primary_label="Raw Journal Work",
+                entity_type="publication",
+                domain="science",
+                source="scientific_import",
+                enrichment_issn_l="8765-4321",
+            ),
+            models.JournalMetric(
+                issn_l="1234-5678",
+                normalized_impact_factor=1.2,
+                nif_bayes=1.1,
+            ),
+            models.JournalMetric(
+                issn_l="8765-4321",
+                normalized_impact_factor=1.0,
+                nif_bayes=None,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    create_resp = client.post(
+        "/catalogs",
+        json={
+            "title": "Journal Signal Catalog",
+            "slug": "journal-signal-catalog",
+            "domain_id": "science",
+            "visibility": "private",
+            "featured_facets": ["entity_type", "journal_metric_signal"],
+        },
+        headers=auth_headers,
+    )
+    assert create_resp.status_code == 201, create_resp.text
+
+    results_resp = client.get("/catalogs/journal-signal-catalog/results", headers=auth_headers)
+    assert results_resp.status_code == 200, results_resp.text
+    results = results_resp.json()
+    assert results["facets"]["journal_metric_signal"] == [
+        {"value": "nif_bayes_ready", "count": 1}
+    ]
+
+    filtered_resp = client.get(
+        "/catalogs/journal-signal-catalog/results?ft_journal_metric_signal=nif_bayes_ready",
+        headers=auth_headers,
+    )
+    assert filtered_resp.status_code == 200, filtered_resp.text
+    filtered = filtered_resp.json()
+    assert filtered["total"] == 1
+    assert [item["primary_label"] for item in filtered["items"]] == ["Ready Journal Work"]
 
 
 def test_catalog_portal_can_scope_to_exact_import_batch(client, auth_headers, db_session):

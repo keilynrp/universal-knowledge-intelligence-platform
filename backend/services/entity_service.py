@@ -1,7 +1,7 @@
 from collections import Counter, defaultdict
 from typing import Optional
 
-from sqlalchemy import false as sa_false, func, or_
+from sqlalchemy import and_, false as sa_false, func, or_
 from sqlalchemy.orm import Session
 
 from backend import models
@@ -25,6 +25,22 @@ class EntityService:
         "work_type":          models.RawEntity.enrichment_work_type,
     }
 
+    _JOURNAL_NIF_BAYES_READY = "nif_bayes_ready"
+
+    @staticmethod
+    def _filter_journal_metric_signal(query, signal: Optional[str], org_id: int | None):
+        if signal != EntityService._JOURNAL_NIF_BAYES_READY:
+            return query
+        return query.join(
+            models.JournalMetric,
+            and_(
+                models.RawEntity.enrichment_issn_l == models.JournalMetric.issn_l,
+                models.JournalMetric.org_id == org_id,
+                models.JournalMetric.normalized_impact_factor.isnot(None),
+                models.JournalMetric.nif_bayes.isnot(None),
+            ),
+        )
+
     @classmethod
     def get_facets(
         cls,
@@ -40,19 +56,23 @@ class EntityService:
         ft_source: Optional[str] = None,
         concept: Optional[str] = None,
         ft_work_type: Optional[str] = None,
+        ft_journal_metric_signal: Optional[str] = None,
         org_id: int | None = None,
     ) -> dict:
         requested = [f.strip() for f in fields_raw.split(",") if f.strip()]
         result = {}
         for field in requested:
             col = cls._FACET_FIELDS.get(field)
-            if col is None:
+            if col is None and field != "journal_metric_signal":
                 continue
-            query = scope_query_to_org(
-                db.query(col, func.count(models.RawEntity.id).label("cnt")),
-                models.RawEntity,
-                org_id,
-            )
+            if field == "journal_metric_signal":
+                query = scope_query_to_org(db.query(models.RawEntity.id), models.RawEntity, org_id)
+            else:
+                query = scope_query_to_org(
+                    db.query(col, func.count(models.RawEntity.id).label("cnt")),
+                    models.RawEntity,
+                    org_id,
+                )
 
             if search:
                 search_filter = f"%{search}%"
@@ -86,6 +106,21 @@ class EntityService:
                 expr = work_type_mod.work_type_filter(models.RawEntity.enrichment_work_type, ft_work_type)
                 if expr is not None:
                     query = query.filter(expr)
+            if ft_journal_metric_signal and field != "journal_metric_signal":
+                query = cls._filter_journal_metric_signal(query, ft_journal_metric_signal, org_id)
+
+            if field == "journal_metric_signal":
+                ready_count = cls._filter_journal_metric_signal(
+                    query,
+                    cls._JOURNAL_NIF_BAYES_READY,
+                    org_id,
+                ).count()
+                result[field] = (
+                    [{"value": cls._JOURNAL_NIF_BAYES_READY, "count": ready_count}]
+                    if ready_count
+                    else []
+                )
+                continue
 
             if field == "work_type":
                 raw_rows = query.group_by(col).all()  # includes NULLs (no strip)

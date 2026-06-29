@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Query as SAQuery, Session
 
 from backend import models, schemas
@@ -30,7 +30,15 @@ router = APIRouter(tags=["catalogs"])
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{1,118}[a-z0-9]$")
 _ALLOWED_SORTS = {"id", "quality_score", "primary_label", "enrichment_status"}
 _ALLOWED_ORDERS = {"asc", "desc"}
-_ALLOWED_FACETS = {"entity_type", "domain", "validation_status", "enrichment_status", "source"}
+_ALLOWED_FACETS = {
+    "entity_type",
+    "domain",
+    "validation_status",
+    "enrichment_status",
+    "source",
+    "journal_metric_signal",
+}
+_JOURNAL_NIF_BAYES_READY = "nif_bayes_ready"
 _PORTAL_FACETS_DEFAULT = tuple(schemas.CATALOG_PORTAL_FACETS_DEFAULT)
 
 
@@ -41,6 +49,8 @@ def _normalize_featured_facets(fields: list[str] | None) -> list[str]:
             continue
         if field in _ALLOWED_FACETS and field not in normalized:
             normalized.append(field)
+    if "journal_metric_signal" not in normalized:
+        normalized.append("journal_metric_signal")
     return normalized or list(_PORTAL_FACETS_DEFAULT)
 
 
@@ -79,6 +89,7 @@ def _portal_query_defaults(portal: models.CatalogPortal) -> dict[str, Any]:
         "ft_validation_status": defaults.get("ft_validation_status"),
         "ft_enrichment_status": defaults.get("ft_enrichment_status"),
         "ft_source": defaults.get("ft_source"),
+        "ft_journal_metric_signal": defaults.get("ft_journal_metric_signal"),
         "sort_by": defaults.get("sort_by") or portal.default_sort or "primary_label",
         "order": defaults.get("order") or "asc",
     }
@@ -186,6 +197,8 @@ def _apply_entity_filters(
     ft_validation_status: str | None,
     ft_enrichment_status: str | None,
     ft_source: str | None,
+    ft_journal_metric_signal: str | None = None,
+    org_id: int | None = None,
 ) -> SAQuery:
     if search:
         search_filter = f"%{search}%"
@@ -207,6 +220,16 @@ def _apply_entity_filters(
         query = query.filter(models.RawEntity.enrichment_status == ft_enrichment_status)
     if ft_source:
         query = query.filter(models.RawEntity.source == ft_source)
+    if ft_journal_metric_signal == _JOURNAL_NIF_BAYES_READY:
+        query = query.join(
+            models.JournalMetric,
+            and_(
+                models.RawEntity.enrichment_issn_l == models.JournalMetric.issn_l,
+                models.JournalMetric.org_id == org_id,
+                models.JournalMetric.normalized_impact_factor.isnot(None),
+                models.JournalMetric.nif_bayes.isnot(None),
+            ),
+        )
     return query
 
 
@@ -219,6 +242,7 @@ def _resolve_filters(
     ft_validation_status: str | None,
     ft_enrichment_status: str | None,
     ft_source: str | None,
+    ft_journal_metric_signal: str | None,
     sort_by: str | None,
     order: str | None,
 ) -> dict[str, Any]:
@@ -230,6 +254,11 @@ def _resolve_filters(
         "ft_validation_status": ft_validation_status if ft_validation_status is not None else defaults["ft_validation_status"],
         "ft_enrichment_status": ft_enrichment_status if ft_enrichment_status is not None else defaults["ft_enrichment_status"],
         "ft_source": ft_source if ft_source is not None else defaults["ft_source"],
+        "ft_journal_metric_signal": (
+            ft_journal_metric_signal
+            if ft_journal_metric_signal == _JOURNAL_NIF_BAYES_READY
+            else None
+        ),
         "sort_by": sort_by if sort_by is not None else defaults["sort_by"],
         "order": order if order is not None else defaults["order"],
     }
@@ -251,6 +280,7 @@ def _portal_entity_query(
     ft_validation_status: str | None,
     ft_enrichment_status: str | None,
     ft_source: str | None,
+    ft_journal_metric_signal: str | None = None,
 ) -> SAQuery:
     query = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
     if portal.source_batch_id:
@@ -265,6 +295,8 @@ def _portal_entity_query(
         ft_validation_status=ft_validation_status,
         ft_enrichment_status=ft_enrichment_status,
         ft_source=ft_source,
+        ft_journal_metric_signal=ft_journal_metric_signal,
+        org_id=org_id,
     )
     return query
 
@@ -407,6 +439,7 @@ def create_catalog_portal(
             "ft_validation_status": payload.ft_validation_status,
             "ft_enrichment_status": payload.ft_enrichment_status,
             "ft_source": payload.ft_source,
+            "ft_journal_metric_signal": None,
             "sort_by": payload.default_sort,
             "order": payload.default_order,
         }
@@ -542,6 +575,7 @@ def get_catalog_results(
     ft_validation_status: str | None = Query(default=None),
     ft_enrichment_status: str | None = Query(default=None),
     ft_source: str | None = Query(default=None),
+    ft_journal_metric_signal: str | None = Query(default=None),
     sort_by: str | None = Query(default=None),
     order: str | None = Query(default=None),
     db: Session = Depends(get_db),
@@ -556,6 +590,7 @@ def get_catalog_results(
         ft_validation_status=ft_validation_status,
         ft_enrichment_status=ft_enrichment_status,
         ft_source=ft_source,
+        ft_journal_metric_signal=ft_journal_metric_signal,
         sort_by=sort_by,
         order=order,
     )
@@ -570,6 +605,7 @@ def get_catalog_results(
         ft_validation_status=filters["ft_validation_status"],
         ft_enrichment_status=filters["ft_enrichment_status"],
         ft_source=filters["ft_source"],
+        ft_journal_metric_signal=filters["ft_journal_metric_signal"],
     )
     sort_col = {
         "id": models.RawEntity.id,
@@ -594,6 +630,7 @@ def get_catalog_results(
         ft_validation_status=filters["ft_validation_status"],
         ft_enrichment_status=filters["ft_enrichment_status"],
         ft_source=filters["ft_source"],
+        ft_journal_metric_signal=filters["ft_journal_metric_signal"],
         org_id=org_id,
     )
 

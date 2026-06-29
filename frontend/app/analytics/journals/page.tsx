@@ -27,8 +27,6 @@ interface JournalStats {
 const ADMIN_ROLES = new Set(["admin", "super_admin"]);
 const DEFAULT_SORT = "nif";
 const DEFAULT_ORDER: "asc" | "desc" = "desc";
-const NIF_BAYES_READY_SIGNAL = "nif_bayes_ready";
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function JournalsDashboardPage(): ReactElement {
@@ -46,17 +44,12 @@ export default function JournalsDashboardPage(): ReactElement {
 
   const sortBy = searchParams.get("sort_by") ?? DEFAULT_SORT;
   const order = (searchParams.get("order") ?? DEFAULT_ORDER) as "asc" | "desc";
-  const metricSignal = searchParams.get("metric_signal");
-  const showNifBayesReadyOnly = metricSignal === NIF_BAYES_READY_SIGNAL;
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const listParams = new URLSearchParams({ sort_by: sortBy, order });
-      if (showNifBayesReadyOnly) {
-        listParams.set("metric_signal", NIF_BAYES_READY_SIGNAL);
-      }
       const [listRes, statsRes] = await Promise.all([
         apiFetch(`/journals?${listParams.toString()}`),
         apiFetch("/journals/stats"),
@@ -72,7 +65,7 @@ export default function JournalsDashboardPage(): ReactElement {
     } finally {
       setLoading(false);
     }
-  }, [sortBy, order, showNifBayesReadyOnly]);
+  }, [sortBy, order]);
 
   useEffect(() => {
     void fetchData();
@@ -85,16 +78,6 @@ export default function JournalsDashboardPage(): ReactElement {
     } else {
       params.set("sort_by", column);
       params.set("order", "desc");
-    }
-    router.push(`?${params.toString()}`);
-  }
-
-  function handleMetricSignalToggle(): void {
-    const params = new URLSearchParams(searchParams.toString());
-    if (showNifBayesReadyOnly) {
-      params.delete("metric_signal");
-    } else {
-      params.set("metric_signal", NIF_BAYES_READY_SIGNAL);
     }
     router.push(`?${params.toString()}`);
   }
@@ -143,31 +126,6 @@ export default function JournalsDashboardPage(): ReactElement {
           </div>
         ) : (
           <div className="space-y-6">
-            <section className="rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-surface)]">
-              <div className="border-b border-[var(--ukip-border)] px-5 py-4">
-                <h2 className="text-base font-bold text-[var(--ukip-text-strong)]">
-                  Facetas
-                </h2>
-              </div>
-              <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--ukip-muted)]">
-                    Señales métricas
-                  </h3>
-                  <p className="mt-1 text-sm text-[var(--ukip-muted)]">
-                    Identifica revistas con NIF normalizado y estimación Bayesiana.
-                  </p>
-                </div>
-                <Button
-                  variant={showNifBayesReadyOnly ? "primary" : "secondary"}
-                  size="sm"
-                  onClick={handleMetricSignalToggle}
-                  aria-pressed={showNifBayesReadyOnly}
-                >
-                  NIF + Bayes
-                </Button>
-              </div>
-            </section>
             <JournalsCharts stats={stats} />
             <JournalsRankingTable
               journals={journals}

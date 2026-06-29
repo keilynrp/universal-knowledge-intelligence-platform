@@ -104,6 +104,7 @@ CATALOG_PORTAL_FACETS_DEFAULT = [
     "validation_status",
     "enrichment_status",
     "source",
+    "journal_metric_signal",
 ]
 
 
