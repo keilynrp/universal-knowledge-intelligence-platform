@@ -41,6 +41,10 @@ function formatNum(value: number | null | undefined): string {
   return value.toLocaleString("en-US");
 }
 
+function hasNifBayesSignal(journal: JournalRow): boolean {
+  return journal.normalized_impact_factor != null && journal.nif_bayes != null;
+}
+
 function SortIcon({ active, order }: { active: boolean; order: "asc" | "desc" }): ReactElement {
   if (!active) {
     return (
@@ -202,7 +206,19 @@ export function JournalsRankingTable({
                 className="transition-colors hover:bg-[var(--ukip-panel)]"
               >
                 <td className="px-4 py-3 text-sm font-medium text-[var(--ukip-text)]">
-                  {journal.display_name ?? journal.issn_l}
+                  <span className="flex min-w-0 flex-col gap-1">
+                    <span className="truncate">{journal.display_name ?? journal.issn_l}</span>
+                    {hasNifBayesSignal(journal) && (
+                      <span
+                        title="Has normalized NIF and Bayesian NIF estimate with interval when available."
+                        aria-label="Has normalized NIF and Bayesian NIF estimate"
+                      >
+                        <Badge variant="info" size="sm" dot>
+                          NIF + Bayes
+                        </Badge>
+                      </span>
+                    )}
+                  </span>
                 </td>
                 <td className="px-4 py-3 text-sm text-[var(--ukip-muted)]">
                   {journal.nif_field ?? "—"}

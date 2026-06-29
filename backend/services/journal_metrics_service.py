@@ -95,11 +95,17 @@ def list_journal_metrics(
     limit: int = 50,
     offset: int = 0,
     field: Optional[str] = None,
+    metric_signal: Optional[str] = None,
 ) -> Tuple[list, int]:
     col = _SORT_COLUMNS[sort_by]  # caller validates sort_by; KeyError → 422 upstream
     q = _scoped(db, org_id)
     if field:
         q = q.filter(JournalMetric.nif_field == field)
+    if metric_signal == "nif_bayes_ready":
+        q = q.filter(
+            JournalMetric.normalized_impact_factor.isnot(None),
+            JournalMetric.nif_bayes.isnot(None),
+        )
     total = q.count()
     direction = col.desc() if order == "desc" else col.asc()
     rows = q.order_by(nullslast(direction)).offset(offset).limit(limit).all()

@@ -21,10 +21,10 @@ from backend.services.journal_metrics_service import (
 )
 
 
-def _seed(db, issn, nif=None, cited=None, apc=None, cur=None, doaj=None, field=None, org=None):
+def _seed(db, issn, nif=None, cited=None, apc=None, cur=None, doaj=None, field=None, org=None, nif_bayes=None):
     db.add(JournalMetric(org_id=org, issn_l=issn, normalized_impact_factor=nif,
                          two_yr_mean_citedness=cited, apc_usd=apc, apc_currency=cur,
-                         is_in_doaj=doaj, nif_field=field))
+                         is_in_doaj=doaj, nif_field=field, nif_bayes=nif_bayes))
 
 
 def test_get_journal_metric_scoped(db_session):
@@ -43,6 +43,24 @@ def test_list_org_isolation(db_session):
     _seed(db_session, "A", org=1); _seed(db_session, "B", org=2); db_session.commit()
     rows, total = list_journal_metrics(db_session, 1, sort_by="nif", order="desc", limit=10, offset=0)
     assert total == 1 and rows[0].issn_l == "A"
+
+
+def test_list_filters_nif_bayes_ready_signal(db_session):
+    _seed(db_session, "READY", nif=1.2, nif_bayes=1.1)
+    _seed(db_session, "RAW_ONLY", nif=1.0, nif_bayes=None)
+    _seed(db_session, "BAYES_ONLY", nif=None, nif_bayes=0.9)
+    db_session.commit()
+    rows, total = list_journal_metrics(
+        db_session,
+        None,
+        sort_by="nif",
+        order="desc",
+        limit=10,
+        offset=0,
+        metric_signal="nif_bayes_ready",
+    )
+    assert total == 1
+    assert [r.issn_l for r in rows] == ["READY"]
 
 
 def test_stats_aggregates(db_session):
@@ -112,3 +130,15 @@ def test_endpoint_accepts_nif_bayes_sort(client, auth_headers, db_session):
     r = client.get("/journals?sort_by=nif_bayes&order=desc", headers=auth_headers)
     assert r.status_code == 200
     assert client.get("/journals?sort_by=bogus", headers=auth_headers).status_code == 422
+
+
+def test_endpoint_filters_nif_bayes_ready_signal(client, auth_headers, db_session):
+    _seed(db_session, "READY", nif=1.2, nif_bayes=1.1)
+    _seed(db_session, "RAW_ONLY", nif=1.0)
+    db_session.commit()
+    r = client.get("/journals?metric_signal=nif_bayes_ready", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert [row["issn_l"] for row in body] == ["READY"]
+    assert r.headers["X-Total-Count"] == "1"
+    assert client.get("/journals?metric_signal=bogus", headers=auth_headers).status_code == 422

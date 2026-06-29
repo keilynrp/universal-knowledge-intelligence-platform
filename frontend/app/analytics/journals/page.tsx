@@ -27,6 +27,7 @@ interface JournalStats {
 const ADMIN_ROLES = new Set(["admin", "super_admin"]);
 const DEFAULT_SORT = "nif";
 const DEFAULT_ORDER: "asc" | "desc" = "desc";
+const NIF_BAYES_READY_SIGNAL = "nif_bayes_ready";
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -45,13 +46,19 @@ export default function JournalsDashboardPage(): ReactElement {
 
   const sortBy = searchParams.get("sort_by") ?? DEFAULT_SORT;
   const order = (searchParams.get("order") ?? DEFAULT_ORDER) as "asc" | "desc";
+  const metricSignal = searchParams.get("metric_signal");
+  const showNifBayesReadyOnly = metricSignal === NIF_BAYES_READY_SIGNAL;
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      const listParams = new URLSearchParams({ sort_by: sortBy, order });
+      if (showNifBayesReadyOnly) {
+        listParams.set("metric_signal", NIF_BAYES_READY_SIGNAL);
+      }
       const [listRes, statsRes] = await Promise.all([
-        apiFetch(`/journals?sort_by=${sortBy}&order=${order}`),
+        apiFetch(`/journals?${listParams.toString()}`),
         apiFetch("/journals/stats"),
       ]);
       if (!listRes.ok) throw new Error(`HTTP ${listRes.status}`);
@@ -65,7 +72,7 @@ export default function JournalsDashboardPage(): ReactElement {
     } finally {
       setLoading(false);
     }
-  }, [sortBy, order]);
+  }, [sortBy, order, showNifBayesReadyOnly]);
 
   useEffect(() => {
     void fetchData();
@@ -78,6 +85,16 @@ export default function JournalsDashboardPage(): ReactElement {
     } else {
       params.set("sort_by", column);
       params.set("order", "desc");
+    }
+    router.push(`?${params.toString()}`);
+  }
+
+  function handleMetricSignalToggle(): void {
+    const params = new URLSearchParams(searchParams.toString());
+    if (showNifBayesReadyOnly) {
+      params.delete("metric_signal");
+    } else {
+      params.set("metric_signal", NIF_BAYES_READY_SIGNAL);
     }
     router.push(`?${params.toString()}`);
   }
@@ -127,6 +144,26 @@ export default function JournalsDashboardPage(): ReactElement {
         ) : (
           <div className="space-y-6">
             <JournalsCharts stats={stats} />
+            <section className="rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-surface)] px-4 py-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--ukip-muted)]">
+                    Facets
+                  </h2>
+                  <p className="mt-1 text-sm text-[var(--ukip-muted)]">
+                    Filter journals by available metric signals.
+                  </p>
+                </div>
+                <Button
+                  variant={showNifBayesReadyOnly ? "primary" : "secondary"}
+                  size="sm"
+                  onClick={handleMetricSignalToggle}
+                  aria-pressed={showNifBayesReadyOnly}
+                >
+                  NIF + Bayes
+                </Button>
+              </div>
+            </section>
             <JournalsRankingTable
               journals={journals}
               sortBy={sortBy}
