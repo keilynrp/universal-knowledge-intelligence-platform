@@ -79,6 +79,50 @@ function SortIcon({ active, order }: { active: boolean; order: "asc" | "desc" })
   );
 }
 
+// ── Shared cell classes ──────────────────────────────────────────────────────
+// Single-line everywhere (no wrapped/stacked text), with the long text columns
+// truncating and the numeric columns right-aligned for fast vertical scanning.
+
+const TH_BASE =
+  "whitespace-nowrap px-3 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--ukip-muted)]";
+const TH_LEFT = `${TH_BASE} px-4 text-left`;
+const TH_NUM = `${TH_BASE} text-right`;
+const TD_BASE = "whitespace-nowrap px-3 py-3.5 text-sm text-[var(--ukip-text)]";
+const TD_TEXT = `${TD_BASE} px-4`;
+const TD_NUM = `${TD_BASE} text-right tabular-nums`;
+
+function SortableHeader({
+  label,
+  column,
+  sortBy,
+  order,
+  onSort,
+  badge = false,
+}: {
+  label: string;
+  column: string;
+  sortBy: string;
+  order: "asc" | "desc";
+  onSort: (column: string) => void;
+  badge?: boolean;
+}): ReactElement {
+  return (
+    <th className={TH_NUM}>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => onSort(column)}
+        aria-label={`Sort by ${label}`}
+        className="ml-auto flex-nowrap gap-1.5 whitespace-nowrap px-1 text-xs font-semibold uppercase tracking-wider"
+      >
+        {label}
+        {badge && <JournalProvenanceBadge />}
+        <SortIcon active={sortBy === column} order={order} />
+      </Button>
+    </th>
+  );
+}
+
 // ── Component ──────────────────────────────────────────────────────────────
 
 export function JournalsRankingTable({
@@ -102,100 +146,26 @@ export function JournalsRankingTable({
   return (
     <div className="overflow-hidden rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-surface)]">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-[var(--ukip-border)]">
+        <table className="w-full min-w-[880px] divide-y divide-[var(--ukip-border)]">
           <thead className="sticky top-0 z-10 bg-[var(--ukip-panel)]">
             <tr>
-              {/* Journal — non-sortable */}
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--ukip-muted)]">
-                Journal
-              </th>
+              {/* Journal — non-sortable; sized by its truncating content */}
+              <th className={TH_LEFT}>Journal</th>
 
-              {/* Discipline (OpenAlex field) — non-sortable */}
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--ukip-muted)]">
-                Discipline
-              </th>
+              {/* Discipline (OpenAlex field) — non-sortable, truncates */}
+              <th className={TH_LEFT}>Discipline</th>
 
-              {/* NIF — sortable */}
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--ukip-muted)]">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onSort("nif")}
-                  aria-label="Sort by NIF"
-                  className="gap-1 px-1 uppercase tracking-wider text-xs font-semibold"
-                >
-                  NIF
-                  <JournalProvenanceBadge />
-                  <SortIcon active={sortBy === "nif"} order={order} />
-                </Button>
-              </th>
-
-              {/* NIF (Bayes) — sortable */}
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--ukip-muted)]">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onSort("nif_bayes")}
-                  aria-label="Sort by NIF (Bayes)"
-                  className="gap-1 px-1 uppercase tracking-wider text-xs font-semibold"
-                >
-                  NIF (Bayes)
-                  <JournalProvenanceBadge />
-                  <SortIcon active={sortBy === "nif_bayes"} order={order} />
-                </Button>
-              </th>
-
-              {/* Citedness — sortable */}
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--ukip-muted)]">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onSort("citedness")}
-                  aria-label="Sort by Citedness"
-                  className="px-1 uppercase tracking-wider text-xs font-semibold"
-                >
-                  Citedness
-                  <SortIcon active={sortBy === "citedness"} order={order} />
-                </Button>
-              </th>
-
-              {/* h-index — sortable */}
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--ukip-muted)]">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onSort("h_index")}
-                  aria-label="Sort by h-index"
-                  className="px-1 uppercase tracking-wider text-xs font-semibold"
-                >
-                  h-index
-                  <SortIcon active={sortBy === "h_index"} order={order} />
-                </Button>
-              </th>
-
-              {/* APC — sortable */}
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--ukip-muted)]">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onSort("apc")}
-                  aria-label="Sort by APC"
-                  className="px-1 uppercase tracking-wider text-xs font-semibold"
-                >
-                  APC
-                  <SortIcon active={sortBy === "apc"} order={order} />
-                </Button>
-              </th>
+              <SortableHeader label="NIF" column="nif" sortBy={sortBy} order={order} onSort={onSort} badge />
+              <SortableHeader label="NIF (Bayes)" column="nif_bayes" sortBy={sortBy} order={order} onSort={onSort} badge />
+              <SortableHeader label="Citedness" column="citedness" sortBy={sortBy} order={order} onSort={onSort} />
+              <SortableHeader label="h-index" column="h_index" sortBy={sortBy} order={order} onSort={onSort} />
+              <SortableHeader label="APC" column="apc" sortBy={sortBy} order={order} onSort={onSort} />
 
               {/* Works — non-sortable */}
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--ukip-muted)]">
-                Works
-              </th>
+              <th className={TH_NUM}>Works</th>
 
               {/* OA — non-sortable */}
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--ukip-muted)]">
-                OA
-              </th>
+              <th className={`${TH_BASE} text-center`}>OA</th>
             </tr>
           </thead>
 
@@ -205,11 +175,17 @@ export function JournalsRankingTable({
                 key={journal.issn_l}
                 className="transition-colors hover:bg-[var(--ukip-panel)]"
               >
-                <td className="px-4 py-3 text-sm font-medium text-[var(--ukip-text)]">
-                  <span className="flex min-w-0 flex-col gap-1">
-                    <span className="truncate">{journal.display_name ?? journal.issn_l}</span>
+                <td className={`${TD_TEXT} font-medium`}>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      className="block max-w-[11rem] truncate xl:max-w-[15rem]"
+                      title={journal.display_name ?? journal.issn_l}
+                    >
+                      {journal.display_name ?? journal.issn_l}
+                    </span>
                     {hasNifBayesSignal(journal) && (
                       <span
+                        className="shrink-0"
                         title="Has normalized NIF and Bayesian NIF estimate with interval when available."
                         aria-label="Has normalized NIF and Bayesian NIF estimate"
                       >
@@ -220,17 +196,19 @@ export function JournalsRankingTable({
                     )}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-sm text-[var(--ukip-muted)]">
-                  {journal.nif_field ?? "—"}
+                <td className={`${TD_TEXT} text-[var(--ukip-muted)]`}>
+                  <span className="block max-w-[7rem] truncate xl:max-w-[9rem]" title={journal.nif_field ?? undefined}>
+                    {journal.nif_field ?? "—"}
+                  </span>
                 </td>
-                <td className="px-4 py-3 text-sm text-[var(--ukip-text)]">
+                <td className={TD_NUM}>
                   {journal.normalized_impact_factor != null
                     ? journal.normalized_impact_factor.toFixed(3)
                     : "—"}
                 </td>
-                <td className="px-4 py-3 text-sm text-[var(--ukip-text)]">
+                <td className={TD_NUM}>
                   {journal.nif_bayes != null ? (
-                    <span className="flex flex-col">
+                    <span className="inline-flex flex-col items-end leading-tight">
                       <span>{journal.nif_bayes.toFixed(3)}</span>
                       {journal.nif_ci_low != null && journal.nif_ci_high != null && (
                         <span className="text-xs text-[var(--ukip-muted)]">
@@ -242,21 +220,21 @@ export function JournalsRankingTable({
                     "—"
                   )}
                 </td>
-                <td className="px-4 py-3 text-sm text-[var(--ukip-text)]">
+                <td className={TD_NUM}>
                   {journal.two_yr_mean_citedness != null
                     ? journal.two_yr_mean_citedness.toFixed(2)
                     : "—"}
                 </td>
-                <td className="px-4 py-3 text-sm text-[var(--ukip-text)]">
+                <td className={TD_NUM}>
                   {formatNum(journal.h_index)}
                 </td>
-                <td className="px-4 py-3 text-sm text-[var(--ukip-text)]">
+                <td className={TD_NUM}>
                   {formatApc(journal.apc_usd, journal.apc_currency)}
                 </td>
-                <td className="px-4 py-3 text-sm text-[var(--ukip-text)]">
-                  {journal.works_count ?? "—"}
+                <td className={TD_NUM}>
+                  {formatNum(journal.works_count)}
                 </td>
-                <td className="px-4 py-3 text-sm">
+                <td className={`${TD_NUM} text-center`}>
                   {journal.is_in_doaj ? (
                     <Badge variant="success" size="sm">
                       Open Access
