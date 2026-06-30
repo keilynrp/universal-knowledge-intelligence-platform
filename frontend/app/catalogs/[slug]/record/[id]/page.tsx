@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { EntityConcept, ErrorBanner, PageHeader, QualityBadge } from "../../../../components/ui";
 import { JournalSignalBadge } from "../../../../components/JournalSignalBadge";
+import { JournalMetricsSection } from "../../../../components/JournalMetricsSection";
 import { useLanguage } from "../../../../contexts/LanguageContext";
 
 interface CatalogRecord {
@@ -22,6 +23,7 @@ interface CatalogRecord {
   source: string | null;
   attributes_json: string | null;
   normalized_json: string | null;
+  enrichment_issn_l?: string | null;
   journal_nif_bayes_ready?: boolean;
   journal_display_name?: string | null;
   journal_nif?: number | null;
@@ -134,6 +136,18 @@ export default function CatalogRecordPage() {
     };
   }, [record]);
 
+  // Prefer the attached enrichment_issn_l; fall back to attributes_json.issn_l
+  // (same shape the entity detail page reads) so the journal metrics card shows
+  // wherever the record resolved to a journal.
+  const issnL = useMemo(() => {
+    if (!record) return null;
+    if (record.enrichment_issn_l && record.enrichment_issn_l.trim()) {
+      return record.enrichment_issn_l.trim();
+    }
+    const fromAttrs = mergedAttributes.issn_l;
+    return typeof fromAttrs === "string" && fromAttrs.trim() ? fromAttrs.trim() : null;
+  }, [record, mergedAttributes]);
+
   const coreFields = record ? [
     { key: "primary_label", label: tr("entities.primary_label", "Primary label"), value: record.primary_label },
     { key: "secondary_label", label: tr("page.import.field.secondary_label", "Secondary label"), value: record.secondary_label },
@@ -148,23 +162,6 @@ export default function CatalogRecordPage() {
     { label: tr("page.import.field.enrichment_citation_count", "Citation count"), value: record.enrichment_citation_count },
     { label: resolveEnrichmentHeading(t, "Enriquecido", record.enrichment_status), value: formatQualityPercent(record.quality_score), isQuality: true },
     { label: tr("page.import.field.validation_status", "Validation status"), value: record.validation_status },
-    ...(record.journal_nif_bayes_ready
-      ? [
-          {
-            label: tr("catalogs.record.journal_nif", "Journal NIF (open proxy)"),
-            value: record.journal_nif != null ? record.journal_nif.toFixed(3) : "—",
-          },
-          {
-            label: tr("catalogs.record.journal_nif_bayes", "Journal NIF (Bayes)"),
-            value:
-              record.journal_nif_bayes != null
-                ? record.journal_nif_ci_low != null && record.journal_nif_ci_high != null
-                  ? `${record.journal_nif_bayes.toFixed(3)} (${record.journal_nif_ci_low.toFixed(2)}–${record.journal_nif_ci_high.toFixed(2)})`
-                  : record.journal_nif_bayes.toFixed(3)
-                : "—",
-          },
-        ]
-      : []),
   ] : [];
 
   return (
@@ -240,6 +237,15 @@ export default function CatalogRecordPage() {
               </div>
             </div>
           </section>
+
+          {issnL && (
+            <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+              <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
+                {tr("catalogs.record.section_journal_metrics", "Journal metrics")}
+              </h2>
+              <JournalMetricsSection issnL={issnL} />
+            </section>
+          )}
 
           <section className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
             <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
