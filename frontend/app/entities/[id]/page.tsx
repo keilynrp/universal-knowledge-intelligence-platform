@@ -113,6 +113,7 @@ interface Entity {
     source: string | null;
     attributes_json: string | null;
     normalized_json: string | null;
+    enrichment_issn_l: string | null;
     [key: string]: EntityValue;
 }
 
@@ -1961,9 +1962,15 @@ export default function EntityDetailPage() {
 
     const sourceAttributes = parseJsonObject(entity.attributes_json);
     const normalizedAttributes = parseJsonObject(entity.normalized_json);
-    const issnL = typeof sourceAttributes.issn_l === "string" && sourceAttributes.issn_l.trim()
-        ? sourceAttributes.issn_l.trim()
-        : null;
+    // Prefer the authoritative enrichment_issn_l column (the same source the NIF
+    // + Bayes signal/badge joins on); fall back to attributes_json.issn_l. Some
+    // records carry the column but never wrote issn_l into attributes_json, which
+    // previously left the journal metrics card hidden despite a "ready" signal.
+    const issnL = typeof entity.enrichment_issn_l === "string" && entity.enrichment_issn_l.trim()
+        ? entity.enrichment_issn_l.trim()
+        : typeof sourceAttributes.issn_l === "string" && sourceAttributes.issn_l.trim()
+            ? sourceAttributes.issn_l.trim()
+            : null;
     const mergedAttributes: Record<string, unknown> = {
         ...sourceAttributes,
         ...normalizedAttributes,

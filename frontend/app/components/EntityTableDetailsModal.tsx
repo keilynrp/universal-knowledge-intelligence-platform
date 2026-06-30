@@ -955,9 +955,13 @@ export default function EntityTableDetailsModal({ entity, activeDomain, onClose 
 
     const normalizedAttributes = parseJsonObject(entity.normalized_json);
     const sourceAttributes = parseJsonObject(entity.attributes_json);
-    const issnL = typeof sourceAttributes.issn_l === "string" && sourceAttributes.issn_l.trim()
-        ? sourceAttributes.issn_l.trim()
-        : null;
+    // Prefer the authoritative enrichment_issn_l column (what the NIF + Bayes
+    // signal joins on); fall back to attributes_json.issn_l.
+    const issnL = typeof entity.enrichment_issn_l === "string" && entity.enrichment_issn_l.trim()
+        ? entity.enrichment_issn_l.trim()
+        : typeof sourceAttributes.issn_l === "string" && sourceAttributes.issn_l.trim()
+            ? sourceAttributes.issn_l.trim()
+            : null;
     const mergedExtendedAttributes = { ...sourceAttributes, ...normalizedAttributes };
     const abstractMapping = resolveAbstractMapping(normalizedAttributes, sourceAttributes);
     const attributeSources = [mergedExtendedAttributes, sourceAttributes, normalizedAttributes];

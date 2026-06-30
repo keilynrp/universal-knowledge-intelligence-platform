@@ -19,6 +19,7 @@ export interface Entity {
     normalized_json: string | null;
     quality_score: number | null;
     enrichment_work_type?: string | null;
+    enrichment_issn_l?: string | null;
 }
 
 export type EditableFields = Pick<
