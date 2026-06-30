@@ -96,6 +96,18 @@ class Entity(EntityBase):
     normalized_json: Optional[str] = None
     source: Optional[str] = None
 
+    # Journal-level scientometric signal, looked up from JournalMetric by
+    # enrichment_issn_l and attached per record (batched, not N+1). These let
+    # the catalog/Knowledge cards surface the NIF + Bayes signal directly
+    # instead of only via the journal_metric_signal filter facet.
+    enrichment_issn_l: Optional[str] = None
+    journal_display_name: Optional[str] = None
+    journal_nif: Optional[float] = None
+    journal_nif_bayes: Optional[float] = None
+    journal_nif_ci_low: Optional[float] = None
+    journal_nif_ci_high: Optional[float] = None
+    journal_nif_bayes_ready: bool = False
+
     model_config = ConfigDict(from_attributes=True)
 
 

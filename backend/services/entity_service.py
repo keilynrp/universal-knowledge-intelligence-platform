@@ -27,6 +27,65 @@ class EntityService:
 
     _JOURNAL_NIF_BAYES_READY = "nif_bayes_ready"
 
+    # Transient (non-mapped) attributes attached to RawEntity instances by
+    # attach_journal_metrics so schemas.Entity can serialize the journal signal.
+    _JOURNAL_METRIC_ATTRS = (
+        "journal_display_name",
+        "journal_nif",
+        "journal_nif_bayes",
+        "journal_nif_ci_low",
+        "journal_nif_ci_high",
+        "journal_nif_bayes_ready",
+    )
+
+    @staticmethod
+    def attach_journal_metrics(db: Session, entities, org_id: int | None):
+        """Attach per-record journal scientometric signal to RawEntity instances.
+
+        Looks up JournalMetric by enrichment_issn_l in a single batched query
+        (no N+1) and sets transient attributes consumed by schemas.Entity. The
+        org scoping predicate mirrors _filter_journal_metric_signal so the
+        per-record badge agrees exactly with the journal_metric_signal facet.
+        """
+        issns = {
+            e.enrichment_issn_l
+            for e in entities
+            if getattr(e, "enrichment_issn_l", None)
+        }
+        metrics: dict[str, models.JournalMetric] = {}
+        if issns:
+            rows = (
+                db.query(models.JournalMetric)
+                .filter(
+                    models.JournalMetric.issn_l.in_(issns),
+                    models.JournalMetric.org_id == org_id,
+                )
+                .all()
+            )
+            for row in rows:
+                metrics[row.issn_l] = row
+
+        for entity in entities:
+            metric = metrics.get(getattr(entity, "enrichment_issn_l", None))
+            if metric is not None:
+                entity.journal_display_name = metric.display_name
+                entity.journal_nif = metric.normalized_impact_factor
+                entity.journal_nif_bayes = metric.nif_bayes
+                entity.journal_nif_ci_low = metric.nif_ci_low
+                entity.journal_nif_ci_high = metric.nif_ci_high
+                entity.journal_nif_bayes_ready = (
+                    metric.normalized_impact_factor is not None
+                    and metric.nif_bayes is not None
+                )
+            else:
+                entity.journal_display_name = None
+                entity.journal_nif = None
+                entity.journal_nif_bayes = None
+                entity.journal_nif_ci_low = None
+                entity.journal_nif_ci_high = None
+                entity.journal_nif_bayes_ready = False
+        return entities
+
     @staticmethod
     def _filter_journal_metric_signal(query, signal: Optional[str], org_id: int | None):
         if signal != EntityService._JOURNAL_NIF_BAYES_READY:

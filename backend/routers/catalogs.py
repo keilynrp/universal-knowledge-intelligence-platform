@@ -616,6 +616,7 @@ def get_catalog_results(
     query = query.order_by(sort_col.desc() if filters["order"] == "desc" else sort_col.asc())
     total = query.count()
     items = query.offset(skip).limit(limit).all()
+    EntityService.attach_journal_metrics(db, items, org_id)
 
     featured_facets = _normalize_featured_facets(_parse_json(portal.featured_facets_json, []))
     facet_fields = ",".join(featured_facets)
@@ -671,4 +672,5 @@ def get_catalog_record(
     )
     if not record:
         raise HTTPException(status_code=404, detail="Catalog record not found")
+    EntityService.attach_journal_metrics(db, [record], org_id)
     return record

@@ -1,3 +1,4 @@
+from backend import schemas
 from backend.models import JournalMetric, RawEntity
 from backend.services.entity_service import EntityService
 
@@ -106,3 +107,55 @@ def test_journal_metric_signal_facet_and_filter(db_session):
     )
     assert total == 1
     assert [row.primary_label for row in rows] == ["ready"]
+
+
+def test_attach_journal_metrics_surfaces_signal_per_record(db_session):
+    db_session.add_all(
+        [
+            RawEntity(primary_label="ready", enrichment_issn_l="1111-1111"),
+            RawEntity(primary_label="raw", enrichment_issn_l="2222-2222"),
+            RawEntity(primary_label="orphan", enrichment_issn_l=None),
+            JournalMetric(
+                issn_l="1111-1111",
+                display_name="Nature",
+                normalized_impact_factor=2.703,
+                nif_bayes=3.247,
+                nif_ci_low=3.23,
+                nif_ci_high=3.26,
+            ),
+            JournalMetric(
+                issn_l="2222-2222",
+                display_name="Some Journal",
+                normalized_impact_factor=1.0,
+                nif_bayes=None,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    entities = (
+        db_session.query(RawEntity).order_by(RawEntity.primary_label.asc()).all()
+    )
+    EntityService.attach_journal_metrics(db_session, entities, org_id=None)
+    by_label = {
+        e.primary_label: schemas.Entity.model_validate(e).model_dump()
+        for e in entities
+    }
+
+    ready = by_label["ready"]
+    assert ready["journal_nif_bayes_ready"] is True
+    assert ready["enrichment_issn_l"] == "1111-1111"
+    assert ready["journal_display_name"] == "Nature"
+    assert ready["journal_nif"] == 2.703
+    assert ready["journal_nif_bayes"] == 3.247
+    assert ready["journal_nif_ci_low"] == 3.23
+    assert ready["journal_nif_ci_high"] == 3.26
+
+    # NIF present but no Bayes → not "ready"
+    assert by_label["raw"]["journal_nif_bayes_ready"] is False
+    assert by_label["raw"]["journal_nif"] == 1.0
+    assert by_label["raw"]["journal_nif_bayes"] is None
+
+    # No linked journal at all
+    assert by_label["orphan"]["journal_nif_bayes_ready"] is False
+    assert by_label["orphan"]["journal_display_name"] is None

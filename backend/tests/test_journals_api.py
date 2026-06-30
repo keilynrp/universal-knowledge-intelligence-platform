@@ -142,3 +142,28 @@ def test_endpoint_filters_nif_bayes_ready_signal(client, auth_headers, db_sessio
     assert [row["issn_l"] for row in body] == ["READY"]
     assert r.headers["X-Total-Count"] == "1"
     assert client.get("/journals?metric_signal=bogus", headers=auth_headers).status_code == 422
+
+
+def test_endpoint_lists_journal_works_with_signal(client, auth_headers, db_session):
+    from backend.models import RawEntity
+
+    _seed(db_session, "0028-0836", nif=2.703, nif_bayes=3.247)
+    db_session.add_all(
+        [
+            RawEntity(primary_label="Paper A", enrichment_issn_l="0028-0836"),
+            RawEntity(primary_label="Paper B", enrichment_issn_l="0028-0836"),
+            RawEntity(primary_label="Other", enrichment_issn_l="9999-9999"),
+        ]
+    )
+    db_session.commit()
+
+    r = client.get("/journals/0028-0836/works", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert {row["primary_label"] for row in body} == {"Paper A", "Paper B"}
+    assert r.headers["X-Total-Count"] == "2"
+    assert all(row["journal_nif_bayes_ready"] is True for row in body)
+    assert body[0]["journal_nif"] == 2.703 and body[0]["journal_nif_bayes"] == 3.247
+
+    empty = client.get("/journals/0000-0000/works", headers=auth_headers)
+    assert empty.status_code == 200 and empty.json() == []

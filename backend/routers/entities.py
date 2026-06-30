@@ -125,6 +125,7 @@ def get_entities(
         ft_journal_metric_signal=ft_journal_metric_signal,
         org_id=org_id,
     )
+    EntityService.attach_journal_metrics(db, entities, org_id)
     response.headers["X-Total-Count"] = str(total)
     return entities
 
@@ -277,6 +278,7 @@ def get_entity(
     entity = get_scoped_record(db, models.RawEntity, entity_id, org_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
+    EntityService.attach_journal_metrics(db, [entity], org_id)
     return entity
 
 

@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from backend import models, schemas
 from backend.auth import get_current_user
 from backend.database import get_db
-from backend.tenant_access import resolve_request_org_id
+from backend.tenant_access import resolve_request_org_id, scope_query_to_org
+from backend.services.entity_service import EntityService
 from backend.services.journal_metrics_service import (
     get_journal_metric,
     list_journal_metrics,
@@ -81,3 +82,31 @@ def get_journal(
     resp = schemas.JournalMetricResponse.model_validate(row)
     resp.works_count = works_count_by_issn(db, org_id, issns=[issn_l]).get(issn_l, 0)
     return resp
+
+
+@router.get("/journals/{issn_l}/works", response_model=list[schemas.Entity])
+def list_journal_works(
+    response: Response,
+    issn_l: str,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """List the catalog records (works) linked to a journal by ISSN-L.
+
+    Complements the works_count surfaced on the journal rows: this resolves the
+    actual records behind that count, each carrying the attached NIF + Bayes
+    signal so callers can jump straight from a journal to its works.
+    """
+    org_id = resolve_request_org_id(db, user)
+    query = scope_query_to_org(
+        db.query(models.RawEntity).filter(models.RawEntity.enrichment_issn_l == issn_l),
+        models.RawEntity,
+        org_id,
+    )
+    total = query.count()
+    works = query.order_by(models.RawEntity.id.asc()).offset(offset).limit(limit).all()
+    EntityService.attach_journal_metrics(db, works, org_id)
+    response.headers["X-Total-Count"] = str(total)
+    return works

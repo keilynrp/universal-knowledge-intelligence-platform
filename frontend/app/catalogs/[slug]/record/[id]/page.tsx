@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { EntityConcept, ErrorBanner, PageHeader, QualityBadge } from "../../../../components/ui";
+import { JournalSignalBadge } from "../../../../components/JournalSignalBadge";
 import { useLanguage } from "../../../../contexts/LanguageContext";
 
 interface CatalogRecord {
@@ -21,6 +22,12 @@ interface CatalogRecord {
   source: string | null;
   attributes_json: string | null;
   normalized_json: string | null;
+  journal_nif_bayes_ready?: boolean;
+  journal_display_name?: string | null;
+  journal_nif?: number | null;
+  journal_nif_bayes?: number | null;
+  journal_nif_ci_low?: number | null;
+  journal_nif_ci_high?: number | null;
 }
 
 async function readCatalogError(
@@ -141,6 +148,23 @@ export default function CatalogRecordPage() {
     { label: tr("page.import.field.enrichment_citation_count", "Citation count"), value: record.enrichment_citation_count },
     { label: resolveEnrichmentHeading(t, "Enriquecido", record.enrichment_status), value: formatQualityPercent(record.quality_score), isQuality: true },
     { label: tr("page.import.field.validation_status", "Validation status"), value: record.validation_status },
+    ...(record.journal_nif_bayes_ready
+      ? [
+          {
+            label: tr("catalogs.record.journal_nif", "Journal NIF (open proxy)"),
+            value: record.journal_nif != null ? record.journal_nif.toFixed(3) : "—",
+          },
+          {
+            label: tr("catalogs.record.journal_nif_bayes", "Journal NIF (Bayes)"),
+            value:
+              record.journal_nif_bayes != null
+                ? record.journal_nif_ci_low != null && record.journal_nif_ci_high != null
+                  ? `${record.journal_nif_bayes.toFixed(3)} (${record.journal_nif_ci_low.toFixed(2)}–${record.journal_nif_ci_high.toFixed(2)})`
+                  : record.journal_nif_bayes.toFixed(3)
+                : "—",
+          },
+        ]
+      : []),
   ] : [];
 
   return (
@@ -189,6 +213,19 @@ export default function CatalogRecordPage() {
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                   {tr("catalogs.record.readiness_body", "This percentage reflects how complete and ready the record is for consultation inside the catalog experience.")}
                 </p>
+                {record.journal_nif_bayes_ready ? (
+                  <div className="mt-3">
+                    <JournalSignalBadge
+                      ready
+                      nif={record.journal_nif}
+                      nifBayes={record.journal_nif_bayes}
+                      ciLow={record.journal_nif_ci_low}
+                      ciHigh={record.journal_nif_ci_high}
+                      journalName={record.journal_display_name}
+                      size="md"
+                    />
+                  </div>
+                ) : null}
               </div>
               <div className="rounded-2xl border border-white/70 bg-white/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/70">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">

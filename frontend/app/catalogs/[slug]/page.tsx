@@ -8,6 +8,7 @@ import FacetPanel from "../../components/FacetPanel";
 import EntityTableToolbar from "../../components/EntityTableToolbar";
 import RecordResultCard from "../../components/RecordResultCard";
 import RecordListRow from "../../components/RecordListRow";
+import { JournalSignalBadge } from "../../components/JournalSignalBadge";
 import { useAssistantContextRegistration } from "../../contexts/AssistantContext";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -51,6 +52,12 @@ interface CatalogRecord {
   quality_score: number | null;
   source: string | null;
   attributes_json: string | null;
+  journal_nif_bayes_ready?: boolean;
+  journal_display_name?: string | null;
+  journal_nif?: number | null;
+  journal_nif_bayes?: number | null;
+  journal_nif_ci_low?: number | null;
+  journal_nif_ci_high?: number | null;
 }
 
 interface CatalogResultsPayload {
@@ -667,9 +674,19 @@ export default function CatalogPortalPage() {
                         authorityScore={score}
                         qualityScore={score}
                         statusBadge={
-                          <Badge variant={enrichmentVariant(record.enrichment_status)}>
-                            {statusLabel("enrichment", record.enrichment_status)}
-                          </Badge>
+                          <span className="flex flex-wrap items-center gap-1.5">
+                            <Badge variant={enrichmentVariant(record.enrichment_status)}>
+                              {statusLabel("enrichment", record.enrichment_status)}
+                            </Badge>
+                            <JournalSignalBadge
+                              ready={Boolean(record.journal_nif_bayes_ready)}
+                              nif={record.journal_nif}
+                              nifBayes={record.journal_nif_bayes}
+                              ciLow={record.journal_nif_ci_low}
+                              ciHigh={record.journal_nif_ci_high}
+                              journalName={record.journal_display_name}
+                            />
+                          </span>
                         }
                         owner={record.secondary_label || record.source || "—"}
                       />
@@ -697,6 +714,14 @@ export default function CatalogPortalPage() {
                           </Badge>
                           <QualityBadge score={record.quality_score} />
                           {record.entity_type ? <Badge variant="default">{record.entity_type}</Badge> : null}
+                          <JournalSignalBadge
+                            ready={Boolean(record.journal_nif_bayes_ready)}
+                            nif={record.journal_nif}
+                            nifBayes={record.journal_nif_bayes}
+                            ciLow={record.journal_nif_ci_low}
+                            ciHigh={record.journal_nif_ci_high}
+                            journalName={record.journal_display_name}
+                          />
                         </>
                       }
                       primaryMeta={[
