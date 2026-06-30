@@ -124,10 +124,12 @@ export default function FacetPanel({ activeFacets, onFacetChange, search, minQua
     if (field === "work_type") return t(`page.work_type.${value}`);
 
     if (field === "journal_metric_signal") {
-      const valueMap: Record<string, string> = {
-        nif_bayes_ready: "NIF + Bayes",
-      };
-      return valueMap[value] ?? value;
+      if (value === "nif_bayes_ready") {
+        const key = "catalogs.facets.nif_bayes_ready";
+        const translated = t(key);
+        return translated === key ? "NIF + Bayes (records)" : translated;
+      }
+      return value;
     }
 
     if (field === "entity_type") {
