@@ -20,6 +20,7 @@ export interface Entity {
     quality_score: number | null;
     enrichment_work_type?: string | null;
     enrichment_issn_l?: string | null;
+    journal_display_name?: string | null;
 }
 
 export type EditableFields = Pick<

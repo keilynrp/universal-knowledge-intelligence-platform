@@ -277,7 +277,9 @@ export default function EntityTableContent({
                                 const titleValue = String(resolveAttributeValue(entity, parsedJson, "title", true) || entity.primary_label || t("page.entity_table.unnamed_entity"));
                                 const secondaryValue = resolveAttributeValue(entity, parsedJson, "authors", true) || resolveAttributeValue(entity, parsedJson, "secondary_label", true);
                                 const identifierValue = resolveAttributeValue(entity, parsedJson, "doi", true) || resolveAttributeValue(entity, parsedJson, "canonical_id", true);
-                                const journalValue = resolveAttributeValue(entity, parsedJson, "journal", true);
+                                // Prefer the authoritative journal name resolved from enrichment_issn_l;
+                                // fall back to the journal/venue stored in attributes.
+                                const journalValue = entity.journal_display_name || resolveAttributeValue(entity, parsedJson, "journal", true);
                                 const yearValue = resolveAttributeValue(entity, parsedJson, "year", true);
                                 const citationsValue = resolveAttributeValue(entity, parsedJson, "citations", true);
                                 const statusMeta = enrichmentBadgeMeta(entity.enrichment_status, t);
@@ -360,6 +362,7 @@ export default function EntityTableContent({
                                                     {identifierValue ? String(identifierValue) : `#${entity.id}`}
                                                     {entity.entity_type ? ` · ${entity.entity_type}` : ""}
                                                     {entity.domain ? ` · ${entity.domain}` : ""}
+                                                    {journalValue ? ` · ${String(journalValue)}` : ""}
                                                 </>
                                             }
                                             authorityScore={entity.quality_score !== null && entity.quality_score !== undefined ? entity.quality_score.toFixed(2) : "—"}

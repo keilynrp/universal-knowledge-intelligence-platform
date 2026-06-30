@@ -653,7 +653,8 @@ export default function CatalogPortalPage() {
               ) : results && results.items.length > 0 ? (
                 results.items.map((record) => {
                   const attributes = parseAttributes(record.attributes_json);
-                  const journal = (attributes.journal as string | undefined) || (attributes.venue as string | undefined);
+                  // Prefer the authoritative journal name resolved from enrichment_issn_l.
+                  const journal = record.journal_display_name || (attributes.journal as string | undefined) || (attributes.venue as string | undefined);
                   const year = attributes.year as string | number | undefined;
                   const statusTone = recordStatusTone(record.validation_status, record.enrichment_status);
                   const score = record.quality_score !== null && record.quality_score !== undefined ? record.quality_score.toFixed(2) : "—";
@@ -669,6 +670,7 @@ export default function CatalogPortalPage() {
                             {record.canonical_id || `#${record.id}`}
                             {record.entity_type ? ` · ${record.entity_type}` : ""}
                             {record.domain ? ` · ${record.domain}` : ""}
+                            {journal ? ` · ${journal}` : ""}
                           </>
                         }
                         authorityScore={score}

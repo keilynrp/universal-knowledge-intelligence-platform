@@ -148,9 +148,17 @@ export default function CatalogRecordPage() {
     return typeof fromAttrs === "string" && fromAttrs.trim() ? fromAttrs.trim() : null;
   }, [record, mergedAttributes]);
 
+  // Prefer the authoritative journal name resolved from enrichment_issn_l.
+  const journalName = record
+    ? record.journal_display_name
+      || (typeof mergedAttributes.journal === "string" ? mergedAttributes.journal : null)
+      || (typeof mergedAttributes.venue === "string" ? mergedAttributes.venue : null)
+    : null;
+
   const coreFields = record ? [
     { key: "primary_label", label: tr("entities.primary_label", "Primary label"), value: record.primary_label },
     { key: "secondary_label", label: tr("page.import.field.secondary_label", "Secondary label"), value: record.secondary_label },
+    ...(journalName ? [{ key: "journal", label: tr("catalogs.record.journal", "Journal"), value: journalName }] : []),
     { key: "canonical_id", label: tr("page.import.field.canonical_id", "Canonical ID"), value: record.canonical_id },
     { key: "entity_type", label: tr("page.import.field.entity_type", "Entity type"), value: record.entity_type },
     { key: "domain", label: tr("page.import.field.domain", "Domain"), value: record.domain },
