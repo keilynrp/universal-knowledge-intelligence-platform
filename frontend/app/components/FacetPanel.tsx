@@ -84,9 +84,8 @@ export default function FacetPanel({ activeFacets, onFacetChange, search, minQua
 
   const translateFacetLabel = (field: string) => {
     const explicitLabels: Record<string, string> = {
-      entity_type: "Tipo de entidad",
-      domain: "Dominio",
-      journal_metric_signal: "Señales métricas",
+      entity_type: t("page.import.field.entity_type"),
+      domain: t("page.import.field.domain"),
     };
     if (explicitLabels[field]) return explicitLabels[field];
     const key = FIELD_LABELS[field];

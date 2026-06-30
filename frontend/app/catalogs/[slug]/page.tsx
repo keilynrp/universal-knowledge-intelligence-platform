@@ -602,6 +602,7 @@ export default function CatalogPortalPage() {
                   validation_status: null,
                   enrichment_status: null,
                   source: null,
+                  journal_metric_signal: null,
                 });
               }}
               className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:bg-[var(--ukip-panel)] dark:text-[var(--ukip-text)] dark:hover:bg-[var(--ukip-panel-strong)]"
