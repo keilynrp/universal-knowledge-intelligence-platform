@@ -130,21 +130,25 @@ the file and its watermark survive redeploys. Remaining steps:
 OPENALEX_EMAIL=ops@inbounduxd.com
 ```
 
-**2. First full pull (one-time).** Fetch-bound, so it runs for a while — do it
-once in the running backend container (Dokploy → Terminal, or a one-off
-Schedule). ISSNs come from `journal_metrics` (self-maintaining as journals are
-added):
+**2. Backfill = resumable, multi-day (OpenAlex has a ~1000 req/day free quota).**
+The pull auto-selects its mode from the watermark: with none set it runs a
+**backfill** that fetches one journal at a time and checkpoints each finished
+journal in `_meta`; when the daily budget is hit it stops cleanly (partial data
+persisted, no watermark) and the next run resumes the remaining journals. Once
+every journal is done it sets the watermark and switches to **incremental**
+(`from_updated_date`) automatically. So the same command is safe every day.
+
+**3. Schedule (Dokploy → app → Schedules on `ukip-backend`).** Run **daily**
+`0 3 * * *` until the backfill catches up, then relax to monthly:
 
 ```
 python -m backend.openalex_lake.pull_works
 ```
 
-**3. Monthly incremental (the schedule).** Dokploy → app → Schedules → new
-schedule on the `ukip-backend` service, cron `0 3 1 * *`, command:
-
-```
-python -m backend.openalex_lake.pull_works --incremental
-```
+`python -m backend.openalex_lake.status` reports `phase` (backfill/incremental)
+and `backfill_journals_done` so you can watch the multi-day catch-up. ISSNs come
+from `journal_metrics` (self-maintaining). Set `OPENALEX_API_KEY` (paid credits)
+to lift the daily quota and finish in one run.
 
 Overlap is safe: DuckDB is single-writer, so a second concurrent run simply
 fails to open the file and exits (logged) rather than corrupting anything.

@@ -21,12 +21,19 @@ logger = logging.getLogger(__name__)
 
 def lake_status(store: LakeStore) -> dict:
     """A compact operational snapshot of the lake."""
+    from backend.openalex_lake.pull_works import _DONE_ISSNS_KEY
+
     yr = store.con.execute(
         "SELECT min(publication_year), max(publication_year) FROM fact_works"
     ).fetchone()
     journals = store.con.execute("SELECT count(*) FROM v_source_coverage").fetchone()[0]
+    watermark = store.get_watermark("works")
+    done_raw = store.get_watermark(_DONE_ISSNS_KEY)
+    backfill_done = len(json.loads(done_raw)) if done_raw else 0
     return {
-        "works_watermark": store.get_watermark("works"),
+        "phase": "incremental" if watermark else "backfill",
+        "works_watermark": watermark,
+        "backfill_journals_done": backfill_done,   # >0 while a multi-day backfill is in progress
         "journals": journals,
         "year_min": yr[0],
         "year_max": yr[1],

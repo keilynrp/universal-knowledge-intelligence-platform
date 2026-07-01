@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import json
 import logging
 import time
 from datetime import date
@@ -170,62 +171,115 @@ def iter_works(fetch: FetchFn, filter_str: str, select: Optional[str] = None) ->
             time.sleep(INTER_PAGE_DELAY)
 
 
+_DONE_ISSNS_KEY = "works_backfill_done_issns"
+
+
+def _load_done_issns(store: LakeStore) -> set:
+    raw = store.get_watermark(_DONE_ISSNS_KEY)
+    return set(json.loads(raw)) if raw else set()
+
+
+def _save_done_issns(store: LakeStore, done: set) -> None:
+    store.set_watermark(_DONE_ISSNS_KEY, json.dumps(sorted(done)))
+
+
 def run_pull(
     scope: LakeScope,
     store: LakeStore,
     fetch: FetchFn,
     *,
-    incremental: bool = False,
+    incremental: bool = False,  # kept for CLI compat; mode is watermark-driven
     watermark_key: str = "works",
     limit: Optional[int] = None,
     flush_every: int = 1000,
 ) -> dict:
-    """Pull works for `scope` into `store`. Returns basic stats.
+    """Pull works for `scope` into `store`, resumable across the daily quota.
 
-    `limit` caps the number of works (smoke test); a limited run is *partial* so
-    it deliberately does NOT advance the watermark (that would skip data on the
-    next real pull). Rows are buffered and flushed every `flush_every` works for
-    bulk inserts.
+    Mode is chosen by the watermark, so the same command works every run:
+    - **backfill** (no watermark yet): iterate ISSNs one at a time, checkpointing
+      each completed journal in `_meta`. If the daily rate limit is hit, stop and
+      persist progress; the next run skips finished journals. When every journal
+      is done, set the watermark and clear the checkpoint.
+    - **incremental** (watermark set): batched `from_updated_date` delta pull.
+
+    `limit` caps works (smoke test) and never advances the watermark.
     """
-    from_updated = store.get_watermark(watermark_key) if incremental else None
-    issn_chunks = chunk_issns(list(scope.issn_l)) if scope.issn_l else [None]
+    existing_watermark = store.get_watermark(watermark_key)
+    backfill = existing_watermark is None
     run_started = date.today().isoformat()
     buffer = RowBuffer(store, flush_every=flush_every)
-
     select = select_fields(scope)
     works_seen = 0
     rate_limited = False
     retry_after: Optional[int] = None
+    limited = False
+
+    if backfill and scope.issn_l:
+        all_issns = list(dict.fromkeys(scope.issn_l))
+        done = _load_done_issns(store)
+        pending = [i for i in all_issns if i not in done]
+        try:
+            for issn in pending:
+                for work in iter_works(fetch, build_filter(scope, [issn], None), select):
+                    buffer.add_work_rows(transform_work(work, include_citations=scope.include_citations))
+                    works_seen += 1
+                    if works_seen % 1000 == 0:
+                        logger.info("openalex-lake: %d works ingested…", works_seen)
+                    if limit is not None and works_seen >= limit:
+                        limited = True
+                        break
+                if limited:
+                    break
+                # Journal fully paginated — persist its rows, then checkpoint it.
+                done.add(issn)
+                buffer.flush()
+                _save_done_issns(store, done)
+        except RateLimitExhausted as exc:
+            rate_limited = True
+            retry_after = exc.retry_after
+            logger.warning(
+                "openalex-lake: daily rate limit hit; %d/%d journals done, resume in ~%ss",
+                len(done), len(all_issns), retry_after,
+            )
+        buffer.flush()
+        complete = len(done) >= len(all_issns) and not rate_limited and not limited
+        if complete:
+            store.set_watermark(watermark_key, run_started)
+            _save_done_issns(store, set())  # clear -> future runs are incremental
+        return {
+            "mode": "backfill", "works": works_seen,
+            "done_issns": len(done), "total_issns": len(all_issns),
+            "complete": complete, "limited": limited,
+            "rate_limited": rate_limited, "retry_after": retry_after,
+            "watermark": run_started if complete else None,
+            "tables": store.summary(),
+        }
+
+    # Incremental (or unbounded) path: batched chunks for fewer requests.
+    from_updated = existing_watermark
+    issn_chunks = chunk_issns(list(scope.issn_l)) if scope.issn_l else [None]
     try:
         for chunk in issn_chunks:
-            filter_str = build_filter(scope, chunk, from_updated)
-            for work in iter_works(fetch, filter_str, select):
+            for work in iter_works(fetch, build_filter(scope, chunk, from_updated), select):
                 buffer.add_work_rows(transform_work(work, include_citations=scope.include_citations))
                 works_seen += 1
                 if works_seen % 1000 == 0:
                     logger.info("openalex-lake: %d works ingested…", works_seen)
                 if limit is not None and works_seen >= limit:
+                    limited = True
                     break
-            if limit is not None and works_seen >= limit:
+            if limited:
                 break
     except RateLimitExhausted as exc:
         rate_limited = True
         retry_after = exc.retry_after
-        logger.warning(
-            "openalex-lake: daily rate limit exhausted after %d works; resume in ~%ss",
-            works_seen, retry_after,
-        )
-    buffer.flush()  # persist whatever we got before stopping
-
-    limited = limit is not None and works_seen >= limit
+    buffer.flush()
     complete = not limited and not rate_limited
-    if complete:  # advance watermark only after a full successful pass
+    if complete:
         store.set_watermark(watermark_key, run_started)
     return {
-        "works": works_seen,
-        "limited": limited,
-        "rate_limited": rate_limited,
-        "retry_after": retry_after,
+        "mode": "incremental", "works": works_seen, "limited": limited,
+        "rate_limited": rate_limited, "retry_after": retry_after,
         "watermark": run_started if complete else None,
         "tables": store.summary(),
     }

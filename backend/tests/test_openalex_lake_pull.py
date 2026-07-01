@@ -132,6 +132,39 @@ def test_run_pull_stops_cleanly_on_rate_limit():
         assert store.count("fact_works") == 1       # partial data was persisted
 
 
+def test_backfill_resumes_per_issn_then_switches_to_incremental():
+    scope = LakeScope().with_issns(["1111-1111", "2222-2222"])
+    with LakeStore(":memory:") as store:
+        # Run 1: journal 1 completes, journal 2 hits the daily budget.
+        def fetch1(url, params):
+            if "1111-1111" in params["filter"]:
+                return {"results": [{"id": "https://openalex.org/W1"}], "meta": {"next_cursor": None}}
+            raise RateLimitExhausted(retry_after=100)
+
+        s1 = run_pull(scope, store, fetch1)
+        assert s1["mode"] == "backfill" and s1["rate_limited"] is True
+        assert s1["done_issns"] == 1 and s1["complete"] is False
+        assert s1["watermark"] is None and store.get_watermark("works") is None
+        assert store.count("fact_works") == 1
+
+        # Run 2: journal 1 is checkpointed (skipped); journal 2 completes the pass.
+        seen = []
+
+        def fetch2(url, params):
+            seen.append("1111" if "1111-1111" in params["filter"] else "2222")
+            return {"results": [{"id": "https://openalex.org/W2"}], "meta": {"next_cursor": None}}
+
+        s2 = run_pull(scope, store, fetch2)
+        assert seen == ["2222"]  # journal 1 was NOT re-fetched
+        assert s2["complete"] is True and s2["done_issns"] == 2
+        assert store.get_watermark("works") is not None
+        assert store.count("fact_works") == 2
+
+        # Run 3: watermark set -> incremental mode from here on.
+        s3 = run_pull(scope, store, lambda u, p: {"results": [], "meta": {"next_cursor": None}})
+        assert s3["mode"] == "incremental"
+
+
 def test_run_pull_limit_is_partial_and_no_watermark():
     pages = [
         {
