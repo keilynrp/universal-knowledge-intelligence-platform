@@ -79,6 +79,10 @@ class LakeStore:
             raise ValueError(f"unknown table: {table!r}")
         return self.con.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
 
+    def summary(self) -> dict[str, int]:
+        """Row counts per fact/dim table — a quick post-ingest sanity view."""
+        return {table: self.count(table) for table in sorted(_KNOWN_TABLES)}
+
     def close(self) -> None:
         self.con.close()
 

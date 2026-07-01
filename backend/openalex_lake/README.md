@@ -43,6 +43,7 @@ export OPENALEX_MAILTO="you@example.org"
 # export OPENALEX_API_KEY="..."           # optional, faster
 export OPENALEX_LAKE_DB="data/openalex_lake.duckdb"
 
+python -m backend.openalex_lake.pull_works --limit 25      # smoke test: ~25 real works, prints a table summary, no watermark advance
 python -m backend.openalex_lake.pull_works                 # full pull
 python -m backend.openalex_lake.pull_works --incremental   # only works updated since last run
 python -m backend.openalex_lake.pull_works --include-citations   # add the reference graph (heavy)

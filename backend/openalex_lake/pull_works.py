@@ -117,8 +117,14 @@ def run_pull(
     *,
     incremental: bool = False,
     watermark_key: str = "works",
+    limit: Optional[int] = None,
 ) -> dict:
-    """Pull all works for `scope` into `store`. Returns basic stats."""
+    """Pull works for `scope` into `store`. Returns basic stats.
+
+    `limit` caps the number of works (smoke test); a limited run is *partial* so
+    it deliberately does NOT advance the watermark (that would skip data on the
+    next real pull).
+    """
     from_updated = store.get_watermark(watermark_key) if incremental else None
     issn_chunks = chunk_issns(list(scope.issn_l)) if scope.issn_l else [None]
     run_started = date.today().isoformat()
@@ -131,10 +137,20 @@ def run_pull(
             works_seen += 1
             if works_seen % 1000 == 0:
                 logger.info("openalex-lake: %d works ingested…", works_seen)
+            if limit is not None and works_seen >= limit:
+                break
+        if limit is not None and works_seen >= limit:
+            break
 
-    # Advance the watermark only after a full successful pass.
-    store.set_watermark(watermark_key, run_started)
-    return {"works": works_seen, "fact_works": store.count("fact_works"), "watermark": run_started}
+    limited = limit is not None and works_seen >= limit
+    if not limited:  # advance watermark only after a full successful pass
+        store.set_watermark(watermark_key, run_started)
+    return {
+        "works": works_seen,
+        "limited": limited,
+        "watermark": None if limited else run_started,
+        "tables": store.summary(),
+    }
 
 
 def main() -> None:  # pragma: no cover - thin CLI wrapper
@@ -142,6 +158,8 @@ def main() -> None:  # pragma: no cover - thin CLI wrapper
     parser = argparse.ArgumentParser(description="Pull a targeted OpenAlex works subset into DuckDB.")
     parser.add_argument("--incremental", action="store_true", help="Only works updated since last run.")
     parser.add_argument("--include-citations", action="store_true", help="Also store referenced_works (heavy).")
+    parser.add_argument("--limit", type=int, default=None,
+                        help="Smoke test: stop after N works (does not advance the watermark).")
     args = parser.parse_args()
 
     from backend.database import SessionLocal
@@ -157,7 +175,10 @@ def main() -> None:  # pragma: no cover - thin CLI wrapper
         raise SystemExit("Refusing to pull: scope is unbounded (no ISSN/field/ROR filter).")
 
     with LakeStore(settings.db_path) as store:
-        stats = run_pull(scope, store, _default_fetch(settings), incremental=args.incremental)
+        stats = run_pull(
+            scope, store, _default_fetch(settings),
+            incremental=args.incremental, limit=args.limit,
+        )
     logger.info("openalex-lake pull complete: %s", stats)
 
 

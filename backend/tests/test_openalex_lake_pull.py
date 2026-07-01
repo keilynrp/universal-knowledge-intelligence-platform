@@ -68,5 +68,28 @@ def test_run_pull_ingests_and_watermarks():
     with LakeStore(":memory:") as store:
         stats = run_pull(scope, store, _fake_fetch(pages))
         assert stats["works"] == 1
+        assert stats["limited"] is False
         assert store.count("fact_works") == 1
         assert store.get_watermark("works") is not None
+        assert stats["tables"]["fact_works"] == 1
+
+
+def test_run_pull_limit_is_partial_and_no_watermark():
+    pages = [
+        {
+            "results": [
+                {"id": "https://openalex.org/W1", "publication_year": 2018},
+                {"id": "https://openalex.org/W2", "publication_year": 2019},
+                {"id": "https://openalex.org/W3", "publication_year": 2020},
+            ],
+            "meta": {"next_cursor": None},
+        }
+    ]
+    scope = LakeScope().with_issns(["0028-0836"])
+    with LakeStore(":memory:") as store:
+        stats = run_pull(scope, store, _fake_fetch(pages), limit=2)
+        assert stats["works"] == 2 and stats["limited"] is True
+        assert store.count("fact_works") == 2  # stopped early
+        assert stats["watermark"] is None
+        # a smoke run must NOT advance the watermark
+        assert store.get_watermark("works") is None
