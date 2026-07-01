@@ -1,7 +1,7 @@
 """Tests for the lake status snapshot + read-only store open."""
 import pytest
 
-from backend.openalex_lake.status import lake_status
+from backend.openalex_lake.status import lake_status, resolve_status
 from backend.openalex_lake.store import LakeStore
 from backend.openalex_lake.transform import transform_work
 
@@ -25,6 +25,20 @@ def test_lake_status_reports_watermark_coverage_and_span():
         assert status["journals"] == 1
         assert status["year_min"] == 2012 and status["year_max"] == 2020
         assert status["tables"]["fact_works"] == 2
+
+
+def test_resolve_status_not_initialized(tmp_path):
+    missing = str(tmp_path / "nope.duckdb")
+    out = resolve_status(missing)
+    assert out["lake"] == "not_initialized" and "pull_works" in out["hint"]
+
+
+def test_resolve_status_reads_existing_lake(tmp_path):
+    db = str(tmp_path / "lake.duckdb")
+    with LakeStore(db) as store:
+        store.ingest_work_rows(transform_work(_work("W1", 2015)))
+    out = resolve_status(db)
+    assert out["tables"]["fact_works"] == 1
 
 
 def test_read_only_store_can_query_persisted_lake(tmp_path):

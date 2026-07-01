@@ -40,8 +40,10 @@ _BASE_SELECT = (
 ISSN_CHUNK = 50           # keep the filter URL comfortably bounded
 INTER_PAGE_DELAY = 0.1    # polite pacing between pages
 _RETRY_STATUSES = frozenset({429, 503})
-_MAX_RETRIES = 3
-_MAX_BACKOFF = 8.0
+# Sustained pulls see 429 bursts even on the polite pool; be patient rather than
+# crashing a multi-hour first pull. Honors Retry-After when present.
+_MAX_RETRIES = 6
+_MAX_BACKOFF = 60.0
 
 # A fetch takes (url, params) and returns the parsed JSON body.
 FetchFn = Callable[[str, dict], dict]
