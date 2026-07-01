@@ -44,6 +44,22 @@ def chunk_issns(issns: list[str], size: int = ISSN_CHUNK) -> list[list[str]]:
     return [issns[i:i + size] for i in range(0, len(issns), size)] or [[]]
 
 
+def parse_issn_list(raw: str) -> list[str]:
+    """Comma-separated ISSN-L string -> deduped, trimmed list."""
+    return list(dict.fromkeys(i.strip() for i in raw.split(",") if i.strip()))
+
+
+def read_issn_file(path: str) -> list[str]:
+    """One ISSN-L per line; blank lines and '#' comments ignored."""
+    out: list[str] = []
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                out.append(line)
+    return list(dict.fromkeys(out))
+
+
 def build_filter(
     scope: LakeScope,
     issn_chunk: Optional[list[str]] = None,
@@ -160,19 +176,34 @@ def main() -> None:  # pragma: no cover - thin CLI wrapper
     parser.add_argument("--include-citations", action="store_true", help="Also store referenced_works (heavy).")
     parser.add_argument("--limit", type=int, default=None,
                         help="Smoke test: stop after N works (does not advance the watermark).")
+    parser.add_argument("--issn", help="Comma-separated ISSN-L list (overrides journal_metrics).")
+    parser.add_argument("--issn-file", help="File with one ISSN-L per line (overrides journal_metrics).")
     args = parser.parse_args()
-
-    from backend.database import SessionLocal
 
     settings = LakeSettings()
     scope = default_scope()
-    with SessionLocal() as db:
-        scope = scope.with_issns(load_scored_issn_l(db))
+
+    # Prefer explicit ISSNs (works in any env); else read the app's journal_metrics.
+    issns: list[str] = []
+    if args.issn:
+        issns += parse_issn_list(args.issn)
+    if args.issn_file:
+        issns += read_issn_file(args.issn_file)
+    if issns:
+        scope = scope.with_issns(issns)
+    else:
+        from backend.database import SessionLocal
+        with SessionLocal() as db:
+            scope = scope.with_issns(load_scored_issn_l(db))
+
     if args.include_citations:
         scope = dataclasses.replace(scope, include_citations=True)
 
     if not scope.is_bounded():
-        raise SystemExit("Refusing to pull: scope is unbounded (no ISSN/field/ROR filter).")
+        raise SystemExit(
+            "Refusing to pull: scope is unbounded. Pass --issn / --issn-file, "
+            "or populate journal_metrics."
+        )
 
     with LakeStore(settings.db_path) as store:
         stats = run_pull(

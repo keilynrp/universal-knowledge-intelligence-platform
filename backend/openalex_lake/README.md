@@ -43,6 +43,8 @@ export OPENALEX_MAILTO="you@example.org"
 # export OPENALEX_API_KEY="..."           # optional, faster
 export OPENALEX_LAKE_DB="data/openalex_lake.duckdb"
 
+python -m backend.openalex_lake.pull_works --issn 0028-0836 --limit 5   # any env: pass ISSNs directly (no journal_metrics needed)
+python -m backend.openalex_lake.pull_works --issn-file journals.txt     # one ISSN-L per line
 python -m backend.openalex_lake.pull_works --limit 25      # smoke test: ~25 real works, prints a table summary, no watermark advance
 python -m backend.openalex_lake.pull_works                 # full pull
 python -m backend.openalex_lake.pull_works --incremental   # only works updated since last run

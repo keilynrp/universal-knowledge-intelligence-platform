@@ -1,7 +1,25 @@
 """Tests for the OpenAlex works puller (pure logic + paginated ingest)."""
 from backend.openalex_lake.config import LakeScope
-from backend.openalex_lake.pull_works import build_filter, chunk_issns, iter_works, run_pull
+from backend.openalex_lake.pull_works import (
+    build_filter,
+    chunk_issns,
+    iter_works,
+    parse_issn_list,
+    read_issn_file,
+    run_pull,
+)
 from backend.openalex_lake.store import LakeStore
+
+
+def test_parse_issn_list_dedups_and_trims():
+    assert parse_issn_list(" 0028-0836, 1476-4687 ,0028-0836,, ") == ["0028-0836", "1476-4687"]
+    assert parse_issn_list("") == []
+
+
+def test_read_issn_file_ignores_blanks_and_comments(tmp_path):
+    p = tmp_path / "issns.txt"
+    p.write_text("# journals\n0028-0836\n\n1476-4687\n0028-0836\n", encoding="utf-8")
+    assert read_issn_file(str(p)) == ["0028-0836", "1476-4687"]
 
 
 def test_chunk_issns_bounds_url():
