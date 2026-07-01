@@ -47,6 +47,11 @@ data/*.csv
 *.xlsx
 *.csv
 
+# OpenAlex lake (DuckDB store, built at runtime)
+*.duckdb
+*.duckdb.wal
+data/openalex_lake.duckdb
+
 # =========================
 # IDE & OS
 # =========================
