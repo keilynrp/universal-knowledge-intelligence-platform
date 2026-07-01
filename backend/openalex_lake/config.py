@@ -60,7 +60,10 @@ class LakeSettings:
         )
     )
     # OpenAlex "polite pool" wants a contact; a premium key lifts rate limits.
-    mailto: Optional[str] = field(default_factory=lambda: os.environ.get("OPENALEX_MAILTO"))
+    # Reuse the app's existing OPENALEX_EMAIL if OPENALEX_MAILTO isn't set.
+    mailto: Optional[str] = field(
+        default_factory=lambda: os.environ.get("OPENALEX_MAILTO") or os.environ.get("OPENALEX_EMAIL")
+    )
     api_key: Optional[str] = field(default_factory=lambda: os.environ.get("OPENALEX_API_KEY"))
     # S3 snapshot bucket (public, --no-sign-request).
     snapshot_s3_uri: str = field(

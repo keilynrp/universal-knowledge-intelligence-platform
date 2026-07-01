@@ -193,6 +193,16 @@ def test_dedup_by_pk_keeps_last_write():
     assert dedup_by_pk("dim_author", rows) == [{"author_id": "A1", "display_name": "new"}]
 
 
+def test_settings_mailto_falls_back_to_openalex_email(monkeypatch):
+    from backend.openalex_lake.config import LakeSettings
+
+    monkeypatch.delenv("OPENALEX_MAILTO", raising=False)
+    monkeypatch.setenv("OPENALEX_EMAIL", "ops@example.org")
+    assert LakeSettings().mailto == "ops@example.org"
+    monkeypatch.setenv("OPENALEX_MAILTO", "primary@example.org")
+    assert LakeSettings().mailto == "primary@example.org"  # explicit wins
+
+
 def test_default_scope_is_bounded_after_issns():
     scope = default_scope()
     assert scope.year_from == 2010 and scope.year_to == 2025

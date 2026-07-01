@@ -118,26 +118,29 @@ LEFT JOIN v_source_coverage cov ON cov.issn_l = jm.issn_l;
 ## Automated periodic updates (Dokploy)
 
 The puller is watermark-driven (`_meta.works` holds the last successful run
-date), so `--incremental` is safe to schedule. Set-up order matters:
+date), so `--incremental` is safe to schedule. The persistence is already wired
+in `docker-compose.prod.yml`: the `ukip_openalex_lake` volume is mounted at
+`/data` on `ukip-backend` and `OPENALEX_LAKE_DB=/data/openalex_lake.duckdb`, so
+the file and its watermark survive redeploys. Remaining steps:
 
-**1. Persistent volume (non-negotiable).** Point the lake DB at a mounted volume
-so the file *and* its watermark survive redeploys:
+**1. Set the polite-pool contact** (Dokploy → Environment). Reuses the existing
+`OPENALEX_EMAIL` (the anonymous pool is heavily throttled):
 
 ```
-OPENALEX_LAKE_DB=/data/openalex_lake.duckdb     # mounted Dokploy volume
-OPENALEX_MAILTO=ops@yourdomain.org              # polite pool (far less throttled)
+OPENALEX_EMAIL=ops@inbounduxd.com
 ```
 
 **2. First full pull (one-time).** Fetch-bound, so it runs for a while — do it
-once as a manual job in the container (ISSNs come from `journal_metrics`, i.e.
-self-maintaining as journals are added):
+once in the running backend container (Dokploy → Terminal, or a one-off
+Schedule). ISSNs come from `journal_metrics` (self-maintaining as journals are
+added):
 
 ```
 python -m backend.openalex_lake.pull_works
 ```
 
-**3. Monthly incremental (the schedule).** Dokploy → app → Schedules, cron
-`0 3 1 * *`:
+**3. Monthly incremental (the schedule).** Dokploy → app → Schedules → new
+schedule on the `ukip-backend` service, cron `0 3 1 * *`, command:
 
 ```
 python -m backend.openalex_lake.pull_works --incremental

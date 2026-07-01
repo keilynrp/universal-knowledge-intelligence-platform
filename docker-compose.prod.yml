@@ -55,7 +55,13 @@ services:
       # file and keeps telemetry.py's "development" default. Override in Dokploy.
       ENVIRONMENT: ${ENVIRONMENT:-production}
       SCHOLAR_USE_FREE_PROXIES: ${SCHOLAR_USE_FREE_PROXIES:-0}
+      # OPENALEX_EMAIL also feeds the OpenAlex lake polite pool (backend/openalex_lake).
       OPENALEX_EMAIL: ${OPENALEX_EMAIL:-}
+      # OpenAlex analytical lake: persistent DuckDB on a named volume so the file
+      # and its incremental watermark survive redeploys. The monthly refresh runs
+      # `python -m backend.openalex_lake.pull_works --incremental` in this container
+      # via a Dokploy Schedule. See backend/openalex_lake/README.md.
+      OPENALEX_LAKE_DB: ${OPENALEX_LAKE_DB:-/data/openalex_lake.duckdb}
       WOS_API_KEY: ${WOS_API_KEY:-}
       SCOPUS_API_KEY: ${SCOPUS_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -92,6 +98,7 @@ services:
       UKIP_BACKUP_CRITICAL_AFTER_HOURS: ${UKIP_BACKUP_CRITICAL_AFTER_HOURS:-26}
     volumes:
       - ukip_static_data:/app/static
+      - ukip_openalex_lake:/data
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
       interval: 30s
@@ -199,6 +206,7 @@ services:
 volumes:
   ukip_static_data:
   ukip_redis_data:
+  ukip_openalex_lake:
 
 networks:
   dokploy-network:
