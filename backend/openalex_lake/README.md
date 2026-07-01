@@ -31,6 +31,7 @@ Widening to the **full corpus** later is a config change, not a rewrite: relax
 - `pull_works.py` — API puller for the targeted subset (works / fact tables).
 - `sync_dimensions.py` — S3-snapshot loader for the dimensions (sources, institutions, topics).
 - `views.py` — DuckDB analysis views for the 4 axes (auto-registered by the store).
+- `status.py` — operational snapshot (watermark, counts, coverage) to verify scheduled runs.
 
 ## Default subset (day one)
 
@@ -114,15 +115,40 @@ LEFT JOIN v_source_coverage cov ON cov.issn_l = jm.issn_l;
 - At ~80–90 works/s (polite pool) the first full subset pull is a multi-hour,
   one-time batch; `--incremental` afterwards is cheap.
 
-## Automated periodic updates
+## Automated periodic updates (Dokploy)
 
 The puller is watermark-driven (`_meta.works` holds the last successful run
-date), so `--incremental` is safe to schedule. Recommended: an external cron /
-Dokploy scheduled job, e.g. monthly:
+date), so `--incremental` is safe to schedule. Set-up order matters:
+
+**1. Persistent volume (non-negotiable).** Point the lake DB at a mounted volume
+so the file *and* its watermark survive redeploys:
 
 ```
-0 3 1 * *  cd /app && python -m backend.openalex_lake.pull_works --incremental
+OPENALEX_LAKE_DB=/data/openalex_lake.duckdb     # mounted Dokploy volume
+OPENALEX_MAILTO=ops@yourdomain.org              # polite pool (far less throttled)
 ```
 
-(OpenAlex refreshes the snapshot ~monthly; incremental API pulls can run more
-often.) Deletions/merges are handled on the snapshot path via `merged_ids`.
+**2. First full pull (one-time).** Fetch-bound, so it runs for a while — do it
+once as a manual job in the container (ISSNs come from `journal_metrics`, i.e.
+self-maintaining as journals are added):
+
+```
+python -m backend.openalex_lake.pull_works
+```
+
+**3. Monthly incremental (the schedule).** Dokploy → app → Schedules, cron
+`0 3 1 * *`:
+
+```
+python -m backend.openalex_lake.pull_works --incremental
+```
+
+Overlap is safe: DuckDB is single-writer, so a second concurrent run simply
+fails to open the file and exits (logged) rather than corrupting anything.
+
+**Verify a run:** `python -m backend.openalex_lake.status` prints the watermark,
+per-table counts, journal coverage and year span (read-only, safe while the job
+holds the file).
+
+OpenAlex refreshes the snapshot ~monthly; incremental API pulls can run more
+often. Deletions/merges are handled on the snapshot path via `merged_ids`.

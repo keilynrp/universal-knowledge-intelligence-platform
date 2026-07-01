@@ -48,7 +48,11 @@ def dedup_by_pk(table: str, rows: list[dict]) -> list[dict]:
 class LakeStore:
     """Thin wrapper over a persistent (or in-memory) DuckDB lake."""
 
-    def __init__(self, db_path: str = ":memory:"):
+    def __init__(self, db_path: str = ":memory:", read_only: bool = False):
+        if read_only:
+            # For status/queries while a scheduled writer may hold the file.
+            self.con = duckdb.connect(db_path, read_only=True)
+            return
         if db_path != ":memory:":
             parent = os.path.dirname(os.path.abspath(db_path))
             os.makedirs(parent, exist_ok=True)
