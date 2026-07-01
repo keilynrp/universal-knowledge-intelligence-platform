@@ -30,6 +30,7 @@ Widening to the **full corpus** later is a config change, not a rewrite: relax
 - `store.py` — idempotent DuckDB upsert + incremental watermark.
 - `pull_works.py` — API puller for the targeted subset (works / fact tables).
 - `sync_dimensions.py` — S3-snapshot loader for the dimensions (sources, institutions, topics).
+- `views.py` — DuckDB analysis views for the 4 axes (auto-registered by the store).
 
 ## Default subset (day one)
 
@@ -47,11 +48,40 @@ python -m backend.openalex_lake.pull_works --incremental   # only works updated 
 python -m backend.openalex_lake.pull_works --include-citations   # add the reference graph (heavy)
 ```
 
+## Analysis views (the 4 axes)
+
+`store.py` auto-registers DuckDB views over the star schema (in `views.py`), so
+they stay in sync with the facts and cost nothing until queried:
+
+| Axis | Views |
+|------|-------|
+| Journal scientometrics | `v_journal_yearly`, `v_journal_citation_trend` |
+| Collaboration networks | `v_coauthor_pairs`, `v_institution_collab` |
+| Topic trends | `v_topic_yearly`, `v_field_yearly` |
+| Coverage / cross-source | `v_source_coverage`, `v_work_keys` |
+
+```sql
+-- journals ranked by output in 2020
+SELECT issn_l, works, citations FROM v_journal_yearly
+WHERE publication_year = 2020 ORDER BY works DESC LIMIT 20;
+```
+
 ## Cross-source joins (in DuckDB)
 
 `dim_source.issn_l` ↔ app `journal_metrics.issn_l` · `fact_works.doi` ↔
 `raw_entities.enrichment_doi` · `dim_author.orcid` / `dim_institution.ror` ↔ your
 author/institution tables.
+
+To join the lake against the app's SQLite/Postgres directly, ATTACH it:
+
+```sql
+INSTALL sqlite; LOAD sqlite;
+ATTACH 'sql_app.db' AS app (TYPE SQLITE);
+-- coverage of our scored journals in the lake
+SELECT jm.issn_l, jm.display_name, cov.works, cov.first_year, cov.last_year
+FROM app.journal_metrics jm
+LEFT JOIN v_source_coverage cov ON cov.issn_l = jm.issn_l;
+```
 
 ## Scaling to the full corpus (when storage allows)
 

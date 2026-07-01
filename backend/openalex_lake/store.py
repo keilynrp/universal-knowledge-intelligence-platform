@@ -14,6 +14,7 @@ from typing import Optional
 import duckdb
 
 from backend.openalex_lake.schema import DDL_STATEMENTS, PRIMARY_KEYS
+from backend.openalex_lake.views import create_analysis_views
 
 _SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 _KNOWN_TABLES = frozenset(PRIMARY_KEYS.keys())
@@ -38,6 +39,8 @@ class LakeStore:
     def _create_schema(self) -> None:
         for ddl in DDL_STATEMENTS:
             self.con.execute(ddl)
+        # Views are cheap and always valid over the (possibly empty) facts.
+        create_analysis_views(self.con)
 
     def insert_rows(self, table: str, rows: list[dict]) -> int:
         """Idempotently upsert rows into `table`. Returns rows written."""
