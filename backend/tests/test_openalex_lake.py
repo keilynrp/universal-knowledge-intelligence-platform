@@ -1,6 +1,6 @@
 """Unit tests for the OpenAlex lake transform + DuckDB store."""
 from backend.openalex_lake.config import LakeScope, default_scope
-from backend.openalex_lake.store import LakeStore
+from backend.openalex_lake.store import LakeStore, RowBuffer, dedup_by_pk
 from backend.openalex_lake.transform import transform_work
 
 SAMPLE_WORK = {
@@ -160,6 +160,37 @@ def test_store_watermark():
         assert store.get_watermark("works") == "2025-06-30"
         store.set_watermark("works", "2025-07-01")
         assert store.get_watermark("works") == "2025-07-01"
+
+
+def _work_with_author(work_id, author_id):
+    return {
+        "id": f"https://openalex.org/{work_id}",
+        "authorships": [{
+            "author": {"id": f"https://openalex.org/{author_id}", "display_name": author_id},
+            "institutions": [{"id": "https://openalex.org/I1"}],
+        }],
+    }
+
+
+def test_row_buffer_auto_flushes_at_threshold_and_dedups_dims():
+    with LakeStore(":memory:") as store:
+        buf = RowBuffer(store, flush_every=2)
+        # Two works sharing author A1 -> auto-flush after the 2nd.
+        buf.add_work_rows(transform_work(_work_with_author("W1", "A1")))
+        buf.add_work_rows(transform_work(_work_with_author("W2", "A1")))
+        assert store.count("fact_works") == 2       # flushed
+        assert store.count("dim_author") == 1       # A1 deduped within the window
+        # A third work stays buffered until flush().
+        buf.add_work_rows(transform_work(_work_with_author("W3", "A2")))
+        assert store.count("fact_works") == 2
+        buf.flush()
+        assert store.count("fact_works") == 3
+        assert store.count("dim_author") == 2
+
+
+def test_dedup_by_pk_keeps_last_write():
+    rows = [{"author_id": "A1", "display_name": "old"}, {"author_id": "A1", "display_name": "new"}]
+    assert dedup_by_pk("dim_author", rows) == [{"author_id": "A1", "display_name": "new"}]
 
 
 def test_default_scope_is_bounded_after_issns():

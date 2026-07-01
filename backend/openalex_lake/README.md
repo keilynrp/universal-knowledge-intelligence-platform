@@ -101,6 +101,19 @@ LEFT JOIN v_source_coverage cov ON cov.issn_l = jm.issn_l;
    year) or, for the whole corpus, stream the works snapshot through
    `transform_work` + `LakeStore` (same code, snapshot reader instead of API).
 
+## Performance notes
+
+- **Bulk insert**: rows are buffered across works and written with a vectorized
+  `INSERT OR REPLACE ... SELECT * FROM <df>` (deduped by PK). Measured on 600
+  Nature works this cut the DB write from **226 s → 0.8 s** (~280×); the pull is
+  now fetch-bound.
+- **`select=`** trims each page from ~8.9 MB to ~4.6 MB (only the fields the
+  transform reads).
+- **Always set `OPENALEX_MAILTO`** — the polite pool is far less throttled than
+  the anonymous common pool; without it, sustained pagination hits 429 backoffs.
+- At ~80–90 works/s (polite pool) the first full subset pull is a multi-hour,
+  one-time batch; `--incremental` afterwards is cheap.
+
 ## Automated periodic updates
 
 The puller is watermark-driven (`_meta.works` holds the last successful run

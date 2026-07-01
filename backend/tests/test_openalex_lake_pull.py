@@ -7,6 +7,7 @@ from backend.openalex_lake.pull_works import (
     parse_issn_list,
     read_issn_file,
     run_pull,
+    select_fields,
 )
 from backend.openalex_lake.store import LakeStore
 
@@ -46,6 +47,24 @@ def test_build_filter_composes_clauses():
 def test_build_filter_omits_absent_clauses():
     f = build_filter(LakeScope(year_from=None, year_to=None), issn_chunk=None)
     assert f == ""
+
+
+def test_select_fields_adds_referenced_works_only_with_citations():
+    base = select_fields(LakeScope())
+    assert "authorships" in base and "counts_by_year" in base
+    assert "referenced_works" not in base
+    assert "referenced_works" in select_fields(LakeScope(include_citations=True))
+
+
+def test_iter_works_passes_select_param():
+    seen = {}
+
+    def fetch(url, params):
+        seen.update(params)
+        return {"results": [], "meta": {"next_cursor": None}}
+
+    list(iter_works(fetch, "filter", "id,doi"))
+    assert seen["select"] == "id,doi"
 
 
 def _fake_fetch(pages):

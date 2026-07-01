@@ -23,13 +23,20 @@ from typing import Callable, Iterator, Optional
 import httpx
 
 from backend.openalex_lake.config import LakeScope, LakeSettings, default_scope, load_scored_issn_l
-from backend.openalex_lake.store import LakeStore
+from backend.openalex_lake.store import LakeStore, RowBuffer
 from backend.openalex_lake.transform import transform_work
 
 logger = logging.getLogger(__name__)
 
 WORKS_URL = "https://api.openalex.org/works"
 PER_PAGE = 200            # OpenAlex max page size
+# Fetch only the fields transform_work needs — roughly halves the page payload
+# (8.9 MB -> 4.6 MB for 200 Nature works) and the parse cost.
+_BASE_SELECT = (
+    "id", "doi", "title", "display_name", "publication_year", "publication_date",
+    "type", "cited_by_count", "primary_location", "open_access", "primary_topic",
+    "topics", "counts_by_year", "authorships", "updated_date",
+)
 ISSN_CHUNK = 50           # keep the filter URL comfortably bounded
 INTER_PAGE_DELAY = 0.1    # polite pacing between pages
 _RETRY_STATUSES = frozenset({429, 503})
@@ -114,11 +121,22 @@ def _default_fetch(settings: LakeSettings) -> FetchFn:
     return fetch
 
 
-def iter_works(fetch: FetchFn, filter_str: str) -> Iterator[dict]:
+def select_fields(scope: LakeScope) -> str:
+    """Comma-separated `select` list: only what transform_work reads."""
+    fields = list(_BASE_SELECT)
+    if scope.include_citations:
+        fields.append("referenced_works")
+    return ",".join(fields)
+
+
+def iter_works(fetch: FetchFn, filter_str: str, select: Optional[str] = None) -> Iterator[dict]:
     """Cursor-paginate one filter combination, yielding raw works."""
     cursor = "*"
     while cursor:
-        body = fetch(WORKS_URL, {"filter": filter_str, "per-page": PER_PAGE, "cursor": cursor})
+        params = {"filter": filter_str, "per-page": PER_PAGE, "cursor": cursor}
+        if select:
+            params["select"] = select
+        body = fetch(WORKS_URL, params)
         for work in body.get("results") or []:
             yield work
         cursor = (body.get("meta") or {}).get("next_cursor")
@@ -134,22 +152,26 @@ def run_pull(
     incremental: bool = False,
     watermark_key: str = "works",
     limit: Optional[int] = None,
+    flush_every: int = 1000,
 ) -> dict:
     """Pull works for `scope` into `store`. Returns basic stats.
 
     `limit` caps the number of works (smoke test); a limited run is *partial* so
     it deliberately does NOT advance the watermark (that would skip data on the
-    next real pull).
+    next real pull). Rows are buffered and flushed every `flush_every` works for
+    bulk inserts.
     """
     from_updated = store.get_watermark(watermark_key) if incremental else None
     issn_chunks = chunk_issns(list(scope.issn_l)) if scope.issn_l else [None]
     run_started = date.today().isoformat()
+    buffer = RowBuffer(store, flush_every=flush_every)
 
+    select = select_fields(scope)
     works_seen = 0
     for chunk in issn_chunks:
         filter_str = build_filter(scope, chunk, from_updated)
-        for work in iter_works(fetch, filter_str):
-            store.ingest_work_rows(transform_work(work, include_citations=scope.include_citations))
+        for work in iter_works(fetch, filter_str, select):
+            buffer.add_work_rows(transform_work(work, include_citations=scope.include_citations))
             works_seen += 1
             if works_seen % 1000 == 0:
                 logger.info("openalex-lake: %d works ingested…", works_seen)
@@ -157,6 +179,7 @@ def run_pull(
                 break
         if limit is not None and works_seen >= limit:
             break
+    buffer.flush()
 
     limited = limit is not None and works_seen >= limit
     if not limited:  # advance watermark only after a full successful pass
