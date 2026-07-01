@@ -28,7 +28,8 @@ Widening to the **full corpus** later is a config change, not a rewrite: relax
 - `schema.py` — DuckDB DDL (fact_works, fact_authorship, fact_work_topic, fact_citation, dim_*).
 - `transform.py` — pure `transform_work(work) -> rows` (fully unit-tested).
 - `store.py` — idempotent DuckDB upsert + incremental watermark.
-- `pull_works.py` — API puller for the targeted subset.
+- `pull_works.py` — API puller for the targeted subset (works / fact tables).
+- `sync_dimensions.py` — S3-snapshot loader for the dimensions (sources, institutions, topics).
 
 ## Default subset (day one)
 
@@ -54,13 +55,15 @@ author/institution tables.
 
 ## Scaling to the full corpus (when storage allows)
 
-1. **Dimensions** — one-time + monthly:
+1. **Dimensions** — one-time + monthly, via `sync_dimensions.py`:
    ```bash
-   aws s3 sync s3://openalex/data/sources     ./snap/sources     --no-sign-request
-   aws s3 sync s3://openalex/data/institutions ./snap/institutions --no-sign-request
-   aws s3 sync s3://openalex/data/topics       ./snap/topics       --no-sign-request
-   # then COPY the gz JSONL into dim_* via DuckDB read_json_auto()
+   # download from the public bucket AND load into dim_* (needs aws-cli + storage)
+   python -m backend.openalex_lake.sync_dimensions --download
+   # or load already-synced parts from a local dir
+   python -m backend.openalex_lake.sync_dimensions --snapshot-dir ./data/openalex-snapshot
    ```
+   It streams the gzipped JSON-Lines parts through the pure dimension transforms
+   into `dim_source` / `dim_institution` / `dim_topic` (idempotent upsert).
 2. **Works** — either keep the API path with a widened scope (e.g. by field +
    year) or, for the whole corpus, stream the works snapshot through
    `transform_work` + `LakeStore` (same code, snapshot reader instead of API).

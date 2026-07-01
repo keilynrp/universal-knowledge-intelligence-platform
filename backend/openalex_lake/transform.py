@@ -55,6 +55,60 @@ def _topic_facets(topic: dict) -> dict[str, Any]:
     }
 
 
+def transform_source(rec: dict) -> Optional[dict]:
+    """OpenAlex source snapshot record -> dim_source row."""
+    source_id = _short_id(rec.get("id"))
+    if not source_id:
+        return None
+    return {
+        "source_id": source_id,
+        "issn_l": rec.get("issn_l"),
+        "display_name": rec.get("display_name"),
+        "host_org": rec.get("host_organization_name"),
+        "is_in_doaj": rec.get("is_in_doaj"),
+        "type": rec.get("type"),
+        "country_code": rec.get("country_code"),
+    }
+
+
+def transform_institution(rec: dict) -> Optional[dict]:
+    """OpenAlex institution snapshot record -> dim_institution row."""
+    institution_id = _short_id(rec.get("id"))
+    if not institution_id:
+        return None
+    return {
+        "institution_id": institution_id,
+        "ror": _bare_ror(rec.get("ror")),
+        "display_name": rec.get("display_name"),
+        "country_code": rec.get("country_code"),
+        "type": rec.get("type"),
+    }
+
+
+def transform_topic(rec: dict) -> Optional[dict]:
+    """OpenAlex topic snapshot record -> dim_topic row."""
+    topic_id = _short_id(rec.get("id"))
+    if not topic_id:
+        return None
+    facets = _topic_facets(rec)
+    return {
+        "topic_id": topic_id,
+        "display_name": rec.get("display_name"),
+        "subfield": facets.get("subfield"),
+        "field_id": facets.get("field_id"),
+        "field": facets.get("field"),
+        "domain": facets.get("domain"),
+    }
+
+
+# Dimension entity -> (transform fn, target table).
+DIMENSION_TRANSFORMS = {
+    "sources": (transform_source, "dim_source"),
+    "institutions": (transform_institution, "dim_institution"),
+    "topics": (transform_topic, "dim_topic"),
+}
+
+
 def transform_work(work: dict, *, include_citations: bool = False) -> dict[str, list[dict]]:
     """Return {table_name: [row, ...]} for a single OpenAlex work.
 
