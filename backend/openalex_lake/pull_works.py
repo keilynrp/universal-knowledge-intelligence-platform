@@ -40,13 +40,24 @@ _BASE_SELECT = (
 ISSN_CHUNK = 50           # keep the filter URL comfortably bounded
 INTER_PAGE_DELAY = 0.1    # polite pacing between pages
 _RETRY_STATUSES = frozenset({429, 503})
-# Sustained pulls see 429 bursts even on the polite pool; be patient rather than
-# crashing a multi-hour first pull. Honors Retry-After when present.
+# Sustained pulls see transient 429/503 bursts; be patient rather than crashing.
 _MAX_RETRIES = 6
 _MAX_BACKOFF = 60.0
+# OpenAlex enforces a daily request budget (x-ratelimit-remaining -> 0, with a
+# multi-hour Retry-After). Don't sleep for hours or burn retries against it:
+# stop cleanly above this threshold so the caller can resume after the reset.
+_RATE_LIMIT_RETRY_AFTER_CAP = 300.0
 
 # A fetch takes (url, params) and returns the parsed JSON body.
 FetchFn = Callable[[str, dict], dict]
+
+
+class RateLimitExhausted(Exception):
+    """OpenAlex daily budget is spent — resume after `retry_after` seconds."""
+
+    def __init__(self, retry_after: Optional[int] = None):
+        super().__init__(f"OpenAlex rate limit exhausted; retry after {retry_after}s")
+        self.retry_after = retry_after
 
 
 def chunk_issns(issns: list[str], size: int = ISSN_CHUNK) -> list[list[str]]:
@@ -101,6 +112,13 @@ def _default_fetch(settings: LakeSettings) -> FetchFn:
     """Retry-aware httpx GET returning parsed JSON (mirrors OpenAlexAdapter)."""
     client = httpx.Client(timeout=30.0)
 
+    def _retry_after_seconds(resp) -> Optional[float]:
+        raw = resp.headers.get("Retry-After")
+        try:
+            return float(raw) if raw is not None else None
+        except (TypeError, ValueError):
+            return None
+
     def fetch(url: str, params: dict) -> dict:
         if settings.mailto:
             params = {**params, "mailto": settings.mailto}
@@ -110,13 +128,19 @@ def _default_fetch(settings: LakeSettings) -> FetchFn:
         for attempt in range(1, _MAX_RETRIES + 1):
             if resp.status_code not in _RETRY_STATUSES:
                 break
-            retry_after = resp.headers.get("Retry-After")
-            try:
-                wait = float(retry_after) if retry_after else min(2.0 ** attempt, _MAX_BACKOFF)
-            except (TypeError, ValueError):
-                wait = min(2.0 ** attempt, _MAX_BACKOFF)
-            time.sleep(wait)
+            ra = _retry_after_seconds(resp)
+            # Daily budget spent (remaining == 0 or a multi-hour Retry-After):
+            # stop cleanly instead of sleeping for hours.
+            if resp.status_code == 429 and (
+                resp.headers.get("x-ratelimit-remaining") == "0"
+                or (ra is not None and ra > _RATE_LIMIT_RETRY_AFTER_CAP)
+            ):
+                raise RateLimitExhausted(retry_after=int(ra) if ra is not None else None)
+            wait = ra if ra is not None else min(2.0 ** attempt, _MAX_BACKOFF)
+            time.sleep(min(wait, _MAX_BACKOFF))
             resp = client.get(url, params=params)
+        if resp.status_code == 429:
+            raise RateLimitExhausted(retry_after=int(_retry_after_seconds(resp) or 0) or None)
         resp.raise_for_status()
         return resp.json()
 
@@ -170,26 +194,39 @@ def run_pull(
 
     select = select_fields(scope)
     works_seen = 0
-    for chunk in issn_chunks:
-        filter_str = build_filter(scope, chunk, from_updated)
-        for work in iter_works(fetch, filter_str, select):
-            buffer.add_work_rows(transform_work(work, include_citations=scope.include_citations))
-            works_seen += 1
-            if works_seen % 1000 == 0:
-                logger.info("openalex-lake: %d works ingested…", works_seen)
+    rate_limited = False
+    retry_after: Optional[int] = None
+    try:
+        for chunk in issn_chunks:
+            filter_str = build_filter(scope, chunk, from_updated)
+            for work in iter_works(fetch, filter_str, select):
+                buffer.add_work_rows(transform_work(work, include_citations=scope.include_citations))
+                works_seen += 1
+                if works_seen % 1000 == 0:
+                    logger.info("openalex-lake: %d works ingested…", works_seen)
+                if limit is not None and works_seen >= limit:
+                    break
             if limit is not None and works_seen >= limit:
                 break
-        if limit is not None and works_seen >= limit:
-            break
-    buffer.flush()
+    except RateLimitExhausted as exc:
+        rate_limited = True
+        retry_after = exc.retry_after
+        logger.warning(
+            "openalex-lake: daily rate limit exhausted after %d works; resume in ~%ss",
+            works_seen, retry_after,
+        )
+    buffer.flush()  # persist whatever we got before stopping
 
     limited = limit is not None and works_seen >= limit
-    if not limited:  # advance watermark only after a full successful pass
+    complete = not limited and not rate_limited
+    if complete:  # advance watermark only after a full successful pass
         store.set_watermark(watermark_key, run_started)
     return {
         "works": works_seen,
         "limited": limited,
-        "watermark": None if limited else run_started,
+        "rate_limited": rate_limited,
+        "retry_after": retry_after,
+        "watermark": run_started if complete else None,
         "tables": store.summary(),
     }
 

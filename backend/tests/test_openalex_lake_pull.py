@@ -1,6 +1,7 @@
 """Tests for the OpenAlex works puller (pure logic + paginated ingest)."""
 from backend.openalex_lake.config import LakeScope
 from backend.openalex_lake.pull_works import (
+    RateLimitExhausted,
     build_filter,
     chunk_issns,
     iter_works,
@@ -109,6 +110,26 @@ def test_run_pull_ingests_and_watermarks():
         assert store.count("fact_works") == 1
         assert store.get_watermark("works") is not None
         assert stats["tables"]["fact_works"] == 1
+
+
+def test_run_pull_stops_cleanly_on_rate_limit():
+    # First page returns one work, second call hits the daily budget.
+    calls = {"n": 0}
+
+    def fetch(url, params):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return {"results": [{"id": "https://openalex.org/W1", "publication_year": 2018}],
+                    "meta": {"next_cursor": "c2"}}
+        raise RateLimitExhausted(retry_after=28181)
+
+    scope = LakeScope().with_issns(["0028-0836"])
+    with LakeStore(":memory:") as store:
+        stats = run_pull(scope, store, fetch)
+        assert stats["rate_limited"] is True
+        assert stats["retry_after"] == 28181
+        assert stats["watermark"] is None          # partial -> no watermark advance
+        assert store.count("fact_works") == 1       # partial data was persisted
 
 
 def test_run_pull_limit_is_partial_and_no_watermark():
