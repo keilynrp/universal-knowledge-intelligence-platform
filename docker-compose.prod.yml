@@ -58,10 +58,13 @@ services:
       # OPENALEX_EMAIL also feeds the OpenAlex lake polite pool (backend/openalex_lake).
       OPENALEX_EMAIL: ${OPENALEX_EMAIL:-}
       # OpenAlex analytical lake: persistent DuckDB on a named volume so the file
-      # and its incremental watermark survive redeploys. The monthly refresh runs
-      # `python -m backend.openalex_lake.pull_works --incremental` in this container
-      # via a Dokploy Schedule. See backend/openalex_lake/README.md.
+      # and its incremental watermark survive redeploys. The refresh runs
+      # `python -m backend.openalex_lake.pull_works` in this container via a
+      # Dokploy Schedule. See backend/openalex_lake/README.md.
       OPENALEX_LAKE_DB: ${OPENALEX_LAKE_DB:-/data/openalex_lake.duckdb}
+      # Paid OpenAlex credits key — lifts the ~1000 req/day free quota so the
+      # backfill finishes in one run. Empty => free tier (resumable multi-day).
+      OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
       WOS_API_KEY: ${WOS_API_KEY:-}
       SCOPUS_API_KEY: ${SCOPUS_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
