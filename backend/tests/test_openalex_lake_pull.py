@@ -1,11 +1,17 @@
 """Tests for the OpenAlex works puller (pure logic + paginated ingest)."""
-from backend.openalex_lake.config import LakeScope
+from unittest.mock import MagicMock
+
+import httpx
+
+from backend.openalex_lake.config import LakeScope, LakeSettings
 from backend.openalex_lake.pull_works import (
     RateLimitExhausted,
+    _default_fetch,
     build_filter,
     chunk_issns,
     iter_works,
     parse_issn_list,
+    parse_rate_limit_headers,
     read_issn_file,
     run_pull,
     select_fields,
@@ -130,6 +136,41 @@ def test_run_pull_stops_cleanly_on_rate_limit():
         assert stats["retry_after"] == 28181
         assert stats["watermark"] is None          # partial -> no watermark advance
         assert store.count("fact_works") == 1       # partial data was persisted
+
+
+def test_parse_rate_limit_headers_extracts_known_fields():
+    headers = {
+        "x-ratelimit-limit": "10000",
+        "x-ratelimit-remaining": "9999",
+        "x-ratelimit-prepaid-remaining-usd": "2",
+        "x-ratelimit-cost-usd": "0.0001",
+        "some-other-header": "ignored",
+    }
+    parsed = parse_rate_limit_headers(headers)
+    assert parsed == {
+        "limit": 10000,
+        "remaining": 9999,
+        "prepaid_remaining_usd": 2,
+        "last_request_cost_usd": 0.0001,
+    }
+
+
+def test_parse_rate_limit_headers_empty_when_absent():
+    assert parse_rate_limit_headers({}) == {}
+
+
+def test_default_fetch_invokes_rate_limit_callback(monkeypatch):
+    def fake_get(self, url, params=None):
+        resp = MagicMock(status_code=200)
+        resp.headers = {"x-ratelimit-remaining": "9999", "x-ratelimit-limit": "10000"}
+        resp.json.return_value = {"results": [], "meta": {"next_cursor": None}}
+        return resp
+
+    monkeypatch.setattr(httpx.Client, "get", fake_get)
+    captured: list[dict] = []
+    fetch = _default_fetch(LakeSettings(), on_response_headers=captured.append)
+    fetch("https://api.openalex.org/works", {})
+    assert captured and captured[0]["x-ratelimit-remaining"] == "9999"
 
 
 def test_backfill_resumes_per_issn_then_switches_to_incremental():

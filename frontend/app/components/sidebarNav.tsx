@@ -546,6 +546,16 @@ export const navSections: NavSection[] = [
         ),
         translationKey: "nav.developer",
       },
+      {
+        label: "Data Ops",
+        href: "/dashboards/data-ops",
+        icon: (
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.25 6.375c0 2.07-3.694 3.75-8.25 3.75s-8.25-1.68-8.25-3.75m16.5 0c0-2.07-3.694-3.75-8.25-3.75s-8.25 1.68-8.25 3.75m16.5 0v11.25c0 2.07-3.694 3.75-8.25 3.75s-8.25-1.68-8.25-3.75V6.375m16.5 5.625c0 2.07-3.694 3.75-8.25 3.75s-8.25-1.68-8.25-3.75" />
+          </svg>
+        ),
+        translationKey: "nav.data_ops",
+      },
     ],
   },
 ];

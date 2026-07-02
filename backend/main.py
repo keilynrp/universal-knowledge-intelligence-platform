@@ -84,6 +84,7 @@ from backend.routers import (
     transformations,
     webhooks,
     onboarding,
+    openalex_lake_admin,
     platform_auth_settings,
     widgets,
     workspace_reset,
@@ -472,6 +473,7 @@ app.include_router(analytics.router)
 app.include_router(analytics_analyzers.router)
 app.include_router(analytics_ops.router)
 app.include_router(journals.router)
+app.include_router(openalex_lake_admin.router)
 app.include_router(backup_ops.router)
 app.include_router(derived_status.router)
 app.include_router(enrichment_schedule.router)

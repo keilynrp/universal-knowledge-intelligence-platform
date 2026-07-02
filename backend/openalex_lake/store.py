@@ -7,6 +7,8 @@ data — to keep the SQL injection surface at zero.
 """
 from __future__ import annotations
 
+import datetime
+import json
 import os
 import re
 from collections import defaultdict
@@ -106,6 +108,24 @@ class LakeStore:
         self.con.execute(
             "INSERT OR REPLACE INTO _meta (key, value) VALUES (?, ?)", [key, value]
         )
+
+    # ---- OpenAlex quota snapshot (captured for free during a pull) --------
+    _RATE_LIMIT_KEY = "openalex_rate_limit"
+
+    def set_rate_limit_snapshot(self, parsed_headers: dict) -> None:
+        """Persist the latest known OpenAlex quota (x-ratelimit-*), timestamped.
+
+        Free: called with headers already fetched during a real pull request —
+        never triggers an extra request on its own.
+        """
+        if not parsed_headers:
+            return
+        payload = {**parsed_headers, "captured_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+        self.set_watermark(self._RATE_LIMIT_KEY, json.dumps(payload))
+
+    def get_rate_limit_snapshot(self) -> Optional[dict]:
+        raw = self.get_watermark(self._RATE_LIMIT_KEY)
+        return json.loads(raw) if raw else None
 
     def count(self, table: str) -> int:
         table = _safe_identifier(table)

@@ -61,6 +61,42 @@ class RateLimitExhausted(Exception):
         self.retry_after = retry_after
 
 
+# OpenAlex quota headers -> the compact snapshot key we persist. Values that
+# look like an int/float are coerced; anything else is kept as a string so a
+# header format change never crashes the pull.
+RATE_LIMIT_HEADER_KEYS: dict[str, str] = {
+    "x-ratelimit-limit": "limit",
+    "x-ratelimit-remaining": "remaining",
+    "x-ratelimit-limit-usd": "limit_usd",
+    "x-ratelimit-remaining-usd": "remaining_usd",
+    "x-ratelimit-prepaid-remaining-usd": "prepaid_remaining_usd",
+    "x-ratelimit-onetime-remaining": "onetime_remaining",
+    "x-ratelimit-cost-usd": "last_request_cost_usd",
+    "x-ratelimit-reset": "reset_seconds",
+}
+
+
+def _coerce_number(value: str):
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        return value
+
+
+def parse_rate_limit_headers(headers) -> dict:
+    """Extract the OpenAlex quota headers we display, ignoring absent ones."""
+    out: dict = {}
+    for header, key in RATE_LIMIT_HEADER_KEYS.items():
+        value = headers.get(header)
+        if value is not None:
+            out[key] = _coerce_number(value)
+    return out
+
+
 def chunk_issns(issns: list[str], size: int = ISSN_CHUNK) -> list[list[str]]:
     return [issns[i:i + size] for i in range(0, len(issns), size)] or [[]]
 
@@ -109,8 +145,16 @@ def build_filter(
     return ",".join(clauses)
 
 
-def _default_fetch(settings: LakeSettings) -> FetchFn:
-    """Retry-aware httpx GET returning parsed JSON (mirrors OpenAlexAdapter)."""
+def _default_fetch(
+    settings: LakeSettings,
+    on_response_headers: Optional[Callable[[dict], None]] = None,
+) -> FetchFn:
+    """Retry-aware httpx GET returning parsed JSON (mirrors OpenAlexAdapter).
+
+    `on_response_headers`, when given, is called with every raw response's
+    headers (success, 429, or otherwise) — used to persist the latest OpenAlex
+    quota snapshot (x-ratelimit-*) without any extra request.
+    """
     # httpx logs the full request URL at INFO — which would leak api_key (a
     # secret) into container/pull logs. Keep its request logger quiet; our own
     # "N works ingested" logs + status give progress.
@@ -129,7 +173,14 @@ def _default_fetch(settings: LakeSettings) -> FetchFn:
             params = {**params, "mailto": settings.mailto}
         if settings.api_key:
             params = {**params, "api_key": settings.api_key}
-        resp = client.get(url, params=params)
+
+        def _do_get():
+            resp = client.get(url, params=params)
+            if on_response_headers:
+                on_response_headers(dict(resp.headers))
+            return resp
+
+        resp = _do_get()
         for attempt in range(1, _MAX_RETRIES + 1):
             if resp.status_code not in _RETRY_STATUSES:
                 break
@@ -143,7 +194,7 @@ def _default_fetch(settings: LakeSettings) -> FetchFn:
                 raise RateLimitExhausted(retry_after=int(ra) if ra is not None else None)
             wait = ra if ra is not None else min(2.0 ** attempt, _MAX_BACKOFF)
             time.sleep(min(wait, _MAX_BACKOFF))
-            resp = client.get(url, params=params)
+            resp = _do_get()
         if resp.status_code == 429:
             raise RateLimitExhausted(retry_after=int(_retry_after_seconds(resp) or 0) or None)
         resp.raise_for_status()
@@ -326,10 +377,11 @@ def main() -> None:  # pragma: no cover - thin CLI wrapper
         )
 
     with LakeStore(settings.db_path) as store:
-        stats = run_pull(
-            scope, store, _default_fetch(settings),
-            incremental=args.incremental, limit=args.limit,
+        fetch = _default_fetch(
+            settings,
+            on_response_headers=lambda h: store.set_rate_limit_snapshot(parse_rate_limit_headers(h)),
         )
+        stats = run_pull(scope, store, fetch, incremental=args.incremental, limit=args.limit)
     logger.info("openalex-lake pull complete: %s", stats)
 
 

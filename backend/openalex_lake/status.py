@@ -19,8 +19,13 @@ from backend.openalex_lake.store import LakeStore
 logger = logging.getLogger(__name__)
 
 
-def lake_status(store: LakeStore) -> dict:
-    """A compact operational snapshot of the lake."""
+def lake_status(store: LakeStore, total_issns: int | None = None) -> dict:
+    """A compact operational snapshot of the lake.
+
+    `total_issns`, when given (e.g. by the admin endpoint, from journal_metrics),
+    lets callers render a backfill completion percentage; the lake itself has no
+    opinion on the intended scope size.
+    """
     from backend.openalex_lake.pull_works import _DONE_ISSNS_KEY
 
     yr = store.con.execute(
@@ -34,14 +39,16 @@ def lake_status(store: LakeStore) -> dict:
         "phase": "incremental" if watermark else "backfill",
         "works_watermark": watermark,
         "backfill_journals_done": backfill_done,   # >0 while a multi-day backfill is in progress
+        "backfill_total_issns": total_issns,
         "journals": journals,
         "year_min": yr[0],
         "year_max": yr[1],
         "tables": store.summary(),
+        "rate_limit": store.get_rate_limit_snapshot(),  # last quota seen during a pull, or None
     }
 
 
-def resolve_status(db_path: str) -> dict:
+def resolve_status(db_path: str, total_issns: int | None = None) -> dict:
     """Return the lake status, or a friendly marker when it can't be read.
 
     Two common non-error states: the lake file doesn't exist yet (no pull has
@@ -53,7 +60,7 @@ def resolve_status(db_path: str) -> dict:
                 "hint": "run: python -m backend.openalex_lake.pull_works"}
     try:
         with LakeStore(db_path, read_only=True) as store:
-            return lake_status(store)
+            return lake_status(store, total_issns=total_issns)
     except duckdb.IOException:
         return {"lake": "locked", "db_path": db_path,
                 "hint": "a pull is currently running; re-check once it finishes"}

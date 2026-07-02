@@ -27,6 +27,24 @@ def test_lake_status_reports_watermark_coverage_and_span():
         assert status["tables"]["fact_works"] == 2
 
 
+def test_rate_limit_snapshot_roundtrip_and_status_inclusion():
+    with LakeStore(":memory:") as store:
+        assert store.get_rate_limit_snapshot() is None
+        store.set_rate_limit_snapshot({"limit": 10000, "remaining": 9412, "prepaid_remaining_usd": 1.87})
+        snap = store.get_rate_limit_snapshot()
+        assert snap["limit"] == 10000 and snap["remaining"] == 9412
+        assert "captured_at" in snap  # timestamped for "last seen X min ago"
+
+        status = lake_status(store)
+        assert status["rate_limit"]["remaining"] == 9412
+
+
+def test_set_rate_limit_snapshot_ignores_empty_headers():
+    with LakeStore(":memory:") as store:
+        store.set_rate_limit_snapshot({})
+        assert store.get_rate_limit_snapshot() is None
+
+
 def test_resolve_status_not_initialized(tmp_path):
     missing = str(tmp_path / "nope.duckdb")
     out = resolve_status(missing)
