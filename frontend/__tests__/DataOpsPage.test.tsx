@@ -77,6 +77,27 @@ test("renders backfill progress, quota, and table counts on the happy path", asy
   expect(screen.getByText("9,412 / 10,000")).toBeInTheDocument();
   expect(screen.getByText("$1.8700")).toBeInTheDocument();
   expect(screen.getByText("48,213")).toBeInTheDocument();
+  // Captured just now (< 5 min window) -> "active" freshness badge, no extra request made to check it.
+  expect(screen.getByText("just now")).toBeInTheDocument();
+  expect(screen.getByText("pull likely active")).toBeInTheDocument();
+});
+
+test("marks a stale quota snapshot instead of an active one", async () => {
+  const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();
+  vi.mocked(apiFetch).mockResolvedValue(
+    jsonResponse(200, {
+      phase: "backfill",
+      backfill_journals_done: 1,
+      backfill_total_issns: 270,
+      journals: 1,
+      tables: { fact_works: 5 },
+      rate_limit: { limit: 10000, remaining: 9999, captured_at: tenMinutesAgo },
+    })
+  );
+  renderPage();
+  await waitFor(() => expect(screen.getByText("last known — no recent pull")).toBeInTheDocument());
+  expect(screen.getByText("10 min ago")).toBeInTheDocument();
+  expect(screen.queryByText("pull likely active")).not.toBeInTheDocument();
 });
 
 test("renders the incremental phase badge once the backfill is complete", async () => {

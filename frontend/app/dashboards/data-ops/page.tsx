@@ -65,6 +65,17 @@ function formatRelativeMinutes(iso: string | undefined): number | null {
   return Math.max(0, Math.round((Date.now() - then) / 60000));
 }
 
+// The quota snapshot is captured for free from whatever request a pull was
+// already making — it's never fetched live. Within this window, a fresh
+// capture is a strong signal a pull is actively running right now; past it,
+// it's just the last known reading from whenever the pull last touched OpenAlex.
+const QUOTA_ACTIVE_WINDOW_MIN = 5;
+
+function quotaFreshness(minutesAgo: number | null): "active" | "stale" | null {
+  if (minutesAgo === null) return null;
+  return minutesAgo <= QUOTA_ACTIVE_WINDOW_MIN ? "active" : "stale";
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function DataOpsPage(): ReactElement {
@@ -107,6 +118,7 @@ export default function DataOpsPage(): ReactElement {
 
   const rateLimit = status?.rate_limit ?? null;
   const capturedMinutesAgo = formatRelativeMinutes(rateLimit?.captured_at);
+  const freshness = quotaFreshness(capturedMinutesAgo);
   const backfillPct =
     status?.backfill_total_issns && status.backfill_total_issns > 0
       ? Math.min(100, Math.round(((status.backfill_journals_done ?? 0) / status.backfill_total_issns) * 100))
@@ -250,15 +262,30 @@ export default function DataOpsPage(): ReactElement {
                   </div>
                   <div className="col-span-2">
                     <dt className="text-xs text-[var(--ukip-muted)]">{tr("dashboards.data_ops.quota_captured", "Captured")}</dt>
-                    <dd className="text-sm text-[var(--ukip-text)]">
-                      {capturedMinutesAgo === null
-                        ? "—"
-                        : capturedMinutesAgo < 1
-                          ? tr("dashboards.data_ops.just_now", "just now")
-                          : `${capturedMinutesAgo} ${tr("dashboards.data_ops.min_ago", "min ago")}`}
+                    <dd className="flex flex-wrap items-center gap-2 text-sm text-[var(--ukip-text)]">
+                      <span>
+                        {capturedMinutesAgo === null
+                          ? "—"
+                          : capturedMinutesAgo < 1
+                            ? tr("dashboards.data_ops.just_now", "just now")
+                            : `${capturedMinutesAgo} ${tr("dashboards.data_ops.min_ago", "min ago")}`}
+                      </span>
+                      {freshness && (
+                        <Badge variant={freshness === "active" ? "success" : "default"} size="sm" dot>
+                          {freshness === "active"
+                            ? tr("dashboards.data_ops.quota_live", "pull likely active")
+                            : tr("dashboards.data_ops.quota_stale", "last known — no recent pull")}
+                        </Badge>
+                      )}
                     </dd>
                   </div>
                 </dl>
+                <p className="mt-3 text-[11px] leading-4 text-[var(--ukip-muted-soft)]">
+                  {tr(
+                    "dashboards.data_ops.quota_no_extra_requests",
+                    "Never fetched live — captured for free from a pull's own OpenAlex requests. No extra API calls are made to check it.",
+                  )}
+                </p>
               </>
             )}
           </section>
