@@ -54,6 +54,12 @@ def resolve_status(db_path: str, total_issns: int | None = None) -> dict:
     Two common non-error states: the lake file doesn't exist yet (no pull has
     run), or it's write-locked (a pull is running) — DuckDB can't open a
     read-only handle while another process holds the write lock.
+
+    DuckDB raises different concrete exceptions for a lock conflict depending
+    on version/platform — observed as `_duckdb.ConnectionException` in
+    production (NOT `IOException`, despite the "Could not set lock on file"
+    message and the docs link both mention I/O). Both share the
+    `OperationalError` base, so catch that instead of a single subclass.
     """
     if not os.path.exists(db_path):
         return {"lake": "not_initialized", "db_path": db_path,
@@ -61,7 +67,7 @@ def resolve_status(db_path: str, total_issns: int | None = None) -> dict:
     try:
         with LakeStore(db_path, read_only=True) as store:
             return lake_status(store, total_issns=total_issns)
-    except duckdb.IOException:
+    except duckdb.OperationalError:
         return {"lake": "locked", "db_path": db_path,
                 "hint": "a pull is currently running; re-check once it finishes"}
 

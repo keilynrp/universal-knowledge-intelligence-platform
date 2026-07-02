@@ -56,6 +56,25 @@ def test_total_scoped_issns_counts_distinct_journal_metrics(db_session):
     assert _total_scoped_issns() == 2
 
 
+def test_resolve_status_reports_locked_on_real_write_lock(tmp_path):
+    """A concurrent read-only open while a writer holds the file must return
+    the friendly {"lake": "locked"} marker, not raise. DuckDB's actual lock
+    conflict is _duckdb.ConnectionException (NOT IOException, despite the
+    error text mentioning I/O) — this reproduces the real conflict rather
+    than mocking an exception type, so it would have caught the mismatch."""
+    db = str(tmp_path / "lake.duckdb")
+    writer = LakeStore(db)  # holds the write lock; deliberately not closed yet
+    try:
+        out = resolve_status(db)
+        assert out == {
+            "lake": "locked",
+            "db_path": db,
+            "hint": "a pull is currently running; re-check once it finishes",
+        }
+    finally:
+        writer.close()
+
+
 def test_resolve_status_not_initialized(tmp_path):
     missing = str(tmp_path / "nope.duckdb")
     out = resolve_status(missing)
