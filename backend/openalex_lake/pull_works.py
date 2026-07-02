@@ -111,6 +111,10 @@ def build_filter(
 
 def _default_fetch(settings: LakeSettings) -> FetchFn:
     """Retry-aware httpx GET returning parsed JSON (mirrors OpenAlexAdapter)."""
+    # httpx logs the full request URL at INFO — which would leak api_key (a
+    # secret) into container/pull logs. Keep its request logger quiet; our own
+    # "N works ingested" logs + status give progress.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     client = httpx.Client(timeout=30.0)
 
     def _retry_after_seconds(resp) -> Optional[float]:
