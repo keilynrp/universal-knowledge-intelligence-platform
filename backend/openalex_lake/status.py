@@ -66,9 +66,31 @@ def resolve_status(db_path: str, total_issns: int | None = None) -> dict:
                 "hint": "a pull is currently running; re-check once it finishes"}
 
 
+def _total_scoped_issns() -> int | None:
+    """Best-effort count of distinct journal_metrics.issn_l (the backfill scope).
+
+    Mirrors the admin endpoint's total_issns so the CLI is equally informative.
+    Returns None if the app DB isn't reachable from this process (kept optional
+    so `status` still works standalone).
+    """
+    try:
+        from backend import models
+        from backend.database import SessionLocal
+        with SessionLocal() as db:
+            return (
+                db.query(models.JournalMetric.issn_l)
+                .filter(models.JournalMetric.issn_l.isnot(None))
+                .distinct()
+                .count()
+            ) or None
+    except Exception:  # pragma: no cover - defensive; status must never crash
+        logger.warning("openalex-lake status: could not resolve total scoped ISSNs", exc_info=True)
+        return None
+
+
 def main() -> None:  # pragma: no cover - thin CLI wrapper
     logging.basicConfig(level=logging.INFO)
-    print(json.dumps(resolve_status(LakeSettings().db_path), indent=2))
+    print(json.dumps(resolve_status(LakeSettings().db_path, total_issns=_total_scoped_issns()), indent=2))
 
 
 if __name__ == "__main__":  # pragma: no cover

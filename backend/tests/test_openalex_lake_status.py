@@ -1,7 +1,7 @@
 """Tests for the lake status snapshot + read-only store open."""
 import pytest
 
-from backend.openalex_lake.status import lake_status, resolve_status
+from backend.openalex_lake.status import _total_scoped_issns, lake_status, resolve_status
 from backend.openalex_lake.store import LakeStore
 from backend.openalex_lake.transform import transform_work
 
@@ -43,6 +43,17 @@ def test_set_rate_limit_snapshot_ignores_empty_headers():
     with LakeStore(":memory:") as store:
         store.set_rate_limit_snapshot({})
         assert store.get_rate_limit_snapshot() is None
+
+
+def test_total_scoped_issns_counts_distinct_journal_metrics(db_session):
+    from backend.models import JournalMetric
+
+    db_session.add_all([
+        JournalMetric(issn_l="0028-0836", normalized_impact_factor=1.0),
+        JournalMetric(issn_l="1476-4687", normalized_impact_factor=1.0),
+    ])
+    db_session.commit()
+    assert _total_scoped_issns() == 2
 
 
 def test_resolve_status_not_initialized(tmp_path):
