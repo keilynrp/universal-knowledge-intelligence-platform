@@ -51,6 +51,7 @@ class LakeStore:
     """Thin wrapper over a persistent (or in-memory) DuckDB lake."""
 
     def __init__(self, db_path: str = ":memory:", read_only: bool = False):
+        self.db_path = db_path
         if read_only:
             # For status/queries while a scheduled writer may hold the file.
             self.con = duckdb.connect(db_path, read_only=True)

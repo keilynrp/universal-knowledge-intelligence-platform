@@ -238,6 +238,19 @@ def _save_done_issns(store: LakeStore, done: set) -> None:
     store.set_watermark(_DONE_ISSNS_KEY, json.dumps(sorted(done)))
 
 
+def _write_progress_snapshot(store: LakeStore, total_issns: Optional[int]) -> None:
+    """Dump the current status to the JSON sidecar via the writer's own open
+    connection (no new lock needed) so it stays readable while this process
+    holds the DB's write lock — the whole point of showing live progress.
+    Never lets a sidecar write failure interrupt the actual pull.
+    """
+    from backend.openalex_lake.status import lake_status, write_live_status
+    try:
+        write_live_status(store.db_path, lake_status(store, total_issns=total_issns))
+    except Exception:
+        logger.warning("openalex-lake: failed to write live status sidecar", exc_info=True)
+
+
 def run_pull(
     scope: LakeScope,
     store: LakeStore,
@@ -280,6 +293,8 @@ def run_pull(
                     works_seen += 1
                     if works_seen % 1000 == 0:
                         logger.info("openalex-lake: %d works ingested…", works_seen)
+                        buffer.flush()  # so the sidecar reflects rows actually on disk
+                        _write_progress_snapshot(store, len(all_issns))
                     if limit is not None and works_seen >= limit:
                         limited = True
                         break
@@ -289,6 +304,7 @@ def run_pull(
                 done.add(issn)
                 buffer.flush()
                 _save_done_issns(store, done)
+                _write_progress_snapshot(store, len(all_issns))
         except RateLimitExhausted as exc:
             rate_limited = True
             retry_after = exc.retry_after
@@ -301,6 +317,7 @@ def run_pull(
         if complete:
             store.set_watermark(watermark_key, run_started)
             _save_done_issns(store, set())  # clear -> future runs are incremental
+        _write_progress_snapshot(store, len(all_issns))
         return {
             "mode": "backfill", "works": works_seen,
             "done_issns": len(done), "total_issns": len(all_issns),
@@ -320,6 +337,8 @@ def run_pull(
                 works_seen += 1
                 if works_seen % 1000 == 0:
                     logger.info("openalex-lake: %d works ingested…", works_seen)
+                    buffer.flush()
+                    _write_progress_snapshot(store, None)
                 if limit is not None and works_seen >= limit:
                     limited = True
                     break
@@ -332,6 +351,7 @@ def run_pull(
     complete = not limited and not rate_limited
     if complete:
         store.set_watermark(watermark_key, run_started)
+    _write_progress_snapshot(store, None)
     return {
         "mode": "incremental", "works": works_seen, "limited": limited,
         "rate_limited": rate_limited, "retry_after": retry_after,

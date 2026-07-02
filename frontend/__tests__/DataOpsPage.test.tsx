@@ -50,6 +50,35 @@ test("shows the locked state while a pull is running", async () => {
   await waitFor(() => expect(screen.getByText("A pull is running right now")).toBeInTheDocument());
 });
 
+test("shows last-known progress while locked, from the sidecar snapshot", async () => {
+  vi.mocked(apiFetch).mockResolvedValue(
+    jsonResponse(200, {
+      lake: "locked",
+      hint: "a pull is currently running; re-check once it finishes",
+      last_known: {
+        phase: "backfill",
+        backfill_journals_done: 5,
+        backfill_total_issns: 270,
+        journals: 49,
+        tables: { fact_works: 214573 },
+        rate_limit: { limit: 10000, remaining: 9800, captured_at: new Date().toISOString() },
+        snapshot_captured_at: new Date().toISOString(),
+      },
+    })
+  );
+  renderPage();
+  await waitFor(() => expect(screen.getByText("pull running now")).toBeInTheDocument());
+  expect(
+    screen.getByText(
+      "Showing the last progress snapshot the pull saved on its own — the lake file is locked while it writes."
+    )
+  ).toBeInTheDocument();
+  expect(screen.getByText("5 / 270")).toBeInTheDocument();
+  expect(screen.getByText("214,573")).toBeInTheDocument();
+  // The bare "come back later" empty state must NOT show once real progress is available.
+  expect(screen.queryByText("A pull is running right now")).not.toBeInTheDocument();
+});
+
 test("renders backfill progress, quota, and table counts on the happy path", async () => {
   vi.mocked(apiFetch).mockResolvedValue(
     jsonResponse(200, {

@@ -7,6 +7,7 @@ year span so the monthly cron can be checked at a glance:
 """
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import os
@@ -17,6 +18,41 @@ from backend.openalex_lake.config import LakeSettings
 from backend.openalex_lake.store import LakeStore
 
 logger = logging.getLogger(__name__)
+
+_SIDECAR_SUFFIX = ".status.json"
+
+
+def sidecar_path(db_path: str) -> str:
+    """Path of the JSON status sidecar written alongside the lake DB.
+
+    DuckDB allows only one writer; while a pull holds that lock, no other
+    process can even open a read-only connection to inspect progress — the
+    exact moment progress is most wanted. The running pull (which already
+    holds an open connection) periodically dumps its own status here using
+    plain file I/O, so it stays readable regardless of the DB lock.
+    """
+    return db_path + _SIDECAR_SUFFIX
+
+
+def write_live_status(db_path: str, status: dict) -> None:
+    """Atomically write the sidecar (temp file + rename). No-op for ':memory:'."""
+    if db_path == ":memory:":
+        return
+    payload = {**status, "snapshot_captured_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+    path = sidecar_path(db_path)
+    tmp_path = path + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh)
+    os.replace(tmp_path, path)  # atomic on POSIX and Windows
+
+
+def read_live_status(db_path: str) -> dict | None:
+    """Best-effort sidecar read — never raises (missing/corrupt -> None)."""
+    try:
+        with open(sidecar_path(db_path), encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return None
 
 
 def lake_status(store: LakeStore, total_issns: int | None = None) -> dict:
@@ -68,8 +104,12 @@ def resolve_status(db_path: str, total_issns: int | None = None) -> dict:
         with LakeStore(db_path, read_only=True) as store:
             return lake_status(store, total_issns=total_issns)
     except duckdb.OperationalError:
-        return {"lake": "locked", "db_path": db_path,
-                "hint": "a pull is currently running; re-check once it finishes"}
+        locked = {"lake": "locked", "db_path": db_path,
+                  "hint": "a pull is currently running; re-check once it finishes"}
+        last_known = read_live_status(db_path)
+        if last_known:
+            locked["last_known"] = last_known
+        return locked
 
 
 def _total_scoped_issns() -> int | None:

@@ -16,6 +16,7 @@ from backend.openalex_lake.pull_works import (
     run_pull,
     select_fields,
 )
+from backend.openalex_lake.status import read_live_status
 from backend.openalex_lake.store import LakeStore
 
 
@@ -171,6 +172,33 @@ def test_default_fetch_invokes_rate_limit_callback(monkeypatch):
     fetch = _default_fetch(LakeSettings(), on_response_headers=captured.append)
     fetch("https://api.openalex.org/works", {})
     assert captured and captured[0]["x-ratelimit-remaining"] == "9999"
+
+
+def test_backfill_writes_a_live_status_sidecar(tmp_path):
+    """The whole feature this proves: while a pull holds the DB's write lock,
+    progress must still be readable. The sidecar is written via the writer's
+    own connection, so it needs a real file (":memory:" has no sidecar).
+    Uses two journals where only the first completes (the second hits the
+    daily budget) so the run genuinely stops mid-backfill — phase must still
+    read "backfill", not "incremental" (which would only be true once every
+    journal in the scope is done)."""
+    db = str(tmp_path / "lake.duckdb")
+    scope = LakeScope().with_issns(["1111-1111", "2222-2222"])
+
+    def fetch(url, params):
+        if "1111-1111" in params["filter"]:
+            return {"results": [{"id": "https://openalex.org/W1"}], "meta": {"next_cursor": None}}
+        raise RateLimitExhausted(retry_after=100)
+
+    with LakeStore(db) as store:
+        run_pull(scope, store, fetch)
+
+    sidecar = read_live_status(db)
+    assert sidecar is not None
+    assert sidecar["phase"] == "backfill"
+    assert sidecar["backfill_journals_done"] == 1
+    assert sidecar["backfill_total_issns"] == 2
+    assert "snapshot_captured_at" in sidecar
 
 
 def test_backfill_resumes_per_issn_then_switches_to_incremental():

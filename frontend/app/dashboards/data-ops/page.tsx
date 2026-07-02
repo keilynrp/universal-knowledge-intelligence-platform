@@ -21,9 +21,7 @@ interface RateLimitSnapshot {
   captured_at?: string;
 }
 
-interface LakeStatus {
-  lake?: "not_initialized" | "locked";
-  hint?: string;
+interface LakeStatusData {
   phase?: "backfill" | "incremental";
   works_watermark?: string | null;
   backfill_journals_done?: number;
@@ -33,6 +31,15 @@ interface LakeStatus {
   year_max?: number | null;
   tables?: Record<string, number>;
   rate_limit?: RateLimitSnapshot | null;
+}
+
+interface LakeStatus extends LakeStatusData {
+  lake?: "not_initialized" | "locked";
+  hint?: string;
+  // Sidecar snapshot the running pull writes via its own connection — the only
+  // way to see progress while the pull holds the DB's write lock (see
+  // backend/openalex_lake/status.py: write_live_status/read_live_status).
+  last_known?: LakeStatusData & { snapshot_captured_at?: string };
 }
 
 const AUTO_REFRESH_MS = 30_000;
@@ -76,6 +83,161 @@ function quotaFreshness(minutesAgo: number | null): "active" | "stale" | null {
   return minutesAgo <= QUOTA_ACTIVE_WINDOW_MIN ? "active" : "stale";
 }
 
+type Translate = (key: string, fallback: string) => string;
+
+// ── Shared body: renders phase/backfill progress, quota, and table counts.
+// Used both for a live status response and for the sidecar's `last_known`
+// snapshot (all it can show while a pull holds the DB's write lock). ────────
+
+function IngestionOverview({ data, tr }: { data: LakeStatusData; tr: Translate }): ReactElement {
+  const rateLimit = data.rate_limit ?? null;
+  const capturedMinutesAgo = formatRelativeMinutes(rateLimit?.captured_at);
+  const freshness = quotaFreshness(capturedMinutesAgo);
+  const backfillPct =
+    data.backfill_total_issns && data.backfill_total_issns > 0
+      ? Math.min(100, Math.round(((data.backfill_journals_done ?? 0) / data.backfill_total_issns) * 100))
+      : null;
+  const dailyPct =
+    rateLimit?.limit && rateLimit.limit > 0 && rateLimit.remaining !== undefined
+      ? Math.round((rateLimit.remaining / rateLimit.limit) * 100)
+      : null;
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      {/* Ingestion phase + backfill progress */}
+      <section className="rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-surface)] p-5">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ukip-muted)]">
+            {tr("dashboards.data_ops.phase_title", "Ingestion phase")}
+          </p>
+          <Badge variant={data.phase === "incremental" ? "success" : "info"} dot>
+            {data.phase === "incremental"
+              ? tr("dashboards.data_ops.phase_incremental", "Incremental (up to date)")
+              : tr("dashboards.data_ops.phase_backfill", "Backfill in progress")}
+          </Badge>
+        </div>
+
+        {data.phase === "backfill" && (
+          <div className="mt-4">
+            <div className="flex items-baseline justify-between text-sm">
+              <span className="font-mono text-[var(--ukip-text)]">
+                {formatNumber(data.backfill_journals_done)} / {formatNumber(data.backfill_total_issns)}
+              </span>
+              <span className="text-xs text-[var(--ukip-muted)]">
+                {tr("dashboards.data_ops.journals_done", "journals completed")}
+              </span>
+            </div>
+            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[var(--ukip-panel-strong)]">
+              <div
+                className="h-full rounded-full bg-[var(--ukip-violet)] transition-[width]"
+                style={{ width: `${backfillPct ?? 0}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <dt className="text-xs text-[var(--ukip-muted)]">{tr("dashboards.data_ops.journals_with_data", "Journals with data")}</dt>
+            <dd className="font-mono font-semibold text-[var(--ukip-text)]">{formatNumber(data.journals)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-[var(--ukip-muted)]">{tr("dashboards.data_ops.year_range", "Year range")}</dt>
+            <dd className="font-mono font-semibold text-[var(--ukip-text)]">
+              {data.year_min ?? "—"}–{data.year_max ?? "—"}
+            </dd>
+          </div>
+          <div className="col-span-2">
+            <dt className="text-xs text-[var(--ukip-muted)]">{tr("dashboards.data_ops.watermark", "Watermark (last complete pass)")}</dt>
+            <dd className="font-mono font-semibold text-[var(--ukip-text)]">{data.works_watermark ?? "—"}</dd>
+          </div>
+        </dl>
+      </section>
+
+      {/* OpenAlex quota snapshot */}
+      <section className="rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-surface)] p-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ukip-muted)]">
+          {tr("dashboards.data_ops.quota_title", "OpenAlex quota (last seen)")}
+        </p>
+        {!rateLimit ? (
+          <p className="mt-3 text-sm text-[var(--ukip-muted)]">
+            {tr("dashboards.data_ops.quota_none", "No quota captured yet — runs the next time a pull makes a request.")}
+          </p>
+        ) : (
+          <>
+            <div className="mt-3">
+              <div className="flex items-baseline justify-between text-sm">
+                <span className="font-mono text-[var(--ukip-text)]">
+                  {formatNumber(rateLimit.remaining)} / {formatNumber(rateLimit.limit)}
+                </span>
+                <span className="text-xs text-[var(--ukip-muted)]">{tr("dashboards.data_ops.quota_daily", "daily requests left")}</span>
+              </div>
+              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[var(--ukip-panel-strong)]">
+                <div
+                  className={`h-full rounded-full transition-[width] ${(dailyPct ?? 100) < 15 ? "bg-[var(--ukip-danger)]" : "bg-[var(--ukip-cyan)]"}`}
+                  style={{ width: `${dailyPct ?? 0}%` }}
+                />
+              </div>
+            </div>
+            <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <dt className="text-xs text-[var(--ukip-muted)]">{tr("dashboards.data_ops.quota_prepaid", "Prepaid credits")}</dt>
+                <dd className="font-mono font-semibold text-[var(--ukip-text)]">{formatUsd(rateLimit.prepaid_remaining_usd)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-[var(--ukip-muted)]">{tr("dashboards.data_ops.quota_last_cost", "Last request cost")}</dt>
+                <dd className="font-mono font-semibold text-[var(--ukip-text)]">{formatUsd(rateLimit.last_request_cost_usd)}</dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-xs text-[var(--ukip-muted)]">{tr("dashboards.data_ops.quota_captured", "Captured")}</dt>
+                <dd className="flex flex-wrap items-center gap-2 text-sm text-[var(--ukip-text)]">
+                  <span>
+                    {capturedMinutesAgo === null
+                      ? "—"
+                      : capturedMinutesAgo < 1
+                        ? tr("dashboards.data_ops.just_now", "just now")
+                        : `${capturedMinutesAgo} ${tr("dashboards.data_ops.min_ago", "min ago")}`}
+                  </span>
+                  {freshness && (
+                    <Badge variant={freshness === "active" ? "success" : "default"} size="sm" dot>
+                      {freshness === "active"
+                        ? tr("dashboards.data_ops.quota_live", "pull likely active")
+                        : tr("dashboards.data_ops.quota_stale", "last known — no recent pull")}
+                    </Badge>
+                  )}
+                </dd>
+              </div>
+            </dl>
+            <p className="mt-3 text-[11px] leading-4 text-[var(--ukip-muted-soft)]">
+              {tr(
+                "dashboards.data_ops.quota_no_extra_requests",
+                "Never fetched live — captured for free from a pull's own OpenAlex requests. No extra API calls are made to check it.",
+              )}
+            </p>
+          </>
+        )}
+      </section>
+
+      {/* Table row counts */}
+      <section className="rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-surface)] p-5 lg:col-span-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ukip-muted)]">
+          {tr("dashboards.data_ops.tables_title", "Ingested rows by table")}
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {TABLE_ORDER.filter((name) => data.tables && name in data.tables).map((name) => (
+            <div key={name} className="rounded-xl border border-[var(--ukip-border)] bg-[var(--ukip-panel)] p-3">
+              <p className="truncate font-mono text-[10px] text-[var(--ukip-muted)]">{name}</p>
+              <p className="mt-1 font-mono text-lg font-bold text-[var(--ukip-text)]">
+                {formatNumber(data.tables?.[name])}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function DataOpsPage(): ReactElement {
@@ -116,18 +278,6 @@ export default function DataOpsPage(): ReactElement {
     };
   }, [fetchStatus]);
 
-  const rateLimit = status?.rate_limit ?? null;
-  const capturedMinutesAgo = formatRelativeMinutes(rateLimit?.captured_at);
-  const freshness = quotaFreshness(capturedMinutesAgo);
-  const backfillPct =
-    status?.backfill_total_issns && status.backfill_total_issns > 0
-      ? Math.min(100, Math.round(((status.backfill_journals_done ?? 0) / status.backfill_total_issns) * 100))
-      : null;
-  const dailyPct =
-    rateLimit?.limit && rateLimit.limit > 0 && rateLimit.remaining !== undefined
-      ? Math.round((rateLimit.remaining / rateLimit.limit) * 100)
-      : null;
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -165,7 +315,24 @@ export default function DataOpsPage(): ReactElement {
         />
       )}
 
-      {!forbidden && !loading && !error && status?.lake === "locked" && (
+      {!forbidden && !loading && !error && status?.lake === "locked" && status.last_known && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-panel)] px-4 py-3">
+            <Badge variant="info" size="sm" dot>
+              {tr("dashboards.data_ops.locked_badge", "pull running now")}
+            </Badge>
+            <p className="text-sm text-[var(--ukip-muted)]">
+              {tr(
+                "dashboards.data_ops.locked_last_known_body",
+                "Showing the last progress snapshot the pull saved on its own — the lake file is locked while it writes.",
+              )}
+            </p>
+          </div>
+          <IngestionOverview data={status.last_known} tr={tr} />
+        </div>
+      )}
+
+      {!forbidden && !loading && !error && status?.lake === "locked" && !status.last_known && (
         <EmptyState
           icon="bolt"
           color="violet"
@@ -174,140 +341,7 @@ export default function DataOpsPage(): ReactElement {
         />
       )}
 
-      {!forbidden && !loading && !error && status && !status.lake && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {/* Ingestion phase + backfill progress */}
-          <section className="rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-surface)] p-5">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ukip-muted)]">
-                {tr("dashboards.data_ops.phase_title", "Ingestion phase")}
-              </p>
-              <Badge variant={status.phase === "incremental" ? "success" : "info"} dot>
-                {status.phase === "incremental"
-                  ? tr("dashboards.data_ops.phase_incremental", "Incremental (up to date)")
-                  : tr("dashboards.data_ops.phase_backfill", "Backfill in progress")}
-              </Badge>
-            </div>
-
-            {status.phase === "backfill" && (
-              <div className="mt-4">
-                <div className="flex items-baseline justify-between text-sm">
-                  <span className="font-mono text-[var(--ukip-text)]">
-                    {formatNumber(status.backfill_journals_done)} / {formatNumber(status.backfill_total_issns)}
-                  </span>
-                  <span className="text-xs text-[var(--ukip-muted)]">
-                    {tr("dashboards.data_ops.journals_done", "journals completed")}
-                  </span>
-                </div>
-                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[var(--ukip-panel-strong)]">
-                  <div
-                    className="h-full rounded-full bg-[var(--ukip-violet)] transition-[width]"
-                    style={{ width: `${backfillPct ?? 0}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
-            <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <dt className="text-xs text-[var(--ukip-muted)]">{tr("dashboards.data_ops.journals_with_data", "Journals with data")}</dt>
-                <dd className="font-mono font-semibold text-[var(--ukip-text)]">{formatNumber(status.journals)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-[var(--ukip-muted)]">{tr("dashboards.data_ops.year_range", "Year range")}</dt>
-                <dd className="font-mono font-semibold text-[var(--ukip-text)]">
-                  {status.year_min ?? "—"}–{status.year_max ?? "—"}
-                </dd>
-              </div>
-              <div className="col-span-2">
-                <dt className="text-xs text-[var(--ukip-muted)]">{tr("dashboards.data_ops.watermark", "Watermark (last complete pass)")}</dt>
-                <dd className="font-mono font-semibold text-[var(--ukip-text)]">{status.works_watermark ?? "—"}</dd>
-              </div>
-            </dl>
-          </section>
-
-          {/* OpenAlex quota snapshot */}
-          <section className="rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-surface)] p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ukip-muted)]">
-              {tr("dashboards.data_ops.quota_title", "OpenAlex quota (last seen)")}
-            </p>
-            {!rateLimit ? (
-              <p className="mt-3 text-sm text-[var(--ukip-muted)]">
-                {tr("dashboards.data_ops.quota_none", "No quota captured yet — runs the next time a pull makes a request.")}
-              </p>
-            ) : (
-              <>
-                <div className="mt-3">
-                  <div className="flex items-baseline justify-between text-sm">
-                    <span className="font-mono text-[var(--ukip-text)]">
-                      {formatNumber(rateLimit.remaining)} / {formatNumber(rateLimit.limit)}
-                    </span>
-                    <span className="text-xs text-[var(--ukip-muted)]">{tr("dashboards.data_ops.quota_daily", "daily requests left")}</span>
-                  </div>
-                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[var(--ukip-panel-strong)]">
-                    <div
-                      className={`h-full rounded-full transition-[width] ${(dailyPct ?? 100) < 15 ? "bg-[var(--ukip-danger)]" : "bg-[var(--ukip-cyan)]"}`}
-                      style={{ width: `${dailyPct ?? 0}%` }}
-                    />
-                  </div>
-                </div>
-                <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <dt className="text-xs text-[var(--ukip-muted)]">{tr("dashboards.data_ops.quota_prepaid", "Prepaid credits")}</dt>
-                    <dd className="font-mono font-semibold text-[var(--ukip-text)]">{formatUsd(rateLimit.prepaid_remaining_usd)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-[var(--ukip-muted)]">{tr("dashboards.data_ops.quota_last_cost", "Last request cost")}</dt>
-                    <dd className="font-mono font-semibold text-[var(--ukip-text)]">{formatUsd(rateLimit.last_request_cost_usd)}</dd>
-                  </div>
-                  <div className="col-span-2">
-                    <dt className="text-xs text-[var(--ukip-muted)]">{tr("dashboards.data_ops.quota_captured", "Captured")}</dt>
-                    <dd className="flex flex-wrap items-center gap-2 text-sm text-[var(--ukip-text)]">
-                      <span>
-                        {capturedMinutesAgo === null
-                          ? "—"
-                          : capturedMinutesAgo < 1
-                            ? tr("dashboards.data_ops.just_now", "just now")
-                            : `${capturedMinutesAgo} ${tr("dashboards.data_ops.min_ago", "min ago")}`}
-                      </span>
-                      {freshness && (
-                        <Badge variant={freshness === "active" ? "success" : "default"} size="sm" dot>
-                          {freshness === "active"
-                            ? tr("dashboards.data_ops.quota_live", "pull likely active")
-                            : tr("dashboards.data_ops.quota_stale", "last known — no recent pull")}
-                        </Badge>
-                      )}
-                    </dd>
-                  </div>
-                </dl>
-                <p className="mt-3 text-[11px] leading-4 text-[var(--ukip-muted-soft)]">
-                  {tr(
-                    "dashboards.data_ops.quota_no_extra_requests",
-                    "Never fetched live — captured for free from a pull's own OpenAlex requests. No extra API calls are made to check it.",
-                  )}
-                </p>
-              </>
-            )}
-          </section>
-
-          {/* Table row counts */}
-          <section className="rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-surface)] p-5 lg:col-span-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--ukip-muted)]">
-              {tr("dashboards.data_ops.tables_title", "Ingested rows by table")}
-            </p>
-            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              {TABLE_ORDER.filter((name) => status.tables && name in status.tables).map((name) => (
-                <div key={name} className="rounded-xl border border-[var(--ukip-border)] bg-[var(--ukip-panel)] p-3">
-                  <p className="truncate font-mono text-[10px] text-[var(--ukip-muted)]">{name}</p>
-                  <p className="mt-1 font-mono text-lg font-bold text-[var(--ukip-text)]">
-                    {formatNumber(status.tables?.[name])}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </section>
-        </div>
-      )}
+      {!forbidden && !loading && !error && status && !status.lake && <IngestionOverview data={status} tr={tr} />}
     </div>
   );
 }

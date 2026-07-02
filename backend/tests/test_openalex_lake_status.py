@@ -1,7 +1,16 @@
 """Tests for the lake status snapshot + read-only store open."""
+import os
+
 import pytest
 
-from backend.openalex_lake.status import _total_scoped_issns, lake_status, resolve_status
+from backend.openalex_lake.status import (
+    _total_scoped_issns,
+    lake_status,
+    read_live_status,
+    resolve_status,
+    sidecar_path,
+    write_live_status,
+)
 from backend.openalex_lake.store import LakeStore
 from backend.openalex_lake.transform import transform_work
 
@@ -54,6 +63,46 @@ def test_total_scoped_issns_counts_distinct_journal_metrics(db_session):
     ])
     db_session.commit()
     assert _total_scoped_issns() == 2
+
+
+def test_sidecar_roundtrip_adds_snapshot_timestamp(tmp_path):
+    db = str(tmp_path / "lake.duckdb")
+    write_live_status(db, {"phase": "backfill", "backfill_journals_done": 3})
+    loaded = read_live_status(db)
+    assert loaded["phase"] == "backfill" and loaded["backfill_journals_done"] == 3
+    assert "snapshot_captured_at" in loaded
+    assert os.path.exists(sidecar_path(db))
+
+
+def test_sidecar_missing_or_corrupt_returns_none(tmp_path):
+    db = str(tmp_path / "lake.duckdb")
+    assert read_live_status(db) is None  # never written
+    with open(sidecar_path(db), "w", encoding="utf-8") as fh:
+        fh.write("{not valid json")
+    assert read_live_status(db) is None  # corrupt -> None, not a crash
+
+
+def test_write_live_status_noop_for_memory_db():
+    write_live_status(":memory:", {"phase": "backfill"})  # must not raise
+    assert read_live_status(":memory:") is None
+
+
+def test_resolve_status_locked_includes_last_known_sidecar(tmp_path):
+    """The whole point: progress must be readable while the writer holds the
+    lock, using the sidecar the running pull maintains via the same open
+    connection (simulated here with a direct write_live_status call)."""
+    db = str(tmp_path / "lake.duckdb")
+    write_live_status(db, {"phase": "backfill", "backfill_journals_done": 5, "backfill_total_issns": 270})
+
+    writer = LakeStore(db)
+    try:
+        out = resolve_status(db)
+        assert out["lake"] == "locked"
+        assert out["last_known"]["backfill_journals_done"] == 5
+        assert out["last_known"]["backfill_total_issns"] == 270
+        assert "snapshot_captured_at" in out["last_known"]
+    finally:
+        writer.close()
 
 
 def test_resolve_status_reports_locked_on_real_write_lock(tmp_path):
