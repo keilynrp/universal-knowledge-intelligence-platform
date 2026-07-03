@@ -556,6 +556,16 @@ export const navSections: NavSection[] = [
         ),
         translationKey: "nav.data_ops",
       },
+      {
+        label: "Lake Explorer",
+        href: "/dashboards/lake-explorer",
+        icon: (
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.5 14.25l2.25-2.25 2.25 2.25L15.75 10.5l1.5 1.5M3.75 5.25h16.5v13.5H3.75V5.25z" />
+          </svg>
+        ),
+        translationKey: "nav.lake_explorer",
+      },
     ],
   },
 ];
