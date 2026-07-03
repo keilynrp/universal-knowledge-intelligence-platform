@@ -39,6 +39,8 @@ attributes:
     label: "Keywords"
     is_core: false
     source: enrichment_concepts
+    multi_valued: true
+    separator: ", "
   - name: volume
     type: string
     label: "Volume"
@@ -72,7 +74,9 @@ attributes:
     type: string
     label: "Institution / School"
     is_core: false
-    source: affiliation
+    source: canonical_affiliations
+    multi_valued: true
+    item_key: name
 
 epistemology:
   paradigms:

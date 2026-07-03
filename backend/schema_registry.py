@@ -19,6 +19,16 @@ class AttributeSchema(BaseModel):
                                   # attributes_json key. Used by the OLAP cube to
                                   # resolve a dimension to its real storage
                                   # (e.g. citations→enrichment_citation_count).
+    multi_valued: bool = False    # the source holds several items per entity
+                                  # (a delimited string or a JSON list); the OLAP
+                                  # cube explodes it so each item is faceted
+                                  # separately (e.g. keywords, institutions).
+    item_key: Optional[str] = None  # when the source is a list of dicts, the key
+                                    # to pull from each item (e.g. "name" in
+                                    # canonical_affiliations). None → items are the
+                                    # list/string values themselves.
+    separator: str = ", "         # delimiter used to split a multi_valued *string*
+                                  # source into items (ignored for list sources).
 
 
 # ── Epistemology configuration models ─────────────────────────────────────────
