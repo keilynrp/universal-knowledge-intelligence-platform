@@ -31,6 +31,39 @@ def _safe_parse(val) -> dict:
         return {}
 
 
+def _explode_items(value, item_key=None, separator=", ") -> list:
+    """Normalize a multi-valued cell into a clean list of item strings.
+
+    Accepts a delimited string (split on ``separator``), a list of strings, or a
+    list of dicts (pull ``item_key`` from each). Empty/whitespace items are
+    dropped so they never become a spurious facet bucket.
+    """
+    if value is None:
+        return []
+    # A scalar NaN is a float; guard before treating value as a container.
+    if isinstance(value, float):
+        return []
+
+    raw_items: list
+    if isinstance(value, str):
+        raw_items = value.split(separator) if separator else [value]
+    elif isinstance(value, (list, tuple)):
+        raw_items = list(value)
+    else:
+        raw_items = [value]
+
+    items: list[str] = []
+    for el in raw_items:
+        if item_key and isinstance(el, dict):
+            el = el.get(item_key)
+        if el is None:
+            continue
+        text = el.strip() if isinstance(el, str) else str(el)
+        if text:
+            items.append(text)
+    return items
+
+
 def _project_domain_attributes(df: pd.DataFrame, domain) -> pd.DataFrame:
     """Add a column for each domain attribute that lives inside the entity JSON.
 
@@ -62,15 +95,27 @@ def _project_domain_attributes(df: pd.DataFrame, domain) -> pd.DataFrame:
             if not _is_safe_identifier(attr.name):
                 continue  # defense-in-depth: never materialize unsafe names
             src = getattr(attr, "source", None) or attr.name
-            # Source points at another physical column → alias it.
+            # Resolve the raw per-row value from the source (physical column or
+            # the merged JSON stores under the source key).
             if src in df.columns:
-                df[attr.name] = df[src]
-                continue
-            # Otherwise resolve from the merged JSON stores under the source key.
-            df[attr.name] = [
-                a.get(src) if a.get(src) is not None else n.get(src)
-                for n, a in zip(norm_dicts, attr_dicts)
-            ]
+                raw_values = list(df[src])
+            else:
+                raw_values = [
+                    a.get(src) if a.get(src) is not None else n.get(src)
+                    for n, a in zip(norm_dicts, attr_dicts)
+                ]
+
+            # Multi-valued dimension → materialize a list of items per row so the
+            # cube can explode (UNNEST) it into per-item facets.
+            if getattr(attr, "multi_valued", False):
+                item_key = getattr(attr, "item_key", None)
+                sep = getattr(attr, "separator", ", ")
+                df[attr.name] = pd.Series(
+                    [_explode_items(v, item_key, sep) for v in raw_values],
+                    index=df.index, dtype=object,
+                )
+            else:
+                df[attr.name] = raw_values
 
     # Extract epistemic paradigm dimension from attributes_json
     if domain.epistemology and "attributes_json" in df.columns:
@@ -134,15 +179,24 @@ class DuckDBOLAPEngine:
             if attr.type == "string" or attr.name in df.columns:
                 try:
                     col = f'"{attr.name}"'
-                    query = (
-                        f"SELECT CAST({col} AS VARCHAR) AS label, "
-                        f"COUNT(*) AS value "
-                        f"FROM df "
-                        f"WHERE {col} IS NOT NULL "
-                        f"GROUP BY {col} "
-                        f"ORDER BY value DESC "
-                        f"LIMIT 8"
-                    )
+                    if getattr(attr, "multi_valued", False):
+                        # Explode the list column so each item is counted.
+                        query = (
+                            f"SELECT label, COUNT(*) AS value FROM ("
+                            f"SELECT UNNEST({col}) AS label FROM df"
+                            f") WHERE label IS NOT NULL "
+                            f"GROUP BY label ORDER BY value DESC LIMIT 8"
+                        )
+                    else:
+                        query = (
+                            f"SELECT CAST({col} AS VARCHAR) AS label, "
+                            f"COUNT(*) AS value "
+                            f"FROM df "
+                            f"WHERE {col} IS NOT NULL "
+                            f"GROUP BY {col} "
+                            f"ORDER BY value DESC "
+                            f"LIMIT 8"
+                        )
                     res_df = con.execute(query).df()
 
                     if not res_df.empty:
@@ -173,7 +227,17 @@ class DuckDBOLAPEngine:
                 continue
             if not _is_safe_identifier(attr.name):
                 continue
-            distinct = int(df[attr.name].nunique()) if attr.name in df.columns and len(df) > 0 else 0
+            if attr.name not in df.columns or len(df) == 0:
+                distinct = 0
+            elif getattr(attr, "multi_valued", False):
+                # Count distinct *items* across the per-row lists.
+                items: set = set()
+                for lst in df[attr.name]:
+                    if isinstance(lst, (list, tuple)):
+                        items.update(lst)
+                distinct = len(items)
+            else:
+                distinct = int(df[attr.name].nunique())
             result.append({
                 "name": attr.name,
                 "label": attr.label,
@@ -210,7 +274,8 @@ class DuckDBOLAPEngine:
         if not domain:
             raise ValueError(f"Domain '{domain_id}' not found")
 
-        attr_names = {a.name for a in domain.attributes}
+        attr_by_name = {a.name: a for a in domain.attributes}
+        attr_names = set(attr_by_name)
         # Include virtual dimensions (e.g., paradigm from epistemic classification)
         if domain.epistemology:
             attr_names.add("paradigm")
@@ -222,14 +287,31 @@ class DuckDBOLAPEngine:
                 raise ValueError(f"Dimension '{dim}' is not in domain '{domain_id}'")
             valid_columns_schema.add(dim)
 
+        def _is_multi(name: str) -> bool:
+            attr = attr_by_name.get(name)
+            return bool(attr and getattr(attr, "multi_valued", False))
+
+        # Exploding two multi-valued dimensions at once is ambiguous (it would zip
+        # per-row lists, not cross them), so reject it with a clear error.
+        if sum(_is_multi(d) for d in group_by) > 1:
+            raise ValueError("Cannot group by two multi-valued dimensions at once")
+
         df = self._load_domain_df(domain)
 
-        # Apply equality filters (field must exist in schema and DataFrame)
+        # Apply equality filters (field must exist in schema and DataFrame).
         if filters:
             for field, value in (filters or {}).items():
                 if not _is_safe_identifier(field):
                     continue
-                if field in df.columns and value is not None:
+                if field not in df.columns or value is None:
+                    continue
+                if _is_multi(field):
+                    # Drill-down into one item of a multi-valued dimension.
+                    target = str(value)
+                    df = df[df[field].apply(
+                        lambda lst: isinstance(lst, (list, tuple)) and target in [str(x) for x in lst]
+                    )]
+                else:
                     df = df[df[field].astype(str) == str(value)]
 
         empty_response = {
@@ -251,11 +333,17 @@ class DuckDBOLAPEngine:
         con = duckdb.connect()
         con.register("df", df)
 
+        # Explode any multi-valued dimension (list column) into one row per item
+        # via a sub-select; scalar dimensions pass through unchanged.
+        inner_cols = ", ".join(
+            f'UNNEST("{d}") AS "{d}"' if _is_multi(d) else f'"{d}"'
+            for d in group_by
+        )
         select_cols = ", ".join([f'CAST("{d}" AS VARCHAR) AS "{d}"' for d in group_by])
         groupby_clause = ", ".join([f'"{d}"' for d in group_by])
         sql = (
             f"SELECT {select_cols}, COUNT(*) AS count "
-            f"FROM df "
+            f"FROM (SELECT {inner_cols} FROM df) "
             f"GROUP BY {groupby_clause} "
             f"ORDER BY count DESC "
             f"LIMIT 200"
