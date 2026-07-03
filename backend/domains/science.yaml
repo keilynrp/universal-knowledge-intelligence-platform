@@ -29,6 +29,7 @@ attributes:
     type: integer
     label: "Citation Count"
     is_core: true
+    source: enrichment_citation_count
   - name: abstract
     type: text
     label: "Abstract"
@@ -37,6 +38,7 @@ attributes:
     type: string
     label: "Keywords"
     is_core: false
+    source: enrichment_concepts
   - name: volume
     type: string
     label: "Volume"
@@ -57,6 +59,7 @@ attributes:
     type: string
     label: "ISSN"
     is_core: false
+    source: enrichment_issn_l
   - name: url
     type: string
     label: "URL"
@@ -69,6 +72,7 @@ attributes:
     type: string
     label: "Institution / School"
     is_core: false
+    source: affiliation
 
 epistemology:
   paradigms:

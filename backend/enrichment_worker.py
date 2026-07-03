@@ -632,6 +632,15 @@ def enrich_single_record(db: Session, entity: models.RawEntity) -> models.RawEnt
             if enriched_data.venue:
                 attrs["venue"] = enriched_data.venue
 
+            # Journal display name → OLAP `journal` dimension. Prefer the resolved
+            # JournalMetrics name, fall back to the raw venue. Guard against
+            # non-str values (e.g. MagicMock in tests) so json.dumps never breaks.
+            _journal_meta = getattr(enriched_data, "journal", None)
+            _journal_name = getattr(_journal_meta, "display_name", None) if _journal_meta else None
+            _journal_name = _journal_name or enriched_data.venue
+            if isinstance(_journal_name, str) and _journal_name.strip():
+                attrs["journal"] = _journal_name.strip()
+
             # Journal-level metrics (NIF base + APC) — non-essential add-on; a
             # journal sub-step failure (e.g. OpenAlex /sources timeout) must NEVER
             # abort persistence of the work's primary enrichment, so wrap it all.

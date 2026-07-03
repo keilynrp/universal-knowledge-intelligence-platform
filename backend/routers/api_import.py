@@ -86,6 +86,14 @@ def _ingest_records(
         if rec.venue:
             attrs["venue"] = rec.venue
 
+        # Journal display name for the OLAP `journal` dimension. Prefer the
+        # resolved JournalMetrics name, fall back to the raw venue string.
+        journal_meta = getattr(rec, "journal", None)
+        journal_name = getattr(journal_meta, "display_name", None) if journal_meta else None
+        journal_name = journal_name or rec.venue
+        if isinstance(journal_name, str) and journal_name.strip():
+            attrs["journal"] = journal_name.strip()
+
         # Task 2.2 — persist structured affiliation metadata
         canonical_affs = getattr(rec, "canonical_affiliations", None)
         if canonical_affs:

@@ -43,6 +43,12 @@ def _project_domain_attributes(df: pd.DataFrame, domain) -> pd.DataFrame:
     untouched. The ``is_core`` flag is intentionally *not* used to gate
     projection: some domains (e.g. science) mark fields like ``journal``/``year``
     as core yet still store them in ``attributes_json`` rather than as columns.
+
+    An attribute may declare ``source`` when its value lives under a different
+    name — either another physical column (``citations`` →
+    ``enrichment_citation_count``) or a differently-named JSON key
+    (``institution`` → ``affiliation``). The dimension is then resolved from that
+    source, so no data has to be duplicated or backfilled.
     """
     has_attr = "attributes_json" in df.columns
     has_norm = "normalized_json" in df.columns
@@ -55,8 +61,14 @@ def _project_domain_attributes(df: pd.DataFrame, domain) -> pd.DataFrame:
                 continue  # physical column — keep as-is
             if not _is_safe_identifier(attr.name):
                 continue  # defense-in-depth: never materialize unsafe names
+            src = getattr(attr, "source", None) or attr.name
+            # Source points at another physical column → alias it.
+            if src in df.columns:
+                df[attr.name] = df[src]
+                continue
+            # Otherwise resolve from the merged JSON stores under the source key.
             df[attr.name] = [
-                a.get(attr.name) if a.get(attr.name) is not None else n.get(attr.name)
+                a.get(src) if a.get(src) is not None else n.get(src)
                 for n, a in zip(norm_dicts, attr_dicts)
             ]
 
