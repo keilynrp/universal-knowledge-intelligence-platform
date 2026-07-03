@@ -251,9 +251,12 @@ class DuckDBOLAPEngine:
         result_df = con.execute(sql).df()
         total = int(result_df["count"].sum()) if not result_df.empty else 0
 
+        # NULL grouping values come back as pandas NaN. Coerce to None so the
+        # response is JSON-compliant — Starlette's JSONResponse uses
+        # allow_nan=False and would raise (HTTP 500) on a leaked NaN.
         rows = [
             {
-                "values": {d: row[d] for d in group_by},
+                "values": {d: (None if pd.isna(row[d]) else row[d]) for d in group_by},
                 "count": int(row["count"]),
                 "pct": round(row["count"] / total * 100, 1) if total > 0 else 0.0,
             }

@@ -112,3 +112,27 @@ def test_attributes_json_wins_over_normalized_json(monkeypatch):
     result = DuckDBOLAPEngine().query_cube("science", ["journal"])
 
     assert result["rows"][0]["values"]["journal"] == "Nature"
+
+
+def test_null_group_key_serializes_as_none_not_nan(monkeypatch):
+    """A NULL grouping value must become JSON ``null`` (Python None), never a
+    float NaN. Starlette's JSONResponse uses allow_nan=False, so a leaked NaN
+    turns the endpoint into a 500 — which is exactly what happened for nullable
+    columns like entity_type / secondary_label in production."""
+    import json
+
+    df = pd.DataFrame({
+        "attributes_json": ['{"journal": "Nature"}', "{}", '{"journal": "Cell"}'],
+        "normalized_json": [None, None, None],
+    })
+    _patch(monkeypatch, df)
+
+    result = DuckDBOLAPEngine().query_cube("science", ["journal"])
+
+    # The row for the entity with no journal must carry None, not NaN.
+    values = [r["values"]["journal"] for r in result["rows"]]
+    assert None in values
+    assert not any(isinstance(v, float) for v in values)  # no NaN leaked
+
+    # Must be serializable the same way Starlette serializes responses.
+    json.dumps(result, allow_nan=False)  # raises ValueError if a NaN leaks
