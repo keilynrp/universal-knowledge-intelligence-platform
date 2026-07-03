@@ -31,6 +31,45 @@ def _safe_parse(val) -> dict:
         return {}
 
 
+def _project_domain_attributes(df: pd.DataFrame, domain) -> pd.DataFrame:
+    """Add a column for each domain attribute that lives inside the entity JSON.
+
+    Attributes are read from the merged JSON stores where ``attributes_json``
+    (written by the API/BibTeX importers and the enrichment worker) is
+    authoritative and ``normalized_json`` (populated only by the generic CSV
+    wizard for unmapped columns) is the fallback.
+
+    Attributes that are already physical ``raw_entities`` columns are left
+    untouched. The ``is_core`` flag is intentionally *not* used to gate
+    projection: some domains (e.g. science) mark fields like ``journal``/``year``
+    as core yet still store them in ``attributes_json`` rather than as columns.
+    """
+    has_attr = "attributes_json" in df.columns
+    has_norm = "normalized_json" in df.columns
+    if has_attr or has_norm:
+        empty = pd.Series([{} for _ in range(len(df))], index=df.index)
+        attr_dicts = df["attributes_json"].apply(_safe_parse) if has_attr else empty
+        norm_dicts = df["normalized_json"].apply(_safe_parse) if has_norm else empty
+        for attr in domain.attributes:
+            if attr.name in df.columns:
+                continue  # physical column — keep as-is
+            if not _is_safe_identifier(attr.name):
+                continue  # defense-in-depth: never materialize unsafe names
+            df[attr.name] = [
+                a.get(attr.name) if a.get(attr.name) is not None else n.get(attr.name)
+                for n, a in zip(norm_dicts, attr_dicts)
+            ]
+
+    # Extract epistemic paradigm dimension from attributes_json
+    if domain.epistemology and "attributes_json" in df.columns:
+        attrs_parsed = df["attributes_json"].apply(_safe_parse)
+        df["paradigm"] = attrs_parsed.apply(
+            lambda a: (a.get("epistemic_profile") or {}).get("dominant", None)
+        )
+
+    return df
+
+
 class DuckDBOLAPEngine:
     """
     In-Memory OLAP Engine leveraging DuckDB to build Data Cubes out of the
@@ -40,20 +79,7 @@ class DuckDBOLAPEngine:
     def _load_domain_df(self, domain) -> pd.DataFrame:
         """Load raw_entities and project domain-specific attributes."""
         df = pd.read_sql_table("raw_entities", engine)
-        if "normalized_json" in df.columns:
-            json_df = df["normalized_json"].apply(_safe_parse)
-            for attr in domain.attributes:
-                if not attr.is_core:
-                    df[attr.name] = json_df.apply(lambda x, n=attr.name: x.get(n))
-
-        # Extract epistemic paradigm dimension from attributes_json
-        if domain.epistemology and "attributes_json" in df.columns:
-            attrs_parsed = df["attributes_json"].apply(_safe_parse)
-            df["paradigm"] = attrs_parsed.apply(
-                lambda a: (a.get("epistemic_profile") or {}).get("dominant", None)
-            )
-
-        return df
+        return _project_domain_attributes(df, domain)
 
     @staticmethod
     def generate_cube_metrics(domain_id: str) -> dict:
@@ -62,12 +88,7 @@ class DuckDBOLAPEngine:
             raise ValueError(f"Domain '{domain_id}' not found")
 
         df = pd.read_sql_table("raw_entities", engine)
-
-        if "normalized_json" in df.columns:
-            json_df = df["normalized_json"].apply(_safe_parse)
-            for attr in domain.attributes:
-                if not attr.is_core:
-                    df[attr.name] = json_df.apply(lambda x, n=attr.name: x.get(n))
+        df = _project_domain_attributes(df, domain)
 
         valid_columns: set[str] = set(df.columns)
 
