@@ -139,11 +139,18 @@ every journal is done it sets the watermark and switches to **incremental**
 (`from_updated_date`) automatically. So the same command is safe every day.
 
 **3. Schedule (Dokploy → app → Schedules on `ukip-backend`).** Run **daily**
-`0 3 * * *` until the backfill catches up, then relax to monthly:
+`0 3 * * *` until the backfill catches up, then relax to monthly. The backfill
+is now complete, so production runs **monthly** on:
 
 ```
+# Dokploy Schedule (server TZ = UTC): 09:00 UTC on the 1st of each month.
+# CDMX is UTC-6 year-round (no DST since 2022), so this is 03:00 America/Mexico_City.
+0 9 1 * *
 python -m backend.openalex_lake.pull_works
 ```
+
+The plain command auto-selects incremental mode once the backfill watermark is
+set, so no `--incremental` flag is needed.
 
 `python -m backend.openalex_lake.status` reports `phase` (backfill/incremental)
 and `backfill_journals_done` so you can watch the multi-day catch-up. ISSNs come
