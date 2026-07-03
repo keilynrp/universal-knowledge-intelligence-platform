@@ -266,6 +266,33 @@ class DuckDBOLAPEngine:
         """
         Group entities by 1 or 2 dimensions with optional equality filters.
         Returns rows sorted by count descending, capped at 200.
+
+        Dimensionality & performance
+        ----------------------------
+        The cube is capped at **2** group-by dimensions on purpose. The limit is
+        driven by result quality, not raw CPU: on this in-memory DuckDB engine a
+        GROUP BY over 2-3 columns is trivial. What degrades is:
+
+        * **Sparsity / truncation** — the result grid can reach C1×C2×… cells but
+          is cut at ``LIMIT 200``. Crossing high-cardinality dimensions
+          (``keywords``, ``institution``, ``journal``, ``authors``) yields a huge,
+          mostly count=1 grid whose long tail is silently dropped, making the
+          percentages misleading.
+        * **Readability** — beyond 2 dimensions a pivot table stops being
+          human-interpretable.
+        * **Multi-valued explosion** — ``multi_valued`` dims (keywords,
+          institution) already multiply rows via UNNEST, so crossing *two* of them
+          is rejected outright (ambiguous and costly).
+
+        Guidance: cross **low-cardinality** dims (``year``, ``work_type``,
+        ``validation_status``, ``paradigm``); use high-cardinality ones as the
+        single primary dimension or as a ``filters`` drill-down. If deeper N-way
+        slicing is ever needed, do it in a dedicated analytical/materialized query,
+        not this generic cube.
+
+        NB: the real scaling bottleneck is the full ``read_sql_table`` + per-row
+        JSON parse on every call (O(rows), independent of dimension count) — that
+        is what to optimize (cache/pushdown) before ever raising this cap.
         """
         if not 1 <= len(group_by) <= 2:
             raise ValueError("group_by must specify 1 or 2 dimensions")
