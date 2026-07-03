@@ -997,6 +997,46 @@ Antes de implementar, verificar:
 
 ---
 
+## 11-bis. Guía de dimensionalidad y rendimiento (implementación actual)
+
+> Refleja el motor ya en producción (`backend/olap.py`, `query_cube`). No es
+> teoría: es cómo conviene usar el cubo tal como está construido hoy.
+
+**El cubo topa en 2 dimensiones `group_by` a propósito.** El límite lo dicta la
+**calidad del resultado**, no la CPU: sobre DuckDB in-memory, agrupar por 2-3
+columnas es trivial (microsegundos sobre decenas de miles de filas).
+
+| Dimensiones | Recomendación |
+|-------------|---------------|
+| **1** | Ideal para dims de alta cardinalidad (`keywords`, `institution`, `journal`, `authors`) como dimensión primaria. |
+| **2** | Sweet spot interactivo (cross-tab). Preferir que al menos una sea de baja cardinalidad. |
+| **3** | Solo para export/análisis, nunca en pantalla; y solo dims de baja cardinalidad. |
+| **4+** | No aconsejable en el cubo genérico — usar una consulta analítica/materializada dedicada. |
+
+**Lo que se degrada al subir dimensiones (no es CPU):**
+
+1. **Dispersión + truncado.** La malla resultante puede llegar a C₁×C₂×… celdas
+   pero se corta en `LIMIT 200`. Cruzar dims de alta cardinalidad produce una
+   malla enorme con casi todo `count=1`, cuya cola larga se descarta en silencio
+   → los porcentajes engañan.
+2. **Legibilidad.** Más de 2 dims deja de ser una tabla pivote interpretable.
+3. **Explosión multi-valor.** Las dims `multi_valued` (keywords, institution) ya
+   multiplican filas vía `UNNEST`; por eso cruzar **dos** multi-valor está
+   **bloqueado** (ambiguo y costoso).
+
+**Regla práctica de cardinalidad:**
+- Cruza dims de **baja** cardinalidad: `year`, `work_type`, `validation_status`, `paradigm`.
+- Usa las de **alta** cardinalidad como dimensión primaria única o como **filtro** (drill-down).
+- Patrón ideal para multi-valor: `keywords × year` (un multi-valor × una baja cardinalidad).
+
+**El verdadero cuello de botella de escalabilidad** no es el número de
+dimensiones sino el `read_sql_table("raw_entities")` + parseo de JSON por fila en
+**cada** consulta (O(filas), independiente de la aridad). Si el corpus crece a
+cientos de miles, optimizar eso (cachear el DataFrame proyectado o empujar la
+agregación a la base) es lo que importa — mucho antes que subir el cap de 2.
+
+---
+
 ## 12. Conclusión y Próximos Pasos
 
 ### Resumen Ejecutivo
