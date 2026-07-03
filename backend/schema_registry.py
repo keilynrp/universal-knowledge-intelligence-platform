@@ -14,6 +14,11 @@ class AttributeSchema(BaseModel):
     label: str            # human-readable label
     required: bool = False
     is_core: bool = False # whether it matches standard RawEntity columns or goes into normalized_json
+    source: Optional[str] = None  # where the value actually lives when it differs
+                                  # from `name`: a physical RawEntity column or an
+                                  # attributes_json key. Used by the OLAP cube to
+                                  # resolve a dimension to its real storage
+                                  # (e.g. citations→enrichment_citation_count).
 
 
 # ── Epistemology configuration models ─────────────────────────────────────────
