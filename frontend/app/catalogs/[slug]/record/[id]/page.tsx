@@ -311,7 +311,7 @@ export default function CatalogRecordPage() {
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-gray-500 dark:text-gray-400">
+                <p className="text-sm text-[var(--ukip-muted)]">
                   {tr("catalogs.record.no_extended", "No extended metadata was stored for this record.")}
                 </p>
               )}

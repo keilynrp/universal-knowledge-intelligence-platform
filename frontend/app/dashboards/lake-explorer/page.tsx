@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 import { apiFetch } from "@/lib/api";
-import { Badge, EmptyState, ErrorBanner, PageHeader, SkeletonCard } from "../../components/ui";
+import { Badge, Button, EmptyState, ErrorBanner, Input, PageHeader, Select, SkeletonCard } from "../../components/ui";
 import { useLanguage } from "../../contexts/LanguageContext";
 
 // ── Types (mirror backend/openalex_lake/explore.py) ─────────────────────────
@@ -159,17 +159,16 @@ export default function LakeExplorerPage(): ReactElement {
                   <p className="text-[11px] font-semibold text-[var(--ukip-muted)]">{axisLabel(entry.axis)}</p>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {entry.views.map((v) => (
-                      <button
+                      <Button
                         key={v}
                         onClick={() => selectView(v)}
-                        className={`rounded-lg border px-2.5 py-1 font-mono text-xs transition ${
-                          v === view
-                            ? "border-[var(--ukip-violet)] bg-[var(--ukip-primary-soft)] text-[var(--ukip-violet)]"
-                            : "border-[var(--ukip-border)] text-[var(--ukip-muted)] hover:border-[var(--ukip-border-strong)]"
-                        }`}
+                        variant={v === view ? "outline" : "ghost"}
+                        size="sm"
+                        aria-pressed={v === view}
+                        className="font-mono"
                       >
                         {v}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </div>
@@ -178,61 +177,52 @@ export default function LakeExplorerPage(): ReactElement {
 
             {/* Filters */}
             <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-[var(--ukip-border)] pt-4">
-              <label className="text-xs text-[var(--ukip-muted)]">
-                ISSN-L
-                <input
-                  value={issnL}
-                  onChange={(e) => setIssnL(e.target.value)}
-                  placeholder="0028-0836"
-                  className="mt-1 block w-36 rounded-lg border border-[var(--ukip-border)] bg-transparent px-2.5 py-1.5 font-mono text-sm text-[var(--ukip-text)] outline-none focus:border-[var(--ukip-violet)]"
-                />
-              </label>
-              <label className="text-xs text-[var(--ukip-muted)]">
-                {tr("lake_explorer.year_from", "Year from")}
-                <input
-                  value={yearMin}
-                  onChange={(e) => setYearMin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="2010"
-                  className="mt-1 block w-24 rounded-lg border border-[var(--ukip-border)] bg-transparent px-2.5 py-1.5 font-mono text-sm text-[var(--ukip-text)] outline-none focus:border-[var(--ukip-violet)]"
-                />
-              </label>
-              <label className="text-xs text-[var(--ukip-muted)]">
-                {tr("lake_explorer.year_to", "Year to")}
-                <input
-                  value={yearMax}
-                  onChange={(e) => setYearMax(e.target.value.replace(/\D/g, ""))}
-                  placeholder="2025"
-                  className="mt-1 block w-24 rounded-lg border border-[var(--ukip-border)] bg-transparent px-2.5 py-1.5 font-mono text-sm text-[var(--ukip-text)] outline-none focus:border-[var(--ukip-violet)]"
-                />
-              </label>
+              <Input
+                label="ISSN-L"
+                value={issnL}
+                onChange={(e) => setIssnL(e.target.value)}
+                placeholder="0028-0836"
+                className="w-36 font-mono"
+              />
+              <Input
+                label={tr("lake_explorer.year_from", "Year from")}
+                value={yearMin}
+                onChange={(e) => setYearMin(e.target.value.replace(/\D/g, ""))}
+                placeholder="2010"
+                inputMode="numeric"
+                className="w-24 font-mono"
+              />
+              <Input
+                label={tr("lake_explorer.year_to", "Year to")}
+                value={yearMax}
+                onChange={(e) => setYearMax(e.target.value.replace(/\D/g, ""))}
+                placeholder="2025"
+                inputMode="numeric"
+                className="w-24 font-mono"
+              />
               {result?.columns && (
-                <label className="text-xs text-[var(--ukip-muted)]">
-                  {tr("lake_explorer.order_by", "Order by")}
-                  <select
-                    value={orderBy}
-                    onChange={(e) => { setOrderBy(e.target.value); setOffset(0); }}
-                    className="mt-1 block rounded-lg border border-[var(--ukip-border)] bg-[var(--ukip-surface)] px-2.5 py-1.5 font-mono text-sm text-[var(--ukip-text)] outline-none focus:border-[var(--ukip-violet)]"
-                  >
-                    <option value="">—</option>
-                    {result.columns.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </label>
+                <Select
+                  label={tr("lake_explorer.order_by", "Order by")}
+                  value={orderBy}
+                  onChange={(e) => { setOrderBy(e.target.value); setOffset(0); }}
+                  className="font-mono"
+                >
+                  <option value="">—</option>
+                  {result.columns.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </Select>
               )}
-              <button
+              <Button
                 onClick={() => { setDescending(!descending); setOffset(0); }}
-                className="rounded-lg border border-[var(--ukip-border)] px-2.5 py-1.5 text-sm text-[var(--ukip-muted)] transition hover:border-[var(--ukip-border-strong)]"
+                variant="outline"
                 title={tr("lake_explorer.toggle_order", "Toggle sort direction")}
               >
                 {descending ? "↓ desc" : "↑ asc"}
-              </button>
-              <button
-                onClick={() => void runQuery({ resetOffset: true })}
-                className="rounded-lg bg-[var(--ukip-primary)] px-4 py-1.5 text-sm font-semibold text-[var(--ukip-on-primary)] transition hover:bg-[var(--ukip-primary-strong)]"
-              >
+              </Button>
+              <Button onClick={() => void runQuery({ resetOffset: true })} variant="primary">
                 {tr("lake_explorer.apply", "Apply filters")}
-              </button>
+              </Button>
             </div>
           </section>
 
@@ -268,23 +258,25 @@ export default function LakeExplorerPage(): ReactElement {
                   </Badge>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-[var(--ukip-muted)]">
-                  <button
+                  <Button
                     onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
                     disabled={!canPrev}
-                    className="rounded-lg border border-[var(--ukip-border)] px-2.5 py-1 transition enabled:hover:border-[var(--ukip-border-strong)] disabled:opacity-40"
+                    variant="outline"
+                    size="sm"
                   >
                     ← {tr("lake_explorer.prev", "Prev")}
-                  </button>
+                  </Button>
                   <span className="font-mono text-xs">
                     {offset + 1}–{Math.min(offset + PAGE_SIZE, total)}
                   </span>
-                  <button
+                  <Button
                     onClick={() => setOffset(offset + PAGE_SIZE)}
                     disabled={!canNext}
-                    className="rounded-lg border border-[var(--ukip-border)] px-2.5 py-1 transition enabled:hover:border-[var(--ukip-border-strong)] disabled:opacity-40"
+                    variant="outline"
+                    size="sm"
                   >
                     {tr("lake_explorer.next", "Next")} →
-                  </button>
+                  </Button>
                 </div>
               </div>
               <div className="overflow-x-auto">
