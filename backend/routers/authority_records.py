@@ -172,6 +172,35 @@ def bulk_reject_authority_records(
     return {"rejected": rejected}
 
 
+@router.post("/authority/records/purge", tags=["authority"])
+def purge_authority_records(
+    field_name: Optional[str] = Query(None, max_length=64),
+    status: str = Query("pending", pattern="^(pending|rejected)$"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin")),
+):
+    """Bulk-delete unreviewed records so they can be re-resolved (e.g. after
+    enabling orcid_hint). Only ``pending``/``rejected`` are ever deletable —
+    ``confirmed`` records are never touched. Optionally scoped to ``field_name``.
+    """
+    org_id = resolve_request_org_id(db, current_user)
+    q = scope_query_to_org(
+        db.query(models.AuthorityRecord), models.AuthorityRecord, org_id
+    ).filter(models.AuthorityRecord.status == status)
+    if field_name:
+        q = q.filter(models.AuthorityRecord.field_name == field_name)
+    deleted = q.delete(synchronize_session=False)
+    _audit(
+        db, "authority.purge",
+        user_id=current_user.id,
+        entity_type="authority_record",
+        entity_id=0,
+        details={"field_name": field_name, "status": status, "deleted": deleted},
+    )
+    db.commit()
+    return {"deleted": deleted, "field_name": field_name, "status": status}
+
+
 # ── Record CRUD ──────────────────────────────────────────────────────────────
 
 @router.get("/authority/records", tags=["authority"])
