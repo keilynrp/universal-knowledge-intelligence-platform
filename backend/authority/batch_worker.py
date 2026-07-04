@@ -114,14 +114,22 @@ def _run_job(db: Session, job: models.AuthorityResolveJob) -> None:
 
 
 async def run_batch_worker() -> None:
-    """Poll loop: claim + run one pending job per iteration."""
+    """Poll loop: claim + run one pending job per iteration.
+
+    ``_run_job`` is synchronous and can take minutes for large jobs (external
+    HTTP per value), so it MUST run in a worker thread — running it inline
+    would block the event loop, starve every request including ``/health``,
+    and get the container killed by its healthcheck (observed in prod with a
+    500-value auto-enqueued job). The DB session is only ever touched by that
+    one thread at a time, so the sequential handoff is safe.
+    """
     while True:
         try:
             db = SessionLocal()
             try:
                 job = _claim_one(db)
                 if job:
-                    _run_job(db, job)
+                    await asyncio.to_thread(_run_job, db, job)
             finally:
                 db.close()
         except Exception:  # noqa: BLE001 — never let the loop die
