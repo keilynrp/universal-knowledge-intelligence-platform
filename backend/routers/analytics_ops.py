@@ -171,11 +171,26 @@ def health_check(request: Request, db: Session = Depends(get_db)):
     except Exception:  # noqa: BLE001 — never let the probe break /health
         logger.exception("health_check_cache_error")
         cache_health = {"backend": "unknown", "configured": None, "reachable": False}
+    # Effective feature-flag state as seen by THIS running container — read via
+    # the same helpers the code uses, so it reflects the live env exactly. Handy
+    # for confirming a Dokploy env var actually reached the container.
+    try:
+        from backend.authority.auto_enqueue import auto_resolve_enabled
+        from backend.authority.entity_writeback import writeback_enabled
+
+        features = {
+            "auto_resolve_on_ingest": auto_resolve_enabled(),
+            "authority_writeback": writeback_enabled(),
+        }
+    except Exception:  # noqa: BLE001 — never let the probe break /health
+        logger.exception("health_check_features_error")
+        features = {}
     return {
         "status": status,
         "service": "ukip-backend",
         "database": db_status,
         "cache": cache_health,
+        "features": features,
         "request_id": getattr(request.state, "request_id", None),
         "log_format": current_log_format(),
         "telemetry": telemetry_status(),
