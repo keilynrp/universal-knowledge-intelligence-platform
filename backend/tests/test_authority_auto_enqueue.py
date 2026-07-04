@@ -12,7 +12,12 @@ import json
 
 from backend import models
 from backend.authority import auto_enqueue
-from backend.authority.batch_resolution import _distinct_values, execute_batch_resolution
+from backend.authority.batch_resolution import (
+    VALUE_SOURCE_PUB_AUTHORS,
+    _distinct_values,
+    _distinct_values_from_publication_attrs,
+    execute_batch_resolution,
+)
 
 
 def _entity(db, *, label, entity_type, canonical_id, org_id=None):
@@ -21,6 +26,22 @@ def _entity(db, *, label, entity_type, canonical_id, org_id=None):
         primary_label=label, canonical_id=canonical_id,
         attributes_json="{}", validation_status="derived",
         enrichment_status="derived", source="graph_materializer",
+    )
+    db.add(ent)
+    db.flush()
+    return ent
+
+
+def _publication(db, *, title, authors=(), affiliations=(), org_id=None):
+    attrs = {
+        "author_affiliations": [{"author_name": a, "institutions": []} for a in authors],
+        "canonical_affiliations": [{"name": n} for n in affiliations],
+    }
+    ent = models.RawEntity(
+        org_id=org_id, domain="science", entity_type="publication",
+        primary_label=title, canonical_id=f"doi:{title}",
+        attributes_json=json.dumps(attrs), validation_status="pending",
+        enrichment_status="completed", source="openalex",
     )
     db.add(ent)
     db.flush()
@@ -148,3 +169,89 @@ def test_only_unresolved_type_is_enqueued(db_session, monkeypatch):
     assert len(created) == 1
     job = db_session.query(models.AuthorityResolveJob).one()
     assert job.entity_type == "person"
+
+
+# ── publication-attribute value source (OpenAlex path) ────────────────────────
+
+def test_extract_author_names_from_publication_attrs(db_session):
+    _publication(db_session, title="Paper A", authors=["Ada Lovelace", "Grace Hopper"],
+                 affiliations=["Open Lab"])
+    _publication(db_session, title="Paper B", authors=["Ada Lovelace", "Alan Turing"])
+    db_session.flush()
+
+    authors = _distinct_values_from_publication_attrs(db_session, None, VALUE_SOURCE_PUB_AUTHORS)
+
+    assert set(authors) == {"Ada Lovelace", "Grace Hopper", "Alan Turing"}  # deduped across pubs
+
+
+def test_batch_resolution_reads_publication_authors(db_session):
+    _publication(db_session, title="Paper A", authors=["Ada Lovelace"])
+    db_session.flush()
+    seen = []
+
+    def _fake_resolve(value, entity_type, ctx):
+        seen.append((value, entity_type))
+        return []
+
+    summary, _ = execute_batch_resolution(
+        db_session, org_id=None, record_org_id=None, field="author",
+        entity_type="person", limit=100, skip_existing=False,
+        resolve_fn=_fake_resolve, value_source=VALUE_SOURCE_PUB_AUTHORS,
+    )
+
+    assert seen == [("Ada Lovelace", "person")]
+    assert summary["resolved_count"] == 1
+
+
+def test_enqueue_publication_jobs_disabled_by_default(db_session, monkeypatch):
+    monkeypatch.delenv("UKIP_AUTO_RESOLVE_ON_INGEST", raising=False)
+    _publication(db_session, title="Paper A", authors=["Ada Lovelace"])
+    db_session.flush()
+
+    created = auto_enqueue.enqueue_publication_authority_jobs(db_session, org_id=None)
+
+    assert created == []
+
+
+def test_enqueue_publication_jobs_creates_author_and_affiliation(db_session, monkeypatch):
+    monkeypatch.setenv("UKIP_AUTO_RESOLVE_ON_INGEST", "1")
+    _publication(db_session, title="Paper A", authors=["Ada Lovelace"], affiliations=["Open Lab"])
+    db_session.flush()
+
+    created = auto_enqueue.enqueue_publication_authority_jobs(db_session, org_id=None)
+
+    assert len(created) == 2
+    jobs = {j.entity_type: j for j in db_session.query(models.AuthorityResolveJob).all()}
+    assert set(jobs) == {"person", "institution"}
+    assert jobs["person"].field_name == "author"
+    assert json.loads(jobs["person"].params_json)["value_source"] == VALUE_SOURCE_PUB_AUTHORS
+    assert jobs["institution"].field_name == "affiliation"
+
+
+def test_enqueue_publication_jobs_deduplicated(db_session, monkeypatch):
+    monkeypatch.setenv("UKIP_AUTO_RESOLVE_ON_INGEST", "1")
+    _publication(db_session, title="Paper A", authors=["Ada Lovelace"], affiliations=["Open Lab"])
+    db_session.flush()
+
+    first = auto_enqueue.enqueue_publication_authority_jobs(db_session, org_id=None)
+    second = auto_enqueue.enqueue_publication_authority_jobs(db_session, org_id=None)
+
+    assert len(first) == 2
+    assert second == []
+
+
+def test_enqueue_publication_jobs_guard_when_all_covered(db_session, monkeypatch):
+    monkeypatch.setenv("UKIP_AUTO_RESOLVE_ON_INGEST", "1")
+    _publication(db_session, title="Paper A", authors=["Ada Lovelace"])
+    db_session.add(models.AuthorityRecord(
+        org_id=None, field_name="author", original_value="Ada Lovelace",
+        authority_source="orcid", authority_id="A1", canonical_label="Ada Lovelace",
+        aliases="[]", description="", confidence=0.9, uri=None, status="confirmed",
+        resolution_status="exact_match", score_breakdown="{}", evidence="[]", merged_sources="[]",
+    ))
+    db_session.flush()
+
+    created = auto_enqueue.enqueue_publication_authority_jobs(db_session, org_id=None)
+
+    # author covered, no affiliations present → nothing to enqueue
+    assert created == []
