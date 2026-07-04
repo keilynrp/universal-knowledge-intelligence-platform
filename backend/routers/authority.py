@@ -42,6 +42,7 @@ from backend.routers.deps import (
     _serialize_authority_record,
     _serialize_authority_record_link,
 )
+from backend.services.engine_delegation import run_coro_sync
 from backend.routers.limiter import limiter
 from backend.tenant_access import (
     get_scoped_record,
@@ -294,24 +295,17 @@ def resolve_authority(
                 db, org_id=graph_org_id, domain_id=graph_domain_id
             )
 
-    # Try engine delegation first, fall back to Python resolvers
+    # Try engine delegation first, fall back to Python resolvers. This endpoint
+    # is sync (the Python resolver blocks on external HTTP in a threadpool), so
+    # we bridge to the async engine call via a safe run-to-completion helper.
     engine_client = getattr(request.app.state, "engine_client", None)
     engine_candidates = None
     if engine_client:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Already in an async context — can't use run_until_complete
-                engine_candidates = None
-            else:
-                engine_candidates = loop.run_until_complete(
-                    _authority_resolve_engine(
-                        payload.value, payload.entity_type.value, ctx, engine_client
-                    )
-                )
-        except Exception:
-            engine_candidates = None
+        engine_candidates = run_coro_sync(
+            _authority_resolve_engine(
+                payload.value, payload.entity_type.value, ctx, engine_client
+            )
+        )
 
     if engine_candidates is not None:
         candidates = engine_candidates

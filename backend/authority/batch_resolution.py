@@ -37,7 +37,9 @@ def validate_field(db: Session, field: str) -> None:
         raise InvalidFieldError(f"Field '{field}' not found in entity table")
 
 
-def _distinct_values(db: Session, field: str, org_id) -> list[str]:
+def _distinct_values(
+    db: Session, field: str, org_id, entity_type_filter: str | None = None
+) -> list[str]:
     query_text = (
         f'SELECT DISTINCT "{field}" FROM raw_entities '
         f"WHERE \"{field}\" IS NOT NULL AND \"{field}\" != ''"
@@ -45,6 +47,11 @@ def _distinct_values(db: Session, field: str, org_id) -> list[str]:
     params: dict[str, object] = {}
     where_clauses: list[str] = []
     add_org_sql_filter(where_clauses, params, org_id)
+    # Optionally restrict to rows of a given entity_type (e.g. resolve only
+    # 'author' labels as persons, 'affiliation' labels as institutions).
+    if entity_type_filter:
+        where_clauses.append('"entity_type" = :entity_type_filter')
+        params["entity_type_filter"] = entity_type_filter
     if where_clauses:
         query_text += " AND " + " AND ".join(where_clauses)
     rows = db.execute(text(query_text), params).fetchall()
@@ -62,14 +69,16 @@ def execute_batch_resolution(
     skip_existing: bool,
     resolve_fn: Callable,
     progress_cb: Optional[Callable[[int, int, int], None]] = None,
+    entity_type_filter: str | None = None,
 ) -> tuple[dict, list[models.AuthorityRecord]]:
     """Resolve distinct values of ``field`` and persist AuthorityRecords.
 
     Returns ``(summary_dict, new_records)``. ``progress_cb(processed, total,
     records_created)`` is invoked after each value when provided (used by the
-    async worker to update job counters).
+    async worker to update job counters). ``entity_type_filter`` optionally
+    restricts the value pool to raw_entities rows of that entity_type.
     """
-    all_values = _distinct_values(db, field, org_id)
+    all_values = _distinct_values(db, field, org_id, entity_type_filter)
 
     already_existed = 0
     if skip_existing and all_values:

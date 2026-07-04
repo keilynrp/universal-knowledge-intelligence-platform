@@ -1,19 +1,42 @@
 """Shared delegation helpers for routing compute to the Rust engine."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
-from typing import Any
+from typing import Any, Awaitable, TypeVar
 
 logger = logging.getLogger(__name__)
 
 ENGINE_DELEGATION_THRESHOLD = int(os.environ.get("ENGINE_DELEGATION_THRESHOLD", "100"))
 MAX_DELEGATION_VALUES = 50_000
 
+_T = TypeVar("_T")
+
 
 def _get_engine_client(request) -> Any | None:
     """Extract the EngineClient from request.app.state, or return None."""
     return getattr(request.app.state, "engine_client", None)
+
+
+def run_coro_sync(coro: Awaitable[_T]) -> _T | None:
+    """Run an async coroutine to completion from a *sync* context.
+
+    FastAPI runs sync endpoints in a worker thread with no running event loop,
+    so ``asyncio.run`` is safe here and avoids the deprecated
+    ``asyncio.get_event_loop()`` bridge. If a loop is already running in this
+    thread (unexpected) or the coroutine raises, we swallow the failure and
+    return ``None`` so callers cleanly fall back to their Python path.
+    """
+    try:
+        return asyncio.run(coro)
+    except RuntimeError as exc:
+        # e.g. "asyncio.run() cannot be called from a running event loop"
+        logger.debug("run_coro_sync skipped (running loop): %s", exc)
+        return None
+    except Exception as exc:
+        logger.warning("run_coro_sync failed: %s", exc)
+        return None
 
 
 # ── Analytics ────────────────────────────────────────────────────────────────

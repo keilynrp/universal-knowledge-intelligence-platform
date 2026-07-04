@@ -515,6 +515,13 @@ def _after_enrichment_commit(
 
             result = materialize_scientific_import_graph(db, entity.import_batch_id, org_id=entity.org_id)
             logger.debug("Graph materialization result after enrichment for entity %s: %s", entity.id, result)
+
+            # Close the loop (front B): enqueue async authority resolution for the
+            # freshly materialized author/affiliation labels. Opt-in + de-duplicated
+            # + best-effort, so it never blocks or breaks the enrichment path.
+            from backend.authority.auto_enqueue import enqueue_entity_authority_jobs
+
+            enqueue_entity_authority_jobs(db, org_id=entity.org_id)
         except Exception as exc:
             logger.warning("Failed to materialize graph after enrichment for entity %s: %s", entity.id, exc)
 

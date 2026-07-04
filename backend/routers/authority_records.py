@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from backend import models, schemas
 from backend.auth import get_current_user, require_role
+from backend.authority import entity_writeback as _authority_writeback
 from backend.authority import feedback as _authority_feedback
 from backend.authority import thresholds as _authority_thresholds
 from backend.database import get_db
@@ -109,6 +110,7 @@ def bulk_confirm_authority_records(
     org_id = resolve_request_org_id(db, current_user)
     confirmed = 0
     rules_created = 0
+    entities_updated = 0
     now = datetime.now(timezone.utc)
 
     for record_id in payload.ids:
@@ -118,6 +120,12 @@ def bulk_confirm_authority_records(
         rec.status = "confirmed"
         rec.confirmed_at = now
         confirmed += 1
+
+        # Close the loop: promote matching derived entities' weak canonical_id
+        # to the confirmed external identity (best-effort, never raises).
+        entities_updated += _authority_writeback.promote_confirmed_identity(
+            db, rec, org_id=rec.org_id
+        )
 
         if payload.also_create_rules:
             existing = scope_query_to_org(
@@ -137,7 +145,11 @@ def bulk_confirm_authority_records(
                 rules_created += 1
 
     db.commit()
-    return {"confirmed": confirmed, "rules_created": rules_created}
+    return {
+        "confirmed": confirmed,
+        "rules_created": rules_created,
+        "entities_updated": entities_updated,
+    }
 
 
 @router.post("/authority/records/bulk-reject", tags=["authority"])
@@ -211,6 +223,12 @@ def confirm_authority_record(
             confirmed=True, org_id=rec.org_id,
         )
 
+    # Close the loop: promote matching derived entities' weak canonical_id to
+    # the confirmed external identity (best-effort, never raises).
+    entities_updated = _authority_writeback.promote_confirmed_identity(
+        db, rec, org_id=rec.org_id
+    )
+
     rule_created = False
     if payload.also_create_rule:
         existing = scope_query_to_org(
@@ -234,11 +252,19 @@ def confirm_authority_record(
         user_id=current_user.id,
         entity_type="authority_record",
         entity_id=record_id,
-        details={"canonical_label": rec.canonical_label, "rule_created": rule_created},
+        details={
+            "canonical_label": rec.canonical_label,
+            "rule_created": rule_created,
+            "entities_updated": entities_updated,
+        },
     )
     db.commit()
     db.refresh(rec)
-    return {**_serialize_authority_record(rec), "rule_created": rule_created}
+    return {
+        **_serialize_authority_record(rec),
+        "rule_created": rule_created,
+        "entities_updated": entities_updated,
+    }
 
 
 @router.post("/authority/records/{record_id}/reject", tags=["authority"])
