@@ -120,6 +120,55 @@ def _distinct_values_from_publication_attrs(
     return out
 
 
+def _publication_author_hints(
+    db: Session, org_id, scan_limit: int = _PUB_SCAN_LIMIT
+) -> dict[str, dict]:
+    """Map author display name → resolution hints from publication attributes.
+
+    Pulls the per-author ``author_orcid`` and first institution name out of
+    ``author_affiliations`` so resolution can pass them as ``ResolveContext``
+    (orcid_hint → exact-match score 1.0; affiliation → boosts the affil signal).
+    First non-empty value wins per name. Only used for the authors value source.
+    """
+    q = (
+        scope_query_to_org(
+            db.query(models.RawEntity.attributes_json), models.RawEntity, org_id
+        )
+        .filter(
+            models.RawEntity.entity_type == "publication",
+            models.RawEntity.attributes_json.isnot(None),
+        )
+        .limit(scan_limit)
+    )
+    hints: dict[str, dict] = {}
+    for (raw,) in q:
+        try:
+            attrs = json.loads(raw) if raw else {}
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(attrs, dict):
+            continue
+        for aa in attrs.get("author_affiliations") or []:
+            if not isinstance(aa, dict):
+                continue
+            name = aa.get("author_name")
+            if not (isinstance(name, str) and name.strip()):
+                continue
+            name = name.strip()
+            entry = hints.setdefault(name, {"orcid_hint": None, "affiliation": None})
+            if not entry["orcid_hint"]:
+                orcid = aa.get("author_orcid")
+                if isinstance(orcid, str) and orcid.strip():
+                    entry["orcid_hint"] = orcid.strip()
+            if not entry["affiliation"]:
+                insts = aa.get("institutions") or []
+                if insts and isinstance(insts[0], dict):
+                    inst = insts[0].get("name")
+                    if isinstance(inst, str) and inst.strip():
+                        entry["affiliation"] = inst.strip()
+    return hints
+
+
 def execute_batch_resolution(
     db: Session,
     *,
@@ -147,8 +196,12 @@ def execute_batch_resolution(
     (the OpenAlex/api_import path). Persisted records are always tagged with
     ``field_name=field`` so they group cleanly in the review queue.
     """
+    value_hints: dict[str, dict] = {}
     if value_source in (VALUE_SOURCE_PUB_AUTHORS, VALUE_SOURCE_PUB_AFFILIATIONS):
         all_values = _distinct_values_from_publication_attrs(db, org_id, value_source)
+        # ORCID / affiliation hints only make sense for person resolution.
+        if value_source == VALUE_SOURCE_PUB_AUTHORS:
+            value_hints = _publication_author_hints(db, org_id)
     else:
         all_values = _distinct_values(db, field, org_id, entity_type_filter)
 
@@ -179,7 +232,16 @@ def execute_batch_resolution(
     total = len(to_resolve)
 
     for idx, value in enumerate(to_resolve, start=1):
-        candidates = resolve_fn(value, entity_type, ctx)
+        hint = value_hints.get(value)
+        vctx = (
+            ResolveContext(
+                orcid_hint=hint.get("orcid_hint"),
+                affiliation=hint.get("affiliation"),
+            )
+            if hint
+            else ctx
+        )
+        candidates = resolve_fn(value, entity_type, vctx)
         candidates = apply_hierarchical_fallback(value, entity_type, candidates)
         for c in candidates:
             rec = models.AuthorityRecord(

@@ -48,6 +48,64 @@ def _publication(db, *, title, authors=(), affiliations=(), org_id=None):
     return ent
 
 
+def _publication_rich(db, *, title, authors, org_id=None):
+    """authors: list of (name, orcid, institution)."""
+    attrs = {
+        "author_affiliations": [
+            {
+                "author_name": n,
+                "author_orcid": orcid,
+                "institutions": ([{"name": inst}] if inst else []),
+            }
+            for (n, orcid, inst) in authors
+        ],
+    }
+    ent = models.RawEntity(
+        org_id=org_id, domain="science", entity_type="publication",
+        primary_label=title, canonical_id=f"doi:{title}",
+        attributes_json=json.dumps(attrs), validation_status="pending",
+        enrichment_status="completed", source="openalex",
+    )
+    db.add(ent)
+    db.flush()
+    return ent
+
+
+# ── orcid_hint / affiliation threading ────────────────────────────────────────
+
+def test_publication_author_hints_extracted(db_session):
+    from backend.authority.batch_resolution import _publication_author_hints
+    _publication_rich(db_session, title="P", authors=[
+        ("Ada Lovelace", "0000-0001-0000-0001", "Analytical Engine Lab"),
+        ("Grace Hopper", None, "US Navy"),
+    ])
+    db_session.flush()
+    hints = _publication_author_hints(db_session, None)
+    assert hints["Ada Lovelace"]["orcid_hint"] == "0000-0001-0000-0001"
+    assert hints["Ada Lovelace"]["affiliation"] == "Analytical Engine Lab"
+    assert hints["Grace Hopper"]["orcid_hint"] is None
+    assert hints["Grace Hopper"]["affiliation"] == "US Navy"
+
+
+def test_batch_resolution_passes_orcid_hint_per_value(db_session):
+    _publication_rich(db_session, title="P", authors=[
+        ("Ada Lovelace", "0000-0001-0000-0001", "Analytical Engine Lab"),
+    ])
+    db_session.flush()
+    seen_ctx = {}
+
+    def _fake_resolve(value, entity_type, ctx):
+        seen_ctx[value] = (ctx.orcid_hint, ctx.affiliation)
+        return []
+
+    execute_batch_resolution(
+        db_session, org_id=None, record_org_id=None, field="author",
+        entity_type="person", limit=100, skip_existing=False,
+        resolve_fn=_fake_resolve, value_source=VALUE_SOURCE_PUB_AUTHORS,
+    )
+    assert seen_ctx["Ada Lovelace"] == ("0000-0001-0000-0001", "Analytical Engine Lab")
+
+
 # ── entity_type filtering ─────────────────────────────────────────────────────
 
 def test_distinct_values_filters_by_entity_type(db_session):

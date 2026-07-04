@@ -92,6 +92,41 @@ def test_batch_invalid_value_source_is_422(client, editor_headers):
     assert res.status_code == 422
 
 
+def test_purge_deletes_pending_not_confirmed(client, auth_headers, session_factory):
+    with session_factory() as db:
+        def _rec(val, status):
+            return models.AuthorityRecord(
+                org_id=None, field_name="author", original_value=val,
+                authority_source="orcid", authority_id=f"A-{val}", canonical_label=val,
+                aliases="[]", description="", confidence=0.5, uri=None, status=status,
+                resolution_status="ambiguous", score_breakdown="{}", evidence="[]",
+                merged_sources="[]",
+            )
+        db.add_all([_rec("p1", "pending"), _rec("p2", "pending"), _rec("c1", "confirmed")])
+        db.commit()
+
+    # super_admin (auth_headers) required — purge is admin-only.
+    res = client.post("/authority/records/purge?field_name=author&status=pending",
+                      headers=auth_headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["deleted"] >= 2
+
+    with session_factory() as db:
+        remaining = {
+            r.original_value
+            for r in db.query(models.AuthorityRecord)
+            .filter(models.AuthorityRecord.field_name == "author").all()
+        }
+    assert "c1" in remaining          # confirmed untouched
+    assert "p1" not in remaining and "p2" not in remaining  # pending purged
+
+
+def test_purge_requires_admin(client, editor_headers):
+    # editor is below admin → forbidden
+    res = client.post("/authority/records/purge?status=pending", headers=editor_headers)
+    assert res.status_code in (401, 403)
+
+
 def test_sync_flag_preserves_legacy_behavior(client, editor_headers, db_session):
     db_session.add(models.RawEntity(primary_label="Microsoft"))
     db_session.commit()
