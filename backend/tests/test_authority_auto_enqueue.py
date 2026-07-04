@@ -78,9 +78,23 @@ def test_enqueue_disabled_by_default(db_session, monkeypatch):
     assert db_session.query(models.AuthorityResolveJob).count() == 0
 
 
+def _record(db, *, label, status="pending", org_id=None):
+    rec = models.AuthorityRecord(
+        org_id=org_id, field_name="primary_label", original_value=label,
+        authority_source="orcid", authority_id="A1", canonical_label=label,
+        aliases="[]", description="", confidence=0.9, uri=None,
+        status=status, resolution_status="exact_match",
+        score_breakdown="{}", evidence="[]", merged_sources="[]",
+    )
+    db.add(rec)
+    db.flush()
+    return rec
+
+
 def test_enqueue_creates_two_jobs_when_enabled(db_session, monkeypatch):
     monkeypatch.setenv("UKIP_AUTO_RESOLVE_ON_INGEST", "1")
     _entity(db_session, label="Ada Lovelace", entity_type="author", canonical_id="author:ada")
+    _entity(db_session, label="Open Lab", entity_type="affiliation", canonical_id="affiliation:ol")
     db_session.flush()
 
     created = auto_enqueue.enqueue_entity_authority_jobs(db_session, org_id=None)
@@ -97,6 +111,7 @@ def test_enqueue_creates_two_jobs_when_enabled(db_session, monkeypatch):
 def test_enqueue_is_deduplicated(db_session, monkeypatch):
     monkeypatch.setenv("UKIP_AUTO_RESOLVE_ON_INGEST", "1")
     _entity(db_session, label="Ada Lovelace", entity_type="author", canonical_id="author:ada")
+    _entity(db_session, label="Open Lab", entity_type="affiliation", canonical_id="affiliation:ol")
     db_session.flush()
 
     first = auto_enqueue.enqueue_entity_authority_jobs(db_session, org_id=None)
@@ -105,3 +120,31 @@ def test_enqueue_is_deduplicated(db_session, monkeypatch):
     assert len(first) == 2
     assert second == []  # open jobs already exist → no duplicates
     assert db_session.query(models.AuthorityResolveJob).count() == 2
+
+
+def test_no_job_when_nothing_unresolved(db_session, monkeypatch):
+    """Guard: once every label is covered by a record, no no-op job is enqueued."""
+    monkeypatch.setenv("UKIP_AUTO_RESOLVE_ON_INGEST", "1")
+    _entity(db_session, label="Ada Lovelace", entity_type="author", canonical_id="author:ada")
+    _record(db_session, label="Ada Lovelace", status="confirmed")
+    db_session.flush()
+
+    created = auto_enqueue.enqueue_entity_authority_jobs(db_session, org_id=None)
+
+    assert created == []  # author covered, no affiliation rows → nothing to do
+    assert db_session.query(models.AuthorityResolveJob).count() == 0
+
+
+def test_only_unresolved_type_is_enqueued(db_session, monkeypatch):
+    """Author has an unresolved label; affiliation is fully covered → person only."""
+    monkeypatch.setenv("UKIP_AUTO_RESOLVE_ON_INGEST", "1")
+    _entity(db_session, label="Ada Lovelace", entity_type="author", canonical_id="author:ada")
+    _entity(db_session, label="Open Lab", entity_type="affiliation", canonical_id="affiliation:ol")
+    _record(db_session, label="Open Lab", status="pending")
+    db_session.flush()
+
+    created = auto_enqueue.enqueue_entity_authority_jobs(db_session, org_id=None)
+
+    assert len(created) == 1
+    job = db_session.query(models.AuthorityResolveJob).one()
+    assert job.entity_type == "person"

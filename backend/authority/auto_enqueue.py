@@ -20,7 +20,7 @@ import os
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.tenant_access import persisted_org_id
+from backend.tenant_access import persisted_org_id, scope_query_to_org
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,37 @@ def _has_open_job(db: Session, org_id, entity_type: str) -> bool:
     )
 
 
+def _has_unresolved_values(db: Session, org_id, entity_type_filter: str) -> bool:
+    """True when at least one label of ``entity_type_filter`` lacks a
+    pending/confirmed AuthorityRecord — i.e. there is real work to do.
+
+    Cheap ``NOT EXISTS`` probe (LIMIT 1) that mirrors the worker's
+    ``skip_existing`` logic, so we never enqueue a no-op job.
+    """
+    covered = (
+        scope_query_to_org(
+            db.query(models.AuthorityRecord.id), models.AuthorityRecord, org_id
+        )
+        .filter(
+            models.AuthorityRecord.field_name == _FIELD,
+            models.AuthorityRecord.original_value == models.RawEntity.primary_label,
+            models.AuthorityRecord.status.in_(["pending", "confirmed"]),
+        )
+        .exists()
+    )
+    row = (
+        scope_query_to_org(db.query(models.RawEntity.id), models.RawEntity, org_id)
+        .filter(
+            models.RawEntity.entity_type == entity_type_filter,
+            models.RawEntity.primary_label.isnot(None),
+            models.RawEntity.primary_label != "",
+            ~covered,
+        )
+        .first()
+    )
+    return row is not None
+
+
 def enqueue_entity_authority_jobs(
     db: Session, *, org_id, limit: int = _DEFAULT_LIMIT
 ) -> list[int]:
@@ -75,6 +106,8 @@ def enqueue_entity_authority_jobs(
         record_org_id = persisted_org_id(org_id)
         for entity_type_filter, resolve_as in _ENTITY_TYPE_PLAN:
             if _has_open_job(db, org_id, resolve_as):
+                continue
+            if not _has_unresolved_values(db, org_id, entity_type_filter):
                 continue
             job = models.AuthorityResolveJob(
                 org_id=record_org_id,
