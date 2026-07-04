@@ -91,6 +91,11 @@ services:
       COAUTHOR_V2_READ: ${COAUTHOR_V2_READ:-false}
       COAUTHOR_V2_WRITE: ${COAUTHOR_V2_WRITE:-false}
       COAUTHOR_V2_SHADOW: ${COAUTHOR_V2_SHADOW:-false}
+      # Authority-control loop flags (PRs #107-#109). Same rule as above: they
+      # must be declared here or the Dokploy env values never reach the
+      # container. Verify effective state via /health "features".
+      UKIP_AUTO_RESOLVE_ON_INGEST: ${UKIP_AUTO_RESOLVE_ON_INGEST:-0}
+      UKIP_AUTHORITY_WRITEBACK: ${UKIP_AUTHORITY_WRITEBACK:-1}
       # Provider-neutral backup assurance metadata only. Backup payload and
       # storage credentials remain in Dokploy/provider-owned configuration.
       UKIP_BACKUP_MONITOR_ENABLED: ${UKIP_BACKUP_MONITOR_ENABLED:-1}
