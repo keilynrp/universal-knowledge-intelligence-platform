@@ -232,13 +232,16 @@ def execute_batch_resolution(
     total = len(to_resolve)
 
     for idx, value in enumerate(to_resolve, start=1):
+        # Only feed orcid_hint: an exact ORCID match scores the identifier
+        # signal 1.0. We deliberately do NOT pass the affiliation here — the
+        # scorer counts the affiliation weight (0.20) whenever a context
+        # affiliation is present, even when it fuzzy-scores ~0 against the
+        # candidate description, which would dilute an otherwise-perfect ORCID
+        # match from 1.0 down to ~0.75.
         hint = value_hints.get(value)
         vctx = (
-            ResolveContext(
-                orcid_hint=hint.get("orcid_hint"),
-                affiliation=hint.get("affiliation"),
-            )
-            if hint
+            ResolveContext(orcid_hint=hint.get("orcid_hint"))
+            if hint and hint.get("orcid_hint")
             else ctx
         )
         candidates = resolve_fn(value, entity_type, vctx)
