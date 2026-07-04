@@ -65,6 +65,7 @@ def _run_job(db: Session, job: models.AuthorityResolveJob) -> None:
     params = json.loads(job.params_json) if job.params_json else {}
     limit = int(params.get("limit", 100))
     skip_existing = bool(params.get("skip_existing", False))
+    entity_type_filter = params.get("entity_type_filter") or None
 
     def _progress(processed: int, total: int, created: int) -> None:
         job.processed = processed
@@ -84,6 +85,7 @@ def _run_job(db: Session, job: models.AuthorityResolveJob) -> None:
             skip_existing=skip_existing,
             resolve_fn=_resolve_all,
             progress_cb=_progress,
+            entity_type_filter=entity_type_filter,
         )
         db.commit()
         job.status = "done"
