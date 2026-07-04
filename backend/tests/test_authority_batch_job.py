@@ -61,6 +61,37 @@ def test_job_status_404_for_unknown_id(client, editor_headers):
     assert res.status_code == 404
 
 
+def test_batch_value_source_publication_authors_enqueues_with_param(
+    client, editor_headers, session_factory
+):
+    import json as _json
+
+    # `field_name` is only a record tag when value_source is set (not a column),
+    # so a non-column name like "author" is accepted here.
+    res = client.post(
+        "/authority/resolve/batch",
+        json={"field_name": "author", "entity_type": "person", "limit": 5,
+              "value_source": "publication_authors"},
+        headers=editor_headers,
+    )
+    assert res.status_code == 201, res.text
+    job_id = res.json()["job_id"]
+    with session_factory() as db:
+        job = db.query(models.AuthorityResolveJob).filter_by(id=job_id).one()
+        assert job.field_name == "author"
+        assert _json.loads(job.params_json)["value_source"] == "publication_authors"
+
+
+def test_batch_invalid_value_source_is_422(client, editor_headers):
+    res = client.post(
+        "/authority/resolve/batch",
+        json={"field_name": "author", "entity_type": "person",
+              "value_source": "not_a_real_source"},
+        headers=editor_headers,
+    )
+    assert res.status_code == 422
+
+
 def test_sync_flag_preserves_legacy_behavior(client, editor_headers, db_session):
     db_session.add(models.RawEntity(primary_label="Microsoft"))
     db_session.commit()

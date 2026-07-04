@@ -472,6 +472,10 @@ class BatchResolveRequest(BaseModel):
     entity_type:   AuthorityEntityType = AuthorityEntityType.general
     limit:         int                 = Field(default=20, ge=1, le=100)
     skip_existing: bool                = True
+    # When set, values are read from publication attributes_json instead of the
+    # raw_entities column `field_name` (the OpenAlex/api_import path). Allowed:
+    # "publication_authors" | "publication_affiliations".
+    value_source:  Optional[str]       = Field(default=None, max_length=32)
 
 
 class BulkActionRequest(BaseModel):

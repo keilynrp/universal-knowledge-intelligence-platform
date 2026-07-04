@@ -29,6 +29,8 @@ from backend.authority import feedback as _authority_feedback
 from backend.authority import thresholds as _authority_thresholds
 from backend.authority.base import ResolveContext as _AuthorityContext
 from backend.authority.batch_resolution import (
+    VALUE_SOURCE_PUB_AFFILIATIONS,
+    VALUE_SOURCE_PUB_AUTHORS,
     InvalidFieldError,
     execute_batch_resolution,
     validate_field,
@@ -521,18 +523,31 @@ def resolve_authority_batch(
     record_org_id = persisted_org_id(org_id)
     field = payload.field_name
     entity_type = payload.entity_type.value
+    value_source = payload.value_source or None
 
-    try:
-        validate_field(db, field)
-    except InvalidFieldError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+    _PUB_SOURCES = (VALUE_SOURCE_PUB_AUTHORS, VALUE_SOURCE_PUB_AFFILIATIONS)
+    if value_source is not None:
+        if value_source not in _PUB_SOURCES:
+            raise HTTPException(
+                status_code=422,
+                detail=f"value_source must be one of {_PUB_SOURCES}",
+            )
+        # `field` is only a record tag here (not a column), so skip column validation.
+    else:
+        try:
+            validate_field(db, field)
+        except InvalidFieldError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
 
     if not sync:
+        params = {"limit": payload.limit, "skip_existing": payload.skip_existing}
+        if value_source is not None:
+            params["value_source"] = value_source
         job = models.AuthorityResolveJob(
             org_id=record_org_id,
             field_name=field,
             entity_type=entity_type,
-            params_json=json.dumps({"limit": payload.limit, "skip_existing": payload.skip_existing}),
+            params_json=json.dumps(params),
             status="pending",
         )
         db.add(job)
@@ -554,6 +569,7 @@ def resolve_authority_batch(
         limit=payload.limit,
         skip_existing=payload.skip_existing,
         resolve_fn=_authority_resolve_all,
+        value_source=value_source,
     )
     db.commit()
     for rec in new_records:
