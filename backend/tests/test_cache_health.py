@@ -42,3 +42,12 @@ def test_health_endpoint_includes_cache(client):
     # Default test suite has no REDIS_URL → in-process, reachable.
     assert body["cache"]["backend"] == "in-process"
     assert body["cache"]["reachable"] is True
+
+
+def test_health_endpoint_exposes_feature_flags(client, monkeypatch):
+    """/health.features reflects the effective flag state of this container."""
+    monkeypatch.setenv("UKIP_AUTO_RESOLVE_ON_INGEST", "1")
+    monkeypatch.setenv("UKIP_AUTHORITY_WRITEBACK", "0")
+    body = client.get("/health").json()
+    assert body["features"]["auto_resolve_on_ingest"] is True
+    assert body["features"]["authority_writeback"] is False
