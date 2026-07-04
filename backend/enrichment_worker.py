@@ -525,6 +525,17 @@ def _after_enrichment_commit(
         except Exception as exc:
             logger.warning("Failed to materialize graph after enrichment for entity %s: %s", entity.id, exc)
 
+    # Authority resolution for the OpenAlex/api_import path, where authors and
+    # affiliations live inside publication attributes_json rather than as derived
+    # nodes (so this is NOT gated on import_batch_id). Opt-in, de-duplicated,
+    # best-effort — never blocks or breaks enrichment.
+    try:
+        from backend.authority.auto_enqueue import enqueue_publication_authority_jobs
+
+        enqueue_publication_authority_jobs(db, org_id=entity.org_id)
+    except Exception as exc:
+        logger.warning("Failed to enqueue publication authority jobs for entity %s: %s", entity.id, exc)
+
     try:
         from backend.services.semantic_keyword_signal_engine import materialize_keyword_signals
 

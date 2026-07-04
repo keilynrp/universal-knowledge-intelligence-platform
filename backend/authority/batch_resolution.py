@@ -58,6 +58,68 @@ def _distinct_values(
     return [row[0] for row in rows if row[0]]
 
 
+# Value sources that read author/affiliation names out of publication
+# ``attributes_json`` instead of a raw_entities column. This is how the OpenAlex
+# / api_import path exposes authors (as structured attributes on the publication
+# row) — there are no derived author/affiliation node rows for that path.
+VALUE_SOURCE_PUB_AUTHORS = "publication_authors"
+VALUE_SOURCE_PUB_AFFILIATIONS = "publication_affiliations"
+_PUB_SCAN_LIMIT = 2000
+
+
+def _names_from_attrs(attrs: dict, value_source: str) -> list[str]:
+    """Extract author or affiliation display names from one publication's attrs."""
+    names: list[str] = []
+    if value_source == VALUE_SOURCE_PUB_AUTHORS:
+        for aa in attrs.get("author_affiliations") or []:
+            if isinstance(aa, dict):
+                n = aa.get("author_name")
+                if isinstance(n, str) and n.strip():
+                    names.append(n.strip())
+    elif value_source == VALUE_SOURCE_PUB_AFFILIATIONS:
+        for ca in attrs.get("canonical_affiliations") or []:
+            if isinstance(ca, dict):
+                n = ca.get("name")
+                if isinstance(n, str) and n.strip():
+                    names.append(n.strip())
+    return names
+
+
+def _distinct_values_from_publication_attrs(
+    db: Session, org_id, value_source: str, scan_limit: int = _PUB_SCAN_LIMIT
+) -> list[str]:
+    """Distinct author/affiliation names across publication ``attributes_json``.
+
+    Python-side JSON parsing keeps this portable across SQLite/Postgres. The
+    scan is bounded by ``scan_limit`` publications; combined with the worker's
+    ``skip_existing`` this drains large corpora progressively.
+    """
+    q = (
+        scope_query_to_org(
+            db.query(models.RawEntity.attributes_json), models.RawEntity, org_id
+        )
+        .filter(
+            models.RawEntity.entity_type == "publication",
+            models.RawEntity.attributes_json.isnot(None),
+        )
+        .limit(scan_limit)
+    )
+    seen: set[str] = set()
+    out: list[str] = []
+    for (raw,) in q:
+        try:
+            attrs = json.loads(raw) if raw else {}
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(attrs, dict):
+            continue
+        for name in _names_from_attrs(attrs, value_source):
+            if name not in seen:
+                seen.add(name)
+                out.append(name)
+    return out
+
+
 def execute_batch_resolution(
     db: Session,
     *,
@@ -70,6 +132,7 @@ def execute_batch_resolution(
     resolve_fn: Callable,
     progress_cb: Optional[Callable[[int, int, int], None]] = None,
     entity_type_filter: str | None = None,
+    value_source: str | None = None,
 ) -> tuple[dict, list[models.AuthorityRecord]]:
     """Resolve distinct values of ``field`` and persist AuthorityRecords.
 
@@ -77,8 +140,17 @@ def execute_batch_resolution(
     records_created)`` is invoked after each value when provided (used by the
     async worker to update job counters). ``entity_type_filter`` optionally
     restricts the value pool to raw_entities rows of that entity_type.
+
+    ``value_source`` selects where values come from: ``None`` (default) reads
+    the raw_entities column ``field``; ``publication_authors`` /
+    ``publication_affiliations`` extract names from publication attributes_json
+    (the OpenAlex/api_import path). Persisted records are always tagged with
+    ``field_name=field`` so they group cleanly in the review queue.
     """
-    all_values = _distinct_values(db, field, org_id, entity_type_filter)
+    if value_source in (VALUE_SOURCE_PUB_AUTHORS, VALUE_SOURCE_PUB_AFFILIATIONS):
+        all_values = _distinct_values_from_publication_attrs(db, org_id, value_source)
+    else:
+        all_values = _distinct_values(db, field, org_id, entity_type_filter)
 
     already_existed = 0
     if skip_existing and all_values:

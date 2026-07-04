@@ -20,6 +20,11 @@ import os
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.authority.batch_resolution import (
+    VALUE_SOURCE_PUB_AFFILIATIONS,
+    VALUE_SOURCE_PUB_AUTHORS,
+    _distinct_values_from_publication_attrs,
+)
 from backend.tenant_access import persisted_org_id, scope_query_to_org
 
 logger = logging.getLogger(__name__)
@@ -43,13 +48,13 @@ def auto_resolve_enabled() -> bool:
     )
 
 
-def _has_open_job(db: Session, org_id, entity_type: str) -> bool:
-    """True when a pending/processing job for this scope already exists."""
+def _has_open_job(db: Session, org_id, entity_type: str, field: str = _FIELD) -> bool:
+    """True when a pending/processing job for this (field, entity_type) exists."""
     return (
         db.query(models.AuthorityResolveJob.id)
         .filter(
             models.AuthorityResolveJob.org_id == persisted_org_id(org_id),
-            models.AuthorityResolveJob.field_name == _FIELD,
+            models.AuthorityResolveJob.field_name == field,
             models.AuthorityResolveJob.entity_type == entity_type,
             models.AuthorityResolveJob.status.in_(["pending", "processing"]),
         )
@@ -131,4 +136,80 @@ def enqueue_entity_authority_jobs(
         return created
     except Exception as exc:  # defensive: ingest must not break on enqueue
         logger.warning("auto-enqueue of authority jobs failed for org=%s: %s", org_id, exc)
+        return []
+
+
+# (value_source, field tag, authority entity_type) for the OpenAlex/api_import
+# path, where authors/affiliations live inside publication attributes_json rather
+# than as derived RawEntity nodes.
+_PUBLICATION_PLAN: tuple[tuple[str, str, str], ...] = (
+    (VALUE_SOURCE_PUB_AUTHORS, "author", "person"),
+    (VALUE_SOURCE_PUB_AFFILIATIONS, "affiliation", "institution"),
+)
+
+
+def _uncovered_publication_values(db: Session, org_id, value_source: str, field: str) -> int:
+    """Count distinct publication-attribute values lacking a pending/confirmed record."""
+    values = _distinct_values_from_publication_attrs(db, org_id, value_source)
+    if not values:
+        return 0
+    covered = {
+        r.original_value
+        for r in scope_query_to_org(
+            db.query(models.AuthorityRecord.original_value), models.AuthorityRecord, org_id
+        )
+        .filter(
+            models.AuthorityRecord.field_name == field,
+            models.AuthorityRecord.status.in_(["pending", "confirmed"]),
+        )
+        .all()
+    }
+    return sum(1 for v in values if v not in covered)
+
+
+def enqueue_publication_authority_jobs(
+    db: Session, *, org_id, limit: int = _DEFAULT_LIMIT
+) -> list[int]:
+    """Enqueue authority jobs for authors/affiliations held in publication attrs.
+
+    This is the OpenAlex/api_import counterpart to
+    :func:`enqueue_entity_authority_jobs`: it resolves the author/affiliation
+    names stored inside publication ``attributes_json`` (no derived nodes exist
+    for that path). De-duplicated, guard-gated, caller owns the transaction,
+    never raises.
+    """
+    if not auto_resolve_enabled():
+        return []
+    created: list[int] = []
+    try:
+        record_org_id = persisted_org_id(org_id)
+        for value_source, field, resolve_as in _PUBLICATION_PLAN:
+            if _has_open_job(db, org_id, resolve_as, field=field):
+                continue
+            if _uncovered_publication_values(db, org_id, value_source, field) == 0:
+                continue
+            job = models.AuthorityResolveJob(
+                org_id=record_org_id,
+                field_name=field,
+                entity_type=resolve_as,
+                params_json=json.dumps({
+                    "limit": limit,
+                    "skip_existing": True,
+                    "value_source": value_source,
+                }),
+                status="pending",
+            )
+            db.add(job)
+            db.flush()
+            created.append(job.id)
+        if created:
+            logger.info(
+                "auto-enqueued %d publication authority job(s) for org=%s",
+                len(created), record_org_id,
+            )
+        return created
+    except Exception as exc:  # defensive: ingest must not break on enqueue
+        logger.warning(
+            "auto-enqueue of publication authority jobs failed for org=%s: %s", org_id, exc
+        )
         return []
