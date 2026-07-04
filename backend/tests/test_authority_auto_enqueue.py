@@ -103,7 +103,10 @@ def test_batch_resolution_passes_orcid_hint_per_value(db_session):
         entity_type="person", limit=100, skip_existing=False,
         resolve_fn=_fake_resolve, value_source=VALUE_SOURCE_PUB_AUTHORS,
     )
-    assert seen_ctx["Ada Lovelace"] == ("0000-0001-0000-0001", "Analytical Engine Lab")
+    # orcid_hint is threaded per value; affiliation is intentionally NOT passed
+    # (it would dilute an exact-ORCID match via the scorer's affiliation weight).
+    assert seen_ctx["Ada Lovelace"][0] == "0000-0001-0000-0001"
+    assert seen_ctx["Ada Lovelace"][1] is None
 
 
 # ── entity_type filtering ─────────────────────────────────────────────────────
