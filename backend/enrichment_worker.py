@@ -521,7 +521,8 @@ def _after_enrichment_commit(
             # + best-effort, so it never blocks or breaks the enrichment path.
             from backend.authority.auto_enqueue import enqueue_entity_authority_jobs
 
-            enqueue_entity_authority_jobs(db, org_id=entity.org_id)
+            if enqueue_entity_authority_jobs(db, org_id=entity.org_id):
+                db.commit()  # persist the flushed jobs (caller owns the txn)
         except Exception as exc:
             logger.warning("Failed to materialize graph after enrichment for entity %s: %s", entity.id, exc)
 
@@ -532,8 +533,10 @@ def _after_enrichment_commit(
     try:
         from backend.authority.auto_enqueue import enqueue_publication_authority_jobs
 
-        enqueue_publication_authority_jobs(db, org_id=entity.org_id)
+        if enqueue_publication_authority_jobs(db, org_id=entity.org_id):
+            db.commit()  # persist the flushed jobs (caller owns the txn)
     except Exception as exc:
+        db.rollback()
         logger.warning("Failed to enqueue publication authority jobs for entity %s: %s", entity.id, exc)
 
     try:
