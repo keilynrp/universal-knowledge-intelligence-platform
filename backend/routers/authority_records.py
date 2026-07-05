@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from backend import models, schemas
 from backend.auth import get_current_user, require_role
 from backend.authority import entity_writeback as _authority_writeback
+from backend.authority import publication_writeback as _authority_pub_writeback
 from backend.authority import feedback as _authority_feedback
 from backend.authority import thresholds as _authority_thresholds
 from backend.database import get_db
@@ -111,6 +112,7 @@ def bulk_confirm_authority_records(
     confirmed = 0
     rules_created = 0
     entities_updated = 0
+    publications_updated = 0
     now = datetime.now(timezone.utc)
 
     for record_id in payload.ids:
@@ -122,8 +124,11 @@ def bulk_confirm_authority_records(
         confirmed += 1
 
         # Close the loop: promote matching derived entities' weak canonical_id
-        # to the confirmed external identity (best-effort, never raises).
+        # and stamp the identity into publication attributes (best-effort).
         entities_updated += _authority_writeback.promote_confirmed_identity(
+            db, rec, org_id=rec.org_id
+        )
+        publications_updated += _authority_pub_writeback.promote_confirmed_author_to_publications(
             db, rec, org_id=rec.org_id
         )
 
@@ -149,6 +154,7 @@ def bulk_confirm_authority_records(
         "confirmed": confirmed,
         "rules_created": rules_created,
         "entities_updated": entities_updated,
+        "publications_updated": publications_updated,
     }
 
 
@@ -229,6 +235,9 @@ def auto_confirm_authority_records(
                 confirmed=True, org_id=best.org_id,
             )
         _authority_writeback.promote_confirmed_identity(db, best, org_id=best.org_id)
+        _authority_pub_writeback.promote_confirmed_author_to_publications(
+            db, best, org_id=best.org_id
+        )
         if reject_losers:
             for other in recs[1:]:
                 if other.status == "pending":
@@ -290,6 +299,38 @@ def grouped_authority_records(
     ]
     items.sort(key=lambda x: (x["best_confidence"] or 0.0), reverse=True)
     return {"total_groups": len(items), "groups": items[skip: skip + limit]}
+
+
+@router.post("/authority/records/reapply-publication-writeback", tags=["authority"])
+def reapply_publication_writeback(
+    field_name: str = Query("author", max_length=64),
+    limit: int = Query(5000, ge=1, le=50000),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin")),
+):
+    """Backfill ``attrs["canonical_authors"]`` for already-confirmed records.
+
+    Idempotent (skips publications already stamped with the same identity) — run
+    once after deploying the publication write-back so records confirmed before
+    it get stamped too.
+    """
+    org_id = resolve_request_org_id(db, current_user)
+    q = (
+        scope_query_to_org(db.query(models.AuthorityRecord), models.AuthorityRecord, org_id)
+        .filter(
+            models.AuthorityRecord.status == "confirmed",
+            models.AuthorityRecord.field_name == field_name,
+        )
+        .limit(limit)
+    )
+    records = q.all()
+    pubs = 0
+    for rec in records:
+        pubs += _authority_pub_writeback.promote_confirmed_author_to_publications(
+            db, rec, org_id=rec.org_id
+        )
+    db.commit()
+    return {"records_processed": len(records), "publications_updated": pubs}
 
 
 @router.post("/authority/records/purge", tags=["authority"])
@@ -386,9 +427,12 @@ def confirm_authority_record(
             confirmed=True, org_id=rec.org_id,
         )
 
-    # Close the loop: promote matching derived entities' weak canonical_id to
-    # the confirmed external identity (best-effort, never raises).
+    # Close the loop: promote matching derived entities' weak canonical_id and
+    # stamp the identity into publication attributes (best-effort, never raises).
     entities_updated = _authority_writeback.promote_confirmed_identity(
+        db, rec, org_id=rec.org_id
+    )
+    publications_updated = _authority_pub_writeback.promote_confirmed_author_to_publications(
         db, rec, org_id=rec.org_id
     )
 
@@ -427,6 +471,7 @@ def confirm_authority_record(
         **_serialize_authority_record(rec),
         "rule_created": rule_created,
         "entities_updated": entities_updated,
+        "publications_updated": publications_updated,
     }
 
 
