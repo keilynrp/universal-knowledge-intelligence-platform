@@ -127,6 +127,77 @@ def test_purge_requires_admin(client, editor_headers):
     assert res.status_code in (401, 403)
 
 
+def _author_rec(val, conf, status="pending", evidence="[]", source="openalex", aid="A1"):
+    return models.AuthorityRecord(
+        org_id=None, field_name="author", original_value=val,
+        authority_source=source, authority_id=aid, canonical_label=val,
+        aliases="[]", description="", confidence=conf, uri=None, status=status,
+        resolution_status="exact_match", score_breakdown="{}",
+        evidence=evidence, merged_sources="[]",
+    )
+
+
+def test_auto_confirm_groups_by_value_and_confirms_best(client, editor_headers, session_factory):
+    with session_factory() as db:
+        # Author "Ada" has 3 candidates; best (orcid 1.0) should win, others rejected.
+        db.add_all([
+            _author_rec("Ada Lovelace", 1.0, evidence='["orcid_hint_matched"]', source="orcid", aid="0000-1"),
+            _author_rec("Ada Lovelace", 0.6, aid="A2"),
+            _author_rec("Ada Lovelace", 0.5, aid="A3"),
+            # Author "Bob" only has a weak candidate → left pending.
+            _author_rec("Bob Weak", 0.6, aid="B1"),
+        ])
+        db.commit()
+
+    res = client.post("/authority/records/auto-confirm?field_name=author&min_confidence=0.95",
+                      headers=editor_headers)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["confirmed"] == 1  # only Ada's best
+    assert body["rejected"] == 2   # Ada's two losers
+
+    with session_factory() as db:
+        rows = {(r.original_value, r.authority_id): r.status
+                for r in db.query(models.AuthorityRecord)
+                .filter(models.AuthorityRecord.field_name == "author").all()}
+    assert rows[("Ada Lovelace", "0000-1")] == "confirmed"
+    assert rows[("Ada Lovelace", "A2")] == "rejected"
+    assert rows[("Ada Lovelace", "A3")] == "rejected"
+    assert rows[("Bob Weak", "B1")] == "pending"   # below threshold, no orcid → untouched
+
+
+def test_auto_confirm_orcid_match_below_threshold_still_confirms(client, editor_headers, session_factory):
+    with session_factory() as db:
+        # confidence 0.65 but orcid matched → confirmable regardless of threshold.
+        db.add(_author_rec("Curie", 0.65, evidence='["orcid_hint_matched"]', source="orcid", aid="0000-9"))
+        db.commit()
+    res = client.post("/authority/records/auto-confirm?field_name=author&min_confidence=0.95&reject_losers=false",
+                      headers=editor_headers)
+    assert res.json()["confirmed"] == 1
+
+
+def test_grouped_records_one_row_per_value(client, editor_headers, session_factory):
+    with session_factory() as db:
+        db.add_all([
+            _author_rec("Grace Hopper", 1.0, evidence='["orcid_hint_matched"]', source="orcid", aid="0000-2"),
+            _author_rec("Grace Hopper", 0.6, aid="G2"),
+            _author_rec("Alan Turing", 0.62, aid="T1"),
+        ])
+        db.commit()
+
+    res = client.get("/authority/records/grouped?field_name=author", headers=editor_headers)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    by_val = {g["original_value"]: g for g in body["groups"]}
+    # Grace has 2 candidates, top is the orcid 1.0 and is auto_confirmable.
+    assert by_val["Grace Hopper"]["candidate_count"] == 2
+    assert by_val["Grace Hopper"]["auto_confirmable"] is True
+    assert by_val["Grace Hopper"]["best"]["authority_id"] == "0000-2"
+    # Ordered by best_confidence desc → Grace (1.0) before Alan (0.62).
+    assert body["groups"][0]["original_value"] == "Grace Hopper"
+    assert by_val["Alan Turing"]["auto_confirmable"] is False
+
+
 def test_sync_flag_preserves_legacy_behavior(client, editor_headers, db_session):
     db_session.add(models.RawEntity(primary_label="Microsoft"))
     db_session.commit()
