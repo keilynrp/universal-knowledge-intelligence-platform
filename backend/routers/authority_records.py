@@ -172,6 +172,126 @@ def bulk_reject_authority_records(
     return {"rejected": rejected}
 
 
+def _is_auto_confirmable(rec: models.AuthorityRecord, min_confidence: float) -> bool:
+    """A candidate is safe to auto-confirm when the source ORCID was matched
+    exactly (``orcid_hint_matched`` in the evidence trail — a double-confirmed
+    identity) or its confidence clears the threshold."""
+    if "orcid_hint_matched" in (rec.evidence or ""):
+        return True
+    return (rec.confidence or 0.0) >= min_confidence
+
+
+@router.post("/authority/records/auto-confirm", tags=["authority"])
+def auto_confirm_authority_records(
+    field_name: Optional[str] = Query(None, max_length=64),
+    min_confidence: float = Query(0.95, ge=0.0, le=1.0),
+    reject_losers: bool = Query(True),
+    max_groups: int = Query(2000, ge=1, le=20000),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin", "admin", "editor")),
+):
+    """Auto-confirm the best candidate per distinct value at scale.
+
+    Groups pending records by ``(field_name, original_value)`` — one decision per
+    author/institution rather than per candidate — and confirms the top candidate
+    when it is auto-confirmable (exact ORCID match or confidence ≥ threshold),
+    optionally rejecting that value's losing candidates. Confirmation reuses the
+    normal side effects (feedback prior + entity write-back).
+    """
+    org_id = resolve_request_org_id(db, current_user)
+    q = scope_query_to_org(
+        db.query(models.AuthorityRecord), models.AuthorityRecord, org_id
+    ).filter(models.AuthorityRecord.status == "pending")
+    if field_name:
+        q = q.filter(models.AuthorityRecord.field_name == field_name)
+    records = q.order_by(
+        models.AuthorityRecord.original_value,
+        models.AuthorityRecord.confidence.desc(),
+    ).all()
+
+    groups: dict[tuple, list[models.AuthorityRecord]] = {}
+    for r in records:
+        groups.setdefault((r.field_name, r.original_value), []).append(r)
+
+    confirmed = 0
+    rejected = 0
+    now = datetime.now(timezone.utc)
+    for recs in list(groups.values())[:max_groups]:
+        best = recs[0]  # highest confidence within the group (query ordered)
+        if not _is_auto_confirmable(best, min_confidence):
+            continue
+        best.status = "confirmed"
+        best.confirmed_at = now
+        confirmed += 1
+        if best.field_name and best.authority_source:
+            _authority_feedback.record_outcome(
+                db, best.field_name, best.authority_source,
+                confirmed=True, org_id=best.org_id,
+            )
+        _authority_writeback.promote_confirmed_identity(db, best, org_id=best.org_id)
+        if reject_losers:
+            for other in recs[1:]:
+                if other.status == "pending":
+                    other.status = "rejected"
+                    rejected += 1
+
+    _audit(
+        db, "authority.auto_confirm",
+        user_id=current_user.id,
+        entity_type="authority_record",
+        entity_id=0,
+        details={"field_name": field_name, "min_confidence": min_confidence,
+                 "confirmed": confirmed, "rejected": rejected},
+    )
+    db.commit()
+    return {"confirmed": confirmed, "rejected": rejected}
+
+
+@router.get("/authority/records/grouped", tags=["authority"])
+def grouped_authority_records(
+    field_name: Optional[str] = Query(None, max_length=64),
+    status: str = Query("pending", pattern="^(pending|confirmed|rejected)$"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """One row per distinct value (author/institution) with its best candidate
+    and the count of alternatives — the human-review-at-scale surface, so a
+    reviewer makes one decision per person instead of wading through every
+    candidate. Groups are ordered by best-candidate confidence descending.
+    """
+    org_id = resolve_request_org_id(db, current_user)
+    q = scope_query_to_org(
+        db.query(models.AuthorityRecord), models.AuthorityRecord, org_id
+    ).filter(models.AuthorityRecord.status == status)
+    if field_name:
+        q = q.filter(models.AuthorityRecord.field_name == field_name)
+    records = q.order_by(
+        models.AuthorityRecord.original_value,
+        models.AuthorityRecord.confidence.desc(),
+    ).all()
+
+    groups: dict[tuple, list[models.AuthorityRecord]] = {}
+    for r in records:
+        groups.setdefault((r.field_name, r.original_value), []).append(r)
+
+    items = [
+        {
+            "field_name": key[0],
+            "original_value": key[1],
+            "candidate_count": len(recs),
+            "best_confidence": recs[0].confidence,
+            "auto_confirmable": _is_auto_confirmable(recs[0], 0.95),
+            "best": _serialize_authority_record(recs[0]),
+            "alternatives": [_serialize_authority_record(r) for r in recs[1:5]],
+        }
+        for key, recs in groups.items()
+    ]
+    items.sort(key=lambda x: (x["best_confidence"] or 0.0), reverse=True)
+    return {"total_groups": len(items), "groups": items[skip: skip + limit]}
+
+
 @router.post("/authority/records/purge", tags=["authority"])
 def purge_authority_records(
     field_name: Optional[str] = Query(None, max_length=64),
