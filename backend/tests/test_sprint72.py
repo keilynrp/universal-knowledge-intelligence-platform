@@ -17,6 +17,7 @@ def _make_entity(**kwargs) -> models.UniversalEntity:
     e.enrichment_status = kwargs.get("enrichment_status", "none")
     e.enrichment_doi = kwargs.get("enrichment_doi", None)
     e.quality_score = kwargs.get("quality_score", None)
+    e.attributes_json = kwargs.get("attributes_json", None)
     return e
 
 
@@ -92,7 +93,32 @@ class TestQualityScorer:
         e = _make_entity(primary_label="KnownLabel")
         score, bd = score_entity(e, {"KnownLabel"}, set())
         assert bd["authority_confirmed"]["confirmed"] is True
+        assert bd["authority_confirmed"]["mode"] == "label_match"
         assert bd["authority_confirmed"]["contribution"] == pytest.approx(0.20, abs=1e-4)
+
+    def test_publication_authority_uses_canonical_authors(self):
+        import json as _json
+        # A publication's own label (a title) never matches an author record; the
+        # authority signal comes from attrs["canonical_authors"] instead.
+        e = _make_entity(
+            primary_label="Some Paper Title", entity_type="publication",
+            attributes_json=_json.dumps({"canonical_authors": {"Ada Lovelace": {"source": "orcid"}}}),
+        )
+        score, bd = score_entity(e, set(), set())  # not in confirmed_labels
+        assert bd["authority_confirmed"]["confirmed"] is True
+        assert bd["authority_confirmed"]["mode"] == "canonical_authors"
+        assert bd["authority_confirmed"]["contribution"] == pytest.approx(0.20, abs=1e-4)
+
+    def test_publication_without_canonical_authors_scores_zero(self):
+        # Even if the title happened to be in confirmed_labels, publications ignore
+        # label-match and require canonical_authors.
+        e = _make_entity(
+            primary_label="Some Paper Title", entity_type="publication",
+            attributes_json='{"authors": "x"}',
+        )
+        score, bd = score_entity(e, {"Some Paper Title"}, set())
+        assert bd["authority_confirmed"]["confirmed"] is False
+        assert bd["authority_confirmed"]["contribution"] == 0.0
 
     def test_relationship_dimension(self):
         e = _make_entity(id=42)
