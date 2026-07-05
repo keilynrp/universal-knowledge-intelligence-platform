@@ -41,3 +41,20 @@ def test_global_cache_singleton():
     from backend.authority.cache import get_resolver_cache
 
     assert get_resolver_cache() is get_resolver_cache()
+
+
+def test_clear_forces_recompute():
+    cache = ResolverCache(ttl=60, maxsize=10)
+    calls = {"n": 0}
+
+    def loader():
+        calls["n"] += 1
+        return [{"authority_id": "Q1"}]
+
+    cache.get_or_load("orcid", "Ada Lovelace", "person", loader)
+    cache.get_or_load("orcid", "Ada Lovelace", "person", loader)
+    assert calls["n"] == 1  # cached
+
+    cache.clear()
+    cache.get_or_load("orcid", "Ada Lovelace", "person", loader)
+    assert calls["n"] == 2  # recomputed after clear

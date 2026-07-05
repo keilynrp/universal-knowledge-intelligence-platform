@@ -82,6 +82,15 @@ class ResolverCache:
             self._key(source, value, entity_type), loader
         )
 
+    def clear(self) -> int:
+        """Invalidate the entire resolver cache namespace. Returns keys removed.
+
+        Needed after a resolver behavior change (e.g. a new external endpoint):
+        the cache is Redis-backed and deploy-surviving with a 1-week TTL, so
+        stale candidate lists would otherwise mask the new resolver for days.
+        """
+        return self._backend.invalidate_prefix("")
+
 
 _GLOBAL_CACHE = ResolverCache()
 

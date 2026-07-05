@@ -201,6 +201,20 @@ def purge_authority_records(
     return {"deleted": deleted, "field_name": field_name, "status": status}
 
 
+@router.post("/authority/resolver-cache/purge", tags=["authority"])
+def purge_resolver_cache(
+    current_user: models.User = Depends(require_role("super_admin", "admin")),
+):
+    """Flush the external-authority resolver cache (Redis, 1-week TTL,
+    deploy-surviving). Run after a resolver behavior change so the next
+    resolution re-hits the sources instead of serving stale cached candidates.
+    """
+    from backend.authority.cache import get_resolver_cache
+
+    removed = get_resolver_cache().clear()
+    return {"cache_keys_removed": removed}
+
+
 # ── Record CRUD ──────────────────────────────────────────────────────────────
 
 @router.get("/authority/records", tags=["authority"])
