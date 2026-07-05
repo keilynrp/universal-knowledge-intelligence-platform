@@ -8,6 +8,7 @@ Scoring dimensions and weights:
   Relationships       10%  (has at least one edge in entity_relationships)
 """
 from __future__ import annotations
+import json
 from sqlalchemy.orm import Session
 from backend import models
 
@@ -26,6 +27,26 @@ _W = {
 
 def _present(val) -> bool:
     return val is not None and str(val).strip() != ""
+
+
+def _has_canonical_authors(entity: "models.UniversalEntity") -> bool:
+    """True when a publication has a non-empty ``attrs["canonical_authors"]``.
+
+    That map is written by the authority publication write-back on confirm, so
+    for the OpenAlex model (authors live inside publication attributes, not as
+    their own entities) it is the meaningful "authority confirmed" signal — the
+    publication's own primary_label (the paper title) can never match an
+    author-name authority record.
+    """
+    raw = getattr(entity, "attributes_json", None)
+    if not raw:
+        return False
+    try:
+        attrs = json.loads(raw) if isinstance(raw, str) else raw
+    except (TypeError, json.JSONDecodeError):
+        return False
+    ca = attrs.get("canonical_authors") if isinstance(attrs, dict) else None
+    return isinstance(ca, dict) and len(ca) > 0
 
 
 def score_entity(
@@ -66,11 +87,21 @@ def score_entity(
     }
 
     # ── Authority ─────────────────────────────────────────────────────────
-    auth_ok = bool(entity.primary_label and entity.primary_label in confirmed_labels)
+    # Publications never carry an authority record for their own label (a paper
+    # title), so for them "authority confirmed" means their authors have been
+    # reconciled — i.e. attrs["canonical_authors"] is populated by the write-back.
+    # Every other entity type keeps the original label-match semantics.
+    if (entity.entity_type or "") == "publication":
+        auth_ok = _has_canonical_authors(entity)
+        auth_mode = "canonical_authors"
+    else:
+        auth_ok = bool(entity.primary_label and entity.primary_label in confirmed_labels)
+        auth_mode = "label_match"
     a_contrib = _W["authority"] if auth_ok else 0.0
     s += a_contrib
     bd["authority_confirmed"] = {
-        "weight": _W["authority"], "confirmed": auth_ok, "contribution": round(a_contrib, 4)
+        "weight": _W["authority"], "confirmed": auth_ok,
+        "mode": auth_mode, "contribution": round(a_contrib, 4),
     }
 
     # ── Relationships ─────────────────────────────────────────────────────
