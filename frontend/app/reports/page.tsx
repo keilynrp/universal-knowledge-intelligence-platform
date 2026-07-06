@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { PageHeader, Badge } from "../components/ui";
+import { PageHeader, Badge, Button, Input, Textarea } from "../components/ui";
 import PilotFlowCard from "../components/PilotFlowCard";
 import { apiFetch } from "../../lib/api";
 import { useAssistantContextRegistration } from "../contexts/AssistantContext";
@@ -980,66 +980,65 @@ export default function ReportsPage() {
             </div>
           )}
 
-          <div className="rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm dark:border-indigo-500/30 dark:bg-gray-900">
+          <div className="rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-panel)] p-5 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
+                <h2 className="text-sm font-semibold text-[var(--ukip-text-strong)]">
                   {tr("page.reports.manual_section.title", "Analyst writing")}
                 </h2>
-                <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">
+                <p className="mt-1 text-xs leading-5 text-[var(--ukip-muted)]">
                   {tr("page.reports.manual_section.help", "Add narrative sections that will be exported with the intelligence report.")}
                 </p>
               </div>
-              <button
-                type="button"
+              <Button
                 onClick={addManualSection}
-                className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                leftIcon={<span aria-hidden="true">+</span>}
               >
-                <span aria-hidden="true">+</span>
                 {tr("page.reports.manual_section.add", "Add note")}
-              </button>
+              </Button>
             </div>
 
             {manualSections.length === 0 ? (
-              <div className="mt-4 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-400">
+              <div className="mt-4 rounded-xl border border-dashed border-[var(--ukip-border)] bg-[var(--ukip-panel-strong)] px-4 py-5 text-sm text-[var(--ukip-muted)]">
                 {tr("page.reports.manual_section.empty", "No manual text yet.")}
               </div>
             ) : (
               <div className="mt-4 space-y-4">
                 {manualSections.map((section, index) => (
-                  <div key={section.id} className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/70">
+                  <div key={section.id} className="rounded-xl border border-[var(--ukip-border)] bg-[var(--ukip-panel-strong)] p-4">
                     <div className="flex items-center justify-between gap-3">
-                      <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                      <p className="text-xs font-medium text-[var(--ukip-muted)]">
                         {tr("page.reports.manual_section.title_label", "Section title")}
-                      </label>
-                      <button
-                        type="button"
+                      </p>
+                      <Button
                         onClick={() => removeManualSection(section.id)}
-                        className="text-xs font-medium text-red-600 hover:underline dark:text-red-300"
+                        variant="ghost"
+                        size="sm"
+                        className="text-[var(--ukip-danger)]"
                       >
                         {tr("page.reports.manual_section.remove", "Remove")}
-                      </button>
+                      </Button>
                     </div>
-                    <input
-                      type="text"
+                    <Input
                       value={section.title}
                       onChange={(e) => updateManualSection(section.id, { title: e.target.value })}
                       placeholder={tr("page.reports.manual_section.title_placeholder", "Analyst note title")}
                       maxLength={120}
-                      className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
+                      className="mt-2"
                     />
-                    <label className="mt-3 block text-xs font-medium text-gray-600 dark:text-gray-400">
-                      {tr("page.reports.manual_section.content_label", "Manual text")}
-                    </label>
-                    <textarea
+                    <Textarea
+                      label={tr("page.reports.manual_section.content_label", "Manual text")}
                       value={section.content}
                       onChange={(e) => updateManualSection(section.id, { content: e.target.value })}
                       placeholder={tr("page.reports.manual_section.content_placeholder", "Write the analyst interpretation, caveats, recommendations, or context here.")}
                       maxLength={6000}
                       rows={index === 0 ? 8 : 6}
-                      className="mt-2 min-h-36 w-full resize-y rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm leading-6 text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
+                      className="mt-2 min-h-36 leading-6"
                     />
-                    <div className="mt-2 flex items-center justify-between text-[11px] text-gray-400 dark:text-gray-500">
+                    <div className="mt-2 flex items-center justify-between text-[11px] text-[var(--ukip-muted)]">
                       <span>{tr("page.reports.manual_section.export_hint", "Included in every export format")}</span>
                       <span>{section.content.length.toLocaleString()} / 6000</span>
                     </div>
@@ -1178,23 +1177,23 @@ export default function ReportsPage() {
           </div>
 
           {/* Preview of what's included */}
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-            <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">{t('page.reports.included_sections_title')}</h3>
+          <div className="rounded-2xl border border-[var(--ukip-border)] bg-[var(--ukip-panel)] p-5 shadow-sm">
+            <h3 className="mb-3 text-sm font-semibold text-[var(--ukip-text-strong)]">{t('page.reports.included_sections_title')}</h3>
             {selected.size === 0 ? (
               manualSections.some((section) => section.content.trim()) ? (
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-[var(--ukip-muted)]">
                   {tr("page.reports.manual_section.manual_only", "Manual analyst text only")}
                 </p>
               ) : (
-                <p className="text-xs text-gray-400 dark:text-gray-500">{t('page.reports.no_sections_selected')}</p>
+                <p className="text-xs text-[var(--ukip-muted)]">{t('page.reports.no_sections_selected')}</p>
               )
             ) : (
               <ol className="space-y-2">
                 {sections
                   .filter((s) => selected.has(s.id))
                   .map((s, i) => (
-                    <li key={s.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
+                    <li key={s.id} className="flex items-center gap-2 text-sm text-[var(--ukip-text)]">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--ukip-primary-soft)] text-xs font-bold text-[var(--ukip-primary)]">
                         {i + 1}
                       </span>
                       {SECTION_ICONS[s.id]} {s.label}
@@ -1203,8 +1202,8 @@ export default function ReportsPage() {
                 {manualSections
                   .filter((section) => section.content.trim())
                   .map((section) => (
-                    <li key={section.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-300">
+                    <li key={section.id} className="flex items-center gap-2 text-sm text-[var(--ukip-text)]">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--ukip-primary-soft)] text-xs font-bold text-[var(--ukip-primary)]">
                         +
                       </span>
                       {section.title.trim() || tr("page.reports.manual_section.default_title", "Analyst Note")}
