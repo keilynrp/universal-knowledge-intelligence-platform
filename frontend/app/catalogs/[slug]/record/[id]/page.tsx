@@ -266,7 +266,7 @@ export default function CatalogRecordPage() {
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">
                       {field.key === "entity_type" ? <EntityConcept>{field.label}</EntityConcept> : field.label}
                     </p>
-                    <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">{formatValue(field.value)}</p>
+                    <p className="mt-1 min-w-0 break-words text-sm text-gray-700 [overflow-wrap:anywhere] dark:text-gray-300">{formatValue(field.value)}</p>
                   </div>
                 ))}
               </div>
@@ -283,10 +283,10 @@ export default function CatalogRecordPage() {
                     {field.isQuality ? (
                       <div className="mt-2 flex flex-wrap items-center gap-3">
                         <QualityBadge score={record.quality_score} />
-                        <span className="text-sm text-gray-700 dark:text-gray-300">{formatValue(field.value)}</span>
+                        <span className="min-w-0 break-words text-sm text-gray-700 [overflow-wrap:anywhere] dark:text-gray-300">{formatValue(field.value)}</span>
                       </div>
                     ) : (
-                      <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">{formatValue(field.value)}</p>
+                      <p className="mt-1 min-w-0 break-words text-sm text-gray-700 [overflow-wrap:anywhere] dark:text-gray-300">{formatValue(field.value)}</p>
                     )}
                   </div>
                 ))}

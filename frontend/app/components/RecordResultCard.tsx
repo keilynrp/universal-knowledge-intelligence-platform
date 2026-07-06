@@ -30,7 +30,7 @@ function MetaRow({ items }: { items: MetaItem[] }) {
           <p className="truncate text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-[var(--ukip-muted)]">
             {item.label}
           </p>
-          <div className="mt-1 break-words text-xs font-bold leading-5 text-slate-950 dark:text-[var(--ukip-text-strong)]">{item.value}</div>
+          <div className="mt-1 min-w-0 break-words text-xs font-bold leading-5 text-slate-950 [overflow-wrap:anywhere] dark:text-[var(--ukip-text-strong)]">{item.value}</div>
         </div>
       ))}
     </div>

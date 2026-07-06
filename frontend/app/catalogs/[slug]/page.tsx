@@ -730,11 +730,10 @@ export default function CatalogPortalPage() {
                         {
                           label: tr("page.import.field.canonical_id", "Identifier"),
                           value: (
-                            <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700 break-all dark:bg-gray-800 dark:text-gray-300">
+                            <code className="inline-block max-w-full rounded bg-gray-100 px-1.5 py-0.5 text-xs leading-5 text-gray-700 [overflow-wrap:anywhere] dark:bg-gray-800 dark:text-gray-300">
                               {record.canonical_id || "—"}
                             </code>
                           ),
-                          minWidthClassName: "sm:min-w-[12rem]",
                         },
                         {
                           label: tr("page.entity_table.review_status", "Review status"),

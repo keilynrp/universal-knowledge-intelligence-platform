@@ -66,7 +66,7 @@ export default function RecordListRow({
             {title}
           </h3>
           {metaLine ? (
-            <div className="mt-1 truncate font-mono text-xs text-slate-500 dark:text-[var(--ukip-muted)]">
+            <div className="mt-1 line-clamp-2 min-w-0 break-words font-mono text-xs leading-4 text-slate-500 [overflow-wrap:anywhere] dark:text-[var(--ukip-muted)]">
               {metaLine}
             </div>
           ) : null}

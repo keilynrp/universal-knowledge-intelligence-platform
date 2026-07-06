@@ -417,7 +417,6 @@ export default function EntityTableContent({
                                                 {
                                                     label: "ID canónico",
                                                     value: renderDisplayValue("canonical_id", identifierValue, t("page.entity_table.empty_value")),
-                                                    minWidthClassName: "sm:min-w-[12rem]",
                                                 },
                                                 {
                                                     label: "Revisión",
