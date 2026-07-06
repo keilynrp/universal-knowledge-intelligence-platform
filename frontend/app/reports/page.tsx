@@ -74,6 +74,12 @@ interface DashboardBriefSummary {
   };
 }
 
+interface ManualReportSection {
+  id: string;
+  title: string;
+  content: string;
+}
+
 const SECTION_ICONS: Record<string, string> = {
   institutional_benchmark: "🏛️",
   impact_projection: "📈",
@@ -124,6 +130,7 @@ export default function ReportsPage() {
   const [rememberedPersonaLabel, setRememberedPersonaLabel] = useState<string | null>(null);
   const [dashboardBrief, setDashboardBrief] = useState<DashboardBriefSummary | null>(null);
   const [loadingDashboardBrief, setLoadingDashboardBrief] = useState(false);
+  const [manualSections, setManualSections] = useState<ManualReportSection[]>([]);
 
   const preset = searchParams.get("preset");
   const presetDomain = searchParams.get("domain");
@@ -488,9 +495,33 @@ export default function ReportsPage() {
 
   const selectAll = () => setSelected(new Set(sections.map((s) => s.id)));
   const clearAll  = () => setSelected(new Set());
+  const addManualSection = () => {
+    setManualSections((prev) => [
+      ...prev,
+      {
+        id: `manual-${Date.now()}-${prev.length}`,
+        title: tr("page.reports.manual_section.default_title", "Analyst Note"),
+        content: "",
+      },
+    ]);
+  };
+  const updateManualSection = (id: string, patch: Partial<ManualReportSection>) => {
+    setManualSections((prev) => prev.map((section) => (
+      section.id === id ? { ...section, ...patch } : section
+    )));
+  };
+  const removeManualSection = (id: string) => {
+    setManualSections((prev) => prev.filter((section) => section.id !== id));
+  };
 
   const handleGenerate = async () => {
-    if (selected.size === 0) {
+    const filledManualSections = manualSections
+      .map((section) => ({
+        title: section.title.trim() || tr("page.reports.manual_section.default_title", "Analyst Note"),
+        content: section.content.trim(),
+      }))
+      .filter((section) => section.content.length > 0);
+    if (selected.size === 0 && filledManualSections.length === 0) {
       toast(tr("page.reports.toast.select_section", "Select at least one section"), "warning");
       return;
     }
@@ -511,6 +542,7 @@ export default function ReportsPage() {
           title: title.trim() || null,
           benchmark_profile_id: selectedBenchmarkProfile,
           stakeholder_profile: selectedStakeholderProfile,
+          manual_sections: filledManualSections,
         }),
       });
       if (!res.ok) {
@@ -560,7 +592,7 @@ export default function ReportsPage() {
         actions={
           <button
             onClick={handleGenerate}
-            disabled={generating || selected.size === 0}
+            disabled={generating || (selected.size === 0 && manualSections.every((section) => !section.content.trim()))}
             className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
           >
             {generating ? (
@@ -947,6 +979,75 @@ export default function ReportsPage() {
               })}
             </div>
           )}
+
+          <div className="rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm dark:border-indigo-500/30 dark:bg-gray-900">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {tr("page.reports.manual_section.title", "Analyst writing")}
+                </h2>
+                <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">
+                  {tr("page.reports.manual_section.help", "Add narrative sections that will be exported with the intelligence report.")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={addManualSection}
+                className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200"
+              >
+                <span aria-hidden="true">+</span>
+                {tr("page.reports.manual_section.add", "Add note")}
+              </button>
+            </div>
+
+            {manualSections.length === 0 ? (
+              <div className="mt-4 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-400">
+                {tr("page.reports.manual_section.empty", "No manual text yet.")}
+              </div>
+            ) : (
+              <div className="mt-4 space-y-4">
+                {manualSections.map((section, index) => (
+                  <div key={section.id} className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/70">
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                        {tr("page.reports.manual_section.title_label", "Section title")}
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => removeManualSection(section.id)}
+                        className="text-xs font-medium text-red-600 hover:underline dark:text-red-300"
+                      >
+                        {tr("page.reports.manual_section.remove", "Remove")}
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      value={section.title}
+                      onChange={(e) => updateManualSection(section.id, { title: e.target.value })}
+                      placeholder={tr("page.reports.manual_section.title_placeholder", "Analyst note title")}
+                      maxLength={120}
+                      className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
+                    />
+                    <label className="mt-3 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                      {tr("page.reports.manual_section.content_label", "Manual text")}
+                    </label>
+                    <textarea
+                      value={section.content}
+                      onChange={(e) => updateManualSection(section.id, { content: e.target.value })}
+                      placeholder={tr("page.reports.manual_section.content_placeholder", "Write the analyst interpretation, caveats, recommendations, or context here.")}
+                      maxLength={6000}
+                      rows={index === 0 ? 8 : 6}
+                      className="mt-2 min-h-36 w-full resize-y rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm leading-6 text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
+                    />
+                    <div className="mt-2 flex items-center justify-between text-[11px] text-gray-400 dark:text-gray-500">
+                      <span>{tr("page.reports.manual_section.export_hint", "Included in every export format")}</span>
+                      <span>{section.content.length.toLocaleString()} / 6000</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Configuration panel */}
@@ -1080,7 +1181,13 @@ export default function ReportsPage() {
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
             <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">{t('page.reports.included_sections_title')}</h3>
             {selected.size === 0 ? (
-              <p className="text-xs text-gray-400 dark:text-gray-500">{t('page.reports.no_sections_selected')}</p>
+              manualSections.some((section) => section.content.trim()) ? (
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {tr("page.reports.manual_section.manual_only", "Manual analyst text only")}
+                </p>
+              ) : (
+                <p className="text-xs text-gray-400 dark:text-gray-500">{t('page.reports.no_sections_selected')}</p>
+              )
             ) : (
               <ol className="space-y-2">
                 {sections
@@ -1091,6 +1198,16 @@ export default function ReportsPage() {
                         {i + 1}
                       </span>
                       {SECTION_ICONS[s.id]} {s.label}
+                    </li>
+                  ))}
+                {manualSections
+                  .filter((section) => section.content.trim())
+                  .map((section) => (
+                    <li key={section.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-300">
+                        +
+                      </span>
+                      {section.title.trim() || tr("page.reports.manual_section.default_title", "Analyst Note")}
                     </li>
                   ))}
               </ol>

@@ -73,6 +73,7 @@ class EnterpriseExcelExporter:
         domain_id: str,
         sections: List[str],
         org_id: int | None = None,
+        manual_sections: list[dict[str, str]] | None = None,
     ) -> bytes:
         wb = openpyxl.Workbook()
 
@@ -95,6 +96,10 @@ class EnterpriseExcelExporter:
         if "harmonization_log" in sections:
             ws_harm = wb.create_sheet("Harmonization")
             self._write_harmonization(ws_harm, db, org_id)
+
+        if manual_sections:
+            ws_notes = wb.create_sheet("Analyst Notes")
+            self._write_manual_sections(ws_notes, manual_sections)
 
         buf = BytesIO()
         wb.save(buf)
@@ -212,3 +217,13 @@ class EnterpriseExcelExporter:
             ws.cell(row=row_idx, column=7, value="Yes" if h.reverted else "No")
 
         _autofit(ws)
+
+    def _write_manual_sections(self, ws, manual_sections: list[dict[str, str]]) -> None:
+        headers = ["Section", "Analyst Text"]
+        _style_header_row(ws, headers)
+        for row_idx, section in enumerate(manual_sections, start=2):
+            ws.cell(row=row_idx, column=1, value=(section.get("title") or "Analyst Note")[:120])
+            cell = ws.cell(row=row_idx, column=2, value=section.get("content") or "")
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+        ws.column_dimensions["A"].width = 28
+        ws.column_dimensions["B"].width = 90

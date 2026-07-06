@@ -14,7 +14,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from backend import models
@@ -83,12 +83,24 @@ _ALL_REPORT_SECTIONS = list(_report_builder.SECTION_LABELS.keys())
 _PUBLIC_REPORT_SECTIONS = [section for section in _ALL_REPORT_SECTIONS if section != "top_brands"]
 
 
+class _ManualReportSection(BaseModel):
+    title: str = Field(default="Analyst Note", max_length=120)
+    content: str = Field(min_length=1, max_length=6000)
+
+
 class _ReportRequest(BaseModel):
-    domain_id: str          = Field(default="default", min_length=1, max_length=64)
-    sections:  List[str]    = Field(default=_PUBLIC_REPORT_SECTIONS, min_length=1, max_length=10)
-    title:     Optional[str] = Field(default=None, max_length=200)
+    domain_id: str = Field(default="default", min_length=1, max_length=64)
+    sections: List[str] = Field(default=_PUBLIC_REPORT_SECTIONS, max_length=10)
+    title: Optional[str] = Field(default=None, max_length=200)
     benchmark_profile_id: Optional[str] = Field(default=None, max_length=80)
     stakeholder_profile: Optional[str] = Field(default="leadership", max_length=80)
+    manual_sections: List[_ManualReportSection] = Field(default_factory=list, max_length=6)
+
+    @model_validator(mode="after")
+    def _has_report_content(self):
+        if not self.sections and not self.manual_sections:
+            raise ValueError("Select at least one generated section or add an analyst note.")
+        return self
 
 
 @router.post("/reports/generate", tags=["reports"])
@@ -115,6 +127,7 @@ def generate_report(
         benchmark_profile_id=payload.benchmark_profile_id,
         benchmark_org=benchmark_org,
         stakeholder_profile=payload.stakeholder_profile,
+        manual_sections=[section.model_dump() for section in payload.manual_sections],
     )
     filename = (
         f"ukip_report_{payload.domain_id}_"
@@ -159,6 +172,7 @@ def export_pdf(
         benchmark_profile_id=payload.benchmark_profile_id,
         benchmark_org=benchmark_org,
         stakeholder_profile=payload.stakeholder_profile,
+        manual_sections=[section.model_dump() for section in payload.manual_sections],
     )
     pdf_bytes = _make_pdf(html)
     filename = (
@@ -185,6 +199,7 @@ def export_excel(
         payload.domain_id,
         payload.sections,
         org_id=org_id,
+        manual_sections=[section.model_dump() for section in payload.manual_sections],
     )
     filename = (
         f"ukip_export_{payload.domain_id}_"
@@ -228,6 +243,7 @@ def export_pptx(
             title=payload.title,
             branding=branding_dict,
             org_id=org_id,
+            manual_sections=[section.model_dump() for section in payload.manual_sections],
         )
     except ImportError as exc:
         raise HTTPException(

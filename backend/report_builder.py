@@ -5,8 +5,9 @@ No external template dependencies; uses f-strings with inline CSS.
 from __future__ import annotations
 
 import json
+from html import escape
 from datetime import datetime, timezone
-from typing import List
+from typing import List, TypedDict
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -66,8 +67,30 @@ _STAKEHOLDER_PROFILES = {
 }
 
 
+class ManualReportSection(TypedDict, total=False):
+    title: str
+    content: str
+
+
 def _stakeholder_profile(profile_id: str | None) -> dict[str, str]:
     return _STAKEHOLDER_PROFILES.get(profile_id or "leadership", _STAKEHOLDER_PROFILES["leadership"])
+
+
+def _section_manual_note(title: str, content: str) -> str:
+    safe_title = escape(title.strip() or "Analyst Note")
+    paragraphs = [
+        f"<p>{escape(part.strip())}</p>"
+        for part in content.split("\n\n")
+        if part.strip()
+    ]
+    if not paragraphs:
+        return ""
+    return f"""<section>
+    <h2>{safe_title}</h2>
+    <div class="analyst-note">
+        {"".join(paragraphs)}
+    </div>
+</section>"""
 
 
 def _section_stakeholder_reading(
@@ -175,6 +198,9 @@ tr:last-child td { border-bottom: none; }
 .callout { border-radius: 12px; padding: 16px; margin: 16px 0; border: 1px solid #e5e7eb; background: #f9fafb; }
 .callout h3 { font-size: 13px; font-weight: 700; color: #111827; margin-bottom: 6px; }
 .callout p { font-size: 13px; color: #4b5563; line-height: 1.6; }
+.analyst-note { border-left: 4px solid #2563eb; background: #f8fafc; padding: 16px 18px; border-radius: 0 10px 10px 0; }
+.analyst-note p { font-size: 14px; color: #1f2937; line-height: 1.7; margin-bottom: 10px; white-space: pre-wrap; }
+.analyst-note p:last-child { margin-bottom: 0; }
 footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid #e5e7eb;
          font-size: 12px; color: #9ca3af; text-align: center; }
 @media print {
@@ -736,6 +762,7 @@ def build(
     benchmark_profile_id: str | None = None,
     benchmark_org: models.Organization | None = None,
     stakeholder_profile: str | None = None,
+    manual_sections: List[ManualReportSection] | None = None,
 ) -> str:
     """Return a complete, self-contained HTML report string."""
     domain_name = domain_id
@@ -773,6 +800,13 @@ def build(
             stakeholder_profile=stakeholder_profile,
         )
     ]
+    for manual in manual_sections or []:
+        manual_html = _section_manual_note(
+            str(manual.get("title") or "Analyst Note"),
+            str(manual.get("content") or ""),
+        )
+        if manual_html:
+            body_sections.append(manual_html)
     for sec in sections:
         builder = SECTION_BUILDERS.get(sec)
         if builder:

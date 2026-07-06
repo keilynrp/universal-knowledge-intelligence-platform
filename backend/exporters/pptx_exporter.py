@@ -72,6 +72,7 @@ def generate_pptx(
     title: Optional[str],
     branding: dict,
     org_id: int | None = None,
+    manual_sections: list[dict[str, str]] | None = None,
 ) -> bytes:
     """
     Build a branded 16:9 PPTX.
@@ -119,6 +120,18 @@ def generate_pptx(
     # Footer
     _add_text_box(slide, footer_text, Inches(1), Inches(6.8), Inches(11), Inches(0.4),
                   font_size=10, color=RGBColor(150, 150, 150))
+
+    for manual in manual_sections or []:
+        manual_title = (manual.get("title") or "Analyst Note").strip()[:120]
+        manual_content = (manual.get("content") or "").strip()
+        if not manual_content:
+            continue
+        slide = _add_slide(prs)
+        _add_header_bar(slide, accent, W)
+        _add_text_box(slide, manual_title or "Analyst Note", Inches(0.5), Inches(0.05), Inches(10), Inches(0.45),
+                      font_size=16, bold=True, color=RGBColor(255, 255, 255))
+        _add_text_box(slide, manual_content[:1800], Inches(0.75), Inches(0.9), Inches(11.8), Inches(5.6),
+                      font_size=15, color=RGBColor(45, 55, 72))
 
     # ── Slide 2: Entity Statistics ────────────────────────────────────────────
     if "entity_stats" in sections:
