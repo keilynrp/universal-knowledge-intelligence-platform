@@ -234,6 +234,44 @@ class TestEntitiesQualityFilter:
         for entity in data:
             assert entity.get("quality_score", 0) >= 0.7
 
+    def test_min_quality_filter_computes_missing_scores(self, client, auth_headers, db_session):
+        e1 = models.UniversalEntity(
+            primary_label="High Missing Score",
+            secondary_label="Research Office",
+            canonical_id="AUTH:high-missing-score",
+            entity_type="organization",
+            enrichment_status="completed",
+            enrichment_doi="10.1000/high",
+            quality_score=None,
+        )
+        e2 = models.UniversalEntity(
+            primary_label="Low Missing Score",
+            enrichment_status="none",
+            quality_score=None,
+        )
+        db_session.add_all([e1, e2])
+        db_session.flush()
+        db_session.add(
+            models.AuthorityRecord(
+                field_name="primary_label",
+                original_value="High Missing Score",
+                authority_source="ror",
+                authority_id="https://ror.org/high",
+                canonical_label="High Missing Score",
+                confidence=1.0,
+                status="confirmed",
+            )
+        )
+        db_session.commit()
+
+        res = client.get("/entities?min_quality=0.7", headers=auth_headers)
+        assert res.status_code == 200
+        labels = {entity["primary_label"] for entity in res.json()}
+        assert "High Missing Score" in labels
+        assert "Low Missing Score" not in labels
+        high_result = next(entity for entity in res.json() if entity["primary_label"] == "High Missing Score")
+        assert high_result["quality_score"] >= 0.7
+
     def test_sort_by_quality_desc(self, client, auth_headers, db_session):
         e1 = models.UniversalEntity(primary_label="A", enrichment_status="none", quality_score=0.2)
         e2 = models.UniversalEntity(primary_label="B", enrichment_status="none", quality_score=0.9)

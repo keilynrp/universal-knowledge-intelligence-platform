@@ -451,3 +451,58 @@ def test_catalog_import_candidates_are_grouped_from_existing_records(client, aut
     assert top["total_records"] == 2
     assert top["ft_source"] == "scientific_import"
     assert top["ft_entity_type"] == "publication"
+
+
+def test_catalog_results_min_quality_computes_missing_scores(client, auth_headers, db_session):
+    high = models.RawEntity(
+        primary_label="Portal High Missing Score",
+        secondary_label="Research Office",
+        canonical_id="AUTH:portal-high",
+        entity_type="organization",
+        domain="science",
+        enrichment_status="completed",
+        enrichment_doi="10.1000/portal-high",
+        quality_score=None,
+    )
+    low = models.RawEntity(
+        primary_label="Portal Low Missing Score",
+        entity_type="organization",
+        domain="science",
+        enrichment_status="none",
+        quality_score=None,
+    )
+    db_session.add_all([high, low])
+    db_session.flush()
+    db_session.add(
+        models.AuthorityRecord(
+            field_name="primary_label",
+            original_value="Portal High Missing Score",
+            authority_source="ror",
+            authority_id="https://ror.org/portal-high",
+            canonical_label="Portal High Missing Score",
+            confidence=1.0,
+            status="confirmed",
+        )
+    )
+    db_session.commit()
+
+    create_resp = client.post(
+        "/catalogs",
+        json={
+            "title": "Quality Filter Catalog",
+            "slug": "quality-filter-catalog",
+            "domain_id": "science",
+            "visibility": "private",
+            "default_sort": "primary_label",
+        },
+        headers=auth_headers,
+    )
+    assert create_resp.status_code == 201, create_resp.text
+
+    results_resp = client.get("/catalogs/quality-filter-catalog/results?min_quality=0.7", headers=auth_headers)
+    assert results_resp.status_code == 200, results_resp.text
+    labels = {record["primary_label"] for record in results_resp.json()["items"]}
+    assert "Portal High Missing Score" in labels
+    assert "Portal Low Missing Score" not in labels
+    high_result = next(record for record in results_resp.json()["items"] if record["primary_label"] == "Portal High Missing Score")
+    assert high_result["quality_score"] >= 0.7

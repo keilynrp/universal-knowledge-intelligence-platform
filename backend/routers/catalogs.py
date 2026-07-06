@@ -282,6 +282,9 @@ def _portal_entity_query(
     ft_source: str | None,
     ft_journal_metric_signal: str | None = None,
 ) -> SAQuery:
+    if min_quality is not None:
+        EntityService.ensure_quality_scores(db, org_id)
+
     query = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
     if portal.source_batch_id:
         query = query.filter(models.RawEntity.import_batch_id == portal.source_batch_id)

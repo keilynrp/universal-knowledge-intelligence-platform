@@ -39,6 +39,29 @@ class EntityService:
     )
 
     @staticmethod
+    def ensure_quality_scores(db: Session, org_id: int | None = None) -> int:
+        """Compute missing quality scores before quality filtering/sorting.
+
+        Some records arrive without a persisted quality_score. SQL predicates such
+        as quality_score >= 0.7 exclude NULL rows, so materialize missing scores
+        before applying user-facing quality thresholds.
+        """
+        missing = (
+            scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
+            .filter(models.RawEntity.quality_score.is_(None))
+            .all()
+        )
+        if not missing:
+            return 0
+
+        confirmed_labels, entities_with_rels = _fetch_lookups(db)
+        for entity in missing:
+            score, _ = score_entity(entity, confirmed_labels, entities_with_rels)
+            entity.quality_score = score
+        db.flush()
+        return len(missing)
+
+    @staticmethod
     def attach_journal_metrics(db: Session, entities, org_id: int | None):
         """Attach per-record journal scientometric signal to RawEntity instances.
 
@@ -118,6 +141,9 @@ class EntityService:
         ft_journal_metric_signal: Optional[str] = None,
         org_id: int | None = None,
     ) -> dict:
+        if min_quality is not None:
+            cls.ensure_quality_scores(db, org_id)
+
         requested = [f.strip() for f in fields_raw.split(",") if f.strip()]
         result = {}
         for field in requested:
@@ -221,6 +247,9 @@ class EntityService:
         ft_journal_metric_signal: Optional[str] = None,
         org_id: int | None = None,
     ) -> tuple[int, list[models.RawEntity]]:
+        if min_quality is not None or sort_by == "quality_score":
+            EntityService.ensure_quality_scores(db, org_id)
+
         query = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
         
         if search:
