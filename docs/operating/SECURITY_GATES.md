@@ -105,7 +105,7 @@ EMPTY — 0 fixable CRITICALs across the 3 images at gate introduction (2026-06-
 
 ### 7e. pip-audit baseline (`--ignore-vuln` flags in `.github/workflows/security.yml`)
 
-32 vulnerability IDs ignored at introduction. Owner: platform owner. SLA: next dependency-upgrade window (review by 2026-07-10). The 8 entries added 2026-06-18 (cryptography GHSA-537c-gmf6-5ccf; python-multipart CVE-2026-53538/53539/53540; starlette CVE-2026-48817/48818/54282/54283) are newly-disclosed CVEs in already-pinned deps — fix versions are known (see table) but starlette requires a major 0.52→1.x bump, deferred to the upgrade sprint.
+33 vulnerability IDs ignored at introduction. Owner: platform owner. SLA: next dependency-upgrade window (review by 2026-07-10). The 8 entries added 2026-06-18 (cryptography GHSA-537c-gmf6-5ccf; python-multipart CVE-2026-53538/53539/53540; starlette CVE-2026-48817/48818/54282/54283) are newly-disclosed CVEs in already-pinned deps — fix versions are known (see table) but starlette requires a major 0.52→1.x bump, deferred to the upgrade sprint. The 1 entry added 2026-07-07 (weasyprint CVE-2026-49452) is a newly-disclosed CVE in already-pinned weasyprint==68.1 with no fix version in the advisory DB yet (latest 69.0 not marked as fixed); revisit at the next upgrade window.
 
 | ID | Package (pinned) | Fix version if known | Review date |
 | --- | --- | --- | --- |
@@ -141,6 +141,7 @@ EMPTY — 0 fixable CRITICALs across the 3 images at gate introduction (2026-06-
 | CVE-2026-48817 | starlette==0.52.1 | 1.1.0 | 2026-07-10 |
 | CVE-2026-54283 | starlette==0.52.1 | 1.3.1 | 2026-07-10 |
 | CVE-2026-54282 | starlette==0.52.1 | 1.3.0 | 2026-07-10 |
+| CVE-2026-49452 | weasyprint==68.1 | unknown at introduction | 2026-07-10 |
 
 ---
 
