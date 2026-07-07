@@ -2,7 +2,7 @@
 
 import type { DomainAttribute, DomainSchema } from "../contexts/DomainContext";
 import { useLanguage } from "../contexts/LanguageContext";
-import { EntityConcept } from "../components/ui";
+import { Button, EntityConcept, Select } from "../components/ui";
 import type { QueueSummary } from "./reviewQueueTypes";
 import { getEntityTypeLabel, getRouteLabel } from "./reviewQueueI18n";
 
@@ -22,6 +22,11 @@ interface ReviewQueueControlsProps {
     acting: boolean;
     selectedCount: number;
     summary: QueueSummary | null;
+    groupedView: boolean;
+    autoConfirmMinConfidence: number;
+    onGroupedViewChange: (value: boolean) => void;
+    onAutoConfirmMinConfidenceChange: (value: number) => void;
+    onAutoConfirm: () => void;
     onQueueModeChange: (mode: "generic" | "authors" | "institutions") => void;
     onStatusFilterChange: (value: string) => void;
     onFieldFilterChange: (value: string) => void;
@@ -52,6 +57,11 @@ export default function ReviewQueueControls({
     acting,
     selectedCount,
     summary,
+    groupedView,
+    autoConfirmMinConfidence,
+    onGroupedViewChange,
+    onAutoConfirmMinConfidenceChange,
+    onAutoConfirm,
     onQueueModeChange,
     onStatusFilterChange,
     onFieldFilterChange,
@@ -221,16 +231,26 @@ export default function ReviewQueueControls({
                             <option value="rejected">{t("page.authority.filter_rejected")}</option>
                         </select>
                         {queueMode === "generic" ? (
-                            <select
-                                value={fieldFilter}
-                                onChange={e => onFieldFilterChange(e.target.value)}
-                                className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
-                            >
-                                <option value="">{t("page.authority.all_fields")}</option>
-                                {summary?.by_field.map(f => (
-                                    <option key={f.field_name} value={f.field_name}>{f.field_name}</option>
-                                ))}
-                            </select>
+                            <>
+                                <select
+                                    value={fieldFilter}
+                                    onChange={e => onFieldFilterChange(e.target.value)}
+                                    className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                                >
+                                    <option value="">{t("page.authority.all_fields")}</option>
+                                    {summary?.by_field.map(f => (
+                                        <option key={f.field_name} value={f.field_name}>{f.field_name}</option>
+                                    ))}
+                                </select>
+                                <Button
+                                    variant={groupedView ? "primary" : "outline"}
+                                    size="sm"
+                                    onClick={() => onGroupedViewChange(!groupedView)}
+                                    aria-pressed={groupedView}
+                                >
+                                    {t("page.authority.grouped_view")}
+                                </Button>
+                            </>
                         ) : queueMode === "authors" ? (
                             <>
                                 <select
@@ -269,6 +289,26 @@ export default function ReviewQueueControls({
                     </div>
                     {statusFilter === "pending" && (
                         <div className="flex items-center gap-2">
+                            {queueMode === "generic" && (
+                                <div className="mr-1 flex items-center gap-1.5 border-r border-[var(--ukip-border)] pr-2">
+                                    <label htmlFor="authority-auto-confirm-conf" className="text-xs text-[var(--ukip-muted)]">
+                                        {t("page.authority.min_confidence")}
+                                    </label>
+                                    <Select
+                                        id="authority-auto-confirm-conf"
+                                        value={String(autoConfirmMinConfidence)}
+                                        onChange={e => onAutoConfirmMinConfidenceChange(Number(e.target.value))}
+                                        className="!h-8 w-20"
+                                    >
+                                        {["0.85", "0.9", "0.95", "1"].map(v => (
+                                            <option key={v} value={v}>{v}</option>
+                                        ))}
+                                    </Select>
+                                    <Button variant="primary" size="sm" disabled={acting} onClick={onAutoConfirm}>
+                                        {acting ? t("page.authority.auto_confirming") : t("page.authority.auto_confirm")}
+                                    </Button>
+                                </div>
+                            )}
                             <button
                                 onClick={() => onBulkAction("bulk-confirm")}
                                 disabled={acting || selectedCount === 0}

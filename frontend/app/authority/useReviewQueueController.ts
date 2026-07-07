@@ -7,6 +7,9 @@ import type { DomainAttribute, DomainSchema } from "../contexts/DomainContext";
 import type {
     AuthorAffiliationsResponse,
     AuthorCompareResponse,
+    AutoConfirmResponse,
+    GroupedRecord,
+    GroupedRecordsResponse,
     InstitutionApplyResponse,
     InstitutionQueueResponse,
     AuthorMetrics,
@@ -42,6 +45,10 @@ export default function useReviewQueueController(activeDomain: DomainSchema | nu
     const [affiliationMap, setAffiliationMap] = useState<Record<number, AuthorAffiliationsResponse>>({});
     const [loadingCompareId, setLoadingCompareId] = useState<number | null>(null);
     const [linkActionId, setLinkActionId] = useState<number | null>(null);
+    // Review-at-scale (generic queue): grouped view + auto-confirm.
+    const [groupedView, setGroupedView] = useState(false);
+    const [groupedRecords, setGroupedRecords] = useState<GroupedRecord[]>([]);
+    const [autoConfirmMinConfidence, setAutoConfirmMinConfidence] = useState(0.95);
 
     useEffect(() => {
         if (activeDomain && !batchField) {
@@ -125,9 +132,55 @@ export default function useReviewQueueController(activeDomain: DomainSchema | nu
         fetchSummary();
     }, [fetchSummary]);
 
+    const fetchGrouped = useCallback(async () => {
+        if (queueMode !== "generic" || !groupedView) return;
+        setLoadingRecords(true);
+        try {
+            const params = new URLSearchParams({ status: statusFilter, limit: "200" });
+            if (fieldFilter) params.set("field_name", fieldFilter);
+            const res = await apiFetch(`/authority/records/grouped?${params.toString()}`);
+            if (res.ok) {
+                const data: GroupedRecordsResponse = await res.json();
+                setGroupedRecords(data.groups ?? []);
+            }
+        } catch {
+        } finally {
+            setLoadingRecords(false);
+        }
+    }, [queueMode, groupedView, statusFilter, fieldFilter]);
+
     useEffect(() => {
         fetchRecords();
     }, [fetchRecords]);
+
+    useEffect(() => {
+        fetchGrouped();
+    }, [fetchGrouped]);
+
+    async function autoConfirm() {
+        setActing(true);
+        try {
+            const params = new URLSearchParams({ min_confidence: String(autoConfirmMinConfidence) });
+            if (fieldFilter) params.set("field_name", fieldFilter);
+            const res = await apiFetch(`/authority/records/auto-confirm?${params.toString()}`, {
+                method: "POST",
+            });
+            if (res.ok) {
+                const data: AutoConfirmResponse = await res.json();
+                toast(`Auto-confirmed ${data.confirmed}, rejected ${data.rejected}`, "success");
+                await fetchSummary();
+                await fetchRecords();
+                await fetchGrouped();
+            } else {
+                const err = await res.json().catch(() => ({}));
+                toast(`Auto-confirm failed: ${err.detail || res.statusText}`, "error");
+            }
+        } catch {
+            toast("Auto-confirm failed", "error");
+        } finally {
+            setActing(false);
+        }
+    }
 
     function toggleSelect(id: number) {
         setSelected(prev => {
@@ -351,6 +404,12 @@ export default function useReviewQueueController(activeDomain: DomainSchema | nu
         affiliationMap,
         loadingCompareId,
         linkActionId,
+        groupedView,
+        groupedRecords,
+        autoConfirmMinConfidence,
+        setGroupedView,
+        setAutoConfirmMinConfidence,
+        autoConfirm,
         setQueueMode,
         setStatusFilter,
         setFieldFilter,
