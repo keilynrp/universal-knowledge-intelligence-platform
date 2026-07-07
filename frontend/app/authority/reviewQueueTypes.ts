@@ -57,6 +57,26 @@ export interface AuthorityRecord {
     } | null;
 }
 
+export interface GroupedRecord {
+    field_name: string;
+    original_value: string;
+    candidate_count: number;
+    best_confidence: number | null;
+    auto_confirmable: boolean;
+    best: AuthorityRecord;
+    alternatives: AuthorityRecord[];
+}
+
+export interface GroupedRecordsResponse {
+    total_groups: number;
+    groups: GroupedRecord[];
+}
+
+export interface AutoConfirmResponse {
+    confirmed: number;
+    rejected: number;
+}
+
 export interface AuthorQueueSummary {
     total_records: number;
     pending_review: number;
