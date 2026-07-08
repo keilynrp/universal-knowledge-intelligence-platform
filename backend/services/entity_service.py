@@ -130,6 +130,7 @@ class EntityService:
         fields_raw: str,
         search: Optional[str] = None,
         min_quality: Optional[float] = None,
+        max_quality: Optional[float] = None,
         import_batch_id: Optional[int] = None,
         ft_entity_type: Optional[str] = None,
         ft_domain: Optional[str] = None,
@@ -141,7 +142,7 @@ class EntityService:
         ft_journal_metric_signal: Optional[str] = None,
         org_id: int | None = None,
     ) -> dict:
-        if min_quality is not None:
+        if min_quality is not None or max_quality is not None:
             cls.ensure_quality_scores(db, org_id)
 
         requested = [f.strip() for f in fields_raw.split(",") if f.strip()]
@@ -172,6 +173,8 @@ class EntityService:
 
             if min_quality is not None:
                 query = query.filter(models.RawEntity.quality_score >= min_quality)
+            if max_quality is not None:
+                query = query.filter(models.RawEntity.quality_score < max_quality)
             if import_batch_id is not None:
                 query = query.filter(models.RawEntity.import_batch_id == import_batch_id)
             if concept:
@@ -242,12 +245,13 @@ class EntityService:
         ft_validation_status: Optional[str],
         ft_enrichment_status: Optional[str],
         ft_source: Optional[str],
+        max_quality: Optional[float] = None,
         concept: Optional[str] = None,
         ft_work_type: Optional[str] = None,
         ft_journal_metric_signal: Optional[str] = None,
         org_id: int | None = None,
     ) -> tuple[int, list[models.RawEntity]]:
-        if min_quality is not None or sort_by == "quality_score":
+        if min_quality is not None or max_quality is not None or sort_by == "quality_score":
             EntityService.ensure_quality_scores(db, org_id)
 
         query = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
@@ -265,6 +269,8 @@ class EntityService:
 
         if min_quality is not None:
             query = query.filter(models.RawEntity.quality_score >= min_quality)
+        if max_quality is not None:
+            query = query.filter(models.RawEntity.quality_score < max_quality)
         if concept:
             query = query.filter(models.RawEntity.enrichment_concepts.ilike(f"%{concept}%"))
 

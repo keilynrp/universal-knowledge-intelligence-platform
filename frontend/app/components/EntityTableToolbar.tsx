@@ -115,7 +115,7 @@ export default function EntityTableToolbar({
                     )}
                     {minQuality && (
                         <span className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
-                            <span className="shrink-0 font-medium">{t("page.entity_table.min_quality")}:</span>
+                            <span className="shrink-0 font-medium">{t("page.entity_table.quality_group")}:</span>
                             <span className="min-w-0 truncate">{minQuality === "0.7" ? "70%+" : minQuality === "0.3" ? "30%+" : t("page.entity_table.under_30")}</span>
                             <button
                                 onClick={() => onMinQualityChange("")}

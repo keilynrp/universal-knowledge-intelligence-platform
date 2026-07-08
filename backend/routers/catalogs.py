@@ -85,6 +85,7 @@ def _portal_query_defaults(portal: models.CatalogPortal) -> dict[str, Any]:
     return {
         "search": defaults.get("search"),
         "min_quality": defaults.get("min_quality"),
+        "max_quality": defaults.get("max_quality"),
         "ft_entity_type": defaults.get("ft_entity_type"),
         "ft_validation_status": defaults.get("ft_validation_status"),
         "ft_enrichment_status": defaults.get("ft_enrichment_status"),
@@ -193,6 +194,7 @@ def _apply_entity_filters(
     *,
     search: str | None,
     min_quality: float | None,
+    max_quality: float | None = None,
     ft_entity_type: str | None,
     ft_validation_status: str | None,
     ft_enrichment_status: str | None,
@@ -212,6 +214,8 @@ def _apply_entity_filters(
         )
     if min_quality is not None:
         query = query.filter(models.RawEntity.quality_score >= min_quality)
+    if max_quality is not None:
+        query = query.filter(models.RawEntity.quality_score < max_quality)
     if ft_entity_type:
         query = query.filter(models.RawEntity.entity_type == ft_entity_type)
     if ft_validation_status:
@@ -238,6 +242,7 @@ def _resolve_filters(
     *,
     search: str | None,
     min_quality: float | None,
+    max_quality: float | None,
     ft_entity_type: str | None,
     ft_validation_status: str | None,
     ft_enrichment_status: str | None,
@@ -250,6 +255,7 @@ def _resolve_filters(
     resolved = {
         "search": search if search is not None else defaults["search"],
         "min_quality": min_quality if min_quality is not None else defaults["min_quality"],
+        "max_quality": max_quality if max_quality is not None else defaults["max_quality"],
         "ft_entity_type": ft_entity_type if ft_entity_type is not None else defaults["ft_entity_type"],
         "ft_validation_status": ft_validation_status if ft_validation_status is not None else defaults["ft_validation_status"],
         "ft_enrichment_status": ft_enrichment_status if ft_enrichment_status is not None else defaults["ft_enrichment_status"],
@@ -276,13 +282,14 @@ def _portal_entity_query(
     *,
     search: str | None,
     min_quality: float | None,
+    max_quality: float | None = None,
     ft_entity_type: str | None,
     ft_validation_status: str | None,
     ft_enrichment_status: str | None,
     ft_source: str | None,
     ft_journal_metric_signal: str | None = None,
 ) -> SAQuery:
-    if min_quality is not None:
+    if min_quality is not None or max_quality is not None:
         EntityService.ensure_quality_scores(db, org_id)
 
     query = scope_query_to_org(db.query(models.RawEntity), models.RawEntity, org_id)
@@ -294,6 +301,7 @@ def _portal_entity_query(
         query,
         search=search,
         min_quality=min_quality,
+        max_quality=max_quality,
         ft_entity_type=ft_entity_type,
         ft_validation_status=ft_validation_status,
         ft_enrichment_status=ft_enrichment_status,
@@ -574,6 +582,7 @@ def get_catalog_results(
     limit: int = Query(default=24, ge=1, le=100),
     search: str | None = Query(default=None),
     min_quality: float | None = Query(default=None, ge=0.0, le=1.0),
+    max_quality: float | None = Query(default=None, ge=0.0, le=1.0),
     ft_entity_type: str | None = Query(default=None),
     ft_validation_status: str | None = Query(default=None),
     ft_enrichment_status: str | None = Query(default=None),
@@ -589,6 +598,7 @@ def get_catalog_results(
         portal,
         search=search,
         min_quality=min_quality,
+        max_quality=max_quality,
         ft_entity_type=ft_entity_type,
         ft_validation_status=ft_validation_status,
         ft_enrichment_status=ft_enrichment_status,
@@ -604,6 +614,7 @@ def get_catalog_results(
         org_id,
         search=filters["search"],
         min_quality=filters["min_quality"],
+        max_quality=filters["max_quality"],
         ft_entity_type=filters["ft_entity_type"],
         ft_validation_status=filters["ft_validation_status"],
         ft_enrichment_status=filters["ft_enrichment_status"],
@@ -628,6 +639,7 @@ def get_catalog_results(
         facet_fields,
         search=filters["search"],
         min_quality=filters["min_quality"],
+        max_quality=filters["max_quality"],
         import_batch_id=portal.source_batch_id,
         ft_entity_type=filters["ft_entity_type"],
         ft_domain=None if portal.source_batch_id else portal.domain_id,
