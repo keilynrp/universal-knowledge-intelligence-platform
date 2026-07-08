@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { qualityFilterParams } from "@/lib/qualityFilter";
 import { Badge, EmptyState, ErrorBanner, QualityBadge, useToast } from "../../components/ui";
 import FacetPanel from "../../components/FacetPanel";
 import EntityTableToolbar from "../../components/EntityTableToolbar";
@@ -162,7 +163,8 @@ export default function CatalogPortalPage() {
   const currentPage = Number(searchParams.get("page") || "1");
   const limit = 24;
 
-  const loadPortal = async () => {
+  const loadPortal = async (pageOverride?: number) => {
+    const activePage = pageOverride ?? currentPage;
     setLoading(true);
     setError(null);
     try {
@@ -191,11 +193,13 @@ export default function CatalogPortalPage() {
       });
 
       const query = new URLSearchParams({
-        skip: String((currentPage - 1) * limit),
+        skip: String((activePage - 1) * limit),
         limit: String(limit),
       });
       if (search) query.set("search", search);
-      if (minQuality) query.set("min_quality", minQuality);
+      const qualityParams = qualityFilterParams(minQuality);
+      if (qualityParams.min_quality) query.set("min_quality", qualityParams.min_quality);
+      if (qualityParams.max_quality) query.set("max_quality", qualityParams.max_quality);
       const facetParamMap: Record<string, string> = {
         entity_type: "ft_entity_type",
         domain: "ft_domain",
@@ -230,6 +234,27 @@ export default function CatalogPortalPage() {
     void loadPortal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, currentPage]);
+
+  // Auto-apply the quality group filter as soon as it changes (skip the initial
+  // mount, which is already handled by the effect above). Reset to page 1 so the
+  // new, smaller result set is never paged past its end.
+  const isFirstQualityRender = useRef(true);
+  useEffect(() => {
+    if (isFirstQualityRender.current) {
+      isFirstQualityRender.current = false;
+      return;
+    }
+    const next = new URLSearchParams(searchParams.toString());
+    if (minQuality) {
+      next.set("min_quality", minQuality);
+    } else {
+      next.delete("min_quality");
+    }
+    next.set("page", "1");
+    router.replace(`/catalogs/${slug}?${next.toString()}`);
+    void loadPortal(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minQuality]);
 
   const totalPages = useMemo(() => {
     if (!results) return 1;
@@ -270,7 +295,7 @@ export default function CatalogPortalPage() {
     });
     next.set("page", "1");
     router.replace(`/catalogs/${slug}?${next.toString()}`);
-    void loadPortal();
+    void loadPortal(1);
   };
 
   const handleFacetChange = (field: string, value: string | null) => {

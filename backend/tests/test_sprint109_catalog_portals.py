@@ -506,3 +506,53 @@ def test_catalog_results_min_quality_computes_missing_scores(client, auth_header
     assert "Portal Low Missing Score" not in labels
     high_result = next(record for record in results_resp.json()["items"] if record["primary_label"] == "Portal High Missing Score")
     assert high_result["quality_score"] >= 0.7
+
+
+def test_catalog_results_max_quality_returns_only_low_scored(client, auth_headers, db_session):
+    """max_quality expresses the 'Menor a 30%' bucket as quality_score < 0.3."""
+    high = models.RawEntity(
+        primary_label="Portal High Score",
+        entity_type="organization",
+        domain="science",
+        enrichment_status="completed",
+        quality_score=0.9,
+    )
+    low = models.RawEntity(
+        primary_label="Portal Low Score",
+        entity_type="organization",
+        domain="science",
+        enrichment_status="none",
+        quality_score=0.1,
+    )
+    boundary = models.RawEntity(
+        primary_label="Portal Boundary Score",
+        entity_type="organization",
+        domain="science",
+        enrichment_status="none",
+        quality_score=0.3,
+    )
+    db_session.add_all([high, low, boundary])
+    db_session.commit()
+
+    create_resp = client.post(
+        "/catalogs",
+        json={
+            "title": "Max Quality Catalog",
+            "slug": "max-quality-catalog",
+            "domain_id": "science",
+            "visibility": "private",
+            "default_sort": "primary_label",
+        },
+        headers=auth_headers,
+    )
+    assert create_resp.status_code == 201, create_resp.text
+
+    results_resp = client.get(
+        "/catalogs/max-quality-catalog/results?max_quality=0.3", headers=auth_headers
+    )
+    assert results_resp.status_code == 200, results_resp.text
+    labels = {record["primary_label"] for record in results_resp.json()["items"]}
+    assert "Portal Low Score" in labels
+    # 0.3 itself belongs to the "30%+" bucket, not "under 30%".
+    assert "Portal Boundary Score" not in labels
+    assert "Portal High Score" not in labels

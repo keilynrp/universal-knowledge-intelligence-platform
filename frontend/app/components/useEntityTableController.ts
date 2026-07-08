@@ -9,6 +9,7 @@ import type { EditableFields, Entity } from "./EntityTable.types";
 import type { ToastVariant } from "./ui";
 import type { EnrichmentBatchState } from "./EnrichmentProgressToast";
 import { apiFetch } from "@/lib/api";
+import { qualityFilterParams } from "@/lib/qualityFilter";
 
 interface UseEntityTableControllerOptions {
     toast: (message: string, variant?: ToastVariant) => void;
@@ -104,7 +105,9 @@ export function useEntityTableController({ toast, activeDomainId = "all" }: UseE
             });
 
             if (debouncedSearch) queryParams.append("search", debouncedSearch);
-            if (minQuality) queryParams.append("min_quality", minQuality);
+            const qualityParams = qualityFilterParams(minQuality);
+            if (qualityParams.min_quality) queryParams.append("min_quality", qualityParams.min_quality);
+            if (qualityParams.max_quality) queryParams.append("max_quality", qualityParams.max_quality);
             if (conceptFilter) queryParams.append("concept", conceptFilter);
             if (activeFacets.entity_type) queryParams.append("ft_entity_type", activeFacets.entity_type);
             if (activeFacets.work_type) queryParams.append("ft_work_type", activeFacets.work_type);

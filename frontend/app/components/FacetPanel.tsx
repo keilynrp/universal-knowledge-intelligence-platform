@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
+import { qualityFilterParams } from "@/lib/qualityFilter";
 import { useLanguage } from "../contexts/LanguageContext";
 import { EntityConcept } from "./ui";
 
@@ -52,7 +53,9 @@ export default function FacetPanel({ activeFacets, onFacetChange, search, minQua
     try {
       const queryParams = new URLSearchParams();
       if (search) queryParams.append("search", search);
-      if (minQuality) queryParams.append("min_quality", minQuality);
+      const qualityParams = qualityFilterParams(minQuality ?? "");
+      if (qualityParams.min_quality) queryParams.append("min_quality", qualityParams.min_quality);
+      if (qualityParams.max_quality) queryParams.append("max_quality", qualityParams.max_quality);
       if (activeFacets.entity_type) queryParams.append("ft_entity_type", activeFacets.entity_type);
       if (activeFacets.work_type) queryParams.append("ft_work_type", activeFacets.work_type);
       if (activeFacets.domain) queryParams.append("ft_domain", activeFacets.domain);
