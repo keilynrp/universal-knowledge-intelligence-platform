@@ -177,10 +177,12 @@ def health_check(request: Request, db: Session = Depends(get_db)):
     try:
         from backend.authority.auto_enqueue import auto_resolve_enabled
         from backend.authority.entity_writeback import writeback_enabled
+        from backend.routers.deps import _blocking_enabled
 
         features = {
             "auto_resolve_on_ingest": auto_resolve_enabled(),
             "authority_writeback": writeback_enabled(),
+            "use_blocking": _blocking_enabled(),
         }
     except Exception:  # noqa: BLE001 — never let the probe break /health
         logger.exception("health_check_features_error")
