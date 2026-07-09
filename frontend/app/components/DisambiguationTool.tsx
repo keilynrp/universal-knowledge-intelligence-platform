@@ -242,6 +242,9 @@ export default function DisambiguationTool() {
     }
 
     const fieldLabel = activeDomain?.attributes.find(a => a.name === field)?.label || field;
+    // fingerprint/phonetic cluster by an exact key and ignore the threshold, so
+    // we visually disable the slider to avoid implying it has any effect.
+    const thresholdApplies = algorithm === "token_sort" || algorithm === "ngram";
 
     return (
         <div className="space-y-6">
@@ -286,17 +289,18 @@ export default function DisambiguationTool() {
                             ))}
                         </select>
                     </div>
-                    <div className="min-w-[180px]">
+                    <div className={`min-w-[180px] ${thresholdApplies ? "" : "opacity-50"}`}>
                         <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                            {t('disambiguation.threshold_label')}: {threshold}%
+                            {t('disambiguation.threshold_label')}: {thresholdApplies ? `${threshold}%` : t('disambiguation.threshold_na')}
                         </label>
                         <input
                             type="range"
                             min={0}
                             max={100}
                             value={threshold}
+                            disabled={!thresholdApplies}
                             onChange={(e) => setThreshold(Number(e.target.value))}
-                            className="w-full accent-blue-600"
+                            className="w-full accent-blue-600 disabled:cursor-not-allowed"
                         />
                     </div>
                     <button
