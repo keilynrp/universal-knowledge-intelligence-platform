@@ -153,7 +153,9 @@ def _build_disambig_groups(
         for val in values:
             if val in processed:
                 continue
-            matches = process.extract(val, values, scorer=fuzz.token_sort_ratio, limit=50)
+            # limit=None returns every match (thefuzz sorts and does not truncate),
+            # so groups with more than the old cap of 50 variants are not cut off.
+            matches = process.extract(val, values, scorer=fuzz.token_sort_ratio, limit=None)
             group_members = [m[0] for m in matches if m[1] >= threshold]
             if len(group_members) > 1:
                 groups.append({

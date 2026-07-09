@@ -46,3 +46,21 @@ def test_build_groups_uses_blocking_when_flag_on(db_session, monkeypatch):
     assert any(g["algorithm_used"] == "token_sort+blocking" for g in groups)
     # The three Acme variants collapse into one group.
     assert any(g["count"] >= 3 for g in groups)
+
+
+def test_legacy_token_sort_does_not_truncate_large_group(db_session, monkeypatch):
+    """Legacy greedy token_sort path must not cap a group at the old limit of 50."""
+    from backend import models
+    from backend.routers.deps import _build_disambig_groups
+
+    # 60 distinct variants that all share 3 of 4 tokens → token_sort_ratio well
+    # above the threshold, so they belong to a single group.
+    for i in range(60):
+        db_session.add(models.RawEntity(primary_label=f"Acme Corporation Branch {i:03d}"))
+    db_session.commit()
+
+    monkeypatch.setenv("UKIP_USE_BLOCKING", "0")
+    groups = _build_disambig_groups("primary_label", 60, db_session, algorithm="token_sort")
+    assert any(g["algorithm_used"] == "token_sort" for g in groups)
+    # Old code capped extract() at limit=50; the fix returns all 60 variants.
+    assert max(g["count"] for g in groups) > 50
