@@ -64,12 +64,9 @@ HARMONIZATION_STEPS = [
         "name":       "Set Default Validation Status",
         "description": "Set validation_status to 'pending' for any rows where it is NULL or empty.",
         "field":      "validation_status",
-        "reversible": False,
+        "reversible": True,
     },
 ]
-
-_PREVIEW_ROW_CAP = 10_000  # Max rows examined during preview to avoid OOM
-
 
 # ── Step functions ────────────────────────────────────────────────────────────
 
@@ -171,6 +168,9 @@ def _step_set_default_validation(db: Session, preview_only: bool, org_id: int | 
     return changes
 
 
+_PREVIEW_SAMPLE_CAP = 200  # Max change rows returned to the client for preview display
+
+
 STEP_FUNCTIONS = {
     "normalize_labels":        _step_normalize_labels,
     "normalize_canonical_ids": _step_normalize_canonical_ids,
@@ -193,7 +193,7 @@ def get_harmonization_steps(
         or 0
     )
     steps_with_status = []
-    for step in HARMONIZATION_STEPS:
+    for idx, step in enumerate(HARMONIZATION_STEPS):
         last_log = (
             scope_query_to_org(db.query(models.HarmonizationLog), models.HarmonizationLog, org_id)
             .filter(models.HarmonizationLog.step_id == step["step_id"])
@@ -202,6 +202,7 @@ def get_harmonization_steps(
         )
         steps_with_status.append({
             **step,
+            "order":                idx + 1,
             "status":               "completed" if last_log else "pending",
             "last_run":             last_log.executed_at.isoformat() if last_log and last_log.executed_at else None,
             "last_records_updated": last_log.records_updated if last_log else None,
@@ -225,7 +226,7 @@ def preview_harmonization_step(
         "step_name":     step_def["name"],
         "description":   step_def["description"],
         "total_affected": len(changes),
-        "changes":       changes[:200],
+        "changes":       changes[:_PREVIEW_SAMPLE_CAP],
         "sample_changes": changes[:50],
     }
 
@@ -326,6 +327,17 @@ def apply_all_harmonization_steps(
                 new_value=c["new_value"],
             ))
 
+        _audit(
+            db, "harmonization.apply",
+            user_id=current_user.id,
+            details={
+                "step_id":         step_id,
+                "step_name":       step["name"],
+                "records_updated": len(changes),
+                "via":             "apply_all",
+            },
+        )
+
         results.append({
             "step_id":         step_id,
             "step_name":       step["name"],
@@ -335,6 +347,12 @@ def apply_all_harmonization_steps(
         })
 
     db.commit()
+    for r in results:
+        _dispatch_webhook(
+            "harmonization.apply",
+            {"step_id": r["step_id"], "records_updated": r["records_updated"]},
+            database.SessionLocal,
+        )
     return {"results": results, "total_steps": len(results)}
 
 
