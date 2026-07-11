@@ -1,10 +1,10 @@
 ## 1. Architecture and governance
 
-- [ ] 1.1 Record an ADR for internal bounded context first, warehouse-ready export second, microservice extraction later.
-- [ ] 1.2 Inventory source workflows that create retrospective value: import, enrichment, journal metrics, authority, NIL, provenance, governance review, and user decisions.
-- [ ] 1.3 Define tenant, retention, deletion, and audit rules for historical records.
-- [ ] 1.4 Define schema versioning and payload-size limits.
-- [ ] 1.5 Define extraction criteria review cadence.
+- [x] 1.1 Record an ADR for internal bounded context first, warehouse-ready export second, microservice extraction later.
+- [x] 1.2 Inventory source workflows that create retrospective value: import, enrichment, journal metrics, authority, NIL, provenance, governance review, and user decisions.
+- [x] 1.3 Define tenant, retention, deletion, and audit rules for historical records.
+- [x] 1.4 Define schema versioning and payload-size limits.
+- [x] 1.5 Define extraction criteria review cadence.
 
 ## 2. Historical contracts
 
