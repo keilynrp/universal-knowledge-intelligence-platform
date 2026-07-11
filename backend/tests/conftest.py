@@ -258,6 +258,11 @@ def viewer_headers():
 # ── DB cleanup (function-scoped) ────────────────────────────────────────────
 
 _TABLES_TO_CLEAN = [
+    # Retrospective Intelligence Layer (ADR-006) — append-only history.
+    # ORM listeners block update/delete but raw SQL DELETE (used here) bypasses
+    # them, so no trigger suspension is needed for cleanup.
+    "retrospective_events",
+    "retrospective_snapshots",
     # Backup and restore assurance evidence (append-only outside tests)
     "backup_assurance_events",
     # EPIC-017: secret rotation evidence — clean first (no FK deps)

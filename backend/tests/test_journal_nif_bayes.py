@@ -9,7 +9,7 @@ from backend.models import JournalMetric
 def test_single_head_is_nif_bayes():
     cfg = Config("alembic.ini")
     heads = set(ScriptDirectory.from_config(cfg).get_heads())
-    assert heads == {"e6f7a8b9c0d2"}, f"expected single head e6f7a8b9c0d2, got {heads}"
+    assert heads == {"b7c8d9e0f1a2"}, f"expected single head b7c8d9e0f1a2, got {heads}"
 
 
 def test_journalmetric_has_bayes_columns():

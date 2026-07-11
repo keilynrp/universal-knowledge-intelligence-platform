@@ -25,7 +25,7 @@ def test_single_alembic_head_after_migration():
             for rid in re.findall(r'["\']([a-zA-Z0-9_]{4,})["\']', m.group(0)):
                 downs.add(rid)
     heads = revs - downs
-    assert heads == {"e6f7a8b9c0d2"}, f"expected single head e6f7a8b9c0d2, got {heads}"
+    assert heads == {"b7c8d9e0f1a2"}, f"expected single head b7c8d9e0f1a2, got {heads}"
 
 
 def test_migration_backfills_issn_from_attributes(tmp_path):
