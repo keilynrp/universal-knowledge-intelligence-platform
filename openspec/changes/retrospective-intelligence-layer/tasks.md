@@ -17,7 +17,7 @@
 ## 3. Initial retrospective data
 
 - [x] 3.1 Emit journal metric computed and recomputed events.
-- [ ] 3.2 Emit enrichment lifecycle events.
+- [x] 3.2 Emit enrichment lifecycle events.
 - [ ] 3.3 Emit authority and NIL decision events.
 - [ ] 3.4 Materialize journal metric, enrichment coverage, and authority readiness snapshots.
 - [ ] 3.5 Backfill bounded historical events where trustworthy source timestamps exist.

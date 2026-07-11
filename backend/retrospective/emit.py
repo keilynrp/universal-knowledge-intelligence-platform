@@ -87,3 +87,58 @@ def emit_journal_metric_normalized(
             event_type,
             exc_info=True,
         )
+
+
+def emit_enrichment_lifecycle(
+    db: Session,
+    *,
+    org_id: Optional[int],
+    entity_id: int,
+    status: str,
+    occurred_at: datetime,
+    source: Optional[str] = None,
+    citation_count: Optional[int] = None,
+    work_type: Optional[str] = None,
+    failure_reason: Optional[str] = None,
+) -> None:
+    """Emit an enrichment lifecycle event (task 3.2).
+
+    Maps the post-commit enrichment ``status`` to a registered family
+    (``enrichment.completed`` / ``enrichment.failed``); other statuses are
+    ignored. Idempotent within a single enrichment run (keyed by entity, status,
+    and ``occurred_at``); a later re-enrichment is a distinct, expected event.
+    """
+    if not retro_events_enabled():
+        return
+    event_type = {
+        "completed": "enrichment.completed",
+        "failed": "enrichment.failed",
+    }.get(status)
+    if event_type is None:
+        return
+    try:
+        payload: dict = {"status": status, "source": source}
+        if event_type == "enrichment.completed":
+            payload["citation_count"] = citation_count
+            payload["work_type"] = work_type
+        else:
+            payload["failure_reason"] = failure_reason
+        writer.record_event(
+            db,
+            event_type=event_type,
+            org_id=org_id,
+            domain_object_type="entity",
+            domain_object_id=str(entity_id),
+            occurred_at=occurred_at,
+            source="enrichment_worker",
+            actor_type="job",
+            idempotency_key=f"{entity_id}:{status}:{occurred_at.isoformat()}",
+            payload=payload,
+        )
+    except Exception:  # noqa: BLE001 — non-fatal by contract
+        logger.warning(
+            "retrospective emit failed for entity %s (%s); continuing",
+            entity_id,
+            event_type,
+            exc_info=True,
+        )

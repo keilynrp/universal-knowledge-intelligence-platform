@@ -488,6 +488,29 @@ def _after_enrichment_commit(
         )
         db.rollback()
 
+    # Retrospective lifecycle event (Phase 3.2; flag-gated, non-fatal). Runs on
+    # both completed and failed transitions, so it must precede the completed-only
+    # early return below. Its own unit of work — never disturbs the already
+    # committed enrichment.
+    try:
+        from backend.retrospective.emit import emit_enrichment_lifecycle
+
+        emit_enrichment_lifecycle(
+            db,
+            org_id=entity.org_id,
+            entity_id=entity.id,
+            status=entity.enrichment_status,
+            occurred_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            source=entity.enrichment_source,
+            citation_count=entity.enrichment_citation_count,
+            work_type=entity.enrichment_work_type,
+            failure_reason=entity.enrichment_failure_reason,
+        )
+        db.commit()
+    except Exception:
+        logger.warning("Retrospective enrichment emit failed for entity %s", entity.id)
+        db.rollback()
+
     if entity.enrichment_status != EnrichmentStatus.completed:
         return
 
