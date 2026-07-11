@@ -6,6 +6,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.models import JournalMetric
+from backend.retrospective.emit import emit_journal_metric_normalized
 
 
 def normalize_impact_factors(db: Session, org_id: Optional[int]) -> int:
@@ -33,9 +34,22 @@ def normalize_impact_factors(db: Session, org_id: Optional[int]) -> int:
         if not med:
             continue
         for r in group:
-            r.normalized_impact_factor = round(r.two_yr_mean_citedness / med, 4)
+            prior_nif = r.normalized_impact_factor
+            new_nif = round(r.two_yr_mean_citedness / med, 4)
+            r.normalized_impact_factor = new_nif
             r.nif_field = field
             r.nif_updated_at = now
             updated += 1
+            emit_journal_metric_normalized(
+                db,
+                org_id=r.org_id,
+                issn_l=r.issn_l,
+                new_nif=new_nif,
+                prior_nif=prior_nif,
+                nif_field=field,
+                field_median=med,
+                occurred_at=now,
+                source_id=r.source_id,
+            )
     db.flush()
     return updated
