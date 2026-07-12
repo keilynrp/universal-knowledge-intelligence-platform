@@ -1,12 +1,4 @@
-# historical-warehouse-export-contract Specification
-
-## Purpose
-
-Define how UKIP exports retrospective events, snapshots, and analytical marts to
-BigQuery or an equivalent analytical warehouse without coupling the operational
-application to a specific warehouse runtime.
-
-## Requirements
+## ADDED Requirements
 
 ### Requirement: Warehouse exports use versioned manifests
 
