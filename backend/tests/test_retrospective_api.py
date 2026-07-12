@@ -109,3 +109,22 @@ def test_export_snapshots_endpoint(client, auth_headers, db_session):
 def test_export_requires_auth(client):
     r = client.post("/retrospective/export/events")
     assert r.status_code in (401, 403)
+
+
+# ── Phase 6 ML feature endpoint ─────────────────────────────────────────────
+
+def test_journal_nif_features_endpoint(client, auth_headers, db_session):
+    for va, nif in ((_MAY, {"nif": 1.0}), (_JUL, {"nif": 2.0})):
+        _snap(db_session, "issn:A", va, nif)
+    r = client.post("/retrospective/features/journal-nif", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["leakage_ok"] is True
+    assert body["quality"]["row_counts"] == 1
+    assert body["rows"][0]["labels"]["nif_increased"] == 1
+    assert body["rows"][0]["lineage"]["feature_snapshot_id"]
+
+
+def test_features_require_auth(client):
+    r = client.post("/retrospective/features/journal-nif")
+    assert r.status_code in (401, 403)
