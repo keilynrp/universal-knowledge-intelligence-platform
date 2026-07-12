@@ -15,6 +15,9 @@ _T0 = datetime(2026, 7, 12, 12, 0, 0)
 
 
 def _enqueue(db, key="k1", org_id=None, job_type="enrichment", **kw):
+    # Default available_at to the fixed test clock (_T0) so claims with now=_T0 are
+    # due regardless of wall-clock time. Tests that need a future job override it.
+    kw.setdefault("available_at", _T0)
     job = service.enqueue(db, job_type=job_type, org_id=org_id, idempotency_key=key,
                           payload={"entity_id": 1}, **kw)
     db.commit()

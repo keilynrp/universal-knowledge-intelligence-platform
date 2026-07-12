@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-from sqlalchemy import text, update
+from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -162,18 +162,23 @@ def claim(
 
 
 def _select_candidate_id(db, job_type, now, is_pg) -> Optional[int]:
-    conds = ["status = :queued", "available_at <= :now"]
-    params: dict = {"queued": JobStatus.QUEUED, "now": now}
-    if job_type is not None:
-        conds.append("job_type = :jt")
-        params["jt"] = job_type
-    where = " AND ".join(conds)
-    suffix = "FOR UPDATE SKIP LOCKED" if is_pg else ""
-    sql = text(
-        f"SELECT id FROM background_jobs WHERE {where} "
-        f"ORDER BY priority ASC, available_at ASC, id ASC LIMIT 1 {suffix}"
+    # ORM query so DateTime binding is dialect-consistent (raw text() comparisons
+    # of DateTime mis-compare on SQLite due to microsecond formatting). SKIP LOCKED
+    # is applied only on PostgreSQL; SQLite relies on the compare-and-set update.
+    q = db.query(models.BackgroundJob.id).filter(
+        models.BackgroundJob.status == JobStatus.QUEUED,
+        models.BackgroundJob.available_at <= now,
     )
-    row = db.execute(sql, params).first()
+    if job_type is not None:
+        q = q.filter(models.BackgroundJob.job_type == job_type)
+    q = q.order_by(
+        models.BackgroundJob.priority.asc(),
+        models.BackgroundJob.available_at.asc(),
+        models.BackgroundJob.id.asc(),
+    ).limit(1)
+    if is_pg:
+        q = q.with_for_update(skip_locked=True)
+    row = q.first()
     return row[0] if row else None
 
 
@@ -315,13 +320,16 @@ def replay(db: Session, job: models.BackgroundJob, *,
 
 def purge_terminal_jobs(db: Session, *, older_than: datetime) -> int:
     """Governed retention: delete terminal jobs finished before ``older_than``."""
-    res = db.execute(
-        text(
-            "DELETE FROM background_jobs WHERE status IN "
-            "('succeeded','failed','cancelled') AND finished_at IS NOT NULL "
-            "AND finished_at < :cutoff"
-        ),
-        {"cutoff": older_than},
+    from .states import TERMINAL_STATES
+
+    res = (
+        db.query(models.BackgroundJob)
+        .filter(
+            models.BackgroundJob.status.in_(tuple(TERMINAL_STATES)),
+            models.BackgroundJob.finished_at.isnot(None),
+            models.BackgroundJob.finished_at < older_than,
+        )
+        .delete(synchronize_session=False)
     )
     db.commit()
-    return res.rowcount or 0
+    return res or 0
