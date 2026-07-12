@@ -74,3 +74,38 @@ def test_endpoints_require_auth(client):
     r = client.get("/retrospective/snapshot", params={
         "snapshot_type": "journal_metric", "subject_id": "X", "as_of": _JUL.isoformat()})
     assert r.status_code in (401, 403)
+
+
+# ── Phase 5 export endpoints ────────────────────────────────────────────────
+
+def test_export_readiness_not_configured(client, auth_headers, monkeypatch):
+    monkeypatch.delenv("UKIP_WAREHOUSE_DATASET", raising=False)
+    r = client.get("/retrospective/export/readiness", headers=auth_headers)
+    assert r.status_code == 200 and r.json()["status"] == "not_configured"
+
+
+def test_export_events_endpoint_returns_manifest_and_validation(client, auth_headers, db_session):
+    writer.record_event(
+        db_session, event_type="journal_metric.computed", org_id=None,
+        domain_object_type="journal", domain_object_id="issn:A", occurred_at=_MAY,
+        source="test", idempotency_key="A", payload={"nif": 1.0})
+    db_session.commit()
+    r = client.post("/retrospective/export/events", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["manifest"]["row_counts"] == 1
+    assert body["manifest"]["dataset_name"] == "retrospective_events"
+    assert body["validation"]["ok"] is True
+    assert body["readiness"]["status"] == "not_configured"
+
+
+def test_export_snapshots_endpoint(client, auth_headers, db_session):
+    _snap(db_session, "0028-0836", _MAY, {"nif": 1.0})
+    r = client.post("/retrospective/export/snapshots", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["manifest"]["dataset_name"] == "retrospective_snapshots"
+
+
+def test_export_requires_auth(client):
+    r = client.post("/retrospective/export/events")
+    assert r.status_code in (401, 403)
