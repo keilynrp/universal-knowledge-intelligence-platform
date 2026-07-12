@@ -10,15 +10,18 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from dataclasses import asdict
+
 from backend import models
 from backend.auth import require_role
 from backend.database import get_db
-from backend.retrospective import query
+from backend.retrospective import export, query
 from backend.tenant_access import resolve_request_org_id
 
 router = APIRouter(prefix="/retrospective", tags=["retrospective"])
 
 _READ_ROLES = ("super_admin", "admin", "editor", "viewer")
+_EXPORT_ROLES = ("super_admin", "admin")
 
 
 def _journal_current(db: Session, org_id: Optional[int], issn_l: str) -> Optional[dict]:
@@ -124,3 +127,50 @@ def cohort(
     )
     return {"event_type": event_type, "since": since, "until": until,
             "count": len(members), "members": members}
+
+
+# ── Warehouse export (Phase 5) ──────────────────────────────────────────────
+
+@router.get("/export/readiness")
+def export_readiness(
+    current_user: models.User = Depends(require_role(*_EXPORT_ROLES)),
+):
+    """Warehouse export capability status (``configured`` / ``not_configured``)."""
+    return export.export_readiness()
+
+
+def _run_and_validate(result: export.ExportResult, schema, org_scope: Optional[int]) -> dict:
+    report = export.validate_export(result, schema, org_scope=org_scope)
+    return {
+        "readiness": export.export_readiness(),
+        "manifest": asdict(result.manifest),
+        "validation": asdict(report),
+    }
+
+
+@router.post("/export/events")
+def export_events(
+    dataset_version: str = Query("v1"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role(*_EXPORT_ROLES)),
+):
+    """Generate a tenant-scoped, versioned events dataset + auditable manifest.
+
+    Works with no warehouse configured (readiness reports ``not_configured``); the
+    dataset and manifest are still produced and validated for inspection.
+    """
+    org_scope = resolve_request_org_id(db, current_user)
+    result = export.export_events(db, org_scope=org_scope, dataset_version=dataset_version)
+    return _run_and_validate(result, export.EVENT_EXPORT_SCHEMA, org_scope)
+
+
+@router.post("/export/snapshots")
+def export_snapshots(
+    dataset_version: str = Query("v1"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role(*_EXPORT_ROLES)),
+):
+    """Generate a tenant-scoped, versioned snapshots dataset + auditable manifest."""
+    org_scope = resolve_request_org_id(db, current_user)
+    result = export.export_snapshots(db, org_scope=org_scope, dataset_version=dataset_version)
+    return _run_and_validate(result, export.SNAPSHOT_EXPORT_SCHEMA, org_scope)

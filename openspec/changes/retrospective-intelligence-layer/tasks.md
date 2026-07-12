@@ -32,11 +32,11 @@
 
 ## 5. Warehouse export
 
-- [ ] 5.1 Define BigQuery-compatible table schemas and partitioning.
-- [ ] 5.2 Add export manifest format with dataset version, tenant scope, row counts, and schema version.
-- [ ] 5.3 Add idempotent export job for historical events.
-- [ ] 5.4 Add idempotent export job for snapshots and analytical marts.
-- [ ] 5.5 Add export validation for row counts, schema drift, and tenant isolation.
+- [x] 5.1 Define BigQuery-compatible table schemas and partitioning.
+- [x] 5.2 Add export manifest format with dataset version, tenant scope, row counts, and schema version.
+- [x] 5.3 Add idempotent export job for historical events.
+- [x] 5.4 Add idempotent export job for snapshots and analytical marts.
+- [x] 5.5 Add export validation for row counts, schema drift, and tenant isolation.
 
 ## 6. ML readiness
 
