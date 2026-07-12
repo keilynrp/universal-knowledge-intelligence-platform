@@ -471,7 +471,9 @@ def confirm_authority_record(
         org_id=rec.org_id,
         record_id=record_id,
         decision="accepted",
-        occurred_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        # Use the decision's own timestamp so live emission and the historical
+        # backfill (task 3.5) share an idempotency key and never duplicate.
+        occurred_at=rec.confirmed_at.replace(tzinfo=None),
         actor_id=str(current_user.id),
         field_name=rec.field_name,
         authority_source=rec.authority_source,

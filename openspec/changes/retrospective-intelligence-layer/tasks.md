@@ -20,7 +20,7 @@
 - [x] 3.2 Emit enrichment lifecycle events.
 - [x] 3.3 Emit authority and NIL decision events. (accepted/rejected done; deferred follow-ups: candidate_created is high-volume/low-signal from batch resolution; nil_marked has no persisted decision point today — NIL is a scoring signal, needs a product decision on where it is marked.)
 - [x] 3.4 Materialize journal metric, enrichment coverage, and authority readiness snapshots. (materialization service + flag-gated orchestrator; scheduler/admin-endpoint wiring is a thin follow-up.)
-- [ ] 3.5 Backfill bounded historical events where trustworthy source timestamps exist.
+- [x] 3.5 Backfill bounded historical events where trustworthy source timestamps exist. (journal_metric.computed from nif_updated_at; authority.accepted from confirmed_at. Idempotent vs live emission.)
 
 ## 4. Retrospective query and UI
 
