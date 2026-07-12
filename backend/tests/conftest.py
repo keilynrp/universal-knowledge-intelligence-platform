@@ -258,6 +258,8 @@ def viewer_headers():
 # ── DB cleanup (function-scoped) ────────────────────────────────────────────
 
 _TABLES_TO_CLEAN = [
+    # Durable Background Job Runtime (ADR-007) — clean before organizations (org_id FK).
+    "background_jobs",
     # Retrospective Intelligence Layer (ADR-006) — append-only history.
     # ORM listeners block update/delete but raw SQL DELETE (used here) bypasses
     # them, so no trigger suspension is needed for cleanup.
