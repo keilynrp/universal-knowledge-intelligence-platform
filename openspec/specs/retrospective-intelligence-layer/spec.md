@@ -1,13 +1,8 @@
 # retrospective-intelligence-layer Specification
 
 ## Purpose
-
-Define UKIP's internal bounded context for governed retrospective analysis over
-historical entities, metrics, derived signals, workflow decisions, and data
-quality.
-
+TBD - created by archiving change retrospective-intelligence-layer. Update Purpose after archive.
 ## Requirements
-
 ### Requirement: Historical events use a governed append-only envelope
 
 The system SHALL persist retrospective domain events using an append-only
@@ -86,3 +81,4 @@ coverage, drift, and backtesting analysis from historical events and snapshots.
 - **WHEN** a user analyzes journals first enriched in May 2026
 - **THEN** cohort membership is based on historical event timestamps
 - **AND** later changes to current journal state do not change membership
+

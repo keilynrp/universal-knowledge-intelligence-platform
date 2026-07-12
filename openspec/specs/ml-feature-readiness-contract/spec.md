@@ -1,13 +1,8 @@
 # ml-feature-readiness-contract Specification
 
 ## Purpose
-
-Define requirements for generating future ML-ready datasets from UKIP's
-retrospective intelligence layer while preserving governance, provenance, and
-point-in-time correctness.
-
+TBD - created by archiving change retrospective-intelligence-layer. Update Purpose after archive.
 ## Requirements
-
 ### Requirement: Feature datasets use point-in-time envelopes
 
 The system SHALL generate feature datasets with `dataset_id`,
@@ -66,3 +61,4 @@ and review, not train, deploy, or serve models.
 - **THEN** UKIP records dataset quality, row counts, lineage completeness, and
   leakage-check results
 - **AND** no model endpoint is created as part of that workflow
+
