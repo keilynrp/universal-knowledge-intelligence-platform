@@ -142,3 +142,62 @@ def emit_enrichment_lifecycle(
             event_type,
             exc_info=True,
         )
+
+
+def emit_authority_decision(
+    db: Session,
+    *,
+    org_id: Optional[int],
+    record_id: int,
+    decision: str,
+    occurred_at: datetime,
+    actor_id: Optional[str] = None,
+    field_name: Optional[str] = None,
+    authority_source: Optional[str] = None,
+    authority_id: Optional[str] = None,
+    canonical_label: Optional[str] = None,
+    confidence: Optional[float] = None,
+) -> None:
+    """Emit a governed authority decision event (task 3.3).
+
+    ``decision`` is ``accepted`` or ``rejected`` (the governed human review
+    outcomes; the spec uses an accepted decision as a future ML label). Actor is
+    the reviewer. Idempotent within a single decision (keyed by record, decision,
+    and ``occurred_at``); a later re-decision is a distinct, expected event.
+    """
+    if not retro_events_enabled():
+        return
+    event_type = {
+        "accepted": "authority.accepted",
+        "rejected": "authority.rejected",
+    }.get(decision)
+    if event_type is None:
+        return
+    try:
+        writer.record_event(
+            db,
+            event_type=event_type,
+            org_id=org_id,
+            domain_object_type="authority_record",
+            domain_object_id=str(record_id),
+            occurred_at=occurred_at,
+            source="authority_review",
+            actor_type="user",
+            actor_id=actor_id,
+            idempotency_key=f"{record_id}:{decision}:{occurred_at.isoformat()}",
+            payload={
+                "decision": decision,
+                "field_name": field_name,
+                "authority_source": authority_source,
+                "authority_id": authority_id,
+                "canonical_label": canonical_label,
+                "confidence": confidence,
+            },
+        )
+    except Exception:  # noqa: BLE001 — non-fatal by contract
+        logger.warning(
+            "retrospective emit failed for authority record %s (%s); continuing",
+            record_id,
+            event_type,
+            exc_info=True,
+        )

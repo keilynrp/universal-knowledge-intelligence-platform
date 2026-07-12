@@ -18,7 +18,7 @@
 
 - [x] 3.1 Emit journal metric computed and recomputed events.
 - [x] 3.2 Emit enrichment lifecycle events.
-- [ ] 3.3 Emit authority and NIL decision events.
+- [x] 3.3 Emit authority and NIL decision events. (accepted/rejected done; deferred follow-ups: candidate_created is high-volume/low-signal from batch resolution; nil_marked has no persisted decision point today — NIL is a scoring signal, needs a product decision on where it is marked.)
 - [ ] 3.4 Materialize journal metric, enrichment coverage, and authority readiness snapshots.
 - [ ] 3.5 Backfill bounded historical events where trustworthy source timestamps exist.
 
