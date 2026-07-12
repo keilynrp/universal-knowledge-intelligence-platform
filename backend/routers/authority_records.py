@@ -30,6 +30,7 @@ from backend.authority import publication_writeback as _authority_pub_writeback
 from backend.authority import feedback as _authority_feedback
 from backend.authority import thresholds as _authority_thresholds
 from backend.database import get_db
+from backend.retrospective.emit import emit_authority_decision
 from backend.routers.deps import (
     _audit,
     _build_disambig_groups,
@@ -465,6 +466,21 @@ def confirm_authority_record(
             "entities_updated": entities_updated,
         },
     )
+    emit_authority_decision(
+        db,
+        org_id=rec.org_id,
+        record_id=record_id,
+        decision="accepted",
+        # Use the decision's own timestamp so live emission and the historical
+        # backfill (task 3.5) share an idempotency key and never duplicate.
+        occurred_at=rec.confirmed_at.replace(tzinfo=None),
+        actor_id=str(current_user.id),
+        field_name=rec.field_name,
+        authority_source=rec.authority_source,
+        authority_id=rec.authority_id,
+        canonical_label=rec.canonical_label,
+        confidence=rec.confidence,
+    )
     db.commit()
     db.refresh(rec)
     return {
@@ -497,6 +513,19 @@ def reject_authority_record(
         user_id=current_user.id,
         entity_type="authority_record",
         entity_id=record_id,
+    )
+    emit_authority_decision(
+        db,
+        org_id=rec.org_id,
+        record_id=record_id,
+        decision="rejected",
+        occurred_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        actor_id=str(current_user.id),
+        field_name=rec.field_name,
+        authority_source=rec.authority_source,
+        authority_id=rec.authority_id,
+        canonical_label=rec.canonical_label,
+        confidence=rec.confidence,
     )
     db.commit()
     db.refresh(rec)
