@@ -16,11 +16,11 @@
 
 ## 3. Runtime and operations
 
-- [ ] 3.1 Add independently deployable worker and scheduler entrypoints.
-- [ ] 3.2 Add graceful drain and abandoned-lease recovery.
-- [ ] 3.3 Add metrics, health checks, alerts, and bounded diagnostics.
-- [ ] 3.4 Add operator runbook for outage, backlog, poison job, replay, and rollback.
-- [ ] 3.5 Add deployment topology and capacity defaults.
+- [x] 3.1 Add independently deployable worker and scheduler entrypoints.
+- [x] 3.2 Add graceful drain and abandoned-lease recovery.
+- [x] 3.3 Add metrics, health checks, alerts, and bounded diagnostics.
+- [x] 3.4 Add operator runbook for outage, backlog, poison job, replay, and rollback.
+- [x] 3.5 Add deployment topology and capacity defaults.
 
 ## 4. Incremental migration
 

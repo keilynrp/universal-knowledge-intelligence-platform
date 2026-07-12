@@ -213,8 +213,12 @@ def complete(db: Session, job: models.BackgroundJob, now: Optional[datetime] = N
 
 
 def fail(db: Session, job: models.BackgroundJob, *, error_code: str,
-         error_detail: Optional[str] = None, now: Optional[datetime] = None) -> str:
+         error_detail: Optional[str] = None, now: Optional[datetime] = None,
+         terminal: bool = False) -> str:
     """Fail a running job: RETRY_WAIT with backoff if attempts remain, else FAILED.
+
+    ``terminal=True`` forces FAILED regardless of remaining attempts (e.g. a job
+    with no registered handler, where retrying cannot help).
 
     Returns the resulting status.
     """
@@ -223,7 +227,7 @@ def fail(db: Session, job: models.BackgroundJob, *, error_code: str,
     job.error_detail = _sanitize(error_detail)
     job.lease_owner = None
     job.lease_expires_at = None
-    if job.attempt < job.max_attempts:
+    if not terminal and job.attempt < job.max_attempts:
         assert_transition(job.status, JobStatus.RETRY_WAIT)
         job.status = JobStatus.RETRY_WAIT
         job.available_at = now + timedelta(seconds=_backoff(job.attempt))
