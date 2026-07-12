@@ -1319,6 +1319,103 @@ class JournalMetric(Base):
     __table_args__ = (UniqueConstraint("org_id", "issn_l", name="uq_journal_metric_org_issn"),)
 
 
+# ── Retrospective Intelligence Layer (ADR-006) ──────────────────────────────
+# Governed, append-only historical facts. Tenant-scoped (org_id), schema-
+# versioned, provenance-linked. Reads never mutate operational tables; the only
+# permitted mutation is governed retention deletion (EPIC-016). Storage lives in
+# dedicated PostgreSQL tables but the writer/query contracts do not assume
+# co-location with operational data, per ADR-006.
+
+class RetrospectiveEvent(Base):
+    """Append-only historical domain event (spec: governed event envelope).
+
+    One row per governed retrospective fact emitted by an operational workflow
+    (journal metric recompute, enrichment lifecycle, authority/NIL decision, …).
+    ``event_id`` is a stable UUID; ``idempotency_key`` deduplicates replayed
+    writers within (org_id, event_type).
+    """
+    __tablename__ = "retrospective_events"
+
+    id                 = Column(Integer, primary_key=True, index=True)
+    event_id           = Column(String(64), nullable=False, unique=True, index=True)
+    event_type         = Column(String(80), nullable=False, index=True)
+    schema_version     = Column(Integer, nullable=False)
+    org_id             = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
+    domain_object_type = Column(String(60), nullable=False)
+    domain_object_id   = Column(String(120), nullable=False, index=True)
+    occurred_at        = Column(DateTime, nullable=False, index=True)   # when the fact happened
+    recorded_at        = Column(DateTime, nullable=False, default=utc_now_naive, index=True)
+    source             = Column(String(80), nullable=False)            # emitting workflow/system
+    actor_type         = Column(String(20), nullable=False)            # user | system | job
+    actor_id           = Column(String(120), nullable=True)
+    correlation_id     = Column(String(64), nullable=True, index=True)
+    idempotency_key    = Column(String(120), nullable=False)
+    payload            = Column(Text, nullable=False)                  # bounded JSON (<=32KB)
+    lineage            = Column(Text, nullable=True)                   # JSON lineage refs
+
+    __table_args__ = (
+        UniqueConstraint(
+            "org_id", "event_type", "idempotency_key",
+            name="uq_retro_event_idempotency",
+        ),
+        Index("ix_retro_event_type_recorded", "event_type", "recorded_at"),
+    )
+
+
+class RetrospectiveSnapshot(Base):
+    """Append-only point-in-time snapshot (spec: snapshot envelope).
+
+    Materializes the state of a subject (journal metric, enrichment coverage,
+    authority readiness, …) valid at ``valid_at``. ``idempotency_key``
+    deduplicates scheduled re-materialization within (org_id, snapshot_type).
+    """
+    __tablename__ = "retrospective_snapshots"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    snapshot_id     = Column(String(64), nullable=False, unique=True, index=True)
+    snapshot_type   = Column(String(80), nullable=False, index=True)
+    schema_version  = Column(Integer, nullable=False)
+    org_id          = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
+    subject_type    = Column(String(60), nullable=False)
+    subject_id      = Column(String(120), nullable=False, index=True)
+    valid_at        = Column(DateTime, nullable=False, index=True)     # point-in-time the state holds
+    recorded_at     = Column(DateTime, nullable=False, default=utc_now_naive, index=True)
+    idempotency_key = Column(String(120), nullable=False)
+    payload         = Column(Text, nullable=False)                    # bounded JSON (<=32KB)
+    lineage         = Column(Text, nullable=True)                     # JSON lineage refs
+
+    __table_args__ = (
+        UniqueConstraint(
+            "org_id", "snapshot_type", "idempotency_key",
+            name="uq_retro_snapshot_idempotency",
+        ),
+        Index("ix_retro_snapshot_subject_valid", "subject_type", "subject_id", "valid_at"),
+    )
+
+
+def _reject_retrospective_mutation(*_args):
+    raise RuntimeError(
+        "Retrospective records are append-only; the only permitted mutation is "
+        "governed retention deletion via the EPIC-016 lifecycle path."
+    )
+
+
+for _retro_cls in (RetrospectiveEvent, RetrospectiveSnapshot):
+    event.listen(_retro_cls, "before_update", _reject_retrospective_mutation)
+    event.listen(_retro_cls, "before_delete", _reject_retrospective_mutation)
+
+
+@event.listens_for(Session, "do_orm_execute")
+def _reject_retrospective_bulk_mutation(orm_execute_state):
+    mapper = orm_execute_state.bind_mapper
+    if (
+        (orm_execute_state.is_update or orm_execute_state.is_delete)
+        and mapper is not None
+        and mapper.class_ in (RetrospectiveEvent, RetrospectiveSnapshot)
+    ):
+        _reject_retrospective_mutation()
+
+
 event.listen(
     BackupAssuranceEvent.__table__,
     "after_create",
