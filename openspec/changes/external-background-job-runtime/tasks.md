@@ -8,11 +8,11 @@
 
 ## 2. Durable contract
 
-- [ ] 2.1 Add job envelope and transition model.
-- [ ] 2.2 Add tenant-scoped idempotency constraints.
-- [ ] 2.3 Add claim, lease renewal, retry, cancellation, and recovery services.
-- [ ] 2.4 Add sanitized audit events and retention behavior.
-- [ ] 2.5 Add unit and PostgreSQL concurrency tests.
+- [x] 2.1 Add job envelope and transition model.
+- [x] 2.2 Add tenant-scoped idempotency constraints.
+- [x] 2.3 Add claim, lease renewal, retry, cancellation, and recovery services.
+- [x] 2.4 Add sanitized audit events and retention behavior.
+- [x] 2.5 Add unit and PostgreSQL concurrency tests.
 
 ## 3. Runtime and operations
 

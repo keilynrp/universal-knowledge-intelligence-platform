@@ -1319,6 +1319,48 @@ class JournalMetric(Base):
     __table_args__ = (UniqueConstraint("org_id", "issn_l", name="uq_journal_metric_org_issn"),)
 
 
+# ── Durable Background Job Runtime (ADR-007) ────────────────────────────────
+# Broker-free, at-least-once job queue in PostgreSQL. Atomic claims via
+# compare-and-set (FOR UPDATE SKIP LOCKED on Postgres), explicit leases, typed
+# retry, cancellation, replay, and abandoned-lease recovery. Handlers MUST be
+# idempotent (keyed by tenant-scoped idempotency_key). Payloads carry references,
+# never reusable credentials.
+
+class BackgroundJob(Base):
+    """Durable job envelope + finite-state-machine row (see backend/jobs/states.py)."""
+    __tablename__ = "background_jobs"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    job_id           = Column(String(64), nullable=False, unique=True, index=True)
+    job_type         = Column(String(80), nullable=False, index=True)
+    org_id           = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
+    requested_by     = Column(Integer, nullable=True)            # users.id (nullable for system)
+    idempotency_key  = Column(String(160), nullable=False)
+    payload_version  = Column(Integer, nullable=False, default=1)
+    payload          = Column(Text, nullable=True)               # JSON refs — never secrets
+    status           = Column(String(20), nullable=False, default="queued", index=True)
+    priority         = Column(Integer, nullable=False, default=100)  # lower = sooner
+    attempt          = Column(Integer, nullable=False, default=0)
+    max_attempts     = Column(Integer, nullable=False, default=3)
+    available_at     = Column(DateTime, nullable=False, default=utc_now_naive, index=True)
+    lease_owner      = Column(String(80), nullable=True)
+    lease_expires_at = Column(DateTime, nullable=True, index=True)
+    created_at       = Column(DateTime, nullable=False, default=utc_now_naive, index=True)
+    started_at       = Column(DateTime, nullable=True)
+    finished_at      = Column(DateTime, nullable=True)
+    error_code       = Column(String(60), nullable=True)         # bounded, typed
+    error_detail     = Column(Text, nullable=True)               # sanitized — no secrets
+    correlation_id   = Column(String(64), nullable=True, index=True)
+    replay_of        = Column(String(64), nullable=True, index=True)  # original job_id on replay
+
+    __table_args__ = (
+        UniqueConstraint(
+            "org_id", "job_type", "idempotency_key", name="uq_background_job_idempotency"
+        ),
+        Index("ix_background_job_claim", "status", "available_at", "priority", "id"),
+    )
+
+
 # ── Retrospective Intelligence Layer (ADR-006) ──────────────────────────────
 # Governed, append-only historical facts. Tenant-scoped (org_id), schema-
 # versioned, provenance-linked. Reads never mutate operational tables; the only
