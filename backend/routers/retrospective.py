@@ -15,7 +15,7 @@ from dataclasses import asdict
 from backend import models
 from backend.auth import require_role
 from backend.database import get_db
-from backend.retrospective import export, features, query
+from backend.retrospective import export, features, metrics, query
 from backend.tenant_access import resolve_request_org_id
 
 router = APIRouter(prefix="/retrospective", tags=["retrospective"])
@@ -130,6 +130,16 @@ def cohort(
 
 
 # ── Warehouse export (Phase 5) ──────────────────────────────────────────────
+
+@router.get("/metrics")
+def retrospective_metrics(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role(*_READ_ROLES)),
+):
+    """Observability: event write volume, snapshot freshness, data recency, failures."""
+    org_id = resolve_request_org_id(db, current_user)
+    return metrics.retrospective_metrics(db, org_id)
+
 
 @router.get("/export/readiness")
 def export_readiness(

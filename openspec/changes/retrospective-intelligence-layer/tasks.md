@@ -48,8 +48,8 @@
 
 ## 7. Verification and observability
 
-- [ ] 7.1 Test point-in-time reconstruction against known workflow fixtures.
-- [ ] 7.2 Test current-vs-historical comparisons.
-- [ ] 7.3 Test warehouse export manifest integrity.
-- [ ] 7.4 Test retention and deletion behavior.
-- [ ] 7.5 Add metrics for event write volume, snapshot freshness, export lag, and failed retrospective jobs.
+- [x] 7.1 Test point-in-time reconstruction against known workflow fixtures.
+- [x] 7.2 Test current-vs-historical comparisons.
+- [x] 7.3 Test warehouse export manifest integrity.
+- [x] 7.4 Test retention and deletion behavior.
+- [x] 7.5 Add metrics for event write volume, snapshot freshness, export lag, and failed retrospective jobs.
