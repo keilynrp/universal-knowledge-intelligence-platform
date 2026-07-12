@@ -516,9 +516,14 @@ def _scheduler_loop():
                 ).all()
                 for schedule in due:
                     try:
-                        logger.info("Scheduled import %d (%s) is due — executing",
+                        logger.info("Scheduled import %d (%s) is due — dispatching",
                                     schedule.id, schedule.name)
-                        _execute_import(schedule, db)
+                        # Phase 4 migration (flag-gated, default off → in-process):
+                        # shadow/queue also enqueue a durable job.
+                        from backend.jobs.migration import dispatch_due
+
+                        dispatch_due(db, domain="imports", job_type="import.execute",
+                                     schedule=schedule, execute=_execute_import)
                     except Exception:
                         logger.exception("Error executing scheduled import %d", schedule.id)
                 _update_scheduler_state(

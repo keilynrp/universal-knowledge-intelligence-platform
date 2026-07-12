@@ -297,21 +297,32 @@ async def lifespan(app: FastAPI):
     # cleanup can rely on the attribute existing.
     app.state.engine_client = None
     try:
-        asyncio.create_task(enrichment_worker.background_enrichment_worker(get_db_gen()))
+        # Phase 4 task 4.5: the in-process background loops start UNLESS disabled
+        # (UKIP_INPROCESS_SCHEDULERS=0), which an operator sets after cutting the
+        # domains over to the durable queue + external workers. Default keeps
+        # today's behavior. Authority batch worker is out of this change's scope.
+        from backend.jobs.migration import inprocess_schedulers_enabled
+        _inprocess = inprocess_schedulers_enabled()
 
         # Async authority batch resolution worker (Phase 1, Task 3)
         asyncio.create_task(_authority_batch_worker.run_batch_worker())
 
-        # V2 coauthorship: periodic recompute of author_stats for dirty scopes.
-        asyncio.create_task(enrichment_worker.coauthor_recompute_loop())
+        if _inprocess:
+            asyncio.create_task(enrichment_worker.background_enrichment_worker(get_db_gen()))
 
-        # Start the enrichment domain scheduler
-        asyncio.create_task(_enrichment_scheduler_instance.start_loop())
+            # V2 coauthorship: periodic recompute of author_stats for dirty scopes.
+            asyncio.create_task(enrichment_worker.coauthor_recompute_loop())
 
-        # Start the scheduled-imports scheduler (Sprint 61)
-        scheduled_imports.start_scheduler()
-        # Start the scheduled-reports scheduler (Sprint 79)
-        scheduled_reports.start_scheduler()
+            # Start the enrichment domain scheduler
+            asyncio.create_task(_enrichment_scheduler_instance.start_loop())
+
+            # Start the scheduled-imports scheduler (Sprint 61)
+            scheduled_imports.start_scheduler()
+            # Start the scheduled-reports scheduler (Sprint 79)
+            scheduled_reports.start_scheduler()
+        else:
+            logger.info("In-process schedulers disabled (UKIP_INPROCESS_SCHEDULERS=0) "
+                        "— durable-queue workers are authoritative")
 
         # ── Rust engine gRPC client ──────────────────────────────────────────
         engine_url = os.environ.get("ENGINE_GRPC_URL", "")
