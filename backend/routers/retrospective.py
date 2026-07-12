@@ -15,7 +15,7 @@ from dataclasses import asdict
 from backend import models
 from backend.auth import require_role
 from backend.database import get_db
-from backend.retrospective import export, query
+from backend.retrospective import export, features, query
 from backend.tenant_access import resolve_request_org_id
 
 router = APIRouter(prefix="/retrospective", tags=["retrospective"])
@@ -174,3 +174,33 @@ def export_snapshots(
     org_scope = resolve_request_org_id(db, current_user)
     result = export.export_snapshots(db, org_scope=org_scope, dataset_version=dataset_version)
     return _run_and_validate(result, export.SNAPSHOT_EXPORT_SCHEMA, org_scope)
+
+
+# ── ML feature readiness (Phase 6) ──────────────────────────────────────────
+
+_FEATURE_SAMPLE_CAP = 200
+
+
+@router.post("/features/journal-nif")
+def build_journal_nif_features(
+    dataset_version: str = Query("v1"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role(*_EXPORT_ROLES)),
+):
+    """Generate an OFFLINE journal-NIF feature dataset for validation.
+
+    Point-in-time, leakage-checked, lineage-complete. Does NOT train or serve a
+    model — returns dataset quality metrics and a capped row sample.
+    """
+    org_scope = resolve_request_org_id(db, current_user)
+    ds = features.build_journal_nif_dataset(db, org_scope=org_scope, dataset_version=dataset_version)
+    return {
+        "dataset_id": ds.dataset_id,
+        "dataset_version": ds.dataset_version,
+        "org_scope": ds.org_scope,
+        "created_at": ds.created_at,
+        "leakage_ok": ds.leakage_ok,
+        "quality": ds.quality,
+        "rows": [asdict(r) for r in ds.rows[:_FEATURE_SAMPLE_CAP]],
+        "row_sample_capped": len(ds.rows) > _FEATURE_SAMPLE_CAP,
+    }

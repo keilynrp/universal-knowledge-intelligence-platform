@@ -40,11 +40,11 @@
 
 ## 6. ML readiness
 
-- [ ] 6.1 Define feature dataset envelope with feature timestamp and label timestamp.
-- [ ] 6.2 Define initial supervised labels from governed decisions and later outcomes.
-- [ ] 6.3 Add leakage checks for point-in-time feature generation.
-- [ ] 6.4 Add lineage from feature rows to historical events and snapshots.
-- [ ] 6.5 Produce a first offline feature dataset for validation, not model training.
+- [x] 6.1 Define feature dataset envelope with feature timestamp and label timestamp.
+- [x] 6.2 Define initial supervised labels from governed decisions and later outcomes.
+- [x] 6.3 Add leakage checks for point-in-time feature generation.
+- [x] 6.4 Add lineage from feature rows to historical events and snapshots.
+- [x] 6.5 Produce a first offline feature dataset for validation, not model training.
 
 ## 7. Verification and observability
 
