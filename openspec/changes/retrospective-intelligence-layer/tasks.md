@@ -24,11 +24,11 @@
 
 ## 4. Retrospective query and UI
 
-- [ ] 4.1 Add point-in-time lookup service.
-- [ ] 4.2 Add current-vs-snapshot comparison service.
-- [ ] 4.3 Add cohort and metric time-series helpers.
-- [ ] 4.4 Add minimal dashboard for historical comparison.
-- [ ] 4.5 Add provenance explanations for retrospective values.
+- [x] 4.1 Add point-in-time lookup service.
+- [x] 4.2 Add current-vs-snapshot comparison service.
+- [x] 4.3 Add cohort and metric time-series helpers.
+- [x] 4.4 Add minimal dashboard for historical comparison.
+- [x] 4.5 Add provenance explanations for retrospective values.
 
 ## 5. Warehouse export
 

@@ -39,6 +39,7 @@ from backend.routers import (
     analytics,
     analytics_analyzers,
     analytics_ops,
+    retrospective,
     journals,
     annotations,
     api_keys,
@@ -472,6 +473,7 @@ app.include_router(domains.router)
 app.include_router(analytics.router)
 app.include_router(analytics_analyzers.router)
 app.include_router(analytics_ops.router)
+app.include_router(retrospective.router)
 app.include_router(journals.router)
 app.include_router(openalex_lake_admin.router)
 app.include_router(backup_ops.router)
