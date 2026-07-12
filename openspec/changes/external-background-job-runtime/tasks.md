@@ -1,10 +1,10 @@
 ## 1. Discovery and decision
 
-- [ ] 1.1 Inventory all in-process loops, producers, handlers, side effects, and tenant scopes.
-- [ ] 1.2 Capture workload size, duration, concurrency, retry, and payload characteristics.
-- [ ] 1.3 Evaluate Celery, Dramatiq, and PostgreSQL lease queue against accepted criteria.
-- [ ] 1.4 Record the runtime decision and rejected alternatives in an ADR.
-- [ ] 1.5 Complete threat model and failure-mode analysis.
+- [x] 1.1 Inventory all in-process loops, producers, handlers, side effects, and tenant scopes.
+- [x] 1.2 Capture workload size, duration, concurrency, retry, and payload characteristics.
+- [x] 1.3 Evaluate Celery, Dramatiq, and PostgreSQL lease queue against accepted criteria.
+- [x] 1.4 Record the runtime decision and rejected alternatives in an ADR.
+- [x] 1.5 Complete threat model and failure-mode analysis.
 
 ## 2. Durable contract
 
