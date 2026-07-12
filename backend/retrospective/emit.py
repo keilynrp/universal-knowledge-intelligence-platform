@@ -26,6 +26,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from . import writer
+from .metrics import record_failed_emission
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,7 @@ def emit_journal_metric_normalized(
             lineage={"source_id": source_id} if source_id else None,
         )
     except Exception:  # noqa: BLE001 — non-fatal by contract
+        record_failed_emission()
         logger.warning(
             "retrospective emit failed for journal %s (%s); continuing",
             issn_l,
@@ -136,6 +138,7 @@ def emit_enrichment_lifecycle(
             payload=payload,
         )
     except Exception:  # noqa: BLE001 — non-fatal by contract
+        record_failed_emission()
         logger.warning(
             "retrospective emit failed for entity %s (%s); continuing",
             entity_id,
@@ -195,6 +198,7 @@ def emit_authority_decision(
             },
         )
     except Exception:  # noqa: BLE001 — non-fatal by contract
+        record_failed_emission()
         logger.warning(
             "retrospective emit failed for authority record %s (%s); continuing",
             record_id,
