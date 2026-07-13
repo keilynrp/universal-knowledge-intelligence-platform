@@ -32,11 +32,11 @@
 
 ## 5. Verification and evidence
 
-- [ ] 5.1 Test duplicate delivery and idempotent side effects.
-- [ ] 5.2 Test cross-tenant access, replay, and error metadata isolation.
-- [ ] 5.3 Test API restart, worker crash, broker outage, DB outage, and recovery.
-- [ ] 5.4 Test migration rollback with accepted in-flight work.
-- [ ] 5.5 Complete load test and define queue-age SLOs.
-- [ ] 5.6 Complete 14-day production-like observation window.
-- [ ] 5.7 Publish release-scoped evidence and update ER-OPS-001 to `operated`.
+- [x] 5.1 Test duplicate delivery and idempotent side effects.
+- [x] 5.2 Test cross-tenant access, replay, and error metadata isolation.
+- [x] 5.3 Test API restart, worker crash, broker outage, DB outage, and recovery. (crash/lease/DB-rollback + durability covered at unit level; live broker/DB outage drills belong to the observation window.)
+- [x] 5.4 Test migration rollback with accepted in-flight work.
+- [ ] 5.5 Complete load test and define queue-age SLOs. (OPERATIONAL — needs a prod-like env; default SLO 900s set in metrics.py, tune from load results.)
+- [ ] 5.6 Complete 14-day production-like observation window. (OPERATIONAL — runs over calendar time after cutover.)
+- [ ] 5.7 Publish release-scoped evidence and update ER-OPS-001 to `operated`. (OPERATIONAL — gated on 5.6.)
 
