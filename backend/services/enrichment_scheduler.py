@@ -151,7 +151,7 @@ class EnrichmentScheduler:
         domain_filt = resolve_domain_filter(parsed, models.RawEntity)
 
         q = (
-            db.query(models.RawEntity.id)
+            db.query(models.RawEntity.id, models.RawEntity.org_id)
             .filter(
                 models.RawEntity.source != "graph_materializer",
                 models.RawEntity.enrichment_status.in_(["none", "failed"]),
@@ -160,9 +160,31 @@ class EnrichmentScheduler:
         if domain_filt is not None:
             q = q.filter(domain_filt)
 
-        eligible_ids = [row[0] for row in q.limit(budget).all()]
+        eligible = q.limit(budget).all()
+        eligible_ids = [row[0] for row in eligible]
         if not eligible_ids:
             return 0
+
+        # Phase 4 migration (flag-gated, default off → in-process pending path):
+        # shadow/queue also enqueue a durable per-entity job; queue skips the
+        # in-process pending update entirely.
+        from backend.jobs.migration import (
+            enqueue_occurrence, job_mode, should_enqueue, should_run_inprocess,
+        )
+        mode = job_mode("enrichment")
+        if should_enqueue(mode):
+            occ = datetime.now(timezone.utc)
+            for eid, eorg in eligible:
+                try:
+                    enqueue_occurrence(
+                        db, domain="enrichment", job_type="enrichment.execute",
+                        schedule_id=eid, org_id=eorg, occurrence_at=occ, mode=mode,
+                        payload={"entity_id": eid})
+                except Exception:  # noqa: BLE001 — best-effort migration enqueue
+                    logger.exception("durable enqueue failed for entity %s", eid)
+            db.commit()
+        if not should_run_inprocess(mode):
+            return len(eligible_ids)  # queue mode: durable jobs drive enrichment
 
         stmt = (
             update(models.RawEntity)

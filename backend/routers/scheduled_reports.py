@@ -381,10 +381,15 @@ def _scheduler_loop():
                 for schedule in due:
                     try:
                         logger.info(
-                            "Scheduled report %d (%s) is due — executing",
+                            "Scheduled report %d (%s) is due — dispatching",
                             schedule.id, schedule.name,
                         )
-                        _execute_report(schedule, db)
+                        # Phase 4 migration (flag-gated, default off → in-process):
+                        # shadow/queue also enqueue a durable job.
+                        from backend.jobs.migration import dispatch_due
+
+                        dispatch_due(db, domain="reports", job_type="report.execute",
+                                     schedule=schedule, execute=_execute_report)
                     except Exception:
                         logger.exception(
                             "Unexpected error in scheduled report %d", schedule.id

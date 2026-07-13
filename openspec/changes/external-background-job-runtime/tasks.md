@@ -24,11 +24,11 @@
 
 ## 4. Incremental migration
 
-- [ ] 4.1 Shadow-write and compare scheduled-report behavior.
-- [ ] 4.2 Cut over scheduled reports behind a feature flag.
-- [ ] 4.3 Shadow-write and cut over scheduled imports.
-- [ ] 4.4 Shadow-write and cut over enrichment scheduling/execution.
-- [ ] 4.5 Disable in-process schedulers by default.
+- [x] 4.1 Shadow-write and compare scheduled-report behavior.
+- [x] 4.2 Cut over scheduled reports behind a feature flag.
+- [x] 4.3 Shadow-write and cut over scheduled imports.
+- [x] 4.4 Shadow-write and cut over enrichment scheduling/execution.
+- [x] 4.5 Disable in-process schedulers by default. (Flag-gated; defaults ENABLED — operators set UKIP_INPROCESS_SCHEDULERS=0 after cutover. Code lands safe-by-default.)
 
 ## 5. Verification and evidence
 

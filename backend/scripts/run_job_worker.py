@@ -13,6 +13,7 @@ import os
 import signal
 import socket
 
+from backend.jobs import handlers as _handlers  # noqa: F401 — registers handlers
 from backend.jobs.runtime import JobWorker
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
