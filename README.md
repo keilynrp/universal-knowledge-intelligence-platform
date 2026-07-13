@@ -10,15 +10,15 @@
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-gRPC_Engine-000000?logo=rust&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/Tests-2857_passing-28A745?logo=pytest&logoColor=white)
-![Routes](https://img.shields.io/badge/API_Routes-396-blue)
+![Tests](https://img.shields.io/badge/Tests-3163_passing-28A745?logo=pytest&logoColor=white)
+![Routes](https://img.shields.io/badge/API_Routes-420-blue)
 
 UKIP is a research intelligence platform for ingesting, normalizing, enriching, reconciling, exploring, and reporting on knowledge datasets. It is built around a governed semantic canonical layer: source data is profiled, mapped into canonical entities, resolved against authority registries, enriched with evidence, and surfaced through dashboards, graph analytics, and executive reports.
 
 The current product focus is scientific and institutional intelligence: publications, authors, affiliations, organizations, concepts, citations, geographic context, semantic signals, and stakeholder-ready decision support.
 
 > [!NOTE]
-> UKIP is an advanced product prototype moving toward production readiness. Core ingestion, enrichment, analytics, dashboards, and reporting flows are functional today. Architecture, data governance, and enterprise-readiness work are tracked through OpenSpec.
+> UKIP is an advanced product prototype moving toward production readiness. Core ingestion, enrichment, analytics, dashboards, and reporting flows are functional today, alongside a governed retrospective intelligence layer (ADR-006) and a durable background job runtime (ADR-007). Architecture, data governance, and enterprise-readiness work are tracked through OpenSpec.
 
 ---
 
@@ -56,17 +56,19 @@ flowchart LR
 
 ```text
 backend/                 FastAPI API server
-  routers/               66 route modules, 396 endpoints
+  routers/               69 route modules, 420 endpoints
   services/              45+ domain services
   authority/             19 modules: resolution, scoring, normalization, caching, benchmarking, 5 resolver plugins
   analyzers/             13 analyzers: topics, correlation, coauthorship, geographic, trends, journal normalization (NIF / Bayesian NIF)
   adapters/enrichment/   8 adapters: OpenAlex, Crossref, PubMed, WoS, Scopus, Semantic Scholar, DBLP, Scholar
+  retrospective/         governed append-only history: events, snapshots, query, warehouse export, ML features, metrics (ADR-006)
+  jobs/                  durable PostgreSQL lease-queue runtime: FSM, claim/lease/retry, worker, scheduler, ops metrics (ADR-007)
   cache/                 distributed cache layer: Redis backend + in-process fallback, fail-open
   domains/               3 configurable schemas: default, science, healthcare
-  scripts/               maintenance + backfills (nif_bayes, work_type)
-  tests/                 228 test files, 2864 tests
+  scripts/               maintenance + backfills (nif_bayes, work_type, retrospective) + job worker/scheduler entrypoints
+  tests/                 261 test files, 3170 tests
 frontend/                Next.js 16 App Router
-  app/                   62 pages, 90+ components, 8 context providers
+  app/                   65 pages, 90+ components, 8 context providers
   i18n/                  EN / ES localization
 engine/                  Rust gRPC engine for high-throughput graph and text operations
 alembic/                 Database migrations
@@ -107,6 +109,8 @@ UKIP manages major product and implementation decisions as architecture decision
 | **Reporting** | HTML, PDF (WeasyPrint), Excel, and PowerPoint exports. Stakeholder-oriented summaries and evidence-traceable intelligence narratives. |
 | **Governance** | Source profiling, field correspondence rules, mapping suggestions, readiness assessments, JSON-LD export, and OpenSpec-driven architecture governance. |
 | **Distributed Cache** | Optional Redis-backed cache (authority resolver, thresholds, feedback priors, derived-status, analytics) — cross-worker coherent and deploy-surviving, fail-open, with automatic in-process fallback when `REDIS_URL` is unset. |
+| **Retrospective Intelligence** | Governed, append-only history (events + point-in-time snapshots) that reconstructs what UKIP knew at any moment, compares current-vs-prior state, and prepares BigQuery-compatible warehouse exports and leakage-checked ML feature datasets. Tenant-scoped, schema-versioned, provenance-preserving; flag-gated via `UKIP_RETRO_EVENTS`. (ADR-006) |
+| **Durable Background Jobs** | Broker-free PostgreSQL lease-queue runtime for background work: durable job envelope, finite state machine, atomic claims (`FOR UPDATE SKIP LOCKED`), leases, typed retry, cancellation, audited replay, and abandoned-lease recovery. Independently deployable worker/scheduler processes; tenant-scoped ops API and health/metrics. Migrated incrementally behind per-domain flags. (ADR-007) |
 | **Agentic Features** | Research chat assistant, RAG skill execution, natural language query (NLQ), assistant actions, and GenAI-governed mapping suggestions. |
 
 ---
@@ -123,7 +127,8 @@ UKIP manages major product and implementation decisions as architecture decision
 | Frontend | Next.js 16, React 19, TypeScript 5, Tailwind CSS 4, Recharts, D3 |
 | Engine | Rust, Tokio, tonic gRPC, sqlx |
 | Analytics | pandas, DuckDB, PyArrow, NumPy, SciPy |
-| Testing | pytest (2864 tests), Vitest, Playwright |
+| Background Jobs | Durable PostgreSQL lease queue (broker-free, at-least-once) with worker/scheduler processes |
+| Testing | pytest (3170 tests), Vitest, Playwright |
 | Deployment | Docker Compose, GHCR images, Dokploy-oriented production compose |
 | Monitoring | Sentry (opt-in), structured logging |
 
@@ -162,6 +167,8 @@ Required variables:
 Optional enrichment variables: `OPENALEX_EMAIL`, `WOS_API_KEY`, `SCOPUS_API_KEY`, `OPENAI_API_KEY`, `S2_API_KEY`, `NCBI_API_KEY`.
 
 Optional cache variables: `REDIS_URL` (enables the distributed cache; unset ⇒ in-process caches), `UKIP_CACHE_PREFIX`, `UKIP_CACHE_CONNECT_TIMEOUT`, `UKIP_CACHE_SOCKET_TIMEOUT`.
+
+Optional retrospective/jobs variables: `UKIP_RETRO_EVENTS` (enable governed history emission; default on in prod compose), `UKIP_WAREHOUSE_DATASET` (enable warehouse export readiness; unset ⇒ `not_configured`), `UKIP_JOBS_REPORTS` / `UKIP_JOBS_IMPORTS` / `UKIP_JOBS_ENRICHMENT` (`off` \| `shadow` \| `queue`, default `off`), `UKIP_INPROCESS_SCHEDULERS` (default `1`; set `0` after cutover). See the [cutover checklist](docs/operating/background-jobs-cutover-checklist.md).
 
 ### Backend
 
@@ -223,13 +230,13 @@ cd frontend && npm run e2e
 cd frontend && npx tsc --noEmit
 ```
 
-**Current test stats:** 2864 backend tests across 228 test files (2857 passing, 7 skipped). Frontend: 273 Vitest tests.
+**Current test stats:** 3170 backend tests across 261 test files (3163 passing, 7 skipped). Frontend: 273 Vitest tests.
 
 ---
 
 ## API Overview
 
-396 endpoints organized across 66 route modules:
+420 endpoints organized across 69 route modules:
 
 | Module Group | Routes | Description |
 | --- | --- | --- |
@@ -246,13 +253,15 @@ cd frontend && npx tsc --noEmit
 | `reports`, `graph_export`, `sales_deck` | PDF, Excel, PPTX, graph export | Reporting and export |
 | `enrichment_schedule`, `stores`, `webhooks` | Scheduling, connectors, hooks | Integration layer |
 | `agentic_chat`, `ai_rag`, `nlq`, `assistant_actions` | Chat, RAG, NLQ, actions | AI-powered features |
+| `retrospective` | Point-in-time lookup, current-vs-prior comparison, cohorts, warehouse export, ML features, metrics | Retrospective intelligence (ADR-006) |
+| `jobs` | List, status, cancel, replay, metrics, health | Durable background job operability (ADR-007) |
 | `demo`, `onboarding`, `workspace_reset` | Seed data, guided setup, reset | Platform operations |
 
 ---
 
 ## Product Surfaces
 
-### Frontend Pages (62 pages)
+### Frontend Pages (65 pages)
 
 | Surface | Path | Description |
 | --- | --- | --- |
@@ -263,6 +272,7 @@ cd frontend && npx tsc --noEmit
 | OLAP Explorer | `/analytics/olap` | Dimensional cross-tabulation |
 | Researcher Analytics | `/analytics/researchers` | Author metrics, collaboration networks |
 | Journals Ranking | `/analytics/journals` | Journal NIF / NIF Bayes ranking, charts, admin recompute |
+| Retrospective | `/dashboards/retrospective` | Point-in-time journal comparison (current vs prior snapshot, changed-field + provenance badges, NIF timeline) |
 | Entity Browser | `/entities` | Filterable entity list (grouped view) with side-panel facets incl. work type |
 | Entity Detail | `/entities/[id]` | Provenance, enrichment, authority, relationships, work type, and journal metrics (NIF / NIF Bayes) |
 | Import Wizard | `/import` | Guided data ingestion with mapping |
@@ -287,6 +297,8 @@ Key service modules:
 - **`source_profiler.py`** — Source structure analysis
 - **`field_correspondence.py`** — Governance rule engine
 - **`enrichment_scheduler.py`** — Background enrichment orchestration
+- **`retrospective/`** — Governed append-only history: event/snapshot writer, point-in-time query, warehouse export, ML feature generation, and observability metrics (ADR-006)
+- **`jobs/`** — Durable PostgreSQL lease-queue runtime: state machine, claim/lease/retry/recovery services, worker and scheduler, and job metrics (ADR-007)
 
 ---
 
@@ -361,6 +373,8 @@ Custom domains can be created through the Domain Registry UI (`/domains`).
 | Multi-Tenancy | Per-organization (`org_id`) data isolation across entities, catalogs, and analytics surfaces |
 | Secrets Rotation | MultiFernet dual-key encryption + multi-key JWT verification with zero-downtime rotation script and ops checks |
 | Data Lifecycle | Retention/purge controls and GDPR-style subject-data deletion |
+| Retrospective History | Append-only, tenant-scoped, schema-versioned events/snapshots; payloads carry references, never reusable credentials; governed retention deletion only |
+| Durable Jobs | Tenant-scoped job envelope through the full lifecycle; atomic claims; sanitized/bounded error metadata; elevated-role, audited cancel and replay |
 | CI Security Gates | gitleaks, pip-audit, npm-audit, CodeQL, and Trivy/SBOM scanning in CI |
 
 ---
@@ -372,6 +386,10 @@ Custom domains can be created through the Domain Registry UI (`/domains`).
 | [Architecture](docs/ARCHITECTURE.md) | System architecture overview |
 | [Scientometrics](docs/SCIENTOMETRICS.md) | Scientometric enrichment strategy (NIF, NIF Bayes, journal metrics, work type) |
 | [Backfill Runbook](docs/operating/BACKFILL_RUNBOOK.md) | Operator playbook for the `nif_bayes` and `work_type` backfills |
+| [Retrospective Source Inventory](docs/architecture/retrospective-intelligence-source-inventory.md) | Source workflows, tenant/retention rules, and threat model for the retrospective layer (ADR-006) |
+| [Background Jobs Runbook](docs/operating/background-jobs-runbook.md) | Operator playbook for the durable job runtime: outage, backlog, poison job, replay, rollback |
+| [Background Jobs Topology](docs/operating/background-jobs-topology.md) | Deployment topology and capacity defaults for the job runtime |
+| [Background Jobs Cutover Checklist](docs/operating/background-jobs-cutover-checklist.md) | Step-by-step flag-gated cutover from in-process loops to the durable queue |
 | [Technical Onboarding](docs/TECHNICAL_ONBOARDING.md) | Developer getting-started guide |
 | [API Notes](docs/API.md) | API design decisions and conventions |
 | [Contributing](docs/CONTRIBUTING.md) | Contribution guidelines |
@@ -383,7 +401,7 @@ Custom domains can be created through the Domain Registry UI (`/domains`).
 | [Implementation Roadmap](docs/IMPLEMENTATION_ROADMAP.md) | Sprint-level implementation tracking |
 | [Infrastructure Operations](docs/infrastructure-operations.md) | Infrastructure runbooks |
 | [Documentation Governance](docs/DOCUMENTATION_GOVERNANCE.md) | Documentation standards |
-| [ADR Index](docs/adr/) | Architecture Decision Records (5 ADRs) |
+| [ADR Index](docs/adr/) | Architecture Decision Records (7 ADRs) |
 
 ---
 
@@ -396,6 +414,8 @@ Custom domains can be created through the Domain Registry UI (`/domains`).
 | [003](docs/adr/003-authority-resolution.md) | Authority resolution architecture |
 | [004](docs/adr/004-enrichment-circuit-breaker.md) | Circuit breaker pattern for enrichment adapters |
 | [005](docs/adr/005-genai-mapping-governance.md) | GenAI-assisted mapping with governance guardrails |
+| [006](docs/adr/006-retrospective-intelligence-bounded-context.md) | Retrospective intelligence as an internal bounded context (warehouse-ready, ML-ready) |
+| [007](docs/adr/007-external-background-job-runtime.md) | External background job runtime on a PostgreSQL lease queue |
 
 ---
 
@@ -404,6 +424,8 @@ Custom domains can be created through the Domain Registry UI (`/domains`).
 - **Database**: PostgreSQL is the preferred production database. SQLite remains useful for local development and tests.
 - **Migrations**: Run `alembic upgrade head` explicitly or through the guarded backend entrypoint.
 - **Enrichment**: Background enrichment worker runs on startup. Monitor circuit breaker states and adapter health in production.
+- **Retrospective History**: Governed history emission is flag-gated by `UKIP_RETRO_EVENTS` (declared on in the prod compose). After enabling, run `python -m backend.scripts.backfill_retrospective_events` once to seed pre-enablement history from trustworthy timestamps. Warehouse export stays `not_configured` until `UKIP_WAREHOUSE_DATASET` is set. See [ADR-006](docs/adr/006-retrospective-intelligence-bounded-context.md).
+- **Background Jobs**: The durable job runtime (worker/scheduler processes) is deployed separately from the API. Migration is incremental and reversible via per-domain flags (`UKIP_JOBS_<DOMAIN>` = `off` → `shadow` → `queue`), with in-process schedulers disabled only after cutover (`UKIP_INPROCESS_SCHEDULERS=0`). Everything defaults to the current in-process behavior. Follow the [cutover checklist](docs/operating/background-jobs-cutover-checklist.md) and [runbook](docs/operating/background-jobs-runbook.md); see [ADR-007](docs/adr/007-external-background-job-runtime.md).
 - **Caching**: Set `REDIS_URL` to enable the distributed cache (cross-worker, deploy-surviving); leaving it unset keeps single-process in-process caches. Cache access is fail-open — a Redis outage degrades to cache misses, never request failures. See [Infrastructure Operations](docs/infrastructure-operations.md#distributed-cache-redis) for enable/rollback and monitoring.
 - **Monitoring**: Sentry and structured logging are opt-in through environment variables.
 - **Scholar**: Google Scholar fallback is disabled by default. Enable only after understanding operational and legal implications.
