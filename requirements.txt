@@ -43,7 +43,7 @@ itsdangerous
 sentry-sdk[fastapi]
 
 # ── Text normalization
-ftfy>=6.1
+ftfy>=6.3.1
 
 # ── Engine (Rust gRPC) integration
 grpcio>=1.62.0
