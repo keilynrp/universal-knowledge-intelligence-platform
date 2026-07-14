@@ -7,7 +7,7 @@ annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.12.1
 attrs==25.4.0
-Authlib==1.6.9
+Authlib==1.6.10
 babel==2.18.0
 bcrypt==4.0.1
 bibtexparser==1.4.4
@@ -16,7 +16,7 @@ certifi==2026.2.25
 cffi==2.0.0
 charset-normalizer==3.4.4
 chromadb==1.5.2
-click==8.3.1
+click==8.3.3
 colorama==0.4.6
 cryptography==46.0.5
 cssselect==1.4.0
@@ -78,7 +78,7 @@ overrides==7.7.0
 packaging==26.0
 pandas==3.0.1
 passlib==1.7.4
-pillow==12.1.1
+pillow==12.3.0
 pluggy==1.6.0
 posthog==5.4.0
 protobuf==6.33.5
