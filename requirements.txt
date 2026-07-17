@@ -46,7 +46,7 @@ sentry-sdk[fastapi]
 ftfy>=6.3.1
 
 # ── Engine (Rust gRPC) integration
-grpcio>=1.81.1
+grpcio>=1.82.1
 grpcio-tools>=1.81.1
 protobuf>=4.25.0
 
