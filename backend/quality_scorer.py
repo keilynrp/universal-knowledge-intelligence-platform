@@ -9,8 +9,15 @@ Scoring dimensions and weights:
 """
 from __future__ import annotations
 import json
+import logging
+import os
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from backend import models
+
+logger = logging.getLogger(__name__)
+
+_DEFAULT_QUALITY_LOW_THRESHOLD = 60.0
 
 # Individual weights (sum = 1.0 when all present)
 _W = {
@@ -145,3 +152,60 @@ def compute_all(db: Session) -> int:
         entity.quality_score = score
     db.commit()
     return len(entities)
+
+
+# ── quality.low alert (change: wire-notification-events, Phase 3) ────────────
+
+def quality_low_threshold() -> float:
+    """Domain-average quality-score alert threshold, as a percent (0..100).
+
+    Read from UKIP_QUALITY_LOW_THRESHOLD; falls back to 60 on an unset or
+    unparseable value.
+    """
+    raw = os.environ.get("UKIP_QUALITY_LOW_THRESHOLD")
+    if raw is None or raw.strip() == "":
+        return _DEFAULT_QUALITY_LOW_THRESHOLD
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning("Invalid UKIP_QUALITY_LOW_THRESHOLD=%r — using default", raw)
+        return _DEFAULT_QUALITY_LOW_THRESHOLD
+
+
+def domain_quality_averages(db: Session) -> dict[str, float]:
+    """Return {domain: average quality_score (0..1)} over scored entities."""
+    rows = (
+        db.query(
+            models.UniversalEntity.domain,
+            func.avg(models.UniversalEntity.quality_score),
+        )
+        .filter(models.UniversalEntity.quality_score.isnot(None))
+        .group_by(models.UniversalEntity.domain)
+        .all()
+    )
+    return {domain: float(avg) for domain, avg in rows if avg is not None}
+
+
+def quality_low_crossings(
+    before: dict[str, float],
+    after: dict[str, float],
+    threshold_pct: float,
+) -> list[dict]:
+    """Domains whose average quality dropped from >= threshold to < threshold.
+
+    Scores are 0..1; ``threshold_pct`` is 0..100. A domain with no ``before``
+    baseline is skipped (no crossing to detect). ``after`` exactly at the
+    threshold is not "below".
+    """
+    threshold = threshold_pct / 100.0
+    crossings: list[dict] = []
+    for domain, new_avg in after.items():
+        old_avg = before.get(domain)
+        if old_avg is not None and old_avg >= threshold and new_avg < threshold:
+            crossings.append({
+                "domain":          domain,
+                "avg_quality_pct": round(new_avg * 100, 1),
+                "previous_pct":    round(old_avg * 100, 1),
+                "threshold_pct":   threshold_pct,
+            })
+    return crossings

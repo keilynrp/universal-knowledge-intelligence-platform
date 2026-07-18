@@ -22,11 +22,12 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from sqlalchemy import func, update
 from sqlalchemy.orm import Session
 
-from backend import models, schemas
+from backend import database, models, schemas
 from backend.auth import require_role
 from backend.database import get_db
 from backend.encryption import encrypt
-from backend.routers.deps import _get_store_adapter
+from backend.notifications.emit import emit_outbound
+from backend.routers.deps import _audit, _get_store_adapter
 from backend.routers.limiter import limiter
 from backend.tenant_quotas import assert_org_quota_available
 from backend.tenant_access import (
@@ -401,8 +402,18 @@ def pull_entities_from_store(
         details=json.dumps({"new_mappings": new_mappings, "queue_items": new_queue_items, "skipped": skipped}),
         executed_at=datetime.now(timezone.utc),
     ))
+    _audit(
+        db, "pull",
+        entity_type="store", entity_id=store_id,
+        details={"new_mappings": new_mappings, "queue_items": new_queue_items, "skipped": skipped},
+    )
     db.commit()
 
+    emit_outbound(
+        "pull",
+        {"store_id": store_id, "new_mappings": new_mappings, "queue_items": new_queue_items},
+        database.SessionLocal,
+    )
     return {
         "message":       f"Pull completed: {len(remote_entities)} entities fetched",
         "new_mappings":  new_mappings,

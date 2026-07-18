@@ -17,7 +17,8 @@ from pydantic import BaseModel, Field as PydanticField
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from backend import models, schemas
+from backend import database, models, schemas
+from backend.notifications.emit import emit_outbound
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
 from backend.services.engine_delegation import (
@@ -177,6 +178,12 @@ def create_rules_bulk(
                 rule_type="exact",
             ))
     db.commit()
+    emit_outbound(
+        "disambiguation.resolved",
+        {"field_name": payload.field_name, "canonical_value": payload.canonical_value,
+         "variations": len(payload.variations) - 1},
+        database.SessionLocal,
+    )
     return {
         "message": f"Rules saved for '{payload.canonical_value}'",
         "variations": len(payload.variations) - 1,

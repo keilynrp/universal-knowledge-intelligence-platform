@@ -105,6 +105,10 @@ services:
       # Default ON in prod so governed history is captured; emission is
       # non-fatal and idempotent. Set to 0 to disable. See /health features.
       UKIP_RETRO_EVENTS: ${UKIP_RETRO_EVENTS:-1}
+      # quality.low alert threshold (domain avg quality score, percent 0-100).
+      # A domain crossing DOWN through this value on a quality recompute fires
+      # the quality.low alert-channel event. Default 60. See docs/NOTIFICATIONS.md.
+      UKIP_QUALITY_LOW_THRESHOLD: ${UKIP_QUALITY_LOW_THRESHOLD:-60}
       # Provider-neutral backup assurance metadata only. Backup payload and
       # storage credentials remain in Dokploy/provider-owned configuration.
       UKIP_BACKUP_MONITOR_ENABLED: ${UKIP_BACKUP_MONITOR_ENABLED:-1}

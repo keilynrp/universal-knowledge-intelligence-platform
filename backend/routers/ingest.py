@@ -27,7 +27,8 @@ from backend.database import get_db
 from backend.routers.limiter import limiter
 from backend.datasource_analyzer import DataSourceAnalyzer
 from backend.routers.column_maps import COLUMN_MAPPING, EXPORT_COLUMN_MAPPING
-from backend.routers.deps import _audit, _dispatch_webhook, _get_active_integration
+from backend.routers.deps import _audit, _get_active_integration
+from backend.notifications.emit import emit_outbound
 from backend.services.field_correspondence import (
     infer_source_schema,
     resolve_field_correspondence,
@@ -336,8 +337,8 @@ async def upload_file(
             domain=effective_domain,
         )
 
-        _dispatch_webhook("upload", {"filename": file.filename, "rows": len(objects), "import_batch_id": import_batch.id},
-                          database.SessionLocal)
+        emit_outbound("upload", {"filename": file.filename, "rows": len(objects), "import_batch_id": import_batch.id},
+                      database.SessionLocal)
         return {
             "message": f"Successfully imported {len(objects)} publications from {science_import.provider.upper()}"
                        + (f" ({dedup_skipped} duplicates skipped)" if dedup_skipped else ""),
@@ -550,7 +551,7 @@ async def upload_file(
         details={"filename": file.filename, "rows": len(objects), "duplicates_skipped": dedup_skipped, "import_batch_id": import_batch.id},
     )
     db.commit()
-    _dispatch_webhook(
+    emit_outbound(
         "upload",
         {"filename": file.filename, "rows": len(objects), "import_batch_id": import_batch.id},
         database.SessionLocal,

@@ -13,6 +13,8 @@ from backend.enrichment_worker import (
     reset_stale_processing_records,
     enrich_single_record,
     trigger_enrichment_bulk,
+    _next_batch_state,
+    _emit_enrichment_batch_complete,
 )
 
 
@@ -64,6 +66,30 @@ def test_atomic_claim_returns_none_when_no_pending(db_session):
     make_entity(db_session, "Done", status="completed")
     claimed_id = _atomic_claim_next(db_session)
     assert claimed_id is None
+
+
+#  ── enrichment.completed batch edge-trigger ─────────────────────────────────
+
+class TestBatchCompletion:
+    def test_state_increments_while_processing(self):
+        assert _next_batch_state(entity_claimed=True, processed=0) == (1, None)
+        assert _next_batch_state(entity_claimed=True, processed=3) == (4, None)
+
+    def test_state_emits_once_on_drain_edge(self):
+        # Queue just drained after enriching 5 → emit count 5, reset to 0.
+        assert _next_batch_state(entity_claimed=False, processed=5) == (0, 5)
+
+    def test_state_idle_when_nothing_processed_does_not_emit(self):
+        assert _next_batch_state(entity_claimed=False, processed=0) == (0, None)
+
+    def test_emit_batch_complete_calls_emit_outbound(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(
+            "backend.enrichment_worker.emit_outbound",
+            lambda action, payload, db_factory: calls.append((action, payload)),
+        )
+        _emit_enrichment_batch_complete(7, object())
+        assert calls == [("enrichment.completed", {"count": 7})]
 
 
 def test_atomic_claim_does_not_double_claim(db_session):

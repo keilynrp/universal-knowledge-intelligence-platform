@@ -19,6 +19,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
 from backend import database, models
+from backend.notifications.emit import emit_outbound
 from backend.auth import require_role
 from backend.database import get_db
 from backend.tenant_quotas import assert_org_quota_available
@@ -304,6 +305,11 @@ def _execute_report(schedule: models.ScheduledReport, db: Session) -> dict:
         schedule.total_sent = (schedule.total_sent or 0) + len(recipients)
         schedule.next_run_at = now + timedelta(minutes=schedule.interval_minutes)
         db.commit()
+        emit_outbound(
+            "report.sent",
+            {"schedule": schedule.name, "recipients": len(recipients), "format": fmt},
+            database.SessionLocal,
+        )
         return {
             "success": True,
             "recipients": len(recipients),
@@ -317,6 +323,11 @@ def _execute_report(schedule: models.ScheduledReport, db: Session) -> dict:
         schedule.last_error = str(exc)
         schedule.next_run_at = now + timedelta(minutes=schedule.interval_minutes)
         db.commit()
+        emit_outbound(
+            "report.failed",
+            {"schedule": schedule.name, "error": str(exc)},
+            database.SessionLocal,
+        )
         return {"success": False, "error": str(exc)}
 
 
