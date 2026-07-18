@@ -20,7 +20,8 @@ from sqlalchemy.orm import Session
 from backend import database, models
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
-from backend.routers.deps import _audit, _dispatch_webhook
+from backend.routers.deps import _audit
+from backend.notifications.emit import emit_outbound
 from backend.routers.limiter import limiter
 from backend.tenant_access import (
     get_scoped_record,
@@ -277,7 +278,7 @@ def apply_harmonization_step(
         },
     )
     db.commit()
-    _dispatch_webhook(
+    emit_outbound(
         "harmonization.apply",
         {"step_id": step_id, "records_updated": len(changes)},
         database.SessionLocal,
@@ -348,7 +349,7 @@ def apply_all_harmonization_steps(
 
     db.commit()
     for r in results:
-        _dispatch_webhook(
+        emit_outbound(
             "harmonization.apply",
             {"step_id": r["step_id"], "records_updated": r["records_updated"]},
             database.SessionLocal,

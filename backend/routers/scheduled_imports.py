@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 
 from backend import models, database
+from backend.notifications.emit import emit_outbound
 from backend.auth import require_role
 from backend.database import get_db
 from backend.routers.deps import _get_store_adapter
@@ -453,6 +454,12 @@ def _execute_import(schedule: models.ScheduledImport, db: Session) -> dict:
     ))
     db.commit()
 
+    emit_outbound(
+        "scheduled_pull",
+        {"store_id": schedule.store_id, "entities_imported": new_mappings,
+         "queue_items": new_queue_items},
+        database.SessionLocal,
+    )
     return {"success": True, **result_data}
 
 

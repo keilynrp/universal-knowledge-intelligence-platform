@@ -19,8 +19,30 @@ from backend.adapters.enrichment.dblp import DBLPAdapter
 from backend.circuit_breaker import CircuitBreaker, CircuitOpenError
 from backend.tenant_access import LEGACY_GLOBAL_ORG_ID, scope_query_to_org
 from backend.domain_scope import parse_scope, resolve_domain_filter
+from backend.notifications.emit import emit_outbound
 
 logger = logging.getLogger(__name__)
+
+
+# ── enrichment.completed batch edge-trigger ─────────────────────────────────
+# The worker drains the pending queue one entity at a time. A "batch" (a
+# background enrichment pass) is complete on the edge where the queue goes from
+# non-empty to empty — i.e. the worker just enriched >=1 entity and the next
+# claim finds nothing. `_next_batch_state` is a pure transition so the "emit
+# once per drain, not once per entity" guarantee is unit-testable.
+
+def _next_batch_state(entity_claimed: bool, processed: int) -> tuple[int, int | None]:
+    """Return (new_processed_count, emit_count_or_None) for one worker tick."""
+    if entity_claimed:
+        return processed + 1, None
+    if processed > 0:
+        return 0, processed  # drain edge — a pass just finished
+    return 0, None
+
+
+def _emit_enrichment_batch_complete(count: int, db_factory) -> None:
+    """Fan out an `enrichment.completed` event (alert channels + gated email)."""
+    emit_outbound("enrichment.completed", {"count": count}, db_factory)
 
 
 def _jsonable_model(value):
@@ -781,7 +803,11 @@ async def background_enrichment_worker(db_generator):
     Background async worker. Atomically claims and enriches 'pending' records
     one at a time with rate-limiting delays to avoid API bans.
     """
+    from backend.database import SessionLocal
+
     await asyncio.sleep(5)  # Let the server finish booting
+
+    processed_since_idle = 0  # entities enriched since the queue was last empty
 
     while True:
         try:
@@ -794,9 +820,13 @@ async def background_enrichment_worker(db_generator):
                 if entity:
                     enrich_single_record(db, entity)
                 db.close()
+                processed_since_idle, _ = _next_batch_state(True, processed_since_idle)
                 await asyncio.sleep(2)  # Polite rate limiting
             else:
                 db.close()
+                processed_since_idle, batch_count = _next_batch_state(False, processed_since_idle)
+                if batch_count:
+                    _emit_enrichment_batch_complete(batch_count, SessionLocal)
                 await asyncio.sleep(10)  # No pending records — idle
 
         except Exception as e:

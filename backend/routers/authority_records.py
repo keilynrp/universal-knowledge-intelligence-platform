@@ -29,7 +29,9 @@ from backend.authority import entity_writeback as _authority_writeback
 from backend.authority import publication_writeback as _authority_pub_writeback
 from backend.authority import feedback as _authority_feedback
 from backend.authority import thresholds as _authority_thresholds
+from backend import database
 from backend.database import get_db
+from backend.notifications.emit import emit_outbound
 from backend.retrospective.emit import emit_authority_decision
 from backend.routers.deps import (
     _audit,
@@ -482,6 +484,12 @@ def confirm_authority_record(
         confidence=rec.confidence,
     )
     db.commit()
+    emit_outbound(
+        "authority.confirm",
+        {"canonical_label": rec.canonical_label, "rule_created": rule_created,
+         "entities_updated": entities_updated},
+        database.SessionLocal,
+    )
     db.refresh(rec)
     return {
         **_serialize_authority_record(rec),
