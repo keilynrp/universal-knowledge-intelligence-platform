@@ -29,6 +29,7 @@ def _sync_spawn(monkeypatch):
 class TestMapping:
     def test_known_actions_map_to_alert_events(self):
         assert emit.resolve_alert_event("upload") == "entities.imported"
+        assert emit.resolve_alert_event("pull") == "entities.imported"
         assert emit.resolve_alert_event("harmonization.apply") == "harmonization.applied"
         assert emit.resolve_alert_event("scheduled_pull") == "import.scheduled"
 

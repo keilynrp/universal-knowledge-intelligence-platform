@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 # Audit/webhook action → alert-channel event id.
 _ACTION_TO_ALERT_EVENT: dict[str, str] = {
     "upload":              "entities.imported",
+    "pull":                "entities.imported",
     "scheduled_pull":      "import.scheduled",
     "harmonization.apply": "harmonization.applied",
 }

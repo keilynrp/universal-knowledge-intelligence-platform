@@ -23,7 +23,7 @@ from backend import models, database
 from backend.notifications.emit import emit_outbound
 from backend.auth import require_role
 from backend.database import get_db
-from backend.routers.deps import _get_store_adapter
+from backend.routers.deps import _audit, _get_store_adapter
 from backend.services.field_correspondence import infer_source_schema, resolve_field_mapping
 from backend.services.mapping_suggestions import MappingSuggestionService
 from backend.services.source_profiler import FieldProfile, SourceProfile
@@ -452,6 +452,11 @@ def _execute_import(schedule: models.ScheduledImport, db: Session) -> dict:
         details=json.dumps(result_data),
         executed_at=now,
     ))
+    _audit(
+        db, "scheduled_pull",
+        entity_type="store", entity_id=schedule.store_id,
+        details={"entities_imported": new_mappings, "queue_items": new_queue_items},
+    )
     db.commit()
 
     emit_outbound(

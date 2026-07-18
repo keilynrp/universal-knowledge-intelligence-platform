@@ -37,12 +37,12 @@
 
 ## 4. Cleanup + verification
 
-- [x] 4.1 REVERTED — attempted to drop `pull`/`scheduled_pull` bell mappings, but
-      `test_sprint56` asserts they are intended bell actions ("Scheduled import completed"/🗓️).
-      Restored them; bell vocabulary unchanged. (Making scheduled imports actually WRITE a
-      bell AuditLog is a separate noise/product call — left as-is; they fire `import.scheduled`
-      on alert channels via `emit_outbound`.)
-- [ ] 4.2 E2E test per event (mocked sink → assert payload shape). (follow-up)
-- [ ] 4.3 Docs (notifications runbook) + confirm SMTP/encryption env vars in prod compose. (follow-up)
-- [x] 4.4 Full backend suite: 3188 passed / 7 skipped (1 transient failure from the 4.1
-      cleanup, fixed by the revert; sprint56 re-run green).
+- [x] 4.1 RESOLVED (surface, not remove) — `test_sprint56` showed `pull`/`scheduled_pull`
+      are intended bell actions. Now the scheduled-import + manual-store-pull success sites
+      write a `scheduled_pull`/`pull` AuditLog (bell) AND fire on alert channels
+      (`scheduled_pull`→`import.scheduled`, `pull`→`entities.imported`, new mapping).
+- [x] 4.2 Per-endpoint integration tests (`test_notification_integration.py`, 6): harmonization
+      apply, `/rules/bulk`, quality.low crossing (+ no-fire), authority confirm, bell audit.
+- [x] 4.3 Docs `docs/NOTIFICATIONS.md` runbook + `UKIP_QUALITY_LOW_THRESHOLD` declared in
+      `docker-compose.prod.yml` (web backend service).
+- [x] 4.4 Full backend suite green (re-run after follow-ups).
