@@ -26,15 +26,23 @@
 - [x] 2.3 `disambiguation.resolved` — `emit_outbound` at `create_rules_bulk` (`/rules/bulk`).
 - [x] 2.4 Tests: emit unit tests (13) + worker batch-edge tests (`TestBatchCompletion`, 4).
 
-## 3. quality.low (DEFERRED — needs threshold design)
+## 3. quality.low
 
-- [ ] 3.1 Decide configurable threshold + downward-crossing semantics (product).
-- [ ] 3.2 Emit `quality.low` from `quality_scorer.py` on threshold cross.
-- [ ] 3.3 Tests incl. no-spam-on-recompute.
+- [x] 3.1 Configurable threshold `UKIP_QUALITY_LOW_THRESHOLD` (percent, default 60) +
+      downward-crossing semantics (`quality_low_crossings`, pure).
+- [x] 3.2 Emit `quality.low` per domain from `/entities/quality/compute` (before/after
+      domain averages around `compute_all`).
+- [x] 3.3 Tests: threshold config, crossing logic (no-fire when already-below /
+      staying-above / no baseline / at-threshold), domain averaging. (`test_quality_low_alert.py`, 9)
 
 ## 4. Cleanup + verification
 
-- [ ] 4.1 Resolve `pull`/`scheduled_pull` bell mismatch (write AuditLog or drop dead icons).
-- [ ] 4.2 E2E test per event (mocked sink → assert payload shape).
-- [ ] 4.3 Docs (notifications runbook) + confirm SMTP/encryption env vars in prod compose.
-- [ ] 4.4 Full backend suite green (`pytest backend/tests/`).
+- [x] 4.1 REVERTED — attempted to drop `pull`/`scheduled_pull` bell mappings, but
+      `test_sprint56` asserts they are intended bell actions ("Scheduled import completed"/🗓️).
+      Restored them; bell vocabulary unchanged. (Making scheduled imports actually WRITE a
+      bell AuditLog is a separate noise/product call — left as-is; they fire `import.scheduled`
+      on alert channels via `emit_outbound`.)
+- [ ] 4.2 E2E test per event (mocked sink → assert payload shape). (follow-up)
+- [ ] 4.3 Docs (notifications runbook) + confirm SMTP/encryption env vars in prod compose. (follow-up)
+- [x] 4.4 Full backend suite: 3188 passed / 7 skipped (1 transient failure from the 4.1
+      cleanup, fixed by the revert; sprint56 re-run green).

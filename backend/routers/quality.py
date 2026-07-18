@@ -6,10 +6,17 @@ Sprint 72 — Entity Quality Score endpoints.
 from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.orm import Session
 
-from backend import models, schemas
+from backend import database, models, schemas
 from backend.auth import get_current_user, require_role
 from backend.database import get_db
-from backend.quality_scorer import compute_all, compute_one
+from backend.notifications.emit import emit_outbound
+from backend.quality_scorer import (
+    compute_all,
+    compute_one,
+    domain_quality_averages,
+    quality_low_crossings,
+    quality_low_threshold,
+)
 
 router = APIRouter(tags=["quality"])
 
@@ -20,7 +27,11 @@ def bulk_compute_quality(
     _: models.User = Depends(require_role("super_admin", "admin")),
 ):
     """Recompute and persist quality_score for every entity in the catalog."""
+    before = domain_quality_averages(db)
     count = compute_all(db)
+    after = domain_quality_averages(db)
+    for crossing in quality_low_crossings(before, after, quality_low_threshold()):
+        emit_outbound("quality.low", crossing, database.SessionLocal)
     return {"computed": count, "message": f"Quality scores updated for {count} entities."}
 
 
