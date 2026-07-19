@@ -36,6 +36,13 @@ updates:
           - "react-dom"
           - "@types/react"
           - "@types/react-dom"
+    ignore:
+      # TypeScript 7 (native compiler) is GA and our code type-checks clean under
+      # it, but `next build`'s TypeScript integration crashes on it and no stable
+      # Next.js supports it yet (only 16.3 canary/preview). Hold on the 5.x line
+      # and un-ignore once a stable Next.js ships TS 7 support. See #146.
+      - dependency-name: "typescript"
+        versions: [">=7.0.0"]
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
