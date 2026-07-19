@@ -47,8 +47,15 @@ ftfy>=6.3.1
 
 # ── Engine (Rust gRPC) integration
 grpcio>=1.82.1
-grpcio-tools>=1.81.1
-protobuf>=4.25.0
+# grpcio-tools is build-only (regenerates the Python engine stubs; not in
+# requirements.lock / not a runtime dep). Pinned to the protobuf-6 line: 1.82+
+# hard-requires protobuf>=7.35.1, which would cascade a protobuf 6→7 major bump
+# through the transitive otel/googleapis stack for no runtime benefit. See #147.
+grpcio-tools>=1.81.1,<1.82
+# protobuf held at <7 deliberately: opentelemetry-proto (<1.44) and
+# googleapis-common-protos (<1.75) still cap protobuf<7, and we have no runtime
+# need for protobuf 7. Revisit as a dedicated modernization if/when desired.
+protobuf>=4.25.0,<7
 
 # ── Coauthorship V2: community detection (Sprint 2026-05-28 refactor)
 networkx>=3.6.1
