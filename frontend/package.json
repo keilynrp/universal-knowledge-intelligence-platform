@@ -47,7 +47,7 @@
     "jsdom": "^29.0.0",
     "tailwindcss": "^4",
     "topojson-client": "^3.1.0",
-    "typescript": "^5",
+    "typescript": "^6",
     "vitest": "^4.1.0",
     "world-atlas": "^2.0.2"
   },
