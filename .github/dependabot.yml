@@ -13,6 +13,15 @@ updates:
           - "grpcio"
           - "grpcio-tools"
           - "protobuf"
+    ignore:
+      # Deliberately staying on protobuf 6 / grpcio-tools 1.81.x. grpcio-tools
+      # 1.82+ forces protobuf>=7.35.1 (major), which cascades through the
+      # transitive otel/googleapis stack for no runtime benefit (grpcio-tools is
+      # build-only). Un-ignore when doing the protobuf-7 modernization. See #147.
+      - dependency-name: "grpcio-tools"
+        versions: [">=1.82.0"]
+      - dependency-name: "protobuf"
+        versions: [">=7.0.0"]
   - package-ecosystem: npm
     directory: "/frontend"
     schedule:
