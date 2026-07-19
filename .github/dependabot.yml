@@ -5,11 +5,28 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      # grpcio, grpcio-tools and protobuf must move in lockstep — grpcio-tools
+      # hard-pins a compatible protobuf major, so a partial bump breaks install.
+      grpc-protobuf:
+        patterns:
+          - "grpcio"
+          - "grpcio-tools"
+          - "protobuf"
   - package-ecosystem: npm
     directory: "/frontend"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      # react and react-dom must be the exact same version; keep their type
+      # packages together so a bump never lands one without the others.
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
