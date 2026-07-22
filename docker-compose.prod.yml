@@ -113,6 +113,11 @@ services:
       # week, widen or fix the offending keys, THEN set this to 1. Flipping it
       # blind returns 403 to integrations that work today.
       UKIP_API_KEY_SCOPES_ENFORCED: ${UKIP_API_KEY_SCOPES_ENFORCED:-0}
+      # Public API origin used in generated embed snippets ("copy-paste ready"
+      # contract). Unset => the origin the snippet request arrived on, which is
+      # correct only when proxy forwarded-headers are wired end to end — so pin
+      # it explicitly here. FRONTEND_URL (above) supplies the iframe target.
+      UKIP_PUBLIC_API_URL: ${UKIP_PUBLIC_API_URL:-https://api.ukip.inbounduxd.com}
       # quality.low alert threshold (domain avg quality score, percent 0-100).
       # A domain crossing DOWN through this value on a quality recompute fires
       # the quality.low alert-channel event. Default 60. See docs/NOTIFICATIONS.md.
