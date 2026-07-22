@@ -30,7 +30,15 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        source: "/(.*)",
+        // Everything except /embed. Embed routes exist to be iframed by
+        // customer sites, so they are excluded from the blanket frame denial
+        // and receive a per-widget Content-Security-Policy from middleware.ts
+        // (frame-ancestors derived from the widget's allowed_origins,
+        // fail-closed). Making middleware the *only* CSP source for /embed
+        // avoids depending on header merge order between static config and
+        // middleware. All other security headers for /embed are also set
+        // there.
+        source: "/((?!embed/).*)",
         headers: [
           { key: "X-Frame-Options",           value: "DENY" },
           { key: "X-Content-Type-Options",     value: "nosniff" },

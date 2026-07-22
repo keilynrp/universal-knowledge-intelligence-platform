@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import uuid
 from collections import Counter
 from datetime import datetime, timezone
@@ -324,12 +325,18 @@ def _record_view(w: models.EmbedWidget, db: Session) -> None:
 
 @router.get("/embed/{token}/config")
 def embed_config(token: str, db: Session = Depends(get_db)):
-    """Public — returns widget metadata (name, type, config) without auth."""
+    """Public — returns widget metadata (name, type, config) without auth.
+
+    ``allowed_origins`` is included so the frontend embed page can emit its
+    per-widget ``frame-ancestors`` header. It is not a secret: it names who may
+    *frame* the widget, and the widget is public to anyone holding the token.
+    """
     w = _get_active_widget(token, db)
     return {
         "name": w.name,
         "widget_type": w.widget_type,
         "config": json.loads(w.config or "{}"),
+        "allowed_origins": w.allowed_origins or "*",
     }
 
 
@@ -368,28 +375,83 @@ def embed_data(token: str, request: Request, db: Session = Depends(get_db)):
     }
 
 
+def _resolve_bases(request: Request) -> tuple[str, str]:
+    """(api_base, app_base) for embed snippets — configured, never hardcoded.
+
+    API base: ``UKIP_PUBLIC_API_URL``, falling back to the origin this request
+    arrived on. The fallback makes the unset case "probably right" rather than
+    "definitely wrong"; the env var wins because ``request.base_url`` behind a
+    reverse proxy is only correct when forwarded headers are wired end to end,
+    and snippet correctness must not silently couple to proxy configuration.
+
+    App base: ``FRONTEND_URL`` — already the canonical "where does the app
+    live" answer (declared in prod compose; used by auth_users.py). Falls back
+    to the API origin only so a bare dev setup still emits *a* resolvable URL.
+    """
+    api_base = (
+        os.environ.get("UKIP_PUBLIC_API_URL", "").strip()
+        or str(request.base_url)
+    ).rstrip("/")
+    app_base = (os.environ.get("FRONTEND_URL", "").strip() or api_base).rstrip("/")
+    return api_base, app_base
+
+
+#: Headline fields per widget type, rendered by the JS snippet as label/value
+#: rows. Kept server-side so the snippet stays a dumb, dependency-free loop.
+_JS_FIELDS: dict[str, list[tuple[str, str]]] = {
+    "entity_stats": [
+        ("total", "Total entities"),
+        ("enriched", "Enriched"),
+        ("enrichment_rate", "Enrichment rate (%)"),
+    ],
+    "top_concepts": [("total_unique", "Unique concepts")],
+    "recent_entities": [],
+    "quality_score": [("average", "Average score"), ("count", "Scored entities")],
+}
+
+
 @router.get("/embed/{token}/snippet")
-def embed_snippet(token: str, db: Session = Depends(get_db)):
-    """Public — returns ready-to-paste HTML iframe + JS embed snippets."""
+def embed_snippet(token: str, request: Request, db: Session = Depends(get_db)):
+    """Public — returns ready-to-paste HTML iframe + JS embed snippets.
+
+    "Ready to paste" is the contract: both snippets must work verbatim in the
+    deployment that produced them (test_embed_distribution.py pins this).
+    """
     w = _get_active_widget(token, db)
-    api_base = "http://localhost:8000"  # consumers replace with their deployed URL
+    api_base, app_base = _resolve_bases(request)
+    container = f"ukip-widget-{token[:8]}"
 
     iframe_snippet = (
         f'<iframe\n'
-        f'  src="{api_base}/embed/{token}/frame"\n'
+        f'  src="{app_base}/embed/{token}"\n'
         f'  width="480" height="320"\n'
-        f'  frameborder="0"\n'
+        f'  style="border:0"\n'
+        f'  loading="lazy"\n'
         f'  title="{w.name}"\n'
         f'></iframe>'
     )
+
+    fields = _JS_FIELDS.get(w.widget_type, [])
+    fields_js = ", ".join(f'["{key}", "{label}"]' for key, label in fields)
     js_snippet = (
-        f"<div id=\"ukip-widget-{token[:8]}\"></div>\n"
+        f'<div id="{container}"></div>\n'
         f"<script>\n"
         f"  fetch('{api_base}/embed/{token}/data')\n"
-        f"    .then(r => r.json())\n"
-        f"    .then(d => {{\n"
-        f"      document.getElementById('ukip-widget-{token[:8]}').innerHTML =\n"
-        f"        '<pre>' + JSON.stringify(d.data, null, 2) + '</pre>';\n"
+        f"    .then(function (r) {{ return r.json(); }})\n"
+        f"    .then(function (d) {{\n"
+        f"      var root = document.getElementById('{container}');\n"
+        f"      root.textContent = '';\n"
+        f"      var h = document.createElement('strong');\n"
+        f"      h.textContent = d.name;\n"
+        f"      root.appendChild(h);\n"
+        f"      [{fields_js}].forEach(function (f) {{\n"
+        f"        var row = document.createElement('div');\n"
+        f"        row.textContent = f[1] + ': ' + (d.data[f[0]] != null ? d.data[f[0]] : '—');\n"
+        f"        root.appendChild(row);\n"
+        f"      }});\n"
+        f"    }})\n"
+        f"    .catch(function () {{\n"
+        f"      document.getElementById('{container}').textContent = 'Widget unavailable';\n"
         f"    }});\n"
         f"</script>"
     )
