@@ -24,6 +24,7 @@ from backend import database, enrichment_worker, models
 from backend.bootstrap import ensure_bootstrap_super_admin
 from backend.services.enrichment_scheduler import EnrichmentScheduler, scheduler as _enrichment_scheduler_instance
 from backend.logging_utils import RequestLoggingMiddleware, configure_logging
+from backend.openapi_ids import operation_id_for
 from backend.telemetry import initialize_telemetry
 from backend.routers.limiter import limiter
 
@@ -422,6 +423,10 @@ app = FastAPI(
     contact={"name": "UKIP Team", "url": "https://github.com/ukip"},
     license_info={"name": "MIT"},
     openapi_tags=_OPENAPI_TAGS,
+    # Operation IDs are the generated SDK's public method names. Derive them
+    # from method+path so an internal handler rename cannot rename a method
+    # every integrator calls. See backend/openapi_ids.py.
+    generate_unique_id_function=operation_id_for,
     swagger_ui_parameters={
         "persistAuthorization": True,
         "tryItOutEnabled": False,
