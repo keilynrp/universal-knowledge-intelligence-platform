@@ -11,7 +11,7 @@
  * app policy (deny framing). See lib/embedCsp.ts.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { buildEmbedCsp } from "./lib/embedCsp";
+import { buildEmbedCsp, isWidgetToken } from "./lib/embedCsp";
 
 const API_BASE = (
   process.env.BACKEND_INTERNAL_URL ??
@@ -26,12 +26,17 @@ const CACHE_TTL_MS = 60_000;
 const cache = new Map<string, { origins: string | null; expires: number }>();
 
 async function allowedOriginsFor(token: string): Promise<string | null> {
+  // Validate BEFORE the value reaches a URL. A token that is not the exact
+  // minted format never becomes a server-side request, so a crafted path can
+  // neither traverse to another backend route nor probe internal endpoints.
+  if (!isWidgetToken(token)) return null;
+
   const hit = cache.get(token);
   if (hit && hit.expires > Date.now()) return hit.origins;
 
   let origins: string | null = null;
   try {
-    const response = await fetch(`${API_BASE}/embed/${token}/config`, {
+    const response = await fetch(`${API_BASE}/embed/${encodeURIComponent(token)}/config`, {
       signal: AbortSignal.timeout(2_000),
     });
     if (response.ok) {

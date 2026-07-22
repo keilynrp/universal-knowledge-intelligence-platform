@@ -5,7 +5,37 @@
  * framable, the rest of the app is not."
  */
 import { describe, expect, it } from "vitest";
-import { buildFrameAncestors, buildEmbedCsp } from "../lib/embedCsp";
+import { buildFrameAncestors, buildEmbedCsp, isWidgetToken } from "../lib/embedCsp";
+
+describe("isWidgetToken", () => {
+  it("accepts a UUID4, the format the backend mints", () => {
+    expect(isWidgetToken("3f6b2c1e-9a4d-4f7b-8c21-0d5e6a7b8c9d")).toBe(true);
+  });
+
+  it("is case-insensitive", () => {
+    expect(isWidgetToken("3F6B2C1E-9A4D-4F7B-8C21-0D5E6A7B8C9D")).toBe(true);
+  });
+
+  it("rejects path traversal", () => {
+    // The token is interpolated into a server-side fetch URL. Without this,
+    // a crafted token reaches other backend paths (CodeQL js/request-forgery).
+    expect(isWidgetToken("../admin/data-lifecycle/purge")).toBe(false);
+    expect(isWidgetToken("..%2f..%2fhealth")).toBe(false);
+  });
+
+  it("rejects anything with URL structure", () => {
+    expect(isWidgetToken("http://evil.example.com")).toBe(false);
+    expect(isWidgetToken("evil.example.com/x")).toBe(false);
+    expect(isWidgetToken("a?b=c")).toBe(false);
+    expect(isWidgetToken("a#b")).toBe(false);
+  });
+
+  it("rejects empty and malformed values", () => {
+    expect(isWidgetToken("")).toBe(false);
+    expect(isWidgetToken("not-a-uuid")).toBe(false);
+    expect(isWidgetToken("3f6b2c1e9a4d4f7b8c210d5e6a7b8c9d")).toBe(false);
+  });
+});
 
 describe("buildFrameAncestors", () => {
   it("maps * to any ancestor", () => {

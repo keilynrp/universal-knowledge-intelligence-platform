@@ -12,6 +12,22 @@
  * must never become open because of an error.
  */
 
+/**
+ * Widget tokens are UUID4s minted server-side (`str(uuid.uuid4())`).
+ *
+ * The token arrives from the URL path and is interpolated into a *server-side*
+ * fetch of the widget config, so an unvalidated value lets a caller steer that
+ * request at other backend paths — including ones reachable only from inside
+ * the network (CodeQL `js/request-forgery`). Matching the exact minted format
+ * removes the class entirely rather than escaping around it.
+ */
+const UUID_V4 =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isWidgetToken(value: string): boolean {
+  return UUID_V4.test(value);
+}
+
 /** True for values safe to place in a response header as an origin. */
 function isHeaderSafeOrigin(value: string): boolean {
   return /^https?:\/\/[^\s;,]+$/.test(value);
