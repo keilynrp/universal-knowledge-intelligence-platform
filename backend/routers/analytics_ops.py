@@ -175,6 +175,7 @@ def health_check(request: Request, db: Session = Depends(get_db)):
     # the same helpers the code uses, so it reflects the live env exactly. Handy
     # for confirming a Dokploy env var actually reached the container.
     try:
+        from backend.auth import api_key_scopes_enforced
         from backend.authority.auto_enqueue import auto_resolve_enabled
         from backend.authority.entity_writeback import writeback_enabled
         from backend.routers.deps import _blocking_enabled
@@ -185,6 +186,7 @@ def health_check(request: Request, db: Session = Depends(get_db)):
             "authority_writeback": writeback_enabled(),
             "use_blocking": _blocking_enabled(),
             "retro_events": retro_events_enabled(),
+            "api_key_scopes_enforced": api_key_scopes_enforced(),
         }
     except Exception:  # noqa: BLE001 — never let the probe break /health
         logger.exception("health_check_features_error")

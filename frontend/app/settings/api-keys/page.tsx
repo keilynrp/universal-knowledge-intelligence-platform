@@ -74,6 +74,9 @@ export default function ApiKeysPage() {
   });
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState<string | null>(null);
+  // null = unknown (probe failed). Only an explicit `false` warns, so a
+  // transient /health failure never claims scopes are unenforced.
+  const [scopesEnforced, setScopesEnforced] = useState<boolean | null>(null);
   const tr = useCallback((key: string, fallback: string) => {
     const value = t(key);
     return value === key ? fallback : value;
@@ -82,12 +85,18 @@ export default function ApiKeysPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [kRes, sRes] = await Promise.all([
+      const [kRes, sRes, hRes] = await Promise.all([
         apiFetch("/api-keys"),
         apiFetch("/api-keys/scopes"),
+        apiFetch("/health"),
       ]);
       if (kRes.ok) setKeys(await kRes.json());
       if (sRes.ok) setScopes(await sRes.json());
+      if (hRes.ok) {
+        const health = await hRes.json();
+        const enforced = health?.features?.api_key_scopes_enforced;
+        setScopesEnforced(typeof enforced === "boolean" ? enforced : null);
+      }
     } catch {
       toast(tr("page.settings_api_keys.toast.load_failed", "Could not load API keys right now."), "error");
     }
@@ -299,6 +308,14 @@ export default function ApiKeysPage() {
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">{tr("page.settings_api_keys.scopes", "Scopes")}</label>
+                {scopesEnforced === false && (
+                  <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-500/10 dark:text-amber-300">
+                    {tr(
+                      "page.settings_api_keys.scopes_warn_mode",
+                      "Scope enforcement is off on this deployment. Scopes are recorded and violations are audited, but they do not yet restrict what a key can do.",
+                    )}
+                  </p>
+                )}
                 <div className="space-y-2">
                   {scopes.map((s) => (
                     <label key={s.id} className="flex items-start gap-3 cursor-pointer">

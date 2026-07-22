@@ -3,17 +3,19 @@ JWT Authentication module for UKIP.
 Multi-user RBAC model: credentials stored in the 'users' table.
 Roles: super_admin | admin | editor | viewer
 """
+import json
 import logging
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import bcrypt as _bcrypt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
+from backend.api_key_scopes import READ, satisfies, scope_required
 from backend.database import get_db
 from backend import models
 
@@ -150,9 +152,136 @@ def authenticate_user(db: Session, username: str, password: str) -> Optional[mod
     return user
 
 
+# ── API key scopes ───────────────────────────────────────────────────────────
+
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def api_key_scopes_enforced() -> bool:
+    """Whether a scope violation blocks the request or is merely recorded.
+
+    Read at call time rather than at import, so the rollout flag can be flipped
+    without rebuilding the image — and so tests can exercise both modes.
+    """
+    raw = os.environ.get("UKIP_API_KEY_SCOPES_ENFORCED", "0")
+    return raw.strip().lower() in _TRUTHY
+
+
+def _granted_scopes(key_record: models.ApiKey) -> list[str]:
+    """Scopes on the key, or an empty list if the column is absent or corrupt.
+
+    Fail-closed: an unreadable scope list grants nothing.
+    """
+    try:
+        parsed = json.loads(key_record.scopes) if key_record.scopes else []
+    except (TypeError, ValueError):
+        logger.warning("API key %s has an unparseable scope list", key_record.key_prefix)
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [scope for scope in parsed if isinstance(scope, str)]
+
+
+def _route_template(request: Request) -> str:
+    """The matched route template (``/entities/{entity_id}``).
+
+    Matching the template rather than the concrete URL keeps an identifier that
+    happens to contain an admin-looking segment from changing the
+    classification, and lets parameterized read-overrides match at all.
+    """
+    route = request.scope.get("route")
+    return getattr(route, "path", None) or request.url.path
+
+
+def _record_scope_violation(
+    db: Session,
+    key_record: models.ApiKey,
+    method: str,
+    path: str,
+    required: str,
+    granted: list[str],
+    enforced: bool,
+) -> None:
+    """Persist a violation for the warn-mode observation window.
+
+    Written to the audit log rather than only the app log so the window can be
+    reviewed from the UI. Records the key prefix only — never the key, never
+    the hash. Never raises: observability must not break a request.
+    """
+    try:
+        db.add(
+            models.AuditLog(
+                action="api_key.scope_violation",
+                entity_type="api_key",
+                entity_id=key_record.id,
+                user_id=key_record.user_id,
+                endpoint=path,
+                method=method,
+                status_code=status.HTTP_403_FORBIDDEN if enforced else None,
+                details=json.dumps(
+                    {
+                        "key_prefix": key_record.key_prefix,
+                        "method": method,
+                        "path": path,
+                        "required": required,
+                        "granted": granted,
+                        "enforced": enforced,
+                    }
+                ),
+            )
+        )
+        db.commit()
+    except Exception:  # pragma: no cover — defensive
+        db.rollback()
+        logger.exception("Failed to record API key scope violation")
+
+
+def enforce_api_key_scope(
+    db: Session,
+    key_record: models.ApiKey,
+    method: str,
+    path: str,
+) -> None:
+    """Gate a request authenticated by an API key on the key's scopes.
+
+    Raises 403 when the key is too narrow *and* enforcement is on. In warn mode
+    the violation is recorded and the request proceeds, so that a live
+    integration is observed before it is broken.
+
+    This restricts; it never elevates. Role-based access control runs afterwards
+    unchanged, so the effective permission is scope ∩ role.
+    """
+    required = scope_required(method, path)
+    granted = _granted_scopes(key_record)
+    if satisfies(granted, required):
+        return
+
+    enforced = api_key_scopes_enforced()
+    logger.warning(
+        "API key %s lacks scope '%s' for %s %s (grants: %s)%s",
+        key_record.key_prefix,
+        required,
+        method,
+        path,
+        granted or "none",
+        "" if enforced else " — warn mode, allowing",
+    )
+    _record_scope_violation(db, key_record, method, path, required, granted, enforced)
+
+    if enforced:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"API key scope '{required}' is required for this operation; "
+                f"this key grants {granted or 'no scopes'}."
+            ),
+        )
+
+
 # ── Dependencies ─────────────────────────────────────────────────────────────
 
 async def get_current_user(
+    request: Request,
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> models.User:
@@ -180,6 +309,9 @@ async def get_current_user(
         ).first()
         if not user:
             raise credentials_exc
+        enforce_api_key_scope(
+            db, key_record, request.method, _route_template(request)
+        )
         return user
 
     # ── JWT path ──────────────────────────────────────────────────────────────
@@ -202,12 +334,17 @@ async def get_current_user(
 
 
 async def get_current_user_optional(
+    request: Request,
     token: Optional[str] = Depends(optional_oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> Optional[models.User]:
     """
     Best-effort auth resolver for routes that may be publicly readable.
     Invalid, expired, or missing credentials are treated as anonymous access.
+
+    An *insufficient scope* is not treated as anonymous: a caller who presented
+    a real credential that is too narrow gets a 403, not a silent downgrade that
+    would hide the reason their data looks empty.
     """
     if not token:
         return None
@@ -217,10 +354,15 @@ async def get_current_user_optional(
         key_record = verify_api_key(token, db)
         if not key_record:
             return None
-        return db.query(models.User).filter(
+        user = db.query(models.User).filter(
             models.User.id == key_record.user_id,
             models.User.is_active == True,  # noqa: E712
         ).first()
+        if user:
+            enforce_api_key_scope(
+                db, key_record, request.method, _route_template(request)
+            )
+        return user
 
     try:
         payload = _decode_token(token)
