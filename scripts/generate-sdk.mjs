@@ -51,6 +51,11 @@ function dumpSpec() {
   });
 }
 
+/** CRLF -> LF, so the check measures content rather than checkout settings. */
+function normalizeEol(text) {
+  return text.replace(/\r\n/g, "\n");
+}
+
 function main() {
   mkdirSync(SDK_DIR, { recursive: true });
 
@@ -58,7 +63,11 @@ function main() {
 
   if (CHECK_ONLY) {
     const committed = existsSync(SPEC_PATH) ? readFileSync(SPEC_PATH, "utf8") : "";
-    if (committed !== spec) {
+    // Compare content, not line endings. .gitattributes pins this file to LF,
+    // but a checkout predating that rule (or a differently configured client)
+    // still has CRLF on disk — and a gate that reports drift no regeneration
+    // can fix is a gate people learn to bypass.
+    if (normalizeEol(committed) !== normalizeEol(spec)) {
       console.error(
         "[generate-sdk] DRIFT: sdk/openapi.json is stale.\n" +
           "The API surface changed without regenerating the SDK.\n" +

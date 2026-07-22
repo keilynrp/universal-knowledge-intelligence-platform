@@ -1,0 +1,6 @@
+# Generated API contract. The SDK drift gate compares the committed file byte
+# for byte against a freshly generated one, and the generator emits LF. Without
+# this rule a Windows checkout (core.autocrlf=true) rewrites it to CRLF, so the
+# gate reports permanent drift that regenerating cannot fix — the commit would
+# just be converted back. Pin it to LF on every platform.
+sdk/openapi.json text eol=lf
