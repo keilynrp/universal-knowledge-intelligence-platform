@@ -19,6 +19,12 @@ node scripts/generate-sdk.mjs           # rewrite sdk/openapi.json
 node scripts/generate-sdk.mjs --check   # fail if the committed spec is stale
 ```
 
+**Route handler docstrings are part of the spec.** FastAPI publishes them as
+operation `description` fields, so editing one drifts the committed spec and
+trips the gate — correctly, since those descriptions reach generated client
+documentation. If CI reports drift on a change that "only touched comments",
+this is why: rerun the generator and commit the result.
+
 The spec is read directly off the FastAPI app object — no server, no port, no
 database, no lifespan — so the CI gate stays cheap and does not depend on a
 healthy runtime.

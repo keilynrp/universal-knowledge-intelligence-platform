@@ -18860,7 +18860,7 @@
     },
     "/embed/{token}/config": {
       "get": {
-        "description": "Public \u2014 returns widget metadata (name, type, config) without auth.",
+        "description": "Public \u2014 returns widget metadata (name, type, config) without auth.\n\n``allowed_origins`` is included so the frontend embed page can emit its\nper-widget ``frame-ancestors`` header. It is not a secret: it names who may\n*frame* the widget, and the widget is public to anyone holding the token.",
         "operationId": "get_embed_by_token_config",
         "parameters": [
           {
@@ -18942,7 +18942,7 @@
     },
     "/embed/{token}/snippet": {
       "get": {
-        "description": "Public \u2014 returns ready-to-paste HTML iframe + JS embed snippets.",
+        "description": "Public \u2014 returns ready-to-paste HTML iframe + JS embed snippets.\n\n\"Ready to paste\" is the contract: both snippets must work verbatim in the\ndeployment that produced them (test_embed_distribution.py pins this).",
         "operationId": "get_embed_by_token_snippet",
         "parameters": [
           {
