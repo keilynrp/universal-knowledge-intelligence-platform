@@ -237,8 +237,39 @@ def _build_disambig_groups(
     return groups
 
 
+# Live dispatch threads, so the test harness can join them at test boundaries.
+# With the StaticPool in-memory SQLite test engine every session multiplexes a
+# single DBAPI connection; a dispatch thread's commit/rollback interleaving
+# with another thread's in-flight transaction silently discards it.
+_webhook_dispatch_threads: list[threading.Thread] = []
+
+
+def _has_subscribers(action: str, db_factory) -> bool:
+    """True if any active webhook subscribes to *action* (caller-thread check)."""
+    with db_factory() as db:
+        hooks = db.query(models.Webhook).filter(
+            models.Webhook.is_active == True  # noqa: E712
+        ).all()
+        for hook in hooks:
+            try:
+                events = json.loads(hook.events or "[]")
+            except Exception:
+                events = []
+            if action in events:
+                return True
+    return False
+
+
 def _dispatch_webhook(action: str, payload: dict, db_factory) -> None:
     """Fire-and-forget: send POST to every active webhook subscribed to *action*."""
+
+    # Cheap synchronous pre-check: skip spawning a DB-touching thread entirely
+    # when nothing subscribes to this event (the overwhelmingly common case).
+    try:
+        if not _has_subscribers(action, db_factory):
+            return
+    except Exception:
+        logger.exception("Webhook subscriber pre-check failed; dispatching anyway")
 
     def _worker():
         import time as _time
@@ -288,6 +319,10 @@ def _dispatch_webhook(action: str, payload: dict, db_factory) -> None:
             db.commit()
 
     t = threading.Thread(target=_worker, daemon=True)
+    _webhook_dispatch_threads[:] = [
+        th for th in _webhook_dispatch_threads if th.is_alive()
+    ]
+    _webhook_dispatch_threads.append(t)
     t.start()
 
 
