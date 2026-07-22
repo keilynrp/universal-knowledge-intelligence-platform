@@ -9,11 +9,11 @@ import { buildFrameAncestors, buildEmbedCsp, isWidgetToken } from "../lib/embedC
 
 describe("isWidgetToken", () => {
   it("accepts a UUID4, the format the backend mints", () => {
-    expect(isWidgetToken("3f6b2c1e-9a4d-4f7b-8c21-0d5e6a7b8c9d")).toBe(true);
+    expect(isWidgetToken("00000000-0000-4000-8000-000000000000")).toBe(true);
   });
 
   it("is case-insensitive", () => {
-    expect(isWidgetToken("3F6B2C1E-9A4D-4F7B-8C21-0D5E6A7B8C9D")).toBe(true);
+    expect(isWidgetToken("AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE")).toBe(true);
   });
 
   it("rejects path traversal", () => {
@@ -33,7 +33,7 @@ describe("isWidgetToken", () => {
   it("rejects empty and malformed values", () => {
     expect(isWidgetToken("")).toBe(false);
     expect(isWidgetToken("not-a-uuid")).toBe(false);
-    expect(isWidgetToken("3f6b2c1e9a4d4f7b8c210d5e6a7b8c9d")).toBe(false);
+    expect(isWidgetToken("00000000000040008000000000000000")).toBe(false);
   });
 });
 
