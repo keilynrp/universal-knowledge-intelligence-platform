@@ -93,11 +93,22 @@ EMPTY — no findings at gate introduction (2026-06-10).
 
 ### 7b. npm allowlist (`frontend/.npm-audit-allowlist.json`)
 
-EMPTY — 0 production HIGH/CRITICAL findings at gate introduction (2026-06-10).
+| ID | Package | Severity | Reason | Owner | Expires |
+| --- | --- | --- | --- | --- | --- |
+| 1124066 (GHSA-f88m-g3jw-g9cj) | sharp (bundled by next 16.x) | HIGH | npm's only "fix" is a semver-major *downgrade* to next 14. Real fix arrives when next bumps its bundled sharp. An npm `override` would force a lockfile regen, prohibited on Windows dev machines (strips linux native binaries — sharp is exactly such a module). | platform owner | 2026-08-21 |
+
+Note (2026-07-22): the gate wrapper now propagates allowlist status through
+purely-transitive findings (a package flagged only *via* another package is
+allowed exactly when every such package is itself fully allowlisted). Without
+this, `next`-via-`sharp` was impossible to allowlist at all: it exposes no
+advisory id of its own to key an entry on. Propagation remains fail-closed —
+it only flows from explicit entries.
 
 ### 7c. Trivy ignore file (`.trivyignore`)
 
-EMPTY — 0 fixable CRITICALs across the 3 images at gate introduction (2026-06-10).
+| CVE | Where | Severity | Reason | Owner | Review by |
+| --- | --- | --- | --- | --- | --- |
+| CVE-2026-59873 | node-tar inside the npm CLI of the node base image (frontend image) | CRITICAL | Not an app dependency: `usr/local/lib/node_modules/npm/...`. The standalone runtime (`node server.js`) never invokes npm or tar, so the gzip-bomb DoS vector is not reachable. Clears when the node base image ships npm with tar ≥7.5.19. | platform owner | 2026-08-21 |
 
 ### 7d. CodeQL baseline
 

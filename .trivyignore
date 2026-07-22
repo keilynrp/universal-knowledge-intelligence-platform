@@ -1,2 +1,8 @@
 # Trivy ignores — every CVE here needs a row in docs/operating/SECURITY_GATES.md
 # with justification, owner, expiry. Format: one CVE id per line.
+# CVE-2026-59873 — node-tar <7.5.19 (gzip-bomb DoS), CRITICAL. Lives in the npm
+# CLI bundled with the node base image (usr/local/lib/node_modules/npm/...),
+# not in app dependencies; the standalone runtime never invokes npm/tar. Clears
+# when the node base image ships npm with tar >=7.5.19. Owner: platform owner.
+# Review by 2026-08-21. Documented in docs/operating/SECURITY_GATES.md §7c.
+CVE-2026-59873

@@ -1,4 +1,13 @@
 {
   "_comment": "Allowlisted npm advisories. Every entry: {\"id\": <advisory id or GHSA>, \"reason\": \"...\", \"owner\": \"...\", \"expires\": \"YYYY-MM-DD\"}. Must match a row in docs/operating/SECURITY_GATES.md.",
-  "allowlist": []
+  "allowlist": [
+    {
+      "id": "1124066",
+      "package": "sharp (bundled by next 16.x)",
+      "reason": "HIGH in sharp pulled in by next; npm fix is a semver-major DOWNGRADE to next 14. Real fix arrives when next bumps its bundled sharp. An npm override would force a lockfile regen, prohibited on Windows (strips linux binaries; sharp is a native module). Expiry forces a re-check.",
+      "owner": "platform owner",
+      "expires": "2026-08-21",
+      "ghsa": "GHSA-f88m-g3jw-g9cj"
+    }
+  ]
 }

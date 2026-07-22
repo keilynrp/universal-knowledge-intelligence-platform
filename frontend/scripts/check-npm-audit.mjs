@@ -5,8 +5,10 @@
  * (and not expired). npm audit has no native baseline, hence this wrapper.
  *
  * Note: purely transitive vulns (via entries that are all strings) yield no
- * advisory ids; those fail closed and must be allowlisted at the direct-dep
- * level if ever needed.
+ * advisory ids. They are allowed only when every package they point at is
+ * itself fully allowlisted (fixpoint propagation below); otherwise they fail
+ * closed. Example: `next` flagged solely via `sharp` clears once sharp's
+ * advisory is allowlisted — there is no separate advisory to key an entry on.
  */
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -69,19 +71,43 @@ if (!report.vulnerabilities || typeof report.vulnerabilities !== "object") {
   process.exit(2);
 }
 const vulns = report.vulnerabilities;
-const blocking = [];
 
+// Pass 1 — packages whose own advisories (object vias) are all allowlisted.
+// Pass 2..n — propagate through string vias to a fixpoint: a package flagged
+// only *via* other packages is allowed exactly when every one of those
+// packages is itself allowed. Fail-closed is preserved: propagation only ever
+// flows FROM explicit allowlist entries, never around them, and a via chain
+// touching any non-allowed package stays blocking.
+const allowed = new Set();
+let changed = true;
+while (changed) {
+  changed = false;
+  for (const [name, vuln] of Object.entries(vulns)) {
+    if (allowed.has(name) || !SEVERITIES.has(vuln.severity)) continue;
+    const via = vuln.via ?? [];
+    const objectIds = via
+      .filter((v) => typeof v === "object")
+      .map((v) => String(v.source ?? v.ghsaId ?? v.url ?? ""))
+      .filter((id) => id !== "");
+    const viaPackages = via.filter((v) => typeof v === "string");
+    if (objectIds.length === 0 && viaPackages.length === 0) continue; // nothing to key on — stays blocking
+    const idsOk = objectIds.every((id) => active.has(id));
+    const viasOk = viaPackages.every((pkg) => allowed.has(pkg));
+    if (idsOk && viasOk) {
+      allowed.add(name);
+      changed = true;
+    }
+  }
+}
+
+const blocking = [];
 for (const [name, vuln] of Object.entries(vulns)) {
-  if (!SEVERITIES.has(vuln.severity)) continue;
-  // Advisory ids live in vuln.via entries that are objects (not strings).
+  if (!SEVERITIES.has(vuln.severity) || allowed.has(name)) continue;
   const ids = (vuln.via ?? [])
     .filter((v) => typeof v === "object")
     .map((v) => String(v.source ?? v.ghsaId ?? v.url ?? ""))
     .filter((id) => id !== "");
-  const allAllowed = ids.length > 0 && ids.every((id) => active.has(id));
-  if (!allAllowed) {
-    blocking.push({ name, severity: vuln.severity, ids, via: vuln.via });
-  }
+  blocking.push({ name, severity: vuln.severity, ids, via: vuln.via });
 }
 
 if (blocking.length > 0) {
