@@ -80,12 +80,17 @@ to change.
       EN + ES translations added.
 - [x] 5.4 Full backend suite: **3300 passed, 7 skipped**. Frontend: **294
       passed** (43 files). `tsc --noEmit` clean. Design-system gate passed.
-- [ ] 5.5 PR.
+- [x] 5.5 PR #164 (branch `feat/enforce-api-key-scopes`, 5 commits).
 
-⚠️ Local ESLint is currently broken *independently of this change*:
-`eslint-plugin-react` crashes under ESLint 10.7.0
-(`contextOrFilename.getFilename is not a function`) on untouched files too.
-The pre-push hook runs ESLint, so it will fail until that is resolved.
+Resolved along the way (both verified as pre-existing, not caused by this
+change):
+- Local ESLint crash on Windows — `eslint-plugin-react` 7.37.5 auto-detection
+  uses an ESLint-9-era context API and throws under ESLint 10. Fixed by
+  pinning `settings.react.version` from the installed `react/package.json`
+  (behavior-identical; full-repo lint exit 0). Commit `40c3ee3`.
+- `pip-audit` red from two `pyasn1` 0.6.2 CVEs (CVE-2026-59885/59886)
+  published after main last passed. One-line lock bump to 0.6.4; JWT
+  round-trip + 64 auth-dependent tests verified. Commit `88adf8d`.
 
 ## 6. Rollout (operator, post-merge — not part of the PR)
 
