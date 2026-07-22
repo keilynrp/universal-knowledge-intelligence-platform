@@ -657,6 +657,45 @@ Available scopes: `read`, `write`, `admin`. Key format: `ukip_<40 chars>`.
 
 ---
 
+### Embeddable Widgets
+
+Admin-managed widgets that render UKIP stats on external sites.
+
+| Method | Path | Min Role | Description |
+|---|---|---|---|
+| `POST` | `/widgets` | admin | Create widget (returns `public_token`) |
+| `GET` | `/widgets` | viewer | List widgets |
+| `GET` | `/widgets/{id}` | viewer | Get one widget |
+| `PUT` | `/widgets/{id}` | admin | Update widget |
+| `DELETE` | `/widgets/{id}` | admin | Delete widget |
+| `GET` | `/embed/{token}/config` | public | Widget metadata incl. `allowed_origins` |
+| `GET` | `/embed/{token}/data` | public | Live widget data |
+| `GET` | `/embed/{token}/snippet` | public | Ready-to-paste iframe + JS snippets |
+
+Widget types: `entity_stats`, `top_concepts`, `recent_entities`, `quality_score`.
+
+**Snippets are copy-paste ready.** The iframe targets the app's render page
+(`{FRONTEND_URL}/embed/{token}`); the JS snippet fetches from
+`UKIP_PUBLIC_API_URL` (falling back to the request origin). Neither contains a
+placeholder to substitute.
+
+**The token is the credential.** Anyone holding a widget's `public_token` can
+read its data directly — `allowed_origins` does **not** restrict data
+retrieval. What it does control:
+
+- **Framing** — the embed page emits a `Content-Security-Policy:
+  frame-ancestors` header derived from `allowed_origins`, so a widget
+  restricted to `https://example.com` can only be iframed there (`*` = any
+  site). Unknown or malformed origins fail closed to `'none'`.
+- **Browser fetches** — `/embed/{token}/data` rejects browser requests whose
+  `Origin` header is not listed. This is a courtesy filter, not a boundary:
+  non-browser clients simply omit the header.
+
+Treat the token like a public URL: rotate it (delete + recreate the widget) if
+it leaks somewhere you did not intend.
+
+---
+
 ### Search
 
 | Method | Path | Min Role | Description |
