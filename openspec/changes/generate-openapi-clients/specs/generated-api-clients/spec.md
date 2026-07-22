@@ -2,9 +2,15 @@
 
 ### Requirement: Operation identifiers are a stable public interface
 
-The system SHALL derive OpenAPI operation identifiers from route name and tag
-rather than from implementation function names, so that generated client method
-names do not change when internal code is refactored.
+The system SHALL derive OpenAPI operation identifiers from the HTTP method and
+route path rather than from implementation function names or documentation
+tags, so that generated client method names do not change when internal code is
+refactored.
+
+#### Scenario: Tag reorganization does not change the identifier
+
+- **WHEN** a route's documentation tag changes
+- **THEN** its operation identifier is unchanged
 
 #### Scenario: Operation IDs are deterministic
 

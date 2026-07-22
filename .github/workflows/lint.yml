@@ -19,6 +19,35 @@ jobs:
       - name: Enforce enterprise readiness source of truth
         run: python scripts/lint_enterprise_readiness.py
 
+  # ── OpenAPI spec drift (blocking) ─────────────────────────────────────────
+  # The committed sdk/openapi.json is the baseline generated SDK clients are
+  # built from. A stale baseline is worse than none: it looks authoritative
+  # while describing an API that no longer exists. This job fails the PR that
+  # changed a route without regenerating.
+  openapi-drift:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install backend dependencies
+        run: pip install -r requirements.txt -c requirements.lock
+
+      - name: Check the committed OpenAPI spec matches the application
+        run: node scripts/generate-sdk.mjs --check
+
   # ── Domain scope contract lint (blocking) ─────────────────────────────────
   domain-scope-lint:
     runs-on: ubuntu-latest

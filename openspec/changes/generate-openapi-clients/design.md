@@ -24,10 +24,34 @@ generated TS method is `createWidgetWidgetsPost`. Two consequences:
 - **Renaming a private Python function renames a public SDK method.** Internal
   refactors become external breakage with no signal.
 
-So: install `generate_unique_id_function` on the app producing
-`{tag}_{route_name}`, and add a test pinning the operation IDs of a
-representative sample. The names become an intentional interface rather than a
-byproduct of implementation detail.
+**Correction applied during implementation.** This document originally proposed
+`{tag}_{route_name}` — which does *not* deliver the stated property, because
+`route.name` **is** the handler function's name. Renaming the function would
+still rename the public method; the scheme would have been prettier, not more
+stable. Tags are worse still: they are documentation grouping and could be
+re-organized freely.
+
+The identifier is derived from **method + path** instead — the actual HTTP
+contract:
+
+```
+GET    /users/me              -> get_users_me
+DELETE /api-keys/{key_id}     -> delete_api_keys_by_key_id
+GET    /a/{x}/b/{y}           -> get_a_by_x_b_by_y
+```
+
+A path or method change *is* a breaking API change and should rename the client
+method. An internal refactor is not, and now cannot.
+
+**Trade-off, accepted deliberately:** names are mechanical, and deep
+parameterized routes get long ones
+(`get_analyzers_coauthorship_by_domain_id_diagnostics`). That is the price of
+decoupling. It is improvable later per route via an explicit `operation_id=` on
+the decorator — additive and opt-in, and it does not reintroduce the coupling
+anywhere else.
+
+A test pins a representative sample plus the invariant (every ID starts with
+its method), so any change to the public surface fails by name.
 
 Ordering matters: doing this after generating clients means regenerating and
 breaking every name once. Do it first.

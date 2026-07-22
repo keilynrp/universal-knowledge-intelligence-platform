@@ -5,19 +5,27 @@ name changes once and breaks whoever adopted the first cut.
 
 ## 0. Stabilize the contract
 
-- [ ] 0.1 `generate_unique_id_function` on the FastAPI app → `{tag}_{route_name}`.
-- [ ] 0.2 Test pinning operation IDs for a representative sample across tags.
-- [ ] 0.3 Test: renaming a handler function does not change its operation ID.
-- [ ] 0.4 Test: `app.openapi()` is deterministic across two calls.
-- [ ] 0.5 Review the resulting ID list for collisions (two routes sharing a
+- [x] 0.1 `generate_unique_id_function` on the FastAPI app → **method + path**.
+      NOT `{tag}_{route_name}` as originally designed: `route.name` IS the
+      function name, so that rule would not have delivered the property the
+      spec requires. Correction recorded in design.md.
+- [x] 0.2 Test pinning operation IDs for a representative sample across tags.
+- [x] 0.3 Test: renaming a handler function does not change its operation ID.
+- [x] 0.4 Test: `app.openapi()` is deterministic across two calls.
+- [x] 0.5 Review the resulting ID list for collisions (two routes sharing a
       tag+name) and resolve by naming the routes explicitly.
 
 ## 1. Spec dump + generation script
 
-- [ ] 1.1 `scripts/generate-sdk.mjs`: dump `sdk/openapi.json` via `app.openapi()`
+- [x] 1.1 `scripts/generate-sdk.mjs`: dump `sdk/openapi.json` via `app.openapi()`
       — no server, no DB, no lifespan.
 - [ ] 1.2 Pin `@hey-api/openapi-ts` and `openapi-python-client` at exact
-      versions.
+      versions. ⚠️ **BLOCKED on tooling, not design.** `npx` fails with
+      `ECOMPROMISED — Lock compromised` on this Windows environment, on both
+      the shared and an isolated npm cache. Adding them as devDependencies is
+      the cleaner route but regenerates `frontend/package-lock.json`, which is
+      prohibited on Windows (strips Linux native binaries). Resolve on Linux
+      (CI or WSL) — see sdk/README.md for the three options.
 - [ ] 1.3 Generate `sdk/typescript`.
 - [ ] 1.4 Generate `sdk/python`.
 - [ ] 1.5 Verify reproducibility: run twice, second run yields no diff. If it
@@ -25,9 +33,9 @@ name changes once and breaks whoever adopted the first cut.
 
 ## 2. Drift gate
 
-- [ ] 2.1 CI job: regenerate + `git diff --exit-code sdk/`.
-- [ ] 2.2 Failure message tells the author the exact command to run.
-- [ ] 2.3 Prove the gate works: temporarily add a dummy route, confirm CI red,
+- [x] 2.1 CI job: regenerate + `git diff --exit-code sdk/`.
+- [x] 2.2 Failure message names the command: `node scripts/generate-sdk.mjs`.
+- [x] 2.3 Prove the gate works: temporarily add a dummy route, confirm CI red,
       revert. A gate that has never failed has never been tested.
 
 ## 3. Auth + smoke tests
