@@ -105,6 +105,14 @@ services:
       # Default ON in prod so governed history is captured; emission is
       # non-fatal and idempotent. Set to 0 to disable. See /health features.
       UKIP_RETRO_EVENTS: ${UKIP_RETRO_EVENTS:-1}
+      # API key scope enforcement. Ships as 0 (WARN MODE) on purpose: until this
+      # change, key scopes were stored but never checked, so any live
+      # integration holding a "read" key may in fact be writing. Warn mode
+      # records every would-be denial to the audit log as
+      # "api_key.scope_violation" without blocking. Review that action for a
+      # week, widen or fix the offending keys, THEN set this to 1. Flipping it
+      # blind returns 403 to integrations that work today.
+      UKIP_API_KEY_SCOPES_ENFORCED: ${UKIP_API_KEY_SCOPES_ENFORCED:-0}
       # quality.low alert threshold (domain avg quality score, percent 0-100).
       # A domain crossing DOWN through this value on a quality recompute fires
       # the quality.low alert-channel event. Default 60. See docs/NOTIFICATIONS.md.

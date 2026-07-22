@@ -29,7 +29,14 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from sqlalchemy.orm import Session
 
 from backend import models
@@ -58,10 +65,22 @@ def _resolve_user(token: str, db: Session) -> models.User | None:
             key_record = verify_api_key(token, db)
             if not key_record:
                 return None
-            return db.query(models.User).filter(
+            user = db.query(models.User).filter(
                 models.User.id == key_record.user_id,
                 models.User.is_active == True,  # noqa: E712
             ).first()
+            if user is None:
+                return None
+            # A socket only ever streams data outward, so `read` is the bar.
+            # The caller closes the connection on None; enforcement here means a
+            # too-narrow key cannot open a stream it could not poll over HTTP.
+            from backend.auth import enforce_api_key_scope
+
+            try:
+                enforce_api_key_scope(db, key_record, "GET", "/ws")
+            except HTTPException:
+                return None
+            return user
 
         payload = _decode_token(token)
         username: str | None = payload.get("sub")

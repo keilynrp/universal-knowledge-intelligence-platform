@@ -48,6 +48,48 @@ username=admin&password=yourpassword
 
 Long-lived API keys prefixed `ukip_` can be used as Bearer tokens. Keys are shown **once** at creation; only a SHA-256 hash is stored. Manage via the `/api-keys` endpoints.
 
+#### Scopes
+
+A key carries one or more scopes. The scope required by a request is derived
+from the route, not declared per endpoint:
+
+| Request | Required scope |
+|---|---|
+| `GET`, `HEAD`, `OPTIONS` | `read` |
+| `POST`, `PUT`, `PATCH`, `DELETE` | `write` |
+| Any method on an administrative surface | `admin` |
+
+Administrative surfaces are `/users` (except `/users/me`), `/api-keys`,
+`/organizations`, `/stores`, `/admin/*`, `/ops/*`, `/settings/auth`,
+`/auth/sso/settings`, `/webhooks`, `/alert-channels`, and `/workflows` — the
+places where a leaked credential would expose stored secrets, mint further
+credentials, destroy data, or configure a standing outbound data feed.
+
+A small set of `POST` endpoints perform a query, preview, or export rather than
+a mutation (`/rag/query`, `/nlq/query`, `/cube/query`, `/analyze`,
+`/scientific/search`, `/upload/preview`, `/exports/*`, and similar). These
+require only `read`, so an integrator does not need a write-scoped key to run a
+search.
+
+Scopes escalate: `admin` implies `write`, and `write` implies `read`.
+
+**Scopes restrict; they never elevate.** The scope check runs in addition to
+RBAC, so the effective permission is the intersection of the key's scopes and
+the owning user's role. An `admin`-scoped key belonging to a `viewer` still has
+viewer permissions.
+
+A `403` naming a scope means the *credential* is too narrow — issue a new key
+with wider scopes. A `403` naming a role means the *user* lacks permission, and
+a new key will not help.
+
+#### Rollout
+
+Enforcement is controlled by `UKIP_API_KEY_SCOPES_ENFORCED`. While it is `0`
+(warn mode), a request whose scope is insufficient still succeeds, and the
+violation is recorded in the audit log under the action
+`api_key.scope_violation`. Check `GET /health` → `features.api_key_scopes_enforced`
+for the state of a running deployment.
+
 ### SSO (OAuth2 / OIDC)
 
 | Method | Path | Description |
