@@ -410,9 +410,28 @@ def _reset_test_state(db):
         db.commit()
 
 
+def _join_webhook_dispatch_threads() -> None:
+    """Join fire-and-forget webhook dispatch threads at test boundaries.
+
+    On the StaticPool in-memory SQLite engine every session multiplexes ONE
+    DBAPI connection, so a dispatch thread surviving into the next test can
+    commit/rollback the shared connection mid-transaction and silently discard
+    that test's in-flight writes (observed as `Could not refresh instance
+    '<WorkflowRun ...>'` in test_sprint92).
+    """
+    from backend.routers import deps as _deps
+    for t in list(_deps._webhook_dispatch_threads):
+        if t.is_alive():
+            t.join(timeout=15)
+    _deps._webhook_dispatch_threads[:] = [
+        t for t in _deps._webhook_dispatch_threads if t.is_alive()
+    ]
+
+
 @pytest.fixture(autouse=True)
 def isolate_test_state():
     """Isolate endpoint tests that do not explicitly request db_session."""
+    _join_webhook_dispatch_threads()
     _analytics_router._analytics_cache.invalidate()
     _analytics_router._dashboard_cache.invalidate()
     pre = TestingSessionLocal()
@@ -423,6 +442,7 @@ def isolate_test_state():
 
     yield
 
+    _join_webhook_dispatch_threads()
     _analytics_router._analytics_cache.invalidate()
     _analytics_router._dashboard_cache.invalidate()
     post = TestingSessionLocal()

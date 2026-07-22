@@ -194,7 +194,11 @@ def run_workflow(
     )
     db.add(run)
     db.commit()
-    db.refresh(run)
+    # NOTE: no db.refresh(run) here. The instance is already persistent after
+    # commit and expired attributes reload lazily on access. An eager refresh
+    # is also a flake trap on the shared StaticPool SQLite test connection: a
+    # concurrent session rollback (e.g. a webhook dispatch thread) can discard
+    # the row between COMMIT and the refresh SELECT.
 
     try:
         conditions = json.loads(workflow.conditions or "[]")
