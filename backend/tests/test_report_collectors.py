@@ -373,3 +373,33 @@ def test_migrated_harmonization_log_html_preserves_structure(db_session):
     for col in ("Step", "Records Updated", "Status", "Executed"):
         assert col in html
     assert "Normalize labels" in html
+
+
+# ── stakeholder_reading (task 3.11 — always-on section, not in the registry) ─
+
+def test_collect_stakeholder_reading_returns_narrative(db_session):
+    _seed_snapshot(db_session)
+    section = report_builder.collect_stakeholder_reading(db_session, "default", None)
+
+    assert isinstance(section, SectionData)
+    assert section.key == "stakeholder_reading"
+    assert section.title == "Stakeholder Reading"
+
+    reading = next(b for b in section.blocks if isinstance(b, Narrative))
+    assert reading.heading                      # the stakeholder lens label
+    joined = " ".join(reading.paragraphs)
+    assert "benchmark readiness" in joined
+    assert "Recommended emphasis:" in joined
+    assert "Narrative goal:" in joined
+
+
+def test_migrated_stakeholder_reading_html_preserves_structure(db_session):
+    """HTML builder delegates to the collector + renderer. The section still
+    renders as a callout under the Stakeholder Reading heading; the attention-
+    point bullets flatten to paragraphs (the shared Narrative primitive)."""
+    _seed_snapshot(db_session)
+    html = report_builder._section_stakeholder_reading(db_session, "default", None)
+
+    assert "<h2>Stakeholder Reading</h2>" in html
+    assert 'class="callout"' in html
+    assert "benchmark readiness" in html

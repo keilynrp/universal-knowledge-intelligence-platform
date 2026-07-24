@@ -93,14 +93,21 @@ def _section_manual_note(title: str, content: str) -> str:
 </section>"""
 
 
-def _section_stakeholder_reading(
+def collect_stakeholder_reading(
     db: Session,
     domain_id: str,
     org_id: int | None,
     benchmark_profile_id: str | None = None,
     benchmark_org: models.Organization | None = None,
     stakeholder_profile: str | None = None,
-) -> str:
+) -> "SectionData":
+    """Format-neutral stakeholder lens: a single Narrative framing the brief for
+    the chosen audience. Migrated onto the shared payload (phase 3.11). The
+    attention-point bullets flatten to paragraphs and the bold labels become
+    plain text, consistent with the earlier migrations.
+    """
+    from backend.reporting.section_data import Narrative, SectionData
+
     snapshot = AnalyticsService.get_domain_snapshot(
         db,
         TopicAnalyzer(),
@@ -134,28 +141,43 @@ def _section_stakeholder_reading(
         stance = "The dataset is best treated as an early baseline. It already surfaces useful directional patterns, but it is not yet robust enough for a high-confidence external narrative."
 
     action_text = actions[0]["title"] if actions else "Continue strengthening enrichment coverage and record quality before broad circulation."
-    top_entity_text = ""
-    if top_entity:
-        top_entity_text = f"The highest-impact visible entity right now is {top_entity.get('entity_name') or top_entity.get('primary_label') or 'the current lead record'}, which can anchor a concrete stakeholder discussion."
-    attention_points = "".join(
-        f"<li>{point}</li>" for point in stakeholder.get("attention_points", [])
-    )
 
-    return f"""<section>
-    <h2>Stakeholder Reading</h2>
-    <div class="callout">
-        <h3>{stakeholder["label"]}</h3>
-        <p>This brief is being framed for {stakeholder["focus"]}. {stakeholder["brief_hint"]}</p>
-        <p style="margin-top:8px">{stance}</p>
-        <p style="margin-top:8px">Current benchmark readiness is <b>{readiness_pct}%</b>, average quality is <b>{quality_avg}%</b>, and enrichment coverage is <b>{coverage_pct}%</b>.</p>
-        <p style="margin-top:8px">The current Monte Carlo impact projection is <b>{impact_score}/100</b>, with a probable range of <b>{impact_range.get("p10", 0)}–{impact_range.get("p90", 0)}</b>.</p>
-        {'<p style="margin-top:8px">' + top_entity_text + '</p>' if top_entity_text else ''}
-        <p style="margin-top:8px"><b>Recommended emphasis:</b> {action_text}</p>
-        <p style="margin-top:10px"><b>How to read this brief for this audience:</b></p>
-        <ul style="margin:8px 0 0 18px;color:#4b5563;line-height:1.7">{attention_points}</ul>
-        <p style="margin-top:10px"><b>Narrative goal:</b> {stakeholder["narrative_goal"]}</p>
-    </div>
-</section>"""
+    paragraphs: list[str] = [
+        f'This brief is being framed for {stakeholder["focus"]}. {stakeholder["brief_hint"]}',
+        stance,
+        f"Current benchmark readiness is {readiness_pct}%, average quality is {quality_avg}%, and enrichment coverage is {coverage_pct}%.",
+        f'The current Monte Carlo impact projection is {impact_score}/100, with a probable range of {impact_range.get("p10", 0)}–{impact_range.get("p90", 0)}.',
+    ]
+    if top_entity:
+        entity_label = top_entity.get("entity_name") or top_entity.get("primary_label") or "the current lead record"
+        paragraphs.append(
+            f"The highest-impact visible entity right now is {entity_label}, which can anchor a concrete stakeholder discussion."
+        )
+    paragraphs.append(f"Recommended emphasis: {action_text}")
+    attention_points = stakeholder.get("attention_points", [])
+    if attention_points:
+        paragraphs.append("How to read this brief for this audience:")
+        paragraphs.extend(attention_points)
+    paragraphs.append(f'Narrative goal: {stakeholder["narrative_goal"]}')
+
+    reading = Narrative(heading=stakeholder["label"], paragraphs=tuple(paragraphs))
+    return SectionData(key="stakeholder_reading", title="Stakeholder Reading", blocks=(reading,))
+
+
+def _section_stakeholder_reading(
+    db: Session,
+    domain_id: str,
+    org_id: int | None,
+    benchmark_profile_id: str | None = None,
+    benchmark_org: models.Organization | None = None,
+    stakeholder_profile: str | None = None,
+) -> str:
+    from backend.reporting.html_renderer import render_html
+    return render_html(
+        collect_stakeholder_reading(
+            db, domain_id, org_id, benchmark_profile_id, benchmark_org, stakeholder_profile
+        )
+    )
 
 # ── CSS (inline, print-friendly) ─────────────────────────────────────────────
 

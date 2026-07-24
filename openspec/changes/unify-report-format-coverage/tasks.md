@@ -136,7 +136,14 @@ endpoints green and shippable.
       reality (it already rendered in neither binary format) and pairs it with the
       §4 omission reporting so the drop is reported, not silent. No collector is
       introduced.
-- [ ] 3.11 `stakeholder_reading` (always-on section, not in the registry)
+- [x] 3.11 `stakeholder_reading` (always-on section, not in the registry).
+      `collect_stakeholder_reading()` is the single source: one Narrative framing
+      the brief for the chosen audience. `_section_stakeholder_reading` delegates
+      to `render_html(...)`. HTML-only (as before — it is prepended in `build()`,
+      not part of the binary exporters' section loops, so the ratchet is
+      unaffected). The attention-point `<ul>` flattens to paragraphs and the bold
+      labels become plain text, per the migration precedent. Structural assertion
+      in `test_migrated_stakeholder_reading_html_preserves_structure`.
 - [ ] 3.12 Remove each superseded `_section_*` builder once its replacement is
       green; delete the duplicated `_entities_query` / `_harmonization_query`
       from `excel_exporter.py`
