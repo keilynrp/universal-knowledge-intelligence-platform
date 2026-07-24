@@ -416,6 +416,32 @@ def _section_decision_recommendations(
     <p style="color:#9ca3af;padding:12px 0">No recommendation signals yet — import or enrich more records to generate a prioritized action list.</p>
 </section>"""
 
+    def _priority_badge(priority: str) -> str:
+        if priority == "high":
+            return '<span class="badge badge-red">High priority</span>'
+        if priority == "medium":
+            return '<span class="badge badge-amber">Medium priority</span>'
+        return '<span class="badge badge-gray">Low priority</span>'
+
+    cards = "".join(
+        f"""
+        <div class="stat-card">
+            <div style="display:flex;justify-content:space-between;gap:12px;align-items:center">
+                <div class="label">{action["category"].replace("_", " ")}</div>
+                {_priority_badge(action["priority"])}
+            </div>
+            <div style="font-size:16px;font-weight:700;color:#111827;margin-top:8px">{action["title"]}</div>
+            <div class="sub" style="margin-top:8px;color:#4b5563">{action["detail"]}</div>
+            <div style="margin-top:10px;font-size:12px;color:#6b7280">{action["evidence"]}</div>
+        </div>"""
+        for action in actions
+    )
+
+    return f"""<section>
+    <h2>Suggested Next Actions</h2>
+    <div class="grid">{cards}</div>
+</section>"""
+
 
 def _section_impact_projection(
     db: Session,
@@ -529,32 +555,6 @@ def _section_hidden_patterns(
         <h3>Executive reading</h3>
         <p>UKIP scanned the portfolio for non-obvious concentrations, outliers, quality risks, source imbalance and graph bridge signals.</p>
     </div>
-    <div class="grid">{cards}</div>
-</section>"""
-
-    def _priority_badge(priority: str) -> str:
-        if priority == "high":
-            return '<span class="badge badge-red">High priority</span>'
-        if priority == "medium":
-            return '<span class="badge badge-amber">Medium priority</span>'
-        return '<span class="badge badge-gray">Low priority</span>'
-
-    cards = "".join(
-        f"""
-        <div class="stat-card">
-            <div style="display:flex;justify-content:space-between;gap:12px;align-items:center">
-                <div class="label">{action["category"].replace("_", " ")}</div>
-                {_priority_badge(action["priority"])}
-            </div>
-            <div style="font-size:16px;font-weight:700;color:#111827;margin-top:8px">{action["title"]}</div>
-            <div class="sub" style="margin-top:8px;color:#4b5563">{action["detail"]}</div>
-            <div style="margin-top:10px;font-size:12px;color:#6b7280">{action["evidence"]}</div>
-        </div>"""
-        for action in actions
-    )
-
-    return f"""<section>
-    <h2>Suggested Next Actions</h2>
     <div class="grid">{cards}</div>
 </section>"""
 
@@ -812,11 +812,14 @@ def build(
         if builder:
             try:
                 if sec == "institutional_benchmark":
-                    body_sections.append(builder(db, domain_id, org_id, benchmark_profile_id, benchmark_org))
+                    rendered = builder(db, domain_id, org_id, benchmark_profile_id, benchmark_org)
                 elif sec in {"decision_recommendations", "impact_projection", "hidden_patterns"}:
-                    body_sections.append(builder(db, domain_id, org_id, benchmark_org))
+                    rendered = builder(db, domain_id, org_id, benchmark_org)
                 else:
-                    body_sections.append(builder(db, domain_id, org_id))
+                    rendered = builder(db, domain_id, org_id)
+                if not isinstance(rendered, str):
+                    raise TypeError(f"section builder returned {type(rendered).__name__}, expected str")
+                body_sections.append(rendered)
             except Exception as exc:
                 body_sections.append(f'<section><h2>{SECTION_LABELS.get(sec, sec)}</h2>'
                                      f'<p style="color:#ef4444">Error building section: {exc}</p></section>')
