@@ -44,6 +44,28 @@ def test_health_endpoint_includes_cache(client):
     assert body["cache"]["reachable"] is True
 
 
+def test_health_endpoint_reports_build_version(client, monkeypatch):
+    """/health.version is the build this container is actually running.
+
+    Dockerfile.backend already bakes the CI commit into UKIP_APP_VERSION, but it
+    was never surfaced, so nothing outside the container could tell which build
+    was serving. The deploy gate needs exactly this to verify a deploy landed.
+    """
+    monkeypatch.setenv("UKIP_APP_VERSION", "b72df3ea3669f6f4c3febb970ccc47ea6cf409fd")
+    body = client.get("/health").json()
+    assert body["version"] == "b72df3ea3669f6f4c3febb970ccc47ea6cf409fd"
+
+
+def test_health_version_falls_back_when_unset(client, monkeypatch):
+    """An unbuilt/local container reports 'local', never an empty string.
+
+    An empty value would make the deploy gate's comparison vacuously pass.
+    """
+    monkeypatch.delenv("UKIP_APP_VERSION", raising=False)
+    body = client.get("/health").json()
+    assert body["version"] == "local"
+
+
 def test_health_endpoint_exposes_feature_flags(client, monkeypatch):
     """/health.features reflects the effective flag state of this container."""
     monkeypatch.setenv("UKIP_AUTO_RESOLVE_ON_INGEST", "1")

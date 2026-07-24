@@ -19,6 +19,7 @@ Lookups, ops, and specialized analytics endpoints (extracted from analytics.py).
   GET  /analytics/domain-health/{domain_id}
 """
 import logging
+import os
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -194,6 +195,11 @@ def health_check(request: Request, db: Session = Depends(get_db)):
     return {
         "status": status,
         "service": "ukip-backend",
+        # Build actually serving this request. Dockerfile.backend bakes the CI
+        # commit in as UKIP_APP_VERSION; surfacing it is what lets the deploy
+        # gate confirm a deploy landed instead of trusting the trigger call.
+        # Never empty — an empty value would make that comparison vacuously pass.
+        "version": os.getenv("UKIP_APP_VERSION") or "local",
         "database": db_status,
         "cache": cache_health,
         "features": features,
