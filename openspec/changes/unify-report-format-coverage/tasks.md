@@ -205,9 +205,19 @@ endpoints green and shippable.
 
 ## 6. Scheduled reports
 
-- [ ] 6.1 Failing test: a scheduled Excel report with unrenderable sections
-      records the omission on the run.
-- [ ] 6.2 Implement omission recording in `scheduled_reports.py`.
+- [x] 6.1 Failing test: a scheduled Excel report with unrenderable sections
+      records the omission on the run. (`test_scheduled_report_omissions.py`: an
+      Excel schedule with `agentic_trace` records it; an HTML schedule records
+      none.)
+- [x] 6.2 Implement omission recording in `scheduled_reports.py`. `_execute_report`
+      computes `format_support.unsupported_sections(fmt, sections)` and surfaces it
+      on the run — the returned result and the durable `report.sent` event payload
+      both carry `omitted_sections`. **No schema change:** a persisted
+      `ScheduledReport` column was considered and rejected — it would need an
+      alembic migration guarded by the drift-detection + head-assert tests for a
+      single minor field, and the `report.sent` event already is the durable
+      per-run record. Only Excel omits in practice (HTML/PDF render every section;
+      scheduled reports have no PPTX format).
 
 ## 7. Close out
 
