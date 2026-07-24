@@ -105,6 +105,7 @@ EMPTY — no findings at gate introduction (2026-06-10).
 | 1124192 (GHSA-p9j2-gv94-2wf4) | next 16.2.10 | HIGH | **Not exposed.** SSRF in rewrites via an attacker-controlled *destination hostname*. The only rewrite is `/api/backend/:path*` → `${BACKEND_INTERNAL}/:path*`; the hostname is fixed from env and only the path segment is caller-supplied. | platform owner | 2026-08-21 |
 | 1124194 (GHSA-q8wf-6r8g-63ch) | next 16.2.10 | MODERATE | **Applies.** DoS in the Image Optimization API via SVGs. Minimal surface: one `next/image` usage (`app/components/UserAvatar.tsx`). | platform owner | 2026-08-21 |
 | 1124196 (GHSA-955p-x3mx-jcvp) | next 16.2.10 | MODERATE | **Not exposed.** Unauthenticated disclosure of internal Server Function endpoints; no Server Functions or Server Actions exist. | platform owner | 2026-08-21 |
+| 1124288 (GHSA-r28c-9q8g-f849) | postcss 8.5.13 | HIGH | **Not exposed.** Path traversal in previous-source-map auto-loading (`sourceMappingURL` → arbitrary `.map` disclosure). postcss runs at build time over first-party Tailwind/app CSS, never at runtime over untrusted CSS. Also unblocks `next`, which is flagged only transitively *via* postcss (propagation) even though its own nine advisories are already keyed. Real fix is postcss >8.5.17, deferred to Dependabot/CI (a Windows lockfile regen strips linux/native deps). Exit condition: postcss ≥ 8.5.18. | platform owner | 2026-08-21 |
 
 Note (2026-07-23): the nine `next` entries above were added together because
 the wrapper requires *every* advisory on a flagged package to be keyed before
@@ -126,6 +127,14 @@ allowed exactly when every such package is itself fully allowlisted). Without
 this, `next`-via-`sharp` was impossible to allowlist at all: it exposes no
 advisory id of its own to key an entry on. Propagation remains fail-closed —
 it only flows from explicit entries.
+
+Note (2026-07-24): advisory `1124288` (postcss, GHSA-r28c-9q8g-f849) was newly
+published and blocked the gate on two packages at once — postcss directly, and
+`next` transitively (its `via` chain includes `postcss`), even though all nine
+of `next`'s own advisories were already keyed. The propagation rule above is why
+one postcss entry clears both. The real fix is a postcss bump (>8.5.17); it is
+left to Dependabot/CI rather than a Windows-local lockfile regen (which strips
+linux/native optional deps). Exit condition: postcss ≥ 8.5.18.
 
 ### 7c. Trivy ignore file (`.trivyignore`)
 

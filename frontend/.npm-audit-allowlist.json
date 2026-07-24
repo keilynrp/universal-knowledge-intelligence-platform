@@ -80,6 +80,14 @@
       "owner": "platform owner",
       "expires": "2026-08-21",
       "ghsa": "GHSA-955p-x3mx-jcvp"
+    },
+    {
+      "id": "1124288",
+      "package": "postcss 8.5.13",
+      "reason": "NOT EXPOSED — Path Traversal in postcss's previous-source-map auto-loading: a malicious 'sourceMappingURL' comment can make postcss disclose an arbitrary .map file. postcss runs at BUILD time over first-party Tailwind/app CSS only, never at runtime over attacker-controlled CSS, and previous-source-map loading is not fed untrusted input. Also unblocks 'next', which the gate flags only transitively VIA postcss (fixpoint propagation) despite all nine of next's own advisories already being keyed. Real fix is postcss >8.5.17; deferred to Dependabot/CI because a lockfile regen on a Windows dev machine strips linux/native optional deps. Expiry forces a re-check.",
+      "owner": "platform owner",
+      "expires": "2026-08-21",
+      "ghsa": "GHSA-r28c-9q8g-f849"
     }
   ]
 }
