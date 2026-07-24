@@ -201,16 +201,18 @@ def test_migrated_top_secondary_labels_html_preserves_structure(db_session):
 
 def _seed_snapshot(db) -> None:
     """Enriched entities with concepts + citations so the analytics snapshot
-    produces a real impact projection (mirrors the parity-guard seed)."""
-    for i in range(3):
+    produces real recommendations, patterns, a benchmark and an impact
+    projection (mirrors the parity-guard seed, sized to guarantee non-empty
+    analytics output)."""
+    for i in range(6):
         db.add(models.RawEntity(
             primary_label=f"Signal {i}",
             domain="default",
             enrichment_status="completed",
-            enrichment_concepts="knowledge graph; semantic intelligence",
-            enrichment_citation_count=120 + i,
+            enrichment_concepts="knowledge graph; semantic intelligence; ontology",
+            enrichment_citation_count=120 + i * 7,
             enrichment_source="openalex",
-            secondary_label="Clinical Trial",
+            secondary_label="Clinical Trial" if i % 2 else "Review",
             quality_score=0.8,
         ))
     db.commit()
@@ -250,3 +252,82 @@ def test_migrated_impact_projection_html_preserves_structure(db_session):
     for driver in ("Coverage", "Quality", "Citation signal", "Concentration"):
         assert driver in html
     assert 'class="bar"' in html
+
+
+# ── decision_recommendations (task 3.9) ─────────────────────────────────────
+
+def test_collect_decision_recommendations_returns_priority_table(db_session):
+    _seed_snapshot(db_session)
+    section = report_builder.collect_decision_recommendations(db_session, "default", None)
+
+    assert isinstance(section, SectionData)
+    assert section.key == "decision_recommendations"
+    assert section.title == "Suggested Next Actions"
+
+    table = next(b for b in section.blocks if isinstance(b, Table))
+    assert table.columns == ("Priority", "Category", "Recommendation", "Detail", "Evidence")
+    assert len(table.rows) >= 1               # the seed produces real recommendations
+    # priority is title-cased plain text, no badge markup
+    assert all("<span" not in cell for row in table.rows for cell in row)
+
+
+def test_migrated_decision_recommendations_html_preserves_structure(db_session):
+    _seed_snapshot(db_session)
+    html = report_builder._section_decision_recommendations(db_session, "default", None)
+    assert "<h2>Suggested Next Actions</h2>" in html
+    for col in ("Priority", "Category", "Recommendation", "Detail", "Evidence"):
+        assert col in html
+
+
+# ── hidden_patterns (task 3.8) ──────────────────────────────────────────────
+
+def test_collect_hidden_patterns_returns_reading_and_impact_table(db_session):
+    _seed_snapshot(db_session)
+    section = report_builder.collect_hidden_patterns(db_session, "default", None)
+
+    assert section.key == "hidden_patterns"
+    reading = next(b for b in section.blocks if isinstance(b, Narrative))
+    assert reading.heading == "Executive reading"
+
+    table = next(b for b in section.blocks if isinstance(b, Table))
+    assert table.columns == ("Pattern", "Confidence", "Signal", "Evidence", "Action", "Impact")
+    assert table.bar_column == 5
+    assert len(table.rows) >= 1
+    # the impact cell is a plain number the bar renderer reads
+    assert table.rows[0][5].isdigit()
+
+
+def test_migrated_hidden_patterns_html_preserves_structure(db_session):
+    _seed_snapshot(db_session)
+    html = report_builder._section_hidden_patterns(db_session, "default", None)
+    assert "<h2>Hidden Patterns</h2>" in html
+    assert 'class="callout"' in html and "Executive reading" in html
+    assert 'class="bar-wrap"' in html and 'class="bar"' in html
+
+
+# ── institutional_benchmark (task 3.6) ──────────────────────────────────────
+
+def test_collect_institutional_benchmark_returns_kpis_reading_and_tables(db_session):
+    _seed_snapshot(db_session)
+    section = report_builder.collect_institutional_benchmark(db_session, "default", None)
+
+    assert section.key == "institutional_benchmark"
+    grid = next(b for b in section.blocks if isinstance(b, StatGrid))
+    assert {i.label for i in grid.items} == {"Benchmark Profile", "Readiness", "Status"}
+
+    assert any(isinstance(b, Narrative) for b in section.blocks)
+
+    tables = [b for b in section.blocks if isinstance(b, Table)]
+    assert len(tables) == 2
+    assert tables[0].columns == ("Gap", "Priority", "Evidence")
+    assert tables[1].columns == ("Rule", "Observed", "Threshold", "Status", "Interpretation")
+
+
+def test_migrated_institutional_benchmark_html_preserves_structure(db_session):
+    _seed_snapshot(db_session)
+    html = report_builder._section_institutional_benchmark(db_session, "default", None)
+    assert "<h2>Institutional Benchmark</h2>" in html
+    assert html.count('class="stat-card"') == 3
+    assert 'class="callout"' in html and "Executive reading" in html
+    for col in ("Gap", "Priority", "Evidence", "Rule", "Observed", "Threshold", "Interpretation"):
+        assert col in html

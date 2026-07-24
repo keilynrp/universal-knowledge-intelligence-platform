@@ -107,6 +107,9 @@ class EnterpriseExcelExporter:
             "enrichment_coverage": report_builder.collect_enrichment_coverage,
             "top_secondary_labels": report_builder.collect_top_secondary_labels,
             "impact_projection": report_builder.collect_impact_projection,
+            "institutional_benchmark": report_builder.collect_institutional_benchmark,
+            "hidden_patterns": report_builder.collect_hidden_patterns,
+            "decision_recommendations": report_builder.collect_decision_recommendations,
         }
         for section_id, collect in migrated_collectors.items():
             if section_id in requested:

@@ -42,6 +42,9 @@ _MARKERS: dict[str, dict[str, str]] = {
         "enrichment_coverage": "Enrichment Coverage",  # migrated (phase 3.2)
         "top_secondary_labels": "Top Secondary Labels",  # migrated (phase 3.3)
         "impact_projection": "Impact Projection",  # migrated (phase 3.7)
+        "institutional_benchmark": "Institutional Benchmark",  # migrated (phase 3.6)
+        "hidden_patterns": "Hidden Patterns",  # migrated (phase 3.8)
+        "decision_recommendations": "Suggested Next Actions",  # migrated (phase 3.9)
         "topic_clusters": "Concepts",
         "harmonization_log": "Harmonization",
     },

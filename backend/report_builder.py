@@ -413,12 +413,18 @@ def _section_harmonization_log(db: Session, domain_id: str, org_id: int | None) 
 </section>"""
 
 
-def _section_decision_recommendations(
+def collect_decision_recommendations(
     db: Session,
     domain_id: str,
     org_id: int | None,
     benchmark_org: models.Organization | None = None,
-) -> str:
+) -> "SectionData":
+    """Format-neutral suggested next actions: a prioritized recommendation table.
+    Migrated onto the shared payload (phase 3.9). The per-card priority badge
+    becomes a plain Priority column so every format renders the same rows.
+    """
+    from backend.reporting.section_data import SectionData, Table
+
     snapshot = AnalyticsService.get_domain_snapshot(
         db,
         TopicAnalyzer(),
@@ -429,38 +435,35 @@ def _section_decision_recommendations(
         top_n_entities=5,
     )
     actions = snapshot.get("recommended_actions") or []
-
-    if not actions:
-        return """<section>
-    <h2>Suggested Next Actions</h2>
-    <p style="color:#9ca3af;padding:12px 0">No recommendation signals yet — import or enrich more records to generate a prioritized action list.</p>
-</section>"""
-
-    def _priority_badge(priority: str) -> str:
-        if priority == "high":
-            return '<span class="badge badge-red">High priority</span>'
-        if priority == "medium":
-            return '<span class="badge badge-amber">Medium priority</span>'
-        return '<span class="badge badge-gray">Low priority</span>'
-
-    cards = "".join(
-        f"""
-        <div class="stat-card">
-            <div style="display:flex;justify-content:space-between;gap:12px;align-items:center">
-                <div class="label">{action["category"].replace("_", " ")}</div>
-                {_priority_badge(action["priority"])}
-            </div>
-            <div style="font-size:16px;font-weight:700;color:#111827;margin-top:8px">{action["title"]}</div>
-            <div class="sub" style="margin-top:8px;color:#4b5563">{action["detail"]}</div>
-            <div style="margin-top:10px;font-size:12px;color:#6b7280">{action["evidence"]}</div>
-        </div>"""
+    rows = tuple(
+        (
+            str(action.get("priority", "")).title(),
+            str(action.get("category", "")).replace("_", " "),
+            action.get("title", ""),
+            action.get("detail", ""),
+            action.get("evidence", ""),
+        )
         for action in actions
     )
+    table = Table(
+        columns=("Priority", "Category", "Recommendation", "Detail", "Evidence"),
+        rows=rows,
+    )
+    return SectionData(
+        key="decision_recommendations",
+        title="Suggested Next Actions",
+        blocks=(table,),
+    )
 
-    return f"""<section>
-    <h2>Suggested Next Actions</h2>
-    <div class="grid">{cards}</div>
-</section>"""
+
+def _section_decision_recommendations(
+    db: Session,
+    domain_id: str,
+    org_id: int | None,
+    benchmark_org: models.Organization | None = None,
+) -> str:
+    from backend.reporting.html_renderer import render_html
+    return render_html(collect_decision_recommendations(db, domain_id, org_id, benchmark_org))
 
 
 def collect_impact_projection(
@@ -539,12 +542,19 @@ def _section_impact_projection(
     return render_html(collect_impact_projection(db, domain_id, org_id, benchmark_org))
 
 
-def _section_hidden_patterns(
+def collect_hidden_patterns(
     db: Session,
     domain_id: str,
     org_id: int | None,
     benchmark_org: models.Organization | None = None,
-) -> str:
+) -> "SectionData":
+    """Format-neutral hidden patterns: an executive-reading narrative plus a
+    table of discovered signals, the impact score drawn as a bar. Migrated onto
+    the shared payload (phase 3.8). The per-card confidence badge becomes a plain
+    Confidence column.
+    """
+    from backend.reporting.section_data import Narrative, SectionData, Table
+
     result = PatternDiscoveryService.discover(
         db,
         domain_id=domain_id,
@@ -552,47 +562,63 @@ def _section_hidden_patterns(
         limit=6,
     )
     patterns = result.get("patterns") or []
-    if not patterns:
-        return """<section>
-    <h2>Hidden Patterns</h2>
-    <p style="color:#9ca3af;padding:12px 0">No hidden patterns detected yet. Import or enrich more records to surface stronger signals.</p>
-</section>"""
 
-    cards = "".join(
-        f"""
-        <div class="stat-card">
-            <div style="display:flex;justify-content:space-between;gap:12px;align-items:center">
-                <div class="label">{pattern["type"].replace("_", " ")}</div>
-                <span class="badge {'badge-green' if pattern['confidence'] == 'high' else 'badge-blue' if pattern['confidence'] == 'medium' else 'badge-gray'}">{pattern["confidence"].title()}</span>
-            </div>
-            <div style="font-size:16px;font-weight:700;color:#111827;margin-top:8px">{pattern["label"]}</div>
-            <div style="margin-top:8px;font-size:13px;color:#4b5563;line-height:1.5">{pattern["evidence"]}</div>
-            <div style="margin-top:10px;font-size:12px;color:#6b7280"><b>Action:</b> {pattern["recommended_action"]}</div>
-            <div style="margin-top:10px" class="bar-wrap">
-                <div class="bar-bg"><div class="bar" style="width:{int(pattern["impact_score"])}%"></div></div>
-                <span>{int(pattern["impact_score"])}</span>
-            </div>
-        </div>"""
+    reading = Narrative(
+        heading="Executive reading",
+        paragraphs=(
+            "UKIP scanned the portfolio for non-obvious concentrations, outliers, "
+            "quality risks, source imbalance and graph bridge signals.",
+        ),
+    )
+    rows = tuple(
+        (
+            str(pattern.get("type", "")).replace("_", " "),
+            str(pattern.get("confidence", "")).title(),
+            pattern.get("label", ""),
+            pattern.get("evidence", ""),
+            pattern.get("recommended_action", ""),
+            f'{int(pattern.get("impact_score") or 0)}',
+        )
         for pattern in patterns
     )
+    table = Table(
+        columns=("Pattern", "Confidence", "Signal", "Evidence", "Action", "Impact"),
+        rows=rows,
+        bar_column=5,
+    )
+    return SectionData(
+        key="hidden_patterns",
+        title="Hidden Patterns",
+        blocks=(reading, table),
+    )
 
-    return f"""<section>
-    <h2>Hidden Patterns</h2>
-    <div class="callout">
-        <h3>Executive reading</h3>
-        <p>UKIP scanned the portfolio for non-obvious concentrations, outliers, quality risks, source imbalance and graph bridge signals.</p>
-    </div>
-    <div class="grid">{cards}</div>
-</section>"""
+
+def _section_hidden_patterns(
+    db: Session,
+    domain_id: str,
+    org_id: int | None,
+    benchmark_org: models.Organization | None = None,
+) -> str:
+    from backend.reporting.html_renderer import render_html
+    return render_html(collect_hidden_patterns(db, domain_id, org_id, benchmark_org))
 
 
-def _section_institutional_benchmark(
+def collect_institutional_benchmark(
     db: Session,
     domain_id: str,
     org_id: int | None,
     benchmark_profile_id: str | None = None,
     benchmark_org: models.Organization | None = None,
-) -> str:
+) -> "SectionData":
+    """Format-neutral institutional benchmark: readiness KPIs, an executive
+    reading, and gap/rule tables. Migrated onto the shared payload (phase 3.6).
+    The status/priority/pass badges become plain text so every format renders
+    the same content.
+    """
+    from backend.reporting.section_data import (
+        Narrative, SectionData, StatGrid, StatItem, Table,
+    )
+
     snapshot = AnalyticsService.get_domain_snapshot(
         db,
         TopicAnalyzer(),
@@ -608,11 +634,6 @@ def _section_institutional_benchmark(
     rules = benchmark.get("rules") or []
 
     status = benchmark.get("status", "watch")
-    status_badge = {
-        "ready": '<span class="badge badge-green">Ready</span>',
-        "watch": '<span class="badge badge-blue">Watch</span>',
-        "gap": '<span class="badge badge-amber">Gap</span>',
-    }.get(status, '<span class="badge badge-gray">Unknown</span>')
     readiness_pct = round(float(benchmark.get("readiness_pct") or 0))
     passed_rules = benchmark.get("passed_rules", 0)
     total_rules = benchmark.get("total_rules", 0)
@@ -633,76 +654,72 @@ def _section_institutional_benchmark(
             "The benchmark is still useful as a directional baseline, but the current dataset should not be treated as fully decision-ready without additional enrichment or cleanup."
         )
 
-    top_gap_text = ""
+    paragraphs = [benchmark_summary]
     if top_gaps:
         lead_gap = top_gaps[0]
-        top_gap_text = (
+        paragraphs.append(
             f"The main constraint right now is {lead_gap['label'].lower()}, "
             f"with evidence: {lead_gap['evidence']}"
         )
 
-    cards = f"""
-        <div class="stat-card">
-            <div class="label">Benchmark Profile</div>
-            <div class="value" style="font-size:18px">{benchmark.get("profile_name", "Institutional Benchmark")}</div>
-            <div class="sub">{benchmark.get("description", "")}</div>
-        </div>
-        <div class="stat-card">
-            <div class="label">Readiness</div>
-            <div class="value">{readiness_pct}%</div>
-            <div class="sub">{passed_rules} of {total_rules} rules satisfied</div>
-        </div>
-        <div class="stat-card">
-            <div class="label">Status</div>
-            <div class="value" style="font-size:18px">{status_badge}</div>
-            <div class="sub">Baseline evaluation for the current dataset</div>
-        </div>
-    """
-
-    callout = f"""
-        <div class="callout">
-            <h3>Executive reading</h3>
-            <p>{benchmark_summary}</p>
-            {'<p style="margin-top:8px">' + top_gap_text + '</p>' if top_gap_text else ''}
-        </div>
-    """
-
-    rows = "".join(
-        f"""
-        <tr>
-            <td>{gap["label"]}</td>
-            <td><span class="badge {'badge-red' if gap['priority'] == 'high' else 'badge-amber' if gap['priority'] == 'medium' else 'badge-gray'}">{gap["priority"]}</span></td>
-            <td>{gap["evidence"]}</td>
-        </tr>"""
-        for gap in top_gaps
+    grid = StatGrid(items=(
+        StatItem(
+            label="Benchmark Profile",
+            value=benchmark.get("profile_name", "Institutional Benchmark"),
+            sub=benchmark.get("description", "") or None,
+        ),
+        StatItem(
+            label="Readiness",
+            value=f"{readiness_pct}%",
+            sub=f"{passed_rules} of {total_rules} rules satisfied",
+        ),
+        StatItem(
+            label="Status",
+            value=str(status).title(),
+            sub="Baseline evaluation for the current dataset",
+        ),
+    ))
+    reading = Narrative(heading="Executive reading", paragraphs=tuple(paragraphs))
+    gap_table = Table(
+        columns=("Gap", "Priority", "Evidence"),
+        rows=tuple(
+            (gap.get("label", ""), str(gap.get("priority", "")), gap.get("evidence", ""))
+            for gap in top_gaps
+        ),
+    )
+    rule_table = Table(
+        columns=("Rule", "Observed", "Threshold", "Status", "Interpretation"),
+        rows=tuple(
+            (
+                rule.get("label", ""),
+                str(rule.get("observed", "")),
+                str(rule.get("threshold", "")),
+                "Passed" if rule.get("passed") else "Below threshold",
+                rule.get("message", ""),
+            )
+            for rule in rules
+        ),
+    )
+    return SectionData(
+        key="institutional_benchmark",
+        title="Institutional Benchmark",
+        blocks=(grid, reading, gap_table, rule_table),
     )
 
-    rule_rows = "".join(
-        f"""
-        <tr>
-            <td>{rule["label"]}</td>
-            <td>{rule["observed"]}</td>
-            <td>{rule["threshold"]}</td>
-            <td>{'<span class="badge badge-green">Passed</span>' if rule["passed"] else '<span class="badge badge-amber">Below threshold</span>'}</td>
-            <td>{rule["message"]}</td>
-        </tr>"""
-        for rule in rules
-    )
 
-    return f"""<section>
-    <h2>Institutional Benchmark</h2>
-    <div class="grid">{cards}</div>
-    {callout}
-    <table>
-        <thead><tr><th>Gap</th><th>Priority</th><th>Evidence</th></tr></thead>
-        <tbody>{rows if rows else '<tr><td colspan="3" style="color:#9ca3af;text-align:center;padding:20px">No major benchmark gaps detected.</td></tr>'}</tbody>
-    </table>
-    <div style="height:16px"></div>
-    <table>
-        <thead><tr><th>Rule</th><th>Observed</th><th>Threshold</th><th>Status</th><th>Interpretation</th></tr></thead>
-        <tbody>{rule_rows if rule_rows else '<tr><td colspan="5" style="color:#9ca3af;text-align:center;padding:20px">No benchmark rules available.</td></tr>'}</tbody>
-    </table>
-</section>"""
+def _section_institutional_benchmark(
+    db: Session,
+    domain_id: str,
+    org_id: int | None,
+    benchmark_profile_id: str | None = None,
+    benchmark_org: models.Organization | None = None,
+) -> str:
+    from backend.reporting.html_renderer import render_html
+    return render_html(
+        collect_institutional_benchmark(
+            db, domain_id, org_id, benchmark_profile_id, benchmark_org
+        )
+    )
 
 
 def _section_agentic_trace(db: Session, domain_id: str, org_id: int | None) -> str:

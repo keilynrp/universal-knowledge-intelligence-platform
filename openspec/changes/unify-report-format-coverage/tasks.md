@@ -81,7 +81,11 @@ endpoints green and shippable.
       `test_migrated_top_secondary_labels_html_preserves_structure`.
 - [ ] 3.4 `topic_clusters`
 - [ ] 3.5 `harmonization_log`
-- [ ] 3.6 `institutional_benchmark`
+- [x] 3.6 `institutional_benchmark`. `collect_institutional_benchmark()` is the
+      single source: StatGrid (Profile/Readiness/Status) + Narrative (executive
+      reading) + a gaps Table + a rules Table. Status/priority/pass badges become
+      plain text. Flips `(excel, institutional_benchmark)`. Structural assertion in
+      `test_migrated_institutional_benchmark_html_preserves_structure`.
 - [x] 3.7 `impact_projection` (taken ahead of 3.4–3.6: it flips a real Excel
       xfail and is the first real exercise of the Narrative + Meter primitives;
       3.4 topic_clusters and 3.5 harmonization_log are de-dup-only — already
@@ -94,8 +98,17 @@ endpoints green and shippable.
       render as label + bar directly); the bold "Brief angle:" prefix becomes plain
       text. Structural assertion in
       `test_migrated_impact_projection_html_preserves_structure`.
-- [ ] 3.8 `hidden_patterns`
-- [ ] 3.9 `decision_recommendations`
+- [x] 3.8 `hidden_patterns`. `collect_hidden_patterns()` is the single source: a
+      Narrative (executive reading) + a Table of signals with the impact score as
+      the bar column. The per-card confidence badge becomes a plain Confidence
+      column. Flips `(excel, hidden_patterns)`. Structural assertion in
+      `test_migrated_hidden_patterns_html_preserves_structure`.
+- [x] 3.9 `decision_recommendations`. `collect_decision_recommendations()` is the
+      single source: a prioritized recommendation Table
+      (Priority/Category/Recommendation/Detail/Evidence). The per-card priority
+      badge becomes a plain Priority column; the card grid becomes a table. Flips
+      `(excel, decision_recommendations)`. Structural assertion in
+      `test_migrated_decision_recommendations_html_preserves_structure`.
 - [ ] 3.10 `agentic_trace` — decide and record whether Excel declares it
       unsupported rather than forcing free text into cells
 - [ ] 3.11 `stakeholder_reading` (always-on section, not in the registry)
