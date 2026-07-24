@@ -92,6 +92,15 @@ class EnterpriseExcelExporter:
             ws_concepts = wb.create_sheet("Concepts")
             self._write_concepts(ws_concepts, db, domain_id, org_id)
 
+        # ── Migrated sections: rendered from the shared section payload ───────
+        # These render via the format-neutral collector + Excel renderer, so the
+        # section is authored once and appears here without a bespoke writer.
+        # (unify-report-format-coverage phase 3; entity_stats is the pilot.)
+        if "entity_stats" in sections:
+            from backend import report_builder
+            from backend.reporting.excel_renderer import render_excel
+            render_excel(report_builder.collect_entity_stats(db, domain_id, org_id), wb)
+
         # ── Sheet 4: Harmonization Log ────────────────────────────────────────
         if "harmonization_log" in sections:
             ws_harm = wb.create_sheet("Harmonization")

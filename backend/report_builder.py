@@ -223,7 +223,16 @@ def _harmonization_query(db: Session, org_id: int | None):
     return scope_query_to_org(db.query(models.HarmonizationLog), models.HarmonizationLog, org_id)
 
 
-def _section_entity_stats(db: Session, domain_id: str, org_id: int | None) -> str:
+def collect_entity_stats(db: Session, domain_id: str, org_id: int | None) -> "SectionData":
+    """Format-neutral entity statistics: KPI cards + validation distribution.
+
+    First section migrated onto the shared section payload; every format renders
+    from this one collector rather than re-querying and re-formatting.
+    """
+    from backend.reporting.section_data import (
+        SectionData, StatGrid, StatItem, Table,
+    )
+
     query = _entities_query(db, domain_id, org_id)
     total = query.with_entities(func.count(models.RawEntity.id)).scalar() or 0
     by_status = query.with_entities(
@@ -242,35 +251,32 @@ def _section_entity_stats(db: Session, domain_id: str, org_id: int | None) -> st
     enriched = enrich_map.get("completed", 0)
     enrich_pct = round(enriched / total * 100) if total else 0
 
-    cards = [
-        ("Total Entities", f"{total:,}", ""),
-        ("Valid", f"{status_map.get('valid', 0):,}", f"{valid_pct}% of total"),
-        ("Pending", f"{status_map.get('pending', 0):,}", "awaiting validation"),
-        ("Enriched", f"{enriched:,}", f"{enrich_pct}% coverage"),
-    ]
-    cards_html = "".join(f"""
-        <div class="stat-card">
-            <div class="label">{label}</div>
-            <div class="value">{value}</div>
-            <div class="sub">{sub}</div>
-        </div>""" for label, value, sub in cards)
+    grid = StatGrid(items=(
+        StatItem(label="Total Entities", value=f"{total:,}"),
+        StatItem(label="Valid", value=f"{status_map.get('valid', 0):,}", sub=f"{valid_pct}% of total"),
+        StatItem(label="Pending", value=f"{status_map.get('pending', 0):,}", sub="awaiting validation"),
+        StatItem(label="Enriched", value=f"{enriched:,}", sub=f"{enrich_pct}% coverage"),
+    ))
 
-    rows = "".join(f"""
-        <tr><td>{s or "—"}</td>
-            <td>{c:,}</td>
-            <td><div class="bar-wrap">
-                <div class="bar-bg"><div class="bar" style="width:{round(c/total*100) if total else 0}%"></div></div>
-                <span>{round(c/total*100) if total else 0}%</span>
-            </div></td></tr>""" for s, c in sorted(by_status, key=lambda x: -x[1]))
+    rows = tuple(
+        (
+            s or "—",
+            f"{c:,}",
+            f"{round(c / total * 100) if total else 0}%",
+        )
+        for s, c in sorted(by_status, key=lambda x: -x[1])
+    )
+    table = Table(
+        columns=("Validation Status", "Count", "Distribution"),
+        rows=rows,
+        bar_column=2,
+    )
+    return SectionData(key="entity_stats", title="Entity Statistics", blocks=(grid, table))
 
-    return f"""<section>
-    <h2>Entity Statistics</h2>
-    <div class="grid">{cards_html}</div>
-    <table>
-        <thead><tr><th>Validation Status</th><th>Count</th><th>Distribution</th></tr></thead>
-        <tbody>{rows}</tbody>
-    </table>
-</section>"""
+
+def _section_entity_stats(db: Session, domain_id: str, org_id: int | None) -> str:
+    from backend.reporting.html_renderer import render_html
+    return render_html(collect_entity_stats(db, domain_id, org_id))
 
 
 def _section_enrichment_coverage(db: Session, domain_id: str, org_id: int | None) -> str:

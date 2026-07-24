@@ -13,11 +13,12 @@ endpoints green and shippable.
       in the reason, so the ratchet is visible and each migration flips one.
       Marks are derived from `reporting/format_support.py` (the support map) and
       strict, so the map and the renderers cannot drift apart.
-- [ ] 0.3 Snapshot the current HTML per section as a regression baseline for the
-      migration. **Deferred to the migration slice (phase 3)** — the baseline is
-      only consumed when a builder is replaced; generating it now would leave a
-      stale golden sitting across several PRs. The parity guard's HTML honesty
-      checks and the existing per-section tests hold HTML stable until then.
+- [x] 0.3 Snapshot the current HTML per section as a regression baseline for the
+      migration. Resolved per the design's own gate ("character-level equality is
+      not required — existing per-section tests plus a structural assertion are
+      the gate"): each migrated section adds a structural HTML assertion (see
+      `test_migrated_entity_stats_html_preserves_structure`) rather than a stored
+      golden, avoiding a brittle byte-baseline across many PRs.
 
 ## 1. Section payload
 
@@ -48,7 +49,16 @@ endpoints green and shippable.
 
 ## 3. Migrate sections (one commit each, HTML baseline must hold)
 
-- [ ] 3.1 `entity_stats`
+- [x] 3.1 `entity_stats` — **pilot.** `collect_entity_stats()` in report_builder
+      is the single source; `_section_entity_stats` now delegates to
+      `render_html(collect_...)`; the Excel exporter renders it via
+      `render_excel(collect_...)`, gaining real Excel coverage. Support map +
+      parity marker updated; the `(excel, entity_stats)` xfail flipped
+      automatically (14 → 13). HTML stability held by the existing tests plus a
+      structural assertion (`test_migrated_entity_stats_html_preserves_structure`).
+      PPTX already rendered entity_stats via its hand-written block; de-dup of
+      that block onto the collector is deferred to a follow-up (strangler — both
+      paths render the same marker, guard stays green).
 - [ ] 3.2 `enrichment_coverage`
 - [ ] 3.3 `top_secondary_labels`
 - [ ] 3.4 `topic_clusters`
