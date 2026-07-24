@@ -49,6 +49,17 @@ endpoints green and shippable.
 
 ## 3. Migrate sections (one commit each, HTML baseline must hold)
 
+> **PPTX wiring (deviation from design step 3).** The design assumed "Excel and
+> PPTX pick a migrated section up automatically." Excel does — it renders every
+> migrated collector through the shared `render_excel` loop. PPTX does **not**:
+> `generate_pptx` renders its own hand-written slide blocks, so each migrated
+> section had to be wired explicitly into a `render_pptx(collect_...)` loop.
+> Done for `impact_projection`, `institutional_benchmark`, `hidden_patterns`,
+> `decision_recommendations` (their `(pptx, …)` xfails flipped). The three
+> pre-existing hand-written PPTX blocks (`entity_stats`, `enrichment_coverage`,
+> `top_secondary_labels`) are hand-tuned and left in place; replacing them with
+> the generic renderer is a deliberate design call deferred to the cleanup (3.12).
+
 - [x] 3.1 `entity_stats` — **pilot.** `collect_entity_stats()` in report_builder
       is the single source; `_section_entity_stats` now delegates to
       `render_html(collect_...)`; the Excel exporter renders it via

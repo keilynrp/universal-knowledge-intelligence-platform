@@ -50,6 +50,10 @@ SECTION_FORMAT_SUPPORT: dict[str, frozenset[str]] = {
         "enrichment_coverage",
         "top_secondary_labels",
         "topic_clusters",
+        "impact_projection",
+        "institutional_benchmark",
+        "hidden_patterns",
+        "decision_recommendations",
     }),
 }
 

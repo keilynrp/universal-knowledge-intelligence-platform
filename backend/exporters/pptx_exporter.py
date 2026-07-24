@@ -256,6 +256,24 @@ def generate_pptx(
             _add_text_box(slide, line, Inches(6.7), Inches(0.75 + idx * 0.48), Inches(6), Inches(0.42),
                           font_size=11, color=RGBColor(40, 40, 80))
 
+    # ── Migrated sections: rendered from the shared section payload ───────────
+    # These render via the format-neutral collectors + the shared PPTX renderer,
+    # so the section is authored once and appears here without a bespoke slide
+    # builder. (unify-report-format-coverage phase 3.) The hand-written slides
+    # above are left in place for now; de-duping them onto their collectors is
+    # deferred to the cleanup phase. `sections` is already canonicalized above.
+    from backend import report_builder
+    from backend.reporting.pptx_renderer import render_pptx
+    migrated_collectors = {
+        "impact_projection": report_builder.collect_impact_projection,
+        "institutional_benchmark": report_builder.collect_institutional_benchmark,
+        "hidden_patterns": report_builder.collect_hidden_patterns,
+        "decision_recommendations": report_builder.collect_decision_recommendations,
+    }
+    for section_id, collect in migrated_collectors.items():
+        if section_id in sections:
+            render_pptx(collect(db, domain_id, org_id), prs, accent)
+
     # ── Final slide: Closing ──────────────────────────────────────────────────
     slide = _add_slide(prs)
     closing_bar = slide.shapes.add_shape(1, 0, 0, W, H)

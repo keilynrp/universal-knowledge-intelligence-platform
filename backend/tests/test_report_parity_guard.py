@@ -53,6 +53,11 @@ _MARKERS: dict[str, dict[str, str]] = {
         "enrichment_coverage": "Enrichment Coverage",
         "top_secondary_labels": "Top Secondary Labels",
         "topic_clusters": "Top Concepts",
+        # migrated (phase 3): rendered via the shared payload + render_pptx
+        "impact_projection": "Impact Projection",
+        "institutional_benchmark": "Institutional Benchmark",
+        "hidden_patterns": "Hidden Patterns",
+        "decision_recommendations": "Suggested Next Actions",
     },
 }
 
