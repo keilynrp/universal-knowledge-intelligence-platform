@@ -25915,7 +25915,7 @@
     },
     "/reports/sections": {
       "get": {
-        "description": "Return available report sections.",
+        "description": "Return available report sections with per-format availability, so a caller\ncan see before exporting which formats render each section (the omission\nheader reports it after the fact).",
         "operationId": "get_reports_sections",
         "responses": {
           "200": {

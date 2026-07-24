@@ -93,14 +93,21 @@ def _section_manual_note(title: str, content: str) -> str:
 </section>"""
 
 
-def _section_stakeholder_reading(
+def collect_stakeholder_reading(
     db: Session,
     domain_id: str,
     org_id: int | None,
     benchmark_profile_id: str | None = None,
     benchmark_org: models.Organization | None = None,
     stakeholder_profile: str | None = None,
-) -> str:
+) -> "SectionData":
+    """Format-neutral stakeholder lens: a single Narrative framing the brief for
+    the chosen audience. Migrated onto the shared payload (phase 3.11). The
+    attention-point bullets flatten to paragraphs and the bold labels become
+    plain text, consistent with the earlier migrations.
+    """
+    from backend.reporting.section_data import Narrative, SectionData
+
     snapshot = AnalyticsService.get_domain_snapshot(
         db,
         TopicAnalyzer(),
@@ -134,28 +141,43 @@ def _section_stakeholder_reading(
         stance = "The dataset is best treated as an early baseline. It already surfaces useful directional patterns, but it is not yet robust enough for a high-confidence external narrative."
 
     action_text = actions[0]["title"] if actions else "Continue strengthening enrichment coverage and record quality before broad circulation."
-    top_entity_text = ""
-    if top_entity:
-        top_entity_text = f"The highest-impact visible entity right now is {top_entity.get('entity_name') or top_entity.get('primary_label') or 'the current lead record'}, which can anchor a concrete stakeholder discussion."
-    attention_points = "".join(
-        f"<li>{point}</li>" for point in stakeholder.get("attention_points", [])
-    )
 
-    return f"""<section>
-    <h2>Stakeholder Reading</h2>
-    <div class="callout">
-        <h3>{stakeholder["label"]}</h3>
-        <p>This brief is being framed for {stakeholder["focus"]}. {stakeholder["brief_hint"]}</p>
-        <p style="margin-top:8px">{stance}</p>
-        <p style="margin-top:8px">Current benchmark readiness is <b>{readiness_pct}%</b>, average quality is <b>{quality_avg}%</b>, and enrichment coverage is <b>{coverage_pct}%</b>.</p>
-        <p style="margin-top:8px">The current Monte Carlo impact projection is <b>{impact_score}/100</b>, with a probable range of <b>{impact_range.get("p10", 0)}–{impact_range.get("p90", 0)}</b>.</p>
-        {'<p style="margin-top:8px">' + top_entity_text + '</p>' if top_entity_text else ''}
-        <p style="margin-top:8px"><b>Recommended emphasis:</b> {action_text}</p>
-        <p style="margin-top:10px"><b>How to read this brief for this audience:</b></p>
-        <ul style="margin:8px 0 0 18px;color:#4b5563;line-height:1.7">{attention_points}</ul>
-        <p style="margin-top:10px"><b>Narrative goal:</b> {stakeholder["narrative_goal"]}</p>
-    </div>
-</section>"""
+    paragraphs: list[str] = [
+        f'This brief is being framed for {stakeholder["focus"]}. {stakeholder["brief_hint"]}',
+        stance,
+        f"Current benchmark readiness is {readiness_pct}%, average quality is {quality_avg}%, and enrichment coverage is {coverage_pct}%.",
+        f'The current Monte Carlo impact projection is {impact_score}/100, with a probable range of {impact_range.get("p10", 0)}–{impact_range.get("p90", 0)}.',
+    ]
+    if top_entity:
+        entity_label = top_entity.get("entity_name") or top_entity.get("primary_label") or "the current lead record"
+        paragraphs.append(
+            f"The highest-impact visible entity right now is {entity_label}, which can anchor a concrete stakeholder discussion."
+        )
+    paragraphs.append(f"Recommended emphasis: {action_text}")
+    attention_points = stakeholder.get("attention_points", [])
+    if attention_points:
+        paragraphs.append("How to read this brief for this audience:")
+        paragraphs.extend(attention_points)
+    paragraphs.append(f'Narrative goal: {stakeholder["narrative_goal"]}')
+
+    reading = Narrative(heading=stakeholder["label"], paragraphs=tuple(paragraphs))
+    return SectionData(key="stakeholder_reading", title="Stakeholder Reading", blocks=(reading,))
+
+
+def _section_stakeholder_reading(
+    db: Session,
+    domain_id: str,
+    org_id: int | None,
+    benchmark_profile_id: str | None = None,
+    benchmark_org: models.Organization | None = None,
+    stakeholder_profile: str | None = None,
+) -> str:
+    from backend.reporting.html_renderer import render_html
+    return render_html(
+        collect_stakeholder_reading(
+            db, domain_id, org_id, benchmark_profile_id, benchmark_org, stakeholder_profile
+        )
+    )
 
 # ── CSS (inline, print-friendly) ─────────────────────────────────────────────
 
@@ -223,7 +245,16 @@ def _harmonization_query(db: Session, org_id: int | None):
     return scope_query_to_org(db.query(models.HarmonizationLog), models.HarmonizationLog, org_id)
 
 
-def _section_entity_stats(db: Session, domain_id: str, org_id: int | None) -> str:
+def collect_entity_stats(db: Session, domain_id: str, org_id: int | None) -> "SectionData":
+    """Format-neutral entity statistics: KPI cards + validation distribution.
+
+    First section migrated onto the shared section payload; every format renders
+    from this one collector rather than re-querying and re-formatting.
+    """
+    from backend.reporting.section_data import (
+        SectionData, StatGrid, StatItem, Table,
+    )
+
     query = _entities_query(db, domain_id, org_id)
     total = query.with_entities(func.count(models.RawEntity.id)).scalar() or 0
     by_status = query.with_entities(
@@ -242,38 +273,42 @@ def _section_entity_stats(db: Session, domain_id: str, org_id: int | None) -> st
     enriched = enrich_map.get("completed", 0)
     enrich_pct = round(enriched / total * 100) if total else 0
 
-    cards = [
-        ("Total Entities", f"{total:,}", ""),
-        ("Valid", f"{status_map.get('valid', 0):,}", f"{valid_pct}% of total"),
-        ("Pending", f"{status_map.get('pending', 0):,}", "awaiting validation"),
-        ("Enriched", f"{enriched:,}", f"{enrich_pct}% coverage"),
-    ]
-    cards_html = "".join(f"""
-        <div class="stat-card">
-            <div class="label">{label}</div>
-            <div class="value">{value}</div>
-            <div class="sub">{sub}</div>
-        </div>""" for label, value, sub in cards)
+    grid = StatGrid(items=(
+        StatItem(label="Total Entities", value=f"{total:,}"),
+        StatItem(label="Valid", value=f"{status_map.get('valid', 0):,}", sub=f"{valid_pct}% of total"),
+        StatItem(label="Pending", value=f"{status_map.get('pending', 0):,}", sub="awaiting validation"),
+        StatItem(label="Enriched", value=f"{enriched:,}", sub=f"{enrich_pct}% coverage"),
+    ))
 
-    rows = "".join(f"""
-        <tr><td>{s or "—"}</td>
-            <td>{c:,}</td>
-            <td><div class="bar-wrap">
-                <div class="bar-bg"><div class="bar" style="width:{round(c/total*100) if total else 0}%"></div></div>
-                <span>{round(c/total*100) if total else 0}%</span>
-            </div></td></tr>""" for s, c in sorted(by_status, key=lambda x: -x[1]))
-
-    return f"""<section>
-    <h2>Entity Statistics</h2>
-    <div class="grid">{cards_html}</div>
-    <table>
-        <thead><tr><th>Validation Status</th><th>Count</th><th>Distribution</th></tr></thead>
-        <tbody>{rows}</tbody>
-    </table>
-</section>"""
+    rows = tuple(
+        (
+            s or "—",
+            f"{c:,}",
+            f"{round(c / total * 100) if total else 0}%",
+        )
+        for s, c in sorted(by_status, key=lambda x: -x[1])
+    )
+    table = Table(
+        columns=("Validation Status", "Count", "Distribution"),
+        rows=rows,
+        bar_column=2,
+    )
+    return SectionData(key="entity_stats", title="Entity Statistics", blocks=(grid, table))
 
 
-def _section_enrichment_coverage(db: Session, domain_id: str, org_id: int | None) -> str:
+def _section_entity_stats(db: Session, domain_id: str, org_id: int | None) -> str:
+    from backend.reporting.html_renderer import render_html
+    return render_html(collect_entity_stats(db, domain_id, org_id))
+
+
+def collect_enrichment_coverage(db: Session, domain_id: str, org_id: int | None) -> "SectionData":
+    """Format-neutral enrichment coverage: coverage/avg-citation KPIs plus the
+    top enriched entities. Migrated onto the shared section payload (phase 3.2).
+    """
+    from backend.reporting.section_data import (
+        SectionData, StatGrid, StatItem, Table,
+    )
+
     query = _entities_query(db, domain_id, org_id)
     total = query.with_entities(func.count(models.RawEntity.id)).scalar() or 0
     completed = query.with_entities(func.count(models.RawEntity.id))\
@@ -291,25 +326,31 @@ def _section_enrichment_coverage(db: Session, domain_id: str, org_id: int | None
     ).limit(8).all()
 
     pct = round(completed / total * 100) if total else 0
-    rows = "".join(f"""
-        <tr><td>{r[0] or '—'}</td>
-            <td>{r[1] or 0:,}</td>
-            <td><span class="badge badge-blue">{r[2] or '—'}</span></td></tr>""" for r in top)
 
-    return f"""<section>
-    <h2>Enrichment Coverage</h2>
-    <div class="grid">
-        <div class="stat-card"><div class="label">Coverage</div><div class="value">{pct}%</div><div class="sub">{completed:,} of {total:,} entities</div></div>
-        <div class="stat-card"><div class="label">Avg Citations</div><div class="value">{round(avg_cit or 0):,}</div><div class="sub">enriched entities only</div></div>
-    </div>
-    <table>
-        <thead><tr><th>Entity</th><th>Citations</th><th>Source</th></tr></thead>
-        <tbody>{rows if rows else '<tr><td colspan="3" style="color:#9ca3af;text-align:center;padding:20px">No enriched entities yet</td></tr>'}</tbody>
-    </table>
-</section>"""
+    grid = StatGrid(items=(
+        StatItem(label="Coverage", value=f"{pct}%", sub=f"{completed:,} of {total:,} entities"),
+        StatItem(label="Avg Citations", value=f"{round(avg_cit or 0):,}", sub="enriched entities only"),
+    ))
+    rows = tuple(
+        (r[0] or "—", f"{r[1] or 0:,}", r[2] or "—")
+        for r in top
+    )
+    table = Table(columns=("Entity", "Citations", "Source"), rows=rows)
+    return SectionData(key="enrichment_coverage", title="Enrichment Coverage", blocks=(grid, table))
 
 
-def _section_top_brands(db: Session, domain_id: str, org_id: int | None) -> str:
+def _section_enrichment_coverage(db: Session, domain_id: str, org_id: int | None) -> str:
+    from backend.reporting.html_renderer import render_html
+    return render_html(collect_enrichment_coverage(db, domain_id, org_id))
+
+
+def collect_top_secondary_labels(db: Session, domain_id: str, org_id: int | None) -> "SectionData":
+    """Format-neutral top secondary labels: a share table where each row's bar is
+    drawn relative to the most common label. Migrated onto the shared payload
+    (phase 3.3).
+    """
+    from backend.reporting.section_data import SectionData, Table
+
     rows_q = _entities_query(db, domain_id, org_id).with_entities(
         models.RawEntity.secondary_label,
         func.count(models.RawEntity.id).label("n"),
@@ -318,20 +359,21 @@ def _section_top_brands(db: Session, domain_id: str, org_id: int | None) -> str:
         .group_by(models.RawEntity.secondary_label)\
         .order_by(func.count(models.RawEntity.id).desc()).limit(15).all()
     max_n = rows_q[0][1] if rows_q else 1
-    rows = "".join(f"""
-        <tr><td>{r[0]}</td>
-            <td>{r[1]:,}</td>
-            <td><div class="bar-wrap">
-                <div class="bar-bg"><div class="bar" style="width:{round(r[1]/max_n*100)}%"></div></div>
-            </div></td></tr>""" for r in rows_q)
+    rows = tuple(
+        (r[0], f"{r[1]:,}", f"{round(r[1] / max_n * 100)}%")
+        for r in rows_q
+    )
+    table = Table(columns=("Label", "Entities", "Share"), rows=rows, bar_column=2)
+    return SectionData(
+        key="top_secondary_labels",
+        title="Top Secondary Labels / Classifications",
+        blocks=(table,),
+    )
 
-    return f"""<section>
-    <h2>Top Secondary Labels / Classifications</h2>
-    <table>
-        <thead><tr><th>Label</th><th>Entities</th><th>Share</th></tr></thead>
-        <tbody>{rows if rows else '<tr><td colspan="3" style="color:#9ca3af;text-align:center;padding:20px">No secondary-label data</td></tr>'}</tbody>
-    </table>
-</section>"""
+
+def _section_top_brands(db: Session, domain_id: str, org_id: int | None) -> str:
+    from backend.reporting.html_renderer import render_html
+    return render_html(collect_top_secondary_labels(db, domain_id, org_id))
 
 
 def _section_topic_clusters(db: Session, domain_id: str, org_id: int | None) -> str:
@@ -366,39 +408,49 @@ def _section_topic_clusters(db: Session, domain_id: str, org_id: int | None) -> 
 </section>"""
 
 
-def _section_harmonization_log(db: Session, domain_id: str, org_id: int | None) -> str:
+def collect_harmonization_log(db: Session, domain_id: str, org_id: int | None) -> "SectionData":
+    """Format-neutral harmonization log: the recent harmonization steps as a
+    table. Migrated onto the shared payload (phase 3.5, HTML + PPTX). The
+    Applied/Reverted status badge becomes a plain Status column. Excel keeps its
+    bespoke "Harmonization" sheet until the cleanup phase de-dups it.
+    """
+    from backend.reporting.section_data import SectionData, Table
+
     logs = _harmonization_query(db, org_id)\
         .order_by(models.HarmonizationLog.executed_at.desc()).limit(10).all()
-
-    if not logs:
-        return f"""<section><h2>Harmonization Log</h2>
-        <p style="color:#9ca3af;padding:12px 0">No harmonization steps executed yet.</p></section>"""
-
-    def badge(reverted: bool) -> str:
-        return '<span class="badge badge-red">Reverted</span>' if reverted else '<span class="badge badge-green">Applied</span>'
-
-    rows = "".join(f"""
-        <tr><td>{l.step_name or l.step_id}</td>
-            <td>{l.records_updated:,}</td>
-            <td>{badge(l.reverted)}</td>
-            <td style="color:#9ca3af;font-size:12px">{l.executed_at.strftime('%Y-%m-%d %H:%M') if l.executed_at else '—'}</td></tr>"""
-        for l in logs)
-
-    return f"""<section>
-    <h2>Harmonization Log</h2>
-    <table>
-        <thead><tr><th>Step</th><th>Records Updated</th><th>Status</th><th>Executed</th></tr></thead>
-        <tbody>{rows}</tbody>
-    </table>
-</section>"""
+    rows = tuple(
+        (
+            l.step_name or l.step_id,
+            f"{l.records_updated or 0:,}",
+            "Reverted" if l.reverted else "Applied",
+            l.executed_at.strftime("%Y-%m-%d %H:%M") if l.executed_at else "—",
+        )
+        for l in logs
+    )
+    table = Table(
+        columns=("Step", "Records Updated", "Status", "Executed"),
+        rows=rows,
+    )
+    return SectionData(key="harmonization_log", title="Harmonization Log", blocks=(table,))
 
 
-def _section_decision_recommendations(
+def _section_harmonization_log(db: Session, domain_id: str, org_id: int | None) -> str:
+    from backend.reporting.html_renderer import render_html
+    return render_html(collect_harmonization_log(db, domain_id, org_id))
+
+
+def collect_decision_recommendations(
     db: Session,
     domain_id: str,
     org_id: int | None,
     benchmark_org: models.Organization | None = None,
-) -> str:
+) -> "SectionData":
+    """Format-neutral suggested next actions: a prioritized recommendation table.
+    Migrated onto the shared payload (phase 3.9). The per-card priority badge
+    becomes a plain Priority column so every format renders the same rows.
+    """
+    from backend.reporting.section_data import SectionData, Table
+
     snapshot = AnalyticsService.get_domain_snapshot(
         db,
         TopicAnalyzer(),
@@ -409,46 +461,52 @@ def _section_decision_recommendations(
         top_n_entities=5,
     )
     actions = snapshot.get("recommended_actions") or []
-
-    if not actions:
-        return """<section>
-    <h2>Suggested Next Actions</h2>
-    <p style="color:#9ca3af;padding:12px 0">No recommendation signals yet — import or enrich more records to generate a prioritized action list.</p>
-</section>"""
-
-    def _priority_badge(priority: str) -> str:
-        if priority == "high":
-            return '<span class="badge badge-red">High priority</span>'
-        if priority == "medium":
-            return '<span class="badge badge-amber">Medium priority</span>'
-        return '<span class="badge badge-gray">Low priority</span>'
-
-    cards = "".join(
-        f"""
-        <div class="stat-card">
-            <div style="display:flex;justify-content:space-between;gap:12px;align-items:center">
-                <div class="label">{action["category"].replace("_", " ")}</div>
-                {_priority_badge(action["priority"])}
-            </div>
-            <div style="font-size:16px;font-weight:700;color:#111827;margin-top:8px">{action["title"]}</div>
-            <div class="sub" style="margin-top:8px;color:#4b5563">{action["detail"]}</div>
-            <div style="margin-top:10px;font-size:12px;color:#6b7280">{action["evidence"]}</div>
-        </div>"""
+    rows = tuple(
+        (
+            str(action.get("priority", "")).title(),
+            str(action.get("category", "")).replace("_", " "),
+            action.get("title", ""),
+            action.get("detail", ""),
+            action.get("evidence", ""),
+        )
         for action in actions
     )
+    table = Table(
+        columns=("Priority", "Category", "Recommendation", "Detail", "Evidence"),
+        rows=rows,
+    )
+    return SectionData(
+        key="decision_recommendations",
+        title="Suggested Next Actions",
+        blocks=(table,),
+    )
 
-    return f"""<section>
-    <h2>Suggested Next Actions</h2>
-    <div class="grid">{cards}</div>
-</section>"""
 
-
-def _section_impact_projection(
+def _section_decision_recommendations(
     db: Session,
     domain_id: str,
     org_id: int | None,
     benchmark_org: models.Organization | None = None,
 ) -> str:
+    from backend.reporting.html_renderer import render_html
+    return render_html(collect_decision_recommendations(db, domain_id, org_id, benchmark_org))
+
+
+def collect_impact_projection(
+    db: Session,
+    domain_id: str,
+    org_id: int | None,
+    benchmark_org: models.Organization | None = None,
+) -> "SectionData":
+    """Format-neutral impact projection: KPI cards, an executive-interpretation
+    narrative, and one Meter per projection driver. Migrated onto the shared
+    payload (phase 3.7); first section to exercise the Narrative and Meter
+    primitives in a real migration.
+    """
+    from backend.reporting.section_data import (
+        Meter, Narrative, SectionData, StatGrid, StatItem,
+    )
+
     snapshot = AnalyticsService.get_domain_snapshot(
         db,
         TopicAnalyzer(),
@@ -467,49 +525,98 @@ def _section_impact_projection(
     confidence_score = int(projection.get("confidence_score") or 0)
     drivers = projection.get("drivers") or {}
 
-    def _bar(label: str, value: float) -> str:
-        pct = max(0, min(100, round(float(value or 0))))
-        return f"""
-        <div style="margin-top:10px">
-            <div style="display:flex;justify-content:space-between;font-size:12px;color:#4b5563">
-                <span>{label}</span><b>{pct}%</b>
-            </div>
-            <div class="bar-bg" style="margin-top:5px"><div class="bar" style="width:{pct}%"></div></div>
-        </div>"""
+    grid = StatGrid(items=(
+        StatItem(label="Expected Impact", value=f"{score}/100", sub="Monte Carlo median projection"),
+        StatItem(label="Probable Range", value=f"{p10}–{p90}", sub=f"P10 to P90 · expected {p50}"),
+        StatItem(label="Confidence", value=confidence, sub=f"{confidence_score}/100 stability score"),
+    ))
+    interpretation = Narrative(
+        heading="Executive interpretation",
+        paragraphs=(
+            projection.get("recommendation", "No impact projection is available yet."),
+            f'Brief angle: {projection.get("brief_angle", "Use this as a directional signal only.")}',
+            projection.get("explanation", ""),
+        ),
+    )
 
-    return f"""<section>
-    <h2>Impact Projection</h2>
-    <div class="grid">
-        <div class="stat-card">
-            <div class="label">Expected Impact</div>
-            <div class="value">{score}/100</div>
-            <div class="sub">Monte Carlo median projection</div>
-        </div>
-        <div class="stat-card">
-            <div class="label">Probable Range</div>
-            <div class="value" style="font-size:24px">{p10}–{p90}</div>
-            <div class="sub">P10 to P90 · expected {p50}</div>
-        </div>
-        <div class="stat-card">
-            <div class="label">Confidence</div>
-            <div class="value" style="font-size:24px">{confidence}</div>
-            <div class="sub">{confidence_score}/100 stability score</div>
-        </div>
-    </div>
-    <div class="callout">
-        <h3>Executive interpretation</h3>
-        <p>{projection.get("recommendation", "No impact projection is available yet.")}</p>
-        <p style="margin-top:8px"><b>Brief angle:</b> {projection.get("brief_angle", "Use this as a directional signal only.")}</p>
-        <p style="margin-top:8px;color:#6b7280">{projection.get("explanation", "")}</p>
-    </div>
-    <div class="stat-card">
-        <div class="label">Projection drivers</div>
-        {_bar("Coverage", drivers.get("coverage", 0))}
-        {_bar("Quality", drivers.get("quality", 0))}
-        {_bar("Citation signal", drivers.get("citation_signal", 0))}
-        {_bar("Concentration", drivers.get("concentration", 0))}
-    </div>
-</section>"""
+    def _pct(value: float) -> float:
+        return max(0, min(100, round(float(value or 0))))
+
+    meters = tuple(
+        Meter(label=label, pct=_pct(drivers.get(key, 0)))
+        for label, key in (
+            ("Coverage", "coverage"),
+            ("Quality", "quality"),
+            ("Citation signal", "citation_signal"),
+            ("Concentration", "concentration"),
+        )
+    )
+    return SectionData(
+        key="impact_projection",
+        title="Impact Projection",
+        blocks=(grid, interpretation, *meters),
+    )
+
+
+def _section_impact_projection(
+    db: Session,
+    domain_id: str,
+    org_id: int | None,
+    benchmark_org: models.Organization | None = None,
+) -> str:
+    from backend.reporting.html_renderer import render_html
+    return render_html(collect_impact_projection(db, domain_id, org_id, benchmark_org))
+
+
+def collect_hidden_patterns(
+    db: Session,
+    domain_id: str,
+    org_id: int | None,
+    benchmark_org: models.Organization | None = None,
+) -> "SectionData":
+    """Format-neutral hidden patterns: an executive-reading narrative plus a
+    table of discovered signals, the impact score drawn as a bar. Migrated onto
+    the shared payload (phase 3.8). The per-card confidence badge becomes a plain
+    Confidence column.
+    """
+    from backend.reporting.section_data import Narrative, SectionData, Table
+
+    result = PatternDiscoveryService.discover(
+        db,
+        domain_id=domain_id,
+        org_id=org_id,
+        limit=6,
+    )
+    patterns = result.get("patterns") or []
+
+    reading = Narrative(
+        heading="Executive reading",
+        paragraphs=(
+            "UKIP scanned the portfolio for non-obvious concentrations, outliers, "
+            "quality risks, source imbalance and graph bridge signals.",
+        ),
+    )
+    rows = tuple(
+        (
+            str(pattern.get("type", "")).replace("_", " "),
+            str(pattern.get("confidence", "")).title(),
+            pattern.get("label", ""),
+            pattern.get("evidence", ""),
+            pattern.get("recommended_action", ""),
+            f'{int(pattern.get("impact_score") or 0)}',
+        )
+        for pattern in patterns
+    )
+    table = Table(
+        columns=("Pattern", "Confidence", "Signal", "Evidence", "Action", "Impact"),
+        rows=rows,
+        bar_column=5,
+    )
+    return SectionData(
+        key="hidden_patterns",
+        title="Hidden Patterns",
+        blocks=(reading, table),
+    )
 
 
 def _section_hidden_patterns(
@@ -518,54 +625,26 @@ def _section_hidden_patterns(
     org_id: int | None,
     benchmark_org: models.Organization | None = None,
 ) -> str:
-    result = PatternDiscoveryService.discover(
-        db,
-        domain_id=domain_id,
-        org_id=org_id,
-        limit=6,
-    )
-    patterns = result.get("patterns") or []
-    if not patterns:
-        return """<section>
-    <h2>Hidden Patterns</h2>
-    <p style="color:#9ca3af;padding:12px 0">No hidden patterns detected yet. Import or enrich more records to surface stronger signals.</p>
-</section>"""
-
-    cards = "".join(
-        f"""
-        <div class="stat-card">
-            <div style="display:flex;justify-content:space-between;gap:12px;align-items:center">
-                <div class="label">{pattern["type"].replace("_", " ")}</div>
-                <span class="badge {'badge-green' if pattern['confidence'] == 'high' else 'badge-blue' if pattern['confidence'] == 'medium' else 'badge-gray'}">{pattern["confidence"].title()}</span>
-            </div>
-            <div style="font-size:16px;font-weight:700;color:#111827;margin-top:8px">{pattern["label"]}</div>
-            <div style="margin-top:8px;font-size:13px;color:#4b5563;line-height:1.5">{pattern["evidence"]}</div>
-            <div style="margin-top:10px;font-size:12px;color:#6b7280"><b>Action:</b> {pattern["recommended_action"]}</div>
-            <div style="margin-top:10px" class="bar-wrap">
-                <div class="bar-bg"><div class="bar" style="width:{int(pattern["impact_score"])}%"></div></div>
-                <span>{int(pattern["impact_score"])}</span>
-            </div>
-        </div>"""
-        for pattern in patterns
-    )
-
-    return f"""<section>
-    <h2>Hidden Patterns</h2>
-    <div class="callout">
-        <h3>Executive reading</h3>
-        <p>UKIP scanned the portfolio for non-obvious concentrations, outliers, quality risks, source imbalance and graph bridge signals.</p>
-    </div>
-    <div class="grid">{cards}</div>
-</section>"""
+    from backend.reporting.html_renderer import render_html
+    return render_html(collect_hidden_patterns(db, domain_id, org_id, benchmark_org))
 
 
-def _section_institutional_benchmark(
+def collect_institutional_benchmark(
     db: Session,
     domain_id: str,
     org_id: int | None,
     benchmark_profile_id: str | None = None,
     benchmark_org: models.Organization | None = None,
-) -> str:
+) -> "SectionData":
+    """Format-neutral institutional benchmark: readiness KPIs, an executive
+    reading, and gap/rule tables. Migrated onto the shared payload (phase 3.6).
+    The status/priority/pass badges become plain text so every format renders
+    the same content.
+    """
+    from backend.reporting.section_data import (
+        Narrative, SectionData, StatGrid, StatItem, Table,
+    )
+
     snapshot = AnalyticsService.get_domain_snapshot(
         db,
         TopicAnalyzer(),
@@ -581,11 +660,6 @@ def _section_institutional_benchmark(
     rules = benchmark.get("rules") or []
 
     status = benchmark.get("status", "watch")
-    status_badge = {
-        "ready": '<span class="badge badge-green">Ready</span>',
-        "watch": '<span class="badge badge-blue">Watch</span>',
-        "gap": '<span class="badge badge-amber">Gap</span>',
-    }.get(status, '<span class="badge badge-gray">Unknown</span>')
     readiness_pct = round(float(benchmark.get("readiness_pct") or 0))
     passed_rules = benchmark.get("passed_rules", 0)
     total_rules = benchmark.get("total_rules", 0)
@@ -606,76 +680,72 @@ def _section_institutional_benchmark(
             "The benchmark is still useful as a directional baseline, but the current dataset should not be treated as fully decision-ready without additional enrichment or cleanup."
         )
 
-    top_gap_text = ""
+    paragraphs = [benchmark_summary]
     if top_gaps:
         lead_gap = top_gaps[0]
-        top_gap_text = (
+        paragraphs.append(
             f"The main constraint right now is {lead_gap['label'].lower()}, "
             f"with evidence: {lead_gap['evidence']}"
         )
 
-    cards = f"""
-        <div class="stat-card">
-            <div class="label">Benchmark Profile</div>
-            <div class="value" style="font-size:18px">{benchmark.get("profile_name", "Institutional Benchmark")}</div>
-            <div class="sub">{benchmark.get("description", "")}</div>
-        </div>
-        <div class="stat-card">
-            <div class="label">Readiness</div>
-            <div class="value">{readiness_pct}%</div>
-            <div class="sub">{passed_rules} of {total_rules} rules satisfied</div>
-        </div>
-        <div class="stat-card">
-            <div class="label">Status</div>
-            <div class="value" style="font-size:18px">{status_badge}</div>
-            <div class="sub">Baseline evaluation for the current dataset</div>
-        </div>
-    """
-
-    callout = f"""
-        <div class="callout">
-            <h3>Executive reading</h3>
-            <p>{benchmark_summary}</p>
-            {'<p style="margin-top:8px">' + top_gap_text + '</p>' if top_gap_text else ''}
-        </div>
-    """
-
-    rows = "".join(
-        f"""
-        <tr>
-            <td>{gap["label"]}</td>
-            <td><span class="badge {'badge-red' if gap['priority'] == 'high' else 'badge-amber' if gap['priority'] == 'medium' else 'badge-gray'}">{gap["priority"]}</span></td>
-            <td>{gap["evidence"]}</td>
-        </tr>"""
-        for gap in top_gaps
+    grid = StatGrid(items=(
+        StatItem(
+            label="Benchmark Profile",
+            value=benchmark.get("profile_name", "Institutional Benchmark"),
+            sub=benchmark.get("description", "") or None,
+        ),
+        StatItem(
+            label="Readiness",
+            value=f"{readiness_pct}%",
+            sub=f"{passed_rules} of {total_rules} rules satisfied",
+        ),
+        StatItem(
+            label="Status",
+            value=str(status).title(),
+            sub="Baseline evaluation for the current dataset",
+        ),
+    ))
+    reading = Narrative(heading="Executive reading", paragraphs=tuple(paragraphs))
+    gap_table = Table(
+        columns=("Gap", "Priority", "Evidence"),
+        rows=tuple(
+            (gap.get("label", ""), str(gap.get("priority", "")), gap.get("evidence", ""))
+            for gap in top_gaps
+        ),
+    )
+    rule_table = Table(
+        columns=("Rule", "Observed", "Threshold", "Status", "Interpretation"),
+        rows=tuple(
+            (
+                rule.get("label", ""),
+                str(rule.get("observed", "")),
+                str(rule.get("threshold", "")),
+                "Passed" if rule.get("passed") else "Below threshold",
+                rule.get("message", ""),
+            )
+            for rule in rules
+        ),
+    )
+    return SectionData(
+        key="institutional_benchmark",
+        title="Institutional Benchmark",
+        blocks=(grid, reading, gap_table, rule_table),
     )
 
-    rule_rows = "".join(
-        f"""
-        <tr>
-            <td>{rule["label"]}</td>
-            <td>{rule["observed"]}</td>
-            <td>{rule["threshold"]}</td>
-            <td>{'<span class="badge badge-green">Passed</span>' if rule["passed"] else '<span class="badge badge-amber">Below threshold</span>'}</td>
-            <td>{rule["message"]}</td>
-        </tr>"""
-        for rule in rules
-    )
 
-    return f"""<section>
-    <h2>Institutional Benchmark</h2>
-    <div class="grid">{cards}</div>
-    {callout}
-    <table>
-        <thead><tr><th>Gap</th><th>Priority</th><th>Evidence</th></tr></thead>
-        <tbody>{rows if rows else '<tr><td colspan="3" style="color:#9ca3af;text-align:center;padding:20px">No major benchmark gaps detected.</td></tr>'}</tbody>
-    </table>
-    <div style="height:16px"></div>
-    <table>
-        <thead><tr><th>Rule</th><th>Observed</th><th>Threshold</th><th>Status</th><th>Interpretation</th></tr></thead>
-        <tbody>{rule_rows if rule_rows else '<tr><td colspan="5" style="color:#9ca3af;text-align:center;padding:20px">No benchmark rules available.</td></tr>'}</tbody>
-    </table>
-</section>"""
+def _section_institutional_benchmark(
+    db: Session,
+    domain_id: str,
+    org_id: int | None,
+    benchmark_profile_id: str | None = None,
+    benchmark_org: models.Organization | None = None,
+) -> str:
+    from backend.reporting.html_renderer import render_html
+    return render_html(
+        collect_institutional_benchmark(
+            db, domain_id, org_id, benchmark_profile_id, benchmark_org
+        )
+    )
 
 
 def _section_agentic_trace(db: Session, domain_id: str, org_id: int | None) -> str:

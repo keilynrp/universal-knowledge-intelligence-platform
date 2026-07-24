@@ -239,6 +239,11 @@ def _execute_report(schedule: models.ScheduledReport, db: Session) -> dict:
         # Filter to valid sections only
         sections = [s for s in sections if s in _rb.SECTION_BUILDERS]
 
+        # Sections this format cannot render are dropped by the exporter; record
+        # the omission on the run instead of dropping it silently (phase 4/6).
+        from backend.reporting import format_support
+        omitted_sections = format_support.unsupported_sections(fmt, sections)
+
         if fmt == "excel":
             report_bytes = EnterpriseExcelExporter().build(
                 db,
@@ -307,7 +312,12 @@ def _execute_report(schedule: models.ScheduledReport, db: Session) -> dict:
         db.commit()
         emit_outbound(
             "report.sent",
-            {"schedule": schedule.name, "recipients": len(recipients), "format": fmt},
+            {
+                "schedule": schedule.name,
+                "recipients": len(recipients),
+                "format": fmt,
+                "omitted_sections": omitted_sections,
+            },
             database.SessionLocal,
         )
         return {
@@ -315,6 +325,7 @@ def _execute_report(schedule: models.ScheduledReport, db: Session) -> dict:
             "recipients": len(recipients),
             "format": fmt,
             "attachment": attachment_filename,
+            "omitted_sections": omitted_sections,
         }
 
     except Exception as exc:

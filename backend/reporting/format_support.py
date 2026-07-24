@@ -34,12 +34,27 @@ EXPORT_FORMATS: tuple[str, ...] = ("html", "pdf", "excel", "pptx")
 SECTION_FORMAT_SUPPORT: dict[str, frozenset[str]] = {
     "html": frozenset(PUBLIC_SECTIONS),
     "pdf": frozenset(PUBLIC_SECTIONS),
-    "excel": frozenset({"topic_clusters", "harmonization_log"}),
+    "excel": frozenset({
+        "entity_stats",
+        "enrichment_coverage",
+        "top_secondary_labels",
+        "impact_projection",
+        "institutional_benchmark",
+        "hidden_patterns",
+        "decision_recommendations",
+        "topic_clusters",
+        "harmonization_log",
+    }),
     "pptx": frozenset({
         "entity_stats",
         "enrichment_coverage",
         "top_secondary_labels",
         "topic_clusters",
+        "impact_projection",
+        "institutional_benchmark",
+        "hidden_patterns",
+        "decision_recommendations",
+        "harmonization_log",
     }),
 }
 
