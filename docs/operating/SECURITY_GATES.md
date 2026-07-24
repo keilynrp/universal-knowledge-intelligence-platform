@@ -96,6 +96,29 @@ EMPTY — no findings at gate introduction (2026-06-10).
 | ID | Package | Severity | Reason | Owner | Expires |
 | --- | --- | --- | --- | --- | --- |
 | 1124066 (GHSA-f88m-g3jw-g9cj) | sharp (bundled by next 16.x) | HIGH | npm's only "fix" is a semver-major *downgrade* to next 14. Real fix arrives when next bumps its bundled sharp. An npm `override` would force a lockfile regen, prohibited on Windows dev machines (strips linux native binaries — sharp is exactly such a module). | platform owner | 2026-08-21 |
+| 1124170 (GHSA-6gpp-xcg3-4w24) | next 16.2.10 | HIGH | **APPLIES — priority item.** Middleware/proxy bypass. Precondition confirmed present: prod build logs `Next.js 16.2.10 (Turbopack)` and there is no i18n config. Bounded impact: `frontend/middleware.ts` only sets response headers and always returns `NextResponse.next()` — it performs no authorization. A bypass serves `/embed/:token` without its per-widget CSP `frame-ancestors` (defence-in-depth from PR #167); it grants no data access, since the widget token is the access control and is validated backend-side. | platform owner | 2026-08-21 |
+| 1124171 (GHSA-m99w-x7hq-7vfj) | next 16.2.10 | HIGH | **Not exposed.** DoS in App Router Server Actions; the repo contains zero `use server` directives. | platform owner | 2026-08-21 |
+| 1124184 (GHSA-89xv-2m56-2m9x) | next 16.2.10 | HIGH | **Not exposed.** SSRF in Server Actions on custom servers; no Server Actions exist and the app runs on `next start`. | platform owner | 2026-08-21 |
+| 1124186 (GHSA-68g3-v927-f742) | next 16.2.10 | MODERATE | **Applies.** Cache confusion of response bodies for requests with bodies. Generic to the framework; no stable fixed release exists. | platform owner | 2026-08-21 |
+| 1124188 (GHSA-4633-3j49-mh5q) | next 16.2.10 | MODERATE | **Applies.** Cache confusion variant for bodies with invalid UTF-8 sequences. Same posture as 1124186. | platform owner | 2026-08-21 |
+| 1124190 (GHSA-4c39-4ccg-62r3) | next 16.2.10 | MODERATE | **Not exposed.** Unbounded Server Action payload in the Edge runtime; no Server Actions exist. | platform owner | 2026-08-21 |
+| 1124192 (GHSA-p9j2-gv94-2wf4) | next 16.2.10 | HIGH | **Not exposed.** SSRF in rewrites via an attacker-controlled *destination hostname*. The only rewrite is `/api/backend/:path*` → `${BACKEND_INTERNAL}/:path*`; the hostname is fixed from env and only the path segment is caller-supplied. | platform owner | 2026-08-21 |
+| 1124194 (GHSA-q8wf-6r8g-63ch) | next 16.2.10 | MODERATE | **Applies.** DoS in the Image Optimization API via SVGs. Minimal surface: one `next/image` usage (`app/components/UserAvatar.tsx`). | platform owner | 2026-08-21 |
+| 1124196 (GHSA-955p-x3mx-jcvp) | next 16.2.10 | MODERATE | **Not exposed.** Unauthenticated disclosure of internal Server Function endpoints; no Server Functions or Server Actions exist. | platform owner | 2026-08-21 |
+
+Note (2026-07-23): the nine `next` entries above were added together because
+the wrapper requires *every* advisory on a flagged package to be keyed before
+that package clears — allowlisting only the ones that apply would not unblock
+the gate. Five of the nine were assessed as not exposed and are keyed for that
+mechanical reason, not because risk was accepted; the assessment for each is in
+its Reason cell and in `frontend/.npm-audit-allowlist.json`.
+
+There is **no stable release to upgrade to**: the vulnerable range is
+`14.3.0-canary.0 - 16.3.0-preview.7`, so `16.2.11` (current latest stable) is
+still inside it and only `16.3.0-preview.8+` carries the fix. Shipping a
+preview build of the framework to production was judged the larger risk. **Exit
+condition: stable 16.3.0.** Check for it on the expiry re-check; 1124170 is the
+one to clear first.
 
 Note (2026-07-22): the gate wrapper now propagates allowlist status through
 purely-transitive findings (a package flagged only *via* another package is
