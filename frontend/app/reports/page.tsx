@@ -31,6 +31,9 @@ interface ArtifactTemplate {
 interface Section {
   id: string;
   label: string;
+  // Per-format availability from GET /reports/sections. Absent on older
+  // backends — treated as "available" so the picker degrades gracefully.
+  formats?: Record<string, boolean>;
 }
 
 interface BenchmarkProfile {
@@ -162,6 +165,19 @@ export default function ReportsPage() {
     topic_clusters: tr("page.reports.section.topic_clusters", "Most frequent concepts from enrichment data"),
     harmonization_log: tr("page.reports.section.harmonization_log", "Last 10 harmonization steps with status"),
   }), [tr]);
+  // A section is available in the chosen format unless the backend says
+  // otherwise; unknown (older backend) defaults to available.
+  const isSectionAvailable = useCallback(
+    (sec: Section) => sec.formats?.[format] ?? true,
+    [format],
+  );
+  // Selected sections the chosen format cannot render — the export would drop
+  // them, so warn before it happens.
+  const omittedSelected = useMemo(
+    () => sections.filter((s) => selected.has(s.id) && !isSectionAvailable(s)),
+    [sections, selected, isSectionAvailable],
+  );
+
   const formatOptions: { value: ExportFormat; label: string; desc: string; icon: string }[] = useMemo(() => ([
     { value: "html",  label: "HTML",       desc: tr("page.reports.format.html", "Preview in browser, Ctrl+P to print"), icon: "🌐" },
     { value: "pdf",   label: "PDF",        desc: tr("page.reports.format.pdf", "Professional branded PDF download"), icon: "📄" },
@@ -571,7 +587,22 @@ export default function ReportsPage() {
       a.download = match ? match[1] : defaultName;
       a.click();
       URL.revokeObjectURL(url);
-      toast(tr("page.reports.toast.downloaded", "Report downloaded"), "success");
+      // The exporter names any sections it could not render in this header.
+      const omittedHeader = res.headers.get("X-UKIP-Report-Omitted-Sections") ?? "";
+      if (omittedHeader) {
+        const omittedLabels = omittedHeader
+          .split(",")
+          .map((id) => sections.find((s) => s.id === id.trim())?.label ?? id.trim())
+          .join(", ");
+        toast(
+          tr("page.reports.toast.omitted", "Some sections were omitted from {format}: {names}")
+            .replace("{format}", format.toUpperCase())
+            .replace("{names}", omittedLabels),
+          "warning",
+        );
+      } else {
+        toast(tr("page.reports.toast.downloaded", "Report downloaded"), "success");
+      }
     } catch {
       toast(tr("page.reports.toast.generate_error", "Failed to generate report"), "error");
     } finally {
@@ -969,6 +1000,14 @@ export default function ReportsPage() {
                         <span className={`text-sm font-medium ${isOn ? "text-blue-700 dark:text-blue-300" : "text-gray-900 dark:text-white"}`}>
                           {sec.label}
                         </span>
+                        {!isSectionAvailable(sec) && (
+                          <span
+                            className="rounded-full border px-2 py-0.5 text-[10px] font-medium"
+                            style={{ borderColor: "var(--ukip-warning)", color: "var(--ukip-warning)" }}
+                          >
+                            {tr("page.reports.availability.not_in_format", "Not in {format}").replace("{format}", format.toUpperCase())}
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                         {sectionDescriptions[sec.id] ?? ""}
@@ -977,6 +1016,22 @@ export default function ReportsPage() {
                   </button>
                 );
               })}
+            </div>
+          )}
+
+          {omittedSelected.length > 0 && (
+            <div
+              className="rounded-2xl border p-4 text-sm"
+              style={{ borderColor: "var(--ukip-warning)", background: "var(--ukip-panel)", color: "var(--ukip-text)" }}
+              role="status"
+            >
+              {tr(
+                "page.reports.availability.warning",
+                "{count} selected section(s) won't appear in {format}: {names}",
+              )
+                .replace("{count}", String(omittedSelected.length))
+                .replace("{format}", format.toUpperCase())
+                .replace("{names}", omittedSelected.map((s) => s.label).join(", "))}
             </div>
           )}
 
