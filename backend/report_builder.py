@@ -386,31 +386,35 @@ def _section_topic_clusters(db: Session, domain_id: str, org_id: int | None) -> 
 </section>"""
 
 
-def _section_harmonization_log(db: Session, domain_id: str, org_id: int | None) -> str:
+def collect_harmonization_log(db: Session, domain_id: str, org_id: int | None) -> "SectionData":
+    """Format-neutral harmonization log: the recent harmonization steps as a
+    table. Migrated onto the shared payload (phase 3.5, HTML + PPTX). The
+    Applied/Reverted status badge becomes a plain Status column. Excel keeps its
+    bespoke "Harmonization" sheet until the cleanup phase de-dups it.
+    """
+    from backend.reporting.section_data import SectionData, Table
+
     logs = _harmonization_query(db, org_id)\
         .order_by(models.HarmonizationLog.executed_at.desc()).limit(10).all()
+    rows = tuple(
+        (
+            l.step_name or l.step_id,
+            f"{l.records_updated or 0:,}",
+            "Reverted" if l.reverted else "Applied",
+            l.executed_at.strftime("%Y-%m-%d %H:%M") if l.executed_at else "—",
+        )
+        for l in logs
+    )
+    table = Table(
+        columns=("Step", "Records Updated", "Status", "Executed"),
+        rows=rows,
+    )
+    return SectionData(key="harmonization_log", title="Harmonization Log", blocks=(table,))
 
-    if not logs:
-        return f"""<section><h2>Harmonization Log</h2>
-        <p style="color:#9ca3af;padding:12px 0">No harmonization steps executed yet.</p></section>"""
 
-    def badge(reverted: bool) -> str:
-        return '<span class="badge badge-red">Reverted</span>' if reverted else '<span class="badge badge-green">Applied</span>'
-
-    rows = "".join(f"""
-        <tr><td>{l.step_name or l.step_id}</td>
-            <td>{l.records_updated:,}</td>
-            <td>{badge(l.reverted)}</td>
-            <td style="color:#9ca3af;font-size:12px">{l.executed_at.strftime('%Y-%m-%d %H:%M') if l.executed_at else '—'}</td></tr>"""
-        for l in logs)
-
-    return f"""<section>
-    <h2>Harmonization Log</h2>
-    <table>
-        <thead><tr><th>Step</th><th>Records Updated</th><th>Status</th><th>Executed</th></tr></thead>
-        <tbody>{rows}</tbody>
-    </table>
-</section>"""
+def _section_harmonization_log(db: Session, domain_id: str, org_id: int | None) -> str:
+    from backend.reporting.html_renderer import render_html
+    return render_html(collect_harmonization_log(db, domain_id, org_id))
 
 
 def collect_decision_recommendations(

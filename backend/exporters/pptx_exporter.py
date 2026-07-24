@@ -269,6 +269,7 @@ def generate_pptx(
         "institutional_benchmark": report_builder.collect_institutional_benchmark,
         "hidden_patterns": report_builder.collect_hidden_patterns,
         "decision_recommendations": report_builder.collect_decision_recommendations,
+        "harmonization_log": report_builder.collect_harmonization_log,
     }
     for section_id, collect in migrated_collectors.items():
         if section_id in sections:

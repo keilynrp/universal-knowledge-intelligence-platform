@@ -91,7 +91,15 @@ endpoints green and shippable.
       state dropped per the pilot precedent. Structural assertion in
       `test_migrated_top_secondary_labels_html_preserves_structure`.
 - [ ] 3.4 `topic_clusters`
-- [ ] 3.5 `harmonization_log`
+- [~] 3.5 `harmonization_log` (HTML + PPTX done; Excel de-dup pending cleanup).
+      `collect_harmonization_log()` is the single source: a Table
+      (Step/Records Updated/Status/Executed). `_section_harmonization_log`
+      delegates to `render_html(...)` and the PPTX loop renders it, flipping the
+      last `(pptx, harmonization_log)` xfail. The Applied/Reverted status badge
+      becomes a plain Status column; empty state dropped per precedent. Excel still
+      renders it via the bespoke "Harmonization" sheet — de-duping that onto the
+      collector (and the resulting sheet rename) is deferred to the cleanup (3.12).
+      Structural assertion in `test_migrated_harmonization_log_html_preserves_structure`.
 - [x] 3.6 `institutional_benchmark`. `collect_institutional_benchmark()` is the
       single source: StatGrid (Profile/Readiness/Status) + Narrative (executive
       reading) + a gaps Table + a rules Table. Status/priority/pass badges become

@@ -331,3 +331,45 @@ def test_migrated_institutional_benchmark_html_preserves_structure(db_session):
     assert 'class="callout"' in html and "Executive reading" in html
     for col in ("Gap", "Priority", "Evidence", "Rule", "Observed", "Threshold", "Interpretation"):
         assert col in html
+
+
+# ── harmonization_log (task 3.5, HTML + PPTX; Excel keeps its bespoke sheet) ─
+
+def _seed_harmonization(db) -> None:
+    db.add(models.HarmonizationLog(
+        step_id="normalize_labels", step_name="Normalize labels",
+        records_updated=3, fields_modified="primary_label",
+    ))
+    db.add(models.HarmonizationLog(
+        step_id="dedupe", step_name="Deduplicate",
+        records_updated=5, reverted=True,
+    ))
+    db.commit()
+
+
+def test_collect_harmonization_log_returns_status_table(db_session):
+    _seed_harmonization(db_session)
+    section = report_builder.collect_harmonization_log(db_session, "default", None)
+
+    assert section.key == "harmonization_log"
+    assert section.title == "Harmonization Log"
+    table = next(b for b in section.blocks if isinstance(b, Table))
+    assert table.columns == ("Step", "Records Updated", "Status", "Executed")
+    statuses = {row[2] for row in table.rows}
+    assert statuses <= {"Applied", "Reverted"}
+    assert "Reverted" in statuses          # the deduped row was reverted
+
+
+def test_collect_harmonization_log_empty(db_session):
+    section = report_builder.collect_harmonization_log(db_session, "default", None)
+    table = next(b for b in section.blocks if isinstance(b, Table))
+    assert table.rows == ()
+
+
+def test_migrated_harmonization_log_html_preserves_structure(db_session):
+    _seed_harmonization(db_session)
+    html = report_builder._section_harmonization_log(db_session, "default", None)
+    assert "<h2>Harmonization Log</h2>" in html
+    for col in ("Step", "Records Updated", "Status", "Executed"):
+        assert col in html
+    assert "Normalize labels" in html

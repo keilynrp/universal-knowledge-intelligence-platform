@@ -58,6 +58,7 @@ _MARKERS: dict[str, dict[str, str]] = {
         "institutional_benchmark": "Institutional Benchmark",
         "hidden_patterns": "Hidden Patterns",
         "decision_recommendations": "Suggested Next Actions",
+        "harmonization_log": "Harmonization Log",
     },
 }
 
