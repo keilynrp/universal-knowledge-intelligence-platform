@@ -8,6 +8,78 @@
       "owner": "platform owner",
       "expires": "2026-08-21",
       "ghsa": "GHSA-f88m-g3jw-g9cj"
+    },
+    {
+      "id": "1124170",
+      "package": "next 16.2.10",
+      "reason": "APPLIES — PRIORITY ITEM. Middleware/proxy bypass; precondition is Turbopack + single locale, and the prod build log reads 'Next.js 16.2.10 (Turbopack)' with no i18n config. Impact is bounded: frontend/middleware.ts only SETS response headers and always returns NextResponse.next() — it performs no authorization. A bypass therefore serves /embed/:token without its per-widget CSP frame-ancestors (defence-in-depth from PR #167), but grants no data access: the widget token is the access control and is validated backend-side. No stable fixed release exists (vulnerable range ends at 16.3.0-preview.7). Re-check on expiry; exit is stable 16.3.0.",
+      "owner": "platform owner",
+      "expires": "2026-08-21",
+      "ghsa": "GHSA-6gpp-xcg3-4w24"
+    },
+    {
+      "id": "1124171",
+      "package": "next 16.2.10",
+      "reason": "NOT EXPOSED — Denial of Service in App Router Server Actions. The repo contains zero 'use server' directives; no Server Actions are defined. Allowlisted because the gate requires every advisory on a flagged package to be keyed, not because the risk was accepted.",
+      "owner": "platform owner",
+      "expires": "2026-08-21",
+      "ghsa": "GHSA-m99w-x7hq-7vfj"
+    },
+    {
+      "id": "1124184",
+      "package": "next 16.2.10",
+      "reason": "NOT EXPOSED — SSRF in Server Actions on custom servers. No Server Actions exist (zero 'use server'), and the app runs on 'next start', not a custom server.",
+      "owner": "platform owner",
+      "expires": "2026-08-21",
+      "ghsa": "GHSA-89xv-2m56-2m9x"
+    },
+    {
+      "id": "1124186",
+      "package": "next 16.2.10",
+      "reason": "APPLIES, MODERATE — cache confusion of response bodies for requests with bodies. Generic to the framework; no stable fixed release exists. Rated moderate by the advisory; the package-level HIGH that blocks the gate comes from the middleware and rewrite advisories, not this one.",
+      "owner": "platform owner",
+      "expires": "2026-08-21",
+      "ghsa": "GHSA-68g3-v927-f742"
+    },
+    {
+      "id": "1124188",
+      "package": "next 16.2.10",
+      "reason": "APPLIES, MODERATE — cache confusion variant for request bodies containing invalid UTF-8 byte sequences. Same posture as 1124186.",
+      "owner": "platform owner",
+      "expires": "2026-08-21",
+      "ghsa": "GHSA-4633-3j49-mh5q"
+    },
+    {
+      "id": "1124190",
+      "package": "next 16.2.10",
+      "reason": "NOT EXPOSED — unbounded Server Action payload in the Edge runtime. No Server Actions exist (zero 'use server').",
+      "owner": "platform owner",
+      "expires": "2026-08-21",
+      "ghsa": "GHSA-4c39-4ccg-62r3"
+    },
+    {
+      "id": "1124192",
+      "package": "next 16.2.10",
+      "reason": "NOT EXPOSED — SSRF in rewrites via an attacker-controlled destination hostname. The only rewrite is /api/backend/:path* -> ${BACKEND_INTERNAL}/:path* (next.config.ts). The destination hostname is fixed from environment configuration; only the path segment is caller-supplied, which is outside this advisory's vector.",
+      "owner": "platform owner",
+      "expires": "2026-08-21",
+      "ghsa": "GHSA-p9j2-gv94-2wf4"
+    },
+    {
+      "id": "1124194",
+      "package": "next 16.2.10",
+      "reason": "APPLIES, MODERATE — DoS in the Image Optimization API via SVGs. Surface is minimal: a single next/image usage (app/components/UserAvatar.tsx). No stable fixed release exists.",
+      "owner": "platform owner",
+      "expires": "2026-08-21",
+      "ghsa": "GHSA-q8wf-6r8g-63ch"
+    },
+    {
+      "id": "1124196",
+      "package": "next 16.2.10",
+      "reason": "NOT EXPOSED — unauthenticated disclosure of internal Server Function endpoints. No Server Functions or Server Actions exist in the repo (zero 'use server').",
+      "owner": "platform owner",
+      "expires": "2026-08-21",
+      "ghsa": "GHSA-955p-x3mx-jcvp"
     }
   ]
 }
