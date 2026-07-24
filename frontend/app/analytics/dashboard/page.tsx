@@ -691,7 +691,7 @@ export default function ExecutiveDashboardPage() {
         body: JSON.stringify({
           domain_id: dashboardDomainId,
           benchmark_profile_id: selectedBenchmarkProfile,
-          sections: ["entity_stats", "enrichment_coverage", "decision_recommendations", "institutional_benchmark", "top_brands", "topic_clusters"],
+          sections: ["entity_stats", "enrichment_coverage", "decision_recommendations", "institutional_benchmark", "top_secondary_labels", "topic_clusters"],
           title: tr("page.exec_dashboard.export_title", "Executive Dashboard Report"),
         }),
       });
