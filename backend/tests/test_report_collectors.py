@@ -70,3 +70,69 @@ def test_migrated_entity_stats_html_preserves_structure(db_session):
     # the validation-distribution table with its bar column
     assert "Validation Status" in html and "Distribution" in html
     assert 'class="bar-wrap"' in html and 'class="bar"' in html
+
+
+# ── enrichment_coverage (task 3.2) ──────────────────────────────────────────
+
+def _seed_enriched(db) -> None:
+    """Entities with citation counts and sources so the top-enriched table has
+    real content; one non-completed row that must be excluded from coverage."""
+    rows = [
+        ("Alpha", "completed", 300, "openalex"),
+        ("Beta", "completed", 150, "crossref"),
+        ("Gamma", "pending", 0, None),
+    ]
+    for label, status, cites, source in rows:
+        db.add(models.RawEntity(
+            primary_label=label,
+            domain="default",
+            enrichment_status=status,
+            enrichment_citation_count=cites,
+            enrichment_source=source,
+        ))
+    db.commit()
+
+
+def test_collect_enrichment_coverage_returns_coverage_kpis_and_top_table(db_session):
+    _seed_enriched(db_session)
+    section = report_builder.collect_enrichment_coverage(db_session, "default", None)
+
+    assert isinstance(section, SectionData)
+    assert section.key == "enrichment_coverage"
+    assert section.title == "Enrichment Coverage"
+
+    grid = next(b for b in section.blocks if isinstance(b, StatGrid))
+    labels = {item.label: item.value for item in grid.items}
+    assert labels["Coverage"] == "67%"       # 2 of 3 completed → round(66.6) = 67
+    assert labels["Avg Citations"] == "225"  # (300 + 150) / 2 over completed only
+
+    table = next(b for b in section.blocks if isinstance(b, Table))
+    assert table.columns == ("Entity", "Citations", "Source")
+    # only completed entities, sorted by citation count desc
+    assert table.rows[0] == ("Alpha", "300", "openalex")
+    assert all(r[0] != "Gamma" for r in table.rows)  # the pending row is excluded
+
+
+def test_collect_enrichment_coverage_empty_workspace(db_session):
+    section = report_builder.collect_enrichment_coverage(db_session, "default", None)
+    grid = next(b for b in section.blocks if isinstance(b, StatGrid))
+    labels = {item.label: item.value for item in grid.items}
+    assert labels["Coverage"] == "0%"
+    table = next(b for b in section.blocks if isinstance(b, Table))
+    assert table.rows == ()
+
+
+def test_migrated_enrichment_coverage_html_preserves_structure(db_session):
+    """HTML builder now delegates to the collector + renderer; structure holds.
+    The decorative source badge is intentionally dropped (the shared Table
+    primitive renders plain cells)."""
+    _seed_enriched(db_session)
+    html = report_builder._section_enrichment_coverage(db_session, "default", None)
+
+    assert "<h2>Enrichment Coverage</h2>" in html
+    assert html.count('class="stat-card"') == 2      # Coverage + Avg Citations
+    for label in ("Coverage", "Avg Citations"):
+        assert label in html
+    for col in ("Entity", "Citations", "Source"):
+        assert col in html
+    assert "Alpha" in html

@@ -39,6 +39,7 @@ _MARKERS: dict[str, dict[str, str]] = {
     "pdf": dict(report_builder.SECTION_LABELS),
     "excel": {
         "entity_stats": "Entity Statistics",  # migrated (phase 3): dedicated sheet
+        "enrichment_coverage": "Enrichment Coverage",  # migrated (phase 3.2)
         "topic_clusters": "Concepts",
         "harmonization_log": "Harmonization",
     },

@@ -59,7 +59,17 @@ endpoints green and shippable.
       PPTX already rendered entity_stats via its hand-written block; de-dup of
       that block onto the collector is deferred to a follow-up (strangler — both
       paths render the same marker, guard stays green).
-- [ ] 3.2 `enrichment_coverage`
+- [x] 3.2 `enrichment_coverage`. `collect_enrichment_coverage()` is the single
+      source; `_section_enrichment_coverage` delegates to `render_html(collect_...)`
+      and the Excel exporter renders it via the shared `render_excel`, flipping the
+      `(excel, enrichment_coverage)` xfail automatically (13 → 12). The Excel
+      exporter's migrated-section block is now a dict-driven loop so the next
+      sections are one-line additions. Decorative source badge dropped (the shared
+      `Table` primitive renders plain cells); empty-state message dropped per the
+      pilot precedent. HTML stability held by the existing tests plus a structural
+      assertion (`test_migrated_enrichment_coverage_html_preserves_structure`).
+      PPTX already rendered it via its hand-written block; de-dup deferred (both
+      paths emit the same marker, guard stays green).
 - [ ] 3.3 `top_secondary_labels`
 - [ ] 3.4 `topic_clusters`
 - [ ] 3.5 `harmonization_log`

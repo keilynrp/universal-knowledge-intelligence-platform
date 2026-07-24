@@ -95,11 +95,17 @@ class EnterpriseExcelExporter:
         # ── Migrated sections: rendered from the shared section payload ───────
         # These render via the format-neutral collector + Excel renderer, so the
         # section is authored once and appears here without a bespoke writer.
-        # (unify-report-format-coverage phase 3; entity_stats is the pilot.)
-        if "entity_stats" in sections:
-            from backend import report_builder
-            from backend.reporting.excel_renderer import render_excel
-            render_excel(report_builder.collect_entity_stats(db, domain_id, org_id), wb)
+        # (unify-report-format-coverage phase 3; entity_stats was the pilot.)
+        # Each migrated section is one entry here — the strangler grows this map.
+        from backend import report_builder
+        from backend.reporting.excel_renderer import render_excel
+        migrated_collectors = {
+            "entity_stats": report_builder.collect_entity_stats,
+            "enrichment_coverage": report_builder.collect_enrichment_coverage,
+        }
+        for section_id, collect in migrated_collectors.items():
+            if section_id in sections:
+                render_excel(collect(db, domain_id, org_id), wb)
 
         # ── Sheet 4: Harmonization Log ────────────────────────────────────────
         if "harmonization_log" in sections:

@@ -279,7 +279,14 @@ def _section_entity_stats(db: Session, domain_id: str, org_id: int | None) -> st
     return render_html(collect_entity_stats(db, domain_id, org_id))
 
 
-def _section_enrichment_coverage(db: Session, domain_id: str, org_id: int | None) -> str:
+def collect_enrichment_coverage(db: Session, domain_id: str, org_id: int | None) -> "SectionData":
+    """Format-neutral enrichment coverage: coverage/avg-citation KPIs plus the
+    top enriched entities. Migrated onto the shared section payload (phase 3.2).
+    """
+    from backend.reporting.section_data import (
+        SectionData, StatGrid, StatItem, Table,
+    )
+
     query = _entities_query(db, domain_id, org_id)
     total = query.with_entities(func.count(models.RawEntity.id)).scalar() or 0
     completed = query.with_entities(func.count(models.RawEntity.id))\
@@ -297,22 +304,22 @@ def _section_enrichment_coverage(db: Session, domain_id: str, org_id: int | None
     ).limit(8).all()
 
     pct = round(completed / total * 100) if total else 0
-    rows = "".join(f"""
-        <tr><td>{r[0] or '—'}</td>
-            <td>{r[1] or 0:,}</td>
-            <td><span class="badge badge-blue">{r[2] or '—'}</span></td></tr>""" for r in top)
 
-    return f"""<section>
-    <h2>Enrichment Coverage</h2>
-    <div class="grid">
-        <div class="stat-card"><div class="label">Coverage</div><div class="value">{pct}%</div><div class="sub">{completed:,} of {total:,} entities</div></div>
-        <div class="stat-card"><div class="label">Avg Citations</div><div class="value">{round(avg_cit or 0):,}</div><div class="sub">enriched entities only</div></div>
-    </div>
-    <table>
-        <thead><tr><th>Entity</th><th>Citations</th><th>Source</th></tr></thead>
-        <tbody>{rows if rows else '<tr><td colspan="3" style="color:#9ca3af;text-align:center;padding:20px">No enriched entities yet</td></tr>'}</tbody>
-    </table>
-</section>"""
+    grid = StatGrid(items=(
+        StatItem(label="Coverage", value=f"{pct}%", sub=f"{completed:,} of {total:,} entities"),
+        StatItem(label="Avg Citations", value=f"{round(avg_cit or 0):,}", sub="enriched entities only"),
+    ))
+    rows = tuple(
+        (r[0] or "—", f"{r[1] or 0:,}", r[2] or "—")
+        for r in top
+    )
+    table = Table(columns=("Entity", "Citations", "Source"), rows=rows)
+    return SectionData(key="enrichment_coverage", title="Enrichment Coverage", blocks=(grid, table))
+
+
+def _section_enrichment_coverage(db: Session, domain_id: str, org_id: int | None) -> str:
+    from backend.reporting.html_renderer import render_html
+    return render_html(collect_enrichment_coverage(db, domain_id, org_id))
 
 
 def _section_top_brands(db: Session, domain_id: str, org_id: int | None) -> str:
