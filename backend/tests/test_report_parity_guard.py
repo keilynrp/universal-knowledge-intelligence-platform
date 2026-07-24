@@ -40,6 +40,7 @@ _MARKERS: dict[str, dict[str, str]] = {
     "excel": {
         "entity_stats": "Entity Statistics",  # migrated (phase 3): dedicated sheet
         "enrichment_coverage": "Enrichment Coverage",  # migrated (phase 3.2)
+        "top_secondary_labels": "Top Secondary Labels",  # migrated (phase 3.3)
         "topic_clusters": "Concepts",
         "harmonization_log": "Harmonization",
     },

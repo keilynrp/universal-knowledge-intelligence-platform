@@ -136,3 +136,56 @@ def test_migrated_enrichment_coverage_html_preserves_structure(db_session):
     for col in ("Entity", "Citations", "Source"):
         assert col in html
     assert "Alpha" in html
+
+
+# ── top_secondary_labels (task 3.3) ─────────────────────────────────────────
+
+def _seed_labels(db) -> None:
+    """Entities grouped by secondary_label so the share table has a clear order."""
+    counts = [("Clinical Trial", 5), ("Review", 3), ("Dataset", 1)]
+    for label, n in counts:
+        for i in range(n):
+            db.add(models.RawEntity(
+                primary_label=f"{label}-{i}",
+                domain="default",
+                secondary_label=label,
+            ))
+    db.commit()
+
+
+def test_collect_top_secondary_labels_returns_share_table(db_session):
+    _seed_labels(db_session)
+    section = report_builder.collect_top_secondary_labels(db_session, "default", None)
+
+    assert isinstance(section, SectionData)
+    assert section.key == "top_secondary_labels"
+    assert section.title == "Top Secondary Labels / Classifications"
+
+    table = next(b for b in section.blocks if isinstance(b, Table))
+    assert table.columns == ("Label", "Entities", "Share")
+    assert table.bar_column == 2
+    # sorted by count desc; the top label draws a full-width bar
+    assert table.rows[0] == ("Clinical Trial", "5", "100%")
+    review = next(r for r in table.rows if r[0] == "Review")
+    assert review == ("Review", "3", "60%")   # round(3 / 5 * 100)
+
+
+def test_collect_top_secondary_labels_empty(db_session):
+    section = report_builder.collect_top_secondary_labels(db_session, "default", None)
+    table = next(b for b in section.blocks if isinstance(b, Table))
+    assert table.rows == ()
+
+
+def test_migrated_top_secondary_labels_html_preserves_structure(db_session):
+    """HTML builder delegates to the collector + renderer; the share-bar table
+    structure holds. The shared Table also prints the share value next to the
+    bar (the hand-written builder drew the bar alone); the bar width is
+    unchanged."""
+    _seed_labels(db_session)
+    html = report_builder._section_top_brands(db_session, "default", None)
+
+    assert "<h2>Top Secondary Labels / Classifications</h2>" in html
+    for col in ("Label", "Entities", "Share"):
+        assert col in html
+    assert 'class="bar-wrap"' in html and 'class="bar"' in html
+    assert "Clinical Trial" in html

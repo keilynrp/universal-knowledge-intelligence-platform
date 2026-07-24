@@ -322,7 +322,13 @@ def _section_enrichment_coverage(db: Session, domain_id: str, org_id: int | None
     return render_html(collect_enrichment_coverage(db, domain_id, org_id))
 
 
-def _section_top_brands(db: Session, domain_id: str, org_id: int | None) -> str:
+def collect_top_secondary_labels(db: Session, domain_id: str, org_id: int | None) -> "SectionData":
+    """Format-neutral top secondary labels: a share table where each row's bar is
+    drawn relative to the most common label. Migrated onto the shared payload
+    (phase 3.3).
+    """
+    from backend.reporting.section_data import SectionData, Table
+
     rows_q = _entities_query(db, domain_id, org_id).with_entities(
         models.RawEntity.secondary_label,
         func.count(models.RawEntity.id).label("n"),
@@ -331,20 +337,21 @@ def _section_top_brands(db: Session, domain_id: str, org_id: int | None) -> str:
         .group_by(models.RawEntity.secondary_label)\
         .order_by(func.count(models.RawEntity.id).desc()).limit(15).all()
     max_n = rows_q[0][1] if rows_q else 1
-    rows = "".join(f"""
-        <tr><td>{r[0]}</td>
-            <td>{r[1]:,}</td>
-            <td><div class="bar-wrap">
-                <div class="bar-bg"><div class="bar" style="width:{round(r[1]/max_n*100)}%"></div></div>
-            </div></td></tr>""" for r in rows_q)
+    rows = tuple(
+        (r[0], f"{r[1]:,}", f"{round(r[1] / max_n * 100)}%")
+        for r in rows_q
+    )
+    table = Table(columns=("Label", "Entities", "Share"), rows=rows, bar_column=2)
+    return SectionData(
+        key="top_secondary_labels",
+        title="Top Secondary Labels / Classifications",
+        blocks=(table,),
+    )
 
-    return f"""<section>
-    <h2>Top Secondary Labels / Classifications</h2>
-    <table>
-        <thead><tr><th>Label</th><th>Entities</th><th>Share</th></tr></thead>
-        <tbody>{rows if rows else '<tr><td colspan="3" style="color:#9ca3af;text-align:center;padding:20px">No secondary-label data</td></tr>'}</tbody>
-    </table>
-</section>"""
+
+def _section_top_brands(db: Session, domain_id: str, org_id: int | None) -> str:
+    from backend.reporting.html_renderer import render_html
+    return render_html(collect_top_secondary_labels(db, domain_id, org_id))
 
 
 def _section_topic_clusters(db: Session, domain_id: str, org_id: int | None) -> str:

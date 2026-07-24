@@ -70,7 +70,15 @@ endpoints green and shippable.
       assertion (`test_migrated_enrichment_coverage_html_preserves_structure`).
       PPTX already rendered it via its hand-written block; de-dup deferred (both
       paths emit the same marker, guard stays green).
-- [ ] 3.3 `top_secondary_labels`
+- [x] 3.3 `top_secondary_labels`. `collect_top_secondary_labels()` is the single
+      source; `_section_top_brands` delegates to `render_html(collect_...)` and the
+      Excel exporter renders it via the shared loop, flipping the
+      `(excel, top_secondary_labels)` xfail (12 → 11). The Excel exporter now
+      canonicalizes requested sections so the `top_brands` alias resolves to the
+      same collector. The shared `Table` prints the share value beside the bar (the
+      hand-written builder drew the bar alone); the bar width is unchanged. Empty
+      state dropped per the pilot precedent. Structural assertion in
+      `test_migrated_top_secondary_labels_html_preserves_structure`.
 - [ ] 3.4 `topic_clusters`
 - [ ] 3.5 `harmonization_log`
 - [ ] 3.6 `institutional_benchmark`
