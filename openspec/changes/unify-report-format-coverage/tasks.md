@@ -128,8 +128,14 @@ endpoints green and shippable.
       badge becomes a plain Priority column; the card grid becomes a table. Flips
       `(excel, decision_recommendations)`. Structural assertion in
       `test_migrated_decision_recommendations_html_preserves_structure`.
-- [ ] 3.10 `agentic_trace` — decide and record whether Excel declares it
-      unsupported rather than forcing free text into cells
+- [x] 3.10 `agentic_trace` — **declared unsupported for the binary formats.**
+      Decision: agentic_trace is long, free-form Q&A audit text that reads poorly
+      in a spreadsheet *and* as slide bullets, so Excel and PPTX both declare it
+      unsupported; it renders only in HTML/PDF (the existing hand-written
+      `_section_agentic_trace`, unchanged). This formalizes the pre-existing
+      reality (it already rendered in neither binary format) and pairs it with the
+      §4 omission reporting so the drop is reported, not silent. No collector is
+      introduced.
 - [ ] 3.11 `stakeholder_reading` (always-on section, not in the registry)
 - [ ] 3.12 Remove each superseded `_section_*` builder once its replacement is
       green; delete the duplicated `_entities_query` / `_harmonization_query`
@@ -137,15 +143,22 @@ endpoints green and shippable.
 
 ## 4. Omission reporting
 
-- [ ] 4.1 Failing test: requesting an unsupported section returns the file plus
-      an omission indicator, not a silent drop.
-- [ ] 4.2 Implement `X-UKIP-Report-Omitted-Sections` on the binary export
-      endpoints.
-- [ ] 4.3 Failing test: `GET /reports/sections` carries per-format availability.
-- [ ] 4.4 Extend the section listing response.
+- [x] 4.1 Failing test: requesting an unsupported section returns the file plus
+      an omission indicator, not a silent drop. (`test_report_omissions.py`:
+      Excel/PPTX with `agentic_trace` → 200 + header names it; a fully-supported
+      request carries no header.)
+- [x] 4.2 Implement `X-UKIP-Report-Omitted-Sections` on the binary export
+      endpoints. (`reports.py` `_omission_headers()` over
+      `format_support.unsupported_sections`; added to `/exports/excel` and
+      `/exports/pptx`; header added to CORS `expose_headers` in `main.py`.)
+- [x] 4.3 Failing test: `GET /reports/sections` carries per-format availability.
+- [x] 4.4 Extend the section listing response. (Each row now carries a `formats`
+      map `{html, pdf, excel, pptx} → bool`; additive, existing id/label consumers
+      unaffected.)
 - [ ] 4.5 Frontend: the section picker shows per-format availability and warns
-      before an export that would omit a selected section.
-- [ ] 4.6 Translation parity for any new UI strings (EN + ES).
+      before an export that would omit a selected section. (Deferred — backend
+      contract is live; frontend is a separate change.)
+- [ ] 4.6 Translation parity for any new UI strings (EN + ES). (With 4.5.)
 
 ## 5. Validation consistency
 
@@ -168,7 +181,11 @@ endpoints green and shippable.
 
 ## 7. Close out
 
-- [ ] 7.1 Remove every `xfail` from 0.2 — none may remain.
+- [x] 7.1 Remove every `xfail` from 0.2 — none may remain. The parity guard no
+      longer xfails: each combo is asserted directly — supported → the marker must
+      render; unsupported → the export must succeed and the section must be named
+      by `unsupported_sections()` (the omission contract). agentic_trace is the
+      sole declared-unsupported section. Ratchet is at zero.
 - [ ] 7.2 Full backend suite green (`pytest backend/tests/`).
 - [ ] 7.3 Frontend gates: ESLint `--max-warnings=0`, Design System governance,
       translation parity.

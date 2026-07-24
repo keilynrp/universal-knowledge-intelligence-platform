@@ -23,7 +23,20 @@ from backend.auth import get_current_user, require_role
 from backend.database import get_db
 from backend.exporters.excel_exporter import EnterpriseExcelExporter
 from backend.exporters.pptx_exporter import generate_pptx as _generate_pptx
+from backend.reporting import format_support
 from backend.tenant_access import resolve_request_org_id
+
+# Header naming the sections a binary export could not render, so a caller sees
+# the omission instead of discovering a silent drop (unify-report-format-coverage
+# phase 4). Section availability per format lives in `reporting/format_support`.
+_OMITTED_SECTIONS_HEADER = "X-UKIP-Report-Omitted-Sections"
+
+
+def _omission_headers(export_format: str, sections: List[str]) -> dict[str, str]:
+    """Header naming the requested sections `export_format` cannot render, or an
+    empty dict when it renders them all."""
+    omitted = format_support.unsupported_sections(export_format, sections)
+    return {_OMITTED_SECTIONS_HEADER: ",".join(omitted)} if omitted else {}
 
 logger = logging.getLogger(__name__)
 _WEASYPRINT_DLL_HANDLES: list[object] = []
@@ -142,8 +155,20 @@ def generate_report(
 
 @router.get("/reports/sections", tags=["reports"])
 def list_report_sections(_: models.User = Depends(get_current_user)):
-    """Return available report sections."""
-    return [{"id": k, "label": _report_builder.SECTION_LABELS[k]} for k in _PUBLIC_REPORT_SECTIONS]
+    """Return available report sections with per-format availability, so a caller
+    can see before exporting which formats render each section (the omission
+    header reports it after the fact)."""
+    return [
+        {
+            "id": k,
+            "label": _report_builder.SECTION_LABELS[k],
+            "formats": {
+                fmt: format_support.supports(fmt, k)
+                for fmt in format_support.EXPORT_FORMATS
+            },
+        }
+        for k in _PUBLIC_REPORT_SECTIONS
+    ]
 
 
 # ── Enterprise Export Endpoints ────────────────────────────────────────────────
@@ -214,7 +239,10 @@ def export_excel(
     return Response(
         content=xlsx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            **_omission_headers("excel", payload.sections),
+        },
     )
 
 
@@ -263,5 +291,8 @@ def export_pptx(
     return Response(
         content=pptx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            **_omission_headers("pptx", payload.sections),
+        },
     )

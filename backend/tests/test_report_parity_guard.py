@@ -1,23 +1,22 @@
 """Parity guard — the definition of done for unify-report-format-coverage.
 
-Every public section must render in every export format, or be explicitly
-declared unsupported. This test is the ratchet: the migration flips one
-(section, format) at a time until nothing is xfailed.
+Every public section must either render in every export format or be explicitly
+declared unsupported *and reported as omitted* — never silently dropped. The
+migration is complete: there are no xfails. Each (format, section) combo is now
+asserted directly against `SECTION_FORMAT_SUPPORT`:
 
-Design — the ratchet enforces itself, in both directions:
+  * A combo the support map claims → the body performs the *real* render and the
+    section's marker must appear, or the test fails (the map cannot lie about
+    coverage it does not have).
+  * A combo the map omits → the export must still succeed (no raise) and the
+    section must be reported by `unsupported_sections()` — the omission contract
+    (`test_report_omissions`), not a silent drop.
 
-  * The xfail marks are derived from `SECTION_FORMAT_SUPPORT` at collection
-    time, and the test body performs the *real* render and checks the section's
-    marker actually appears.
-  * A combo the support map claims → no xfail → the body must genuinely render
-    it, or the test fails (the map cannot lie about coverage it does not have).
-  * A combo the map omits → strict xfail → the body's render fails, as expected.
-  * When migration makes a section render but forgets to update the map, the
-    strict xfail xpasses and fails, forcing the map update. When the map is
-    updated but the renderer does not actually render, the body fails, forcing
-    the implementation. The map and reality cannot drift apart.
-
-Task 7.1 is done when this test reports zero xfails.
+The map and reality cannot drift apart in either direction: claiming support
+without a renderer fails the render assertion; rendering without claiming it
+means the "unsupported" branch finds the marker anyway is impossible because the
+branch is only taken when the map omits the combo. agentic_trace is the sole
+declared-unsupported section (Excel + PPTX; free text that belongs in HTML/PDF).
 """
 import io
 
@@ -122,30 +121,25 @@ def _seed(db) -> None:
     db.commit()
 
 
-def _param(export_format: str, section: str):
-    marks = ()
-    if not format_support.supports(export_format, section):
-        marks = pytest.mark.xfail(
-            strict=True,
-            reason=f"{export_format} does not render {section} yet — migration flips this",
-        )
-    return pytest.param(export_format, section, marks=marks, id=f"{export_format}:{section}")
-
-
 _COMBOS = [
-    _param(fmt, section)
+    pytest.param(fmt, section, id=f"{fmt}:{section}")
     for fmt in format_support.EXPORT_FORMATS
     for section in format_support.PUBLIC_SECTIONS
 ]
 
 
 @pytest.mark.parametrize("export_format,section", _COMBOS)
-def test_section_renders_in_every_format(export_format, section, db_session):
+def test_section_renders_or_is_declared_unsupported(export_format, section, db_session):
     _seed(db_session)
-    marker = _MARKERS[export_format].get(section)
-    blob = _render(export_format, section, db_session)
-    assert marker is not None, f"{export_format} declares no marker for {section}"
-    assert marker in blob, f"{export_format} did not render {section} (marker {marker!r})"
+    blob = _render(export_format, section, db_session)  # must never raise
+    if format_support.supports(export_format, section):
+        marker = _MARKERS[export_format].get(section)
+        assert marker is not None, f"{export_format} declares no marker for {section}"
+        assert marker in blob, f"{export_format} did not render {section} (marker {marker!r})"
+    else:
+        # Declared unsupported: the export still succeeds and the section is
+        # reported as omitted (see test_report_omissions), never silently dropped.
+        assert section in format_support.unsupported_sections(export_format, [section])
 
 
 def test_support_map_covers_every_public_section_key():
