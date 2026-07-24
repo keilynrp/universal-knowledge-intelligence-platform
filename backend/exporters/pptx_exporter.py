@@ -82,6 +82,11 @@ def generate_pptx(
     if not _PPTX_AVAILABLE:
         raise ImportError("python-pptx is required for PowerPoint export.")
 
+    # Resolve deprecated aliases (e.g. top_brands) to public ids so every slide
+    # gate below matches the vocabulary GET /reports/sections actually returns.
+    from backend.report_builder import canonical_sections
+    sections = canonical_sections(sections)
+
     accent = _hex_to_rgb(branding.get("accent_color", "#6366f1"))
     platform = branding.get("platform_name", "UKIP")
     footer_text = branding.get("footer_text", "Universal Knowledge Intelligence Platform")
@@ -207,7 +212,7 @@ def generate_pptx(
                           font_size=11, color=RGBColor(60, 60, 80))
 
     # ── Slide 4: Top Secondary Labels ─────────────────────────────────────────
-    if "top_brands" in sections:
+    if "top_secondary_labels" in sections:
         rows_q = entities_query.with_entities(
             models.RawEntity.secondary_label,
             func.count(models.RawEntity.id).label("n"),

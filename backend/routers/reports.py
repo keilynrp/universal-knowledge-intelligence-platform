@@ -194,6 +194,12 @@ def export_excel(
 ):
     """Generate a branded multi-sheet Excel workbook."""
     org_id = resolve_request_org_id(db, current_user)
+    invalid = [s for s in payload.sections if s not in _report_builder.SECTION_BUILDERS]
+    if invalid:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown sections: {invalid}. Valid: {_PUBLIC_REPORT_SECTIONS}",
+        )
     xlsx_bytes = EnterpriseExcelExporter().build(
         db,
         payload.domain_id,

@@ -752,6 +752,20 @@ SECTION_LABELS = {
     "harmonization_log": "Harmonization Log",
 }
 
+# Deprecated section ids mapped to the public id that GET /reports/sections
+# returns. Renderers must match on canonical ids only — a gate keyed on a
+# deprecated alias silently drops the section for any client using the
+# documented vocabulary. Run section lists through canonical_sections() at
+# every renderer boundary so no renderer matches raw request strings.
+SECTION_ALIASES = {
+    "top_brands": "top_secondary_labels",
+}
+
+
+def canonical_sections(sections: list[str]) -> list[str]:
+    """Resolve deprecated section aliases to their public ids, order preserved."""
+    return [SECTION_ALIASES.get(section, section) for section in sections]
+
 
 def build(
     db: Session,

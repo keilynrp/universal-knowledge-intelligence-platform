@@ -66,15 +66,16 @@ endpoints green and shippable.
 
 ## 5. Validation consistency
 
-- [ ] 5.1 Failing test: `POST /exports/excel` with an unknown section returns
+- [x] 5.1 Failing test: `POST /exports/excel` with an unknown section returns
       422. (RED — currently accepted.)
-- [ ] 5.2 Add the validation to the Excel endpoint.
-- [ ] 5.3 Test: all four endpoints reject the same unknown name identically.
-- [ ] 5.4 Failing test: PPTX renders the top-labels slide for the *public* id
+- [x] 5.2 Add the validation to the Excel endpoint.
+- [x] 5.3 Test: all four endpoints reject the same unknown name identically.
+- [x] 5.4 Failing test: PPTX renders the top-labels slide for the *public* id
       `top_secondary_labels`, not only the deprecated `top_brands` alias.
       (RED — `pptx_exporter.py:210` gates on the alias.)
-- [ ] 5.5 Resolve aliases centrally so no renderer matches raw section strings;
-      update `dashboard/page.tsx:694` to send the public id.
+- [x] 5.5 Resolve aliases centrally so no renderer matches raw section strings;
+      update `dashboard/page.tsx:694` to send the public id. (Added
+      `canonical_sections()` in `report_builder`, applied at the PPTX boundary.)
 
 ## 6. Scheduled reports
 
