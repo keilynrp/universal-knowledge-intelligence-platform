@@ -77,6 +77,53 @@ def test_html_report_accepts_decision_recommendations_section(client, auth_heade
     assert "Suggested Next Actions" in resp.text
 
 
+def test_html_report_renders_recommended_action_cards(client, auth_headers, db_session):
+    """When the snapshot yields actions, the section must render them — not collapse.
+
+    Regression: the section builder only had a no-actions branch, so with real
+    data it returned None and blew up the whole report with a TypeError.
+    """
+    from backend import models
+
+    db_session.add(models.RawEntity(
+        primary_label="Unenriched record",
+        domain="default",
+        enrichment_status="pending",
+    ))
+    db_session.commit()
+
+    payload = {
+        "domain_id": "default",
+        "sections": ["decision_recommendations"],
+        "title": "Decision Brief",
+    }
+    resp = client.post("/reports/generate", json=payload, headers=auth_headers)
+    assert resp.status_code == 200
+    assert "Suggested Next Actions" in resp.text
+    assert "Run bulk enrichment before external review" in resp.text
+    assert "No recommendation signals yet" not in resp.text
+
+
+def test_report_survives_section_builder_returning_none(client, auth_headers):
+    """A single misbehaving section must degrade to a placeholder, not kill the report."""
+    from backend import report_builder
+
+    with patch.dict(
+        report_builder.SECTION_BUILDERS,
+        {"entity_stats": lambda *args, **kwargs: None},
+    ):
+        resp = client.post(
+            "/reports/generate",
+            json={"domain_id": "default", "sections": ["entity_stats", "topic_clusters"]},
+            headers=auth_headers,
+        )
+
+    assert resp.status_code == 200
+    # The healthy section still renders, the broken one degrades visibly.
+    assert "Topic Clusters" in resp.text
+    assert "Entity Statistics" in resp.text
+
+
 def test_html_report_accepts_impact_projection_section(client, auth_headers, db_session):
     from backend import models
 
