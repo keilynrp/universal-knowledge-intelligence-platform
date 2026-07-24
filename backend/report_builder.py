@@ -463,12 +463,21 @@ def _section_decision_recommendations(
 </section>"""
 
 
-def _section_impact_projection(
+def collect_impact_projection(
     db: Session,
     domain_id: str,
     org_id: int | None,
     benchmark_org: models.Organization | None = None,
-) -> str:
+) -> "SectionData":
+    """Format-neutral impact projection: KPI cards, an executive-interpretation
+    narrative, and one Meter per projection driver. Migrated onto the shared
+    payload (phase 3.7); first section to exercise the Narrative and Meter
+    primitives in a real migration.
+    """
+    from backend.reporting.section_data import (
+        Meter, Narrative, SectionData, StatGrid, StatItem,
+    )
+
     snapshot = AnalyticsService.get_domain_snapshot(
         db,
         TopicAnalyzer(),
@@ -487,49 +496,47 @@ def _section_impact_projection(
     confidence_score = int(projection.get("confidence_score") or 0)
     drivers = projection.get("drivers") or {}
 
-    def _bar(label: str, value: float) -> str:
-        pct = max(0, min(100, round(float(value or 0))))
-        return f"""
-        <div style="margin-top:10px">
-            <div style="display:flex;justify-content:space-between;font-size:12px;color:#4b5563">
-                <span>{label}</span><b>{pct}%</b>
-            </div>
-            <div class="bar-bg" style="margin-top:5px"><div class="bar" style="width:{pct}%"></div></div>
-        </div>"""
+    grid = StatGrid(items=(
+        StatItem(label="Expected Impact", value=f"{score}/100", sub="Monte Carlo median projection"),
+        StatItem(label="Probable Range", value=f"{p10}–{p90}", sub=f"P10 to P90 · expected {p50}"),
+        StatItem(label="Confidence", value=confidence, sub=f"{confidence_score}/100 stability score"),
+    ))
+    interpretation = Narrative(
+        heading="Executive interpretation",
+        paragraphs=(
+            projection.get("recommendation", "No impact projection is available yet."),
+            f'Brief angle: {projection.get("brief_angle", "Use this as a directional signal only.")}',
+            projection.get("explanation", ""),
+        ),
+    )
 
-    return f"""<section>
-    <h2>Impact Projection</h2>
-    <div class="grid">
-        <div class="stat-card">
-            <div class="label">Expected Impact</div>
-            <div class="value">{score}/100</div>
-            <div class="sub">Monte Carlo median projection</div>
-        </div>
-        <div class="stat-card">
-            <div class="label">Probable Range</div>
-            <div class="value" style="font-size:24px">{p10}–{p90}</div>
-            <div class="sub">P10 to P90 · expected {p50}</div>
-        </div>
-        <div class="stat-card">
-            <div class="label">Confidence</div>
-            <div class="value" style="font-size:24px">{confidence}</div>
-            <div class="sub">{confidence_score}/100 stability score</div>
-        </div>
-    </div>
-    <div class="callout">
-        <h3>Executive interpretation</h3>
-        <p>{projection.get("recommendation", "No impact projection is available yet.")}</p>
-        <p style="margin-top:8px"><b>Brief angle:</b> {projection.get("brief_angle", "Use this as a directional signal only.")}</p>
-        <p style="margin-top:8px;color:#6b7280">{projection.get("explanation", "")}</p>
-    </div>
-    <div class="stat-card">
-        <div class="label">Projection drivers</div>
-        {_bar("Coverage", drivers.get("coverage", 0))}
-        {_bar("Quality", drivers.get("quality", 0))}
-        {_bar("Citation signal", drivers.get("citation_signal", 0))}
-        {_bar("Concentration", drivers.get("concentration", 0))}
-    </div>
-</section>"""
+    def _pct(value: float) -> float:
+        return max(0, min(100, round(float(value or 0))))
+
+    meters = tuple(
+        Meter(label=label, pct=_pct(drivers.get(key, 0)))
+        for label, key in (
+            ("Coverage", "coverage"),
+            ("Quality", "quality"),
+            ("Citation signal", "citation_signal"),
+            ("Concentration", "concentration"),
+        )
+    )
+    return SectionData(
+        key="impact_projection",
+        title="Impact Projection",
+        blocks=(grid, interpretation, *meters),
+    )
+
+
+def _section_impact_projection(
+    db: Session,
+    domain_id: str,
+    org_id: int | None,
+    benchmark_org: models.Organization | None = None,
+) -> str:
+    from backend.reporting.html_renderer import render_html
+    return render_html(collect_impact_projection(db, domain_id, org_id, benchmark_org))
 
 
 def _section_hidden_patterns(

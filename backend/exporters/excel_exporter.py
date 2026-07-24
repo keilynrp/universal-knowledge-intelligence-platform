@@ -106,6 +106,7 @@ class EnterpriseExcelExporter:
             "entity_stats": report_builder.collect_entity_stats,
             "enrichment_coverage": report_builder.collect_enrichment_coverage,
             "top_secondary_labels": report_builder.collect_top_secondary_labels,
+            "impact_projection": report_builder.collect_impact_projection,
         }
         for section_id, collect in migrated_collectors.items():
             if section_id in requested:

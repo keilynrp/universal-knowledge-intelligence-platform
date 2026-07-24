@@ -5,7 +5,13 @@ A collector pulls a section's data into a `SectionData` with no markup, so every
 format renders the same payload. Pilot section: entity_stats.
 """
 from backend import models, report_builder
-from backend.reporting.section_data import SectionData, StatGrid, Table
+from backend.reporting.section_data import (
+    Meter,
+    Narrative,
+    SectionData,
+    StatGrid,
+    Table,
+)
 
 
 def _seed(db) -> None:
@@ -189,3 +195,58 @@ def test_migrated_top_secondary_labels_html_preserves_structure(db_session):
         assert col in html
     assert 'class="bar-wrap"' in html and 'class="bar"' in html
     assert "Clinical Trial" in html
+
+
+# ── impact_projection (task 3.7) ────────────────────────────────────────────
+
+def _seed_snapshot(db) -> None:
+    """Enriched entities with concepts + citations so the analytics snapshot
+    produces a real impact projection (mirrors the parity-guard seed)."""
+    for i in range(3):
+        db.add(models.RawEntity(
+            primary_label=f"Signal {i}",
+            domain="default",
+            enrichment_status="completed",
+            enrichment_concepts="knowledge graph; semantic intelligence",
+            enrichment_citation_count=120 + i,
+            enrichment_source="openalex",
+            secondary_label="Clinical Trial",
+            quality_score=0.8,
+        ))
+    db.commit()
+
+
+def test_collect_impact_projection_returns_kpis_interpretation_and_drivers(db_session):
+    _seed_snapshot(db_session)
+    section = report_builder.collect_impact_projection(db_session, "default", None)
+
+    assert isinstance(section, SectionData)
+    assert section.key == "impact_projection"
+    assert section.title == "Impact Projection"
+
+    grid = next(b for b in section.blocks if isinstance(b, StatGrid))
+    assert {i.label for i in grid.items} == {"Expected Impact", "Probable Range", "Confidence"}
+
+    narrative = next(b for b in section.blocks if isinstance(b, Narrative))
+    assert narrative.heading == "Executive interpretation"
+
+    meters = [b for b in section.blocks if isinstance(b, Meter)]
+    assert [m.label for m in meters] == ["Coverage", "Quality", "Citation signal", "Concentration"]
+    for m in meters:
+        assert 0 <= m.pct <= 100
+
+
+def test_migrated_impact_projection_html_preserves_structure(db_session):
+    """HTML builder delegates to the collector + renderer. The three KPI cards,
+    the executive-interpretation callout, and the four driver bars survive; the
+    decorative 'Projection drivers' wrapper card is dropped (the four Meters
+    render as label + bar directly)."""
+    _seed_snapshot(db_session)
+    html = report_builder._section_impact_projection(db_session, "default", None)
+
+    assert "<h2>Impact Projection</h2>" in html
+    assert html.count('class="stat-card"') == 3        # the three KPI cards only
+    assert 'class="callout"' in html and "Executive interpretation" in html
+    for driver in ("Coverage", "Quality", "Citation signal", "Concentration"):
+        assert driver in html
+    assert 'class="bar"' in html

@@ -38,6 +38,7 @@ SECTION_FORMAT_SUPPORT: dict[str, frozenset[str]] = {
         "entity_stats",
         "enrichment_coverage",
         "top_secondary_labels",
+        "impact_projection",
         "topic_clusters",
         "harmonization_log",
     }),

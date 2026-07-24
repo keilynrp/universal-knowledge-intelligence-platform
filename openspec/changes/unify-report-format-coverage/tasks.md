@@ -82,7 +82,18 @@ endpoints green and shippable.
 - [ ] 3.4 `topic_clusters`
 - [ ] 3.5 `harmonization_log`
 - [ ] 3.6 `institutional_benchmark`
-- [ ] 3.7 `impact_projection`
+- [x] 3.7 `impact_projection` (taken ahead of 3.4–3.6: it flips a real Excel
+      xfail and is the first real exercise of the Narrative + Meter primitives;
+      3.4 topic_clusters and 3.5 harmonization_log are de-dup-only — already
+      Excel-covered via bespoke sheets — so they move no ratchet and are batched
+      with the cleanup). `collect_impact_projection()` is the single source:
+      StatGrid (3 KPI cards) + Narrative (executive interpretation) + one Meter
+      per driver. `_section_impact_projection` delegates to `render_html(...)` and
+      the Excel loop renders it, flipping `(excel, impact_projection)` (11 → 10).
+      The decorative "Projection drivers" wrapper card is dropped (the four Meters
+      render as label + bar directly); the bold "Brief angle:" prefix becomes plain
+      text. Structural assertion in
+      `test_migrated_impact_projection_html_preserves_structure`.
 - [ ] 3.8 `hidden_patterns`
 - [ ] 3.9 `decision_recommendations`
 - [ ] 3.10 `agentic_trace` — decide and record whether Excel declares it
