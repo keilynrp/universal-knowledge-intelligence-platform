@@ -5,21 +5,30 @@ endpoints green and shippable.
 
 ## 0. Baseline guard
 
-- [ ] 0.1 Failing test: parametrized over `SECTION_BUILDERS`, assert each
+- [x] 0.1 Failing test: parametrized over `SECTION_BUILDERS`, assert each
       section renders in HTML, PDF, Excel and PPTX. (RED — 6 of 10 fail for
-      PPTX, 8 of 10 for Excel. This test is the definition of done.)
-- [ ] 0.2 Mark the currently-failing combinations `xfail` with the section name
+      PPTX, 8 of 10 for Excel. This test is the definition of done.) Done in
+      `test_report_parity_guard.py`; xfail count confirmed 8 Excel + 6 PPTX.
+- [x] 0.2 Mark the currently-failing combinations `xfail` with the section name
       in the reason, so the ratchet is visible and each migration flips one.
+      Marks are derived from `reporting/format_support.py` (the support map) and
+      strict, so the map and the renderers cannot drift apart.
 - [ ] 0.3 Snapshot the current HTML per section as a regression baseline for the
-      migration.
+      migration. **Deferred to the migration slice (phase 3)** — the baseline is
+      only consumed when a builder is replaced; generating it now would leave a
+      stale golden sitting across several PRs. The parity guard's HTML honesty
+      checks and the existing per-section tests hold HTML stable until then.
 
 ## 1. Section payload
 
-- [ ] 1.1 Test: `SectionData` and the four block types (`StatGrid`, `Table`,
-      `Narrative`, `Meter`) construct and validate.
-- [ ] 1.2 Implement the payload types in `backend/reporting/section_data.py`.
+- [x] 1.1 Test: `SectionData` and the four block types (`StatGrid`, `Table`,
+      `Narrative`, `Meter`) construct and validate. (`test_section_data.py`.)
+- [x] 1.2 Implement the payload types in `backend/reporting/section_data.py`.
+      Frozen dataclasses; Table validates row width + bar_column range, Meter
+      bounds pct to [0, 100], SectionData requires key + title.
 - [ ] 1.3 Test: a payload containing every block type round-trips through each
-      renderer without raising.
+      renderer without raising. **Deferred to the renderer slice (phase 2)** —
+      the round-trip needs the renderers to exist.
 
 ## 2. Renderers over primitives
 
