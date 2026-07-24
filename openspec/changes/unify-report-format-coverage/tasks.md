@@ -90,8 +90,17 @@ endpoints green and shippable.
       hand-written builder drew the bar alone); the bar width is unchanged. Empty
       state dropped per the pilot precedent. Structural assertion in
       `test_migrated_top_secondary_labels_html_preserves_structure`.
-- [ ] 3.4 `topic_clusters`
-- [~] 3.5 `harmonization_log` (HTML + PPTX done; Excel de-dup pending cleanup).
+- [~] 3.4 `topic_clusters` — **intentionally NOT migrated (decision 2026-07-24).**
+      It is already fully covered in every format (HTML/PDF hand-written with a
+      concept **chip cloud**, Excel via the rich `_write_concepts` sheet, PPTX via
+      the "Top Concepts" slide), so it moves no ratchet. Migrating its HTML onto
+      the shared `Table` would drop the prominent chip cloud for only
+      code-uniformity, and folding its Excel onto the collector would strip the
+      Rank/Percentage columns and the full concept list down to a top-10 summary.
+      Kept as-is deliberately; the chips and the richer Excel sheet are the
+      point. See 3.12.
+- [~] 3.5 `harmonization_log` (HTML + PPTX done; Excel intentionally kept rich —
+      see 3.12).
       `collect_harmonization_log()` is the single source: a Table
       (Step/Records Updated/Status/Executed). `_section_harmonization_log`
       delegates to `render_html(...)` and the PPTX loop renders it, flipping the
@@ -144,9 +153,23 @@ endpoints green and shippable.
       unaffected). The attention-point `<ul>` flattens to paragraphs and the bold
       labels become plain text, per the migration precedent. Structural assertion
       in `test_migrated_stakeholder_reading_html_preserves_structure`.
-- [ ] 3.12 Remove each superseded `_section_*` builder once its replacement is
-      green; delete the duplicated `_entities_query` / `_harmonization_query`
-      from `excel_exporter.py`
+- [~] 3.12 **Re-scoped (decision 2026-07-24): keep the rich bespoke Excel writers;
+      do NOT de-dup.** The premise here — "the collectors supersede the bespoke
+      Excel writers" — turned out false. `_write_concepts` (Rank/Concept/Count/
+      Percentage%, full list) and `_write_harmonization` (7 columns, up to 200
+      rows) produce materially **richer** output than the shared collectors, which
+      are sized for a one-page brief (top-10, fewer columns). Folding Excel onto
+      the collectors would regress the one format where users open the file *to get
+      the full data*. So the bespoke writers stay, and `_entities_query` /
+      `_harmonization_query` remain in use (Summary/Entities/Concepts/Harmonization
+      sheets), i.e. nothing is deleted. The `_section_*` builders are also not
+      "superseded" — each is now a thin delegate to `render_html(collect_...)` and
+      is still the registry entry HTML/PDF needs. **Note the surviving asymmetry it
+      documents:** for `harmonization_log` (and, had 3.4 been done, `topic_clusters`),
+      HTML/PDF + PPTX render the lean shared payload while Excel renders its own
+      richer sheet — deliberate, because Excel's audience wants detail. The only
+      real duplication left (the collector query vs. the bespoke Excel query) is the
+      price of that richer Excel, and is accepted.
 
 ## 4. Omission reporting
 
