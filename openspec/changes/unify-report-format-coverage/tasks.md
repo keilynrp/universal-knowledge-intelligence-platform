@@ -26,22 +26,25 @@ endpoints green and shippable.
 - [x] 1.2 Implement the payload types in `backend/reporting/section_data.py`.
       Frozen dataclasses; Table validates row width + bar_column range, Meter
       bounds pct to [0, 100], SectionData requires key + title.
-- [ ] 1.3 Test: a payload containing every block type round-trips through each
-      renderer without raising. **Deferred to the renderer slice (phase 2)** —
-      the round-trip needs the renderers to exist.
+- [x] 1.3 Test: a payload containing every block type round-trips through each
+      renderer without raising. (`test_report_renderers.py`.)
 
 ## 2. Renderers over primitives
 
-- [ ] 2.1 Failing test: HTML renderer emits the existing CSS classes for each
+- [x] 2.1 Failing test: HTML renderer emits the existing CSS classes for each
       block type.
-- [ ] 2.2 Implement the HTML renderer.
-- [ ] 2.3 Failing test: Excel renderer emits a KPI block, a sheet, a wrapped
+- [x] 2.2 Implement the HTML renderer. (`reporting/html_renderer.py`; reuses the
+      existing grid/stat-card/callout/bar-wrap classes; escapes all data.)
+- [x] 2.3 Failing test: Excel renderer emits a KPI block, a sheet, a wrapped
       text block and a percentage cell.
-- [ ] 2.4 Implement the Excel renderer.
-- [ ] 2.5 Failing test: PPTX renderer emits a KPI row, a slide table, a bullet
+- [x] 2.4 Implement the Excel renderer. (`reporting/excel_renderer.py`; one sheet
+      per section, sanitized+deduped 31-char titles.)
+- [x] 2.5 Failing test: PPTX renderer emits a KPI row, a slide table, a bullet
       slide and a bar shape.
-- [ ] 2.6 Implement the PPTX renderer.
-- [ ] 2.7 Each renderer declares its supported block types.
+- [x] 2.6 Implement the PPTX renderer. (`reporting/pptx_renderer.py`; native
+      slide table for Table, proportional auto-shape bar for Meter.)
+- [x] 2.7 Each renderer declares its supported block types. (`SUPPORTED_BLOCKS`
+      on all three; test asserts all four blocks covered.)
 
 ## 3. Migrate sections (one commit each, HTML baseline must hold)
 
