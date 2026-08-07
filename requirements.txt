@@ -65,6 +65,6 @@ python-louvain==0.16
 cachetools>=7.1.6
 
 # ── Distributed cache (Redis-backed, optional; in-process fallback when REDIS_URL unset)
-redis>=8.0.1
+redis>=8.1.0
 # test-only: in-memory Redis used by the cache test suite
 fakeredis>=2.37.0
