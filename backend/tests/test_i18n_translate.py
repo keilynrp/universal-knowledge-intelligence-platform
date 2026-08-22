@@ -20,6 +20,8 @@ from backend.i18n import DEFAULT_LANGUAGE, LANGUAGES
 from backend.i18n import catalog as catalog_module
 from backend.i18n.catalog import SURFACE_PREFIXES, translate
 
+pytestmark = pytest.mark.reporting
+
 _FIXTURE = {
     "en": {
         "report.section.hidden_patterns.title": "Hidden Patterns",

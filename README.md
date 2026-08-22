@@ -214,11 +214,37 @@ The production compose includes a co-located `ukip-redis` service that activates
 ## Testing
 
 ```bash
-# Run all backend tests
+# Run all backend tests (exhaustive — same suite the "test-shard" CI jobs union to)
 pytest backend/tests -q
 
 # With coverage
 pytest backend/tests --tb=short --cov=backend --cov-report=term-missing -q
+
+# Focused marker run — taxonomy: unit, contract, integration, reporting,
+# security, postgres, slow (registered + enforced in pyproject.toml)
+pytest backend/tests -m security -q
+pytest backend/tests -m "not slow" -q
+
+# One CI-equivalent partition (mirrors what a "test-shard" matrix job runs —
+# mapfile, not $(cat file): some parametrize ids contain spaces)
+python scripts/backend_test_partitions.py list-shard --index 0 --count 6 --out /tmp/shard0.txt
+mapfile -t ids < /tmp/shard0.txt && pytest "${ids[@]}" -q
+
+# PostgreSQL-relevant tests (dialect-sensitive files; set UKIP_DB_MODE=postgres
+# + DATABASE_URL for a real dialect run — see .github/workflows/test.yml's
+# postgres-smoke job for the exhaustive, blocking production-dialect lane)
+pytest backend/tests -m postgres -q
+
+# Taxonomy/partition audit — marker histogram + the machine-verifiable proof
+# that union(shard node IDs) == the exhaustive collection (see
+# scripts/backend_test_partitions.py and backend/tests/test_partition_guard.py)
+python scripts/backend_test_partitions.py audit-markers
+for i in 0 1 2 3 4 5; do
+  python scripts/backend_test_partitions.py list-shard --index "$i" --count 6 --out "/tmp/s$i.txt"
+done
+python scripts/backend_test_partitions.py verify --count 6 \
+  --shard-file /tmp/s0.txt --shard-file /tmp/s1.txt --shard-file /tmp/s2.txt \
+  --shard-file /tmp/s3.txt --shard-file /tmp/s4.txt --shard-file /tmp/s5.txt
 
 # Frontend unit tests
 cd frontend && npm test

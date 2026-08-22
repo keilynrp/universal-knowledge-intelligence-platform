@@ -5,6 +5,8 @@ from datetime import timedelta
 import pytest
 from jose import jwt
 
+pytestmark = pytest.mark.security
+
 
 def _reload_auth(monkeypatch, primary, retiring=None):
     monkeypatch.setenv("JWT_SECRET_KEY", primary)

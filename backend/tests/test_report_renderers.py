@@ -18,6 +18,9 @@ from backend.reporting.section_data import (
     StatItem,
     Table,
 )
+import pytest
+
+pytestmark = pytest.mark.reporting
 
 
 def _every_block_section() -> SectionData:

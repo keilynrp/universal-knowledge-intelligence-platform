@@ -29,6 +29,9 @@ import uuid
 from sqlalchemy import func, text
 
 from backend import models
+import pytest
+
+pytestmark = pytest.mark.postgres
 
 def _fresh_name(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:12]}"

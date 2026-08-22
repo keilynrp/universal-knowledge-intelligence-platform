@@ -6,6 +6,9 @@ and GET /reports/sections advertises per-format availability so the caller can
 see it before exporting. agentic_trace is the motivating case — long free text
 that Excel and PPTX declare unsupported.
 """
+import pytest
+
+pytestmark = pytest.mark.reporting
 
 
 def test_excel_export_reports_omitted_agentic_trace(client, auth_headers):

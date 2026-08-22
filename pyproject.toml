@@ -1,0 +1,16 @@
+[tool.pytest.ini_options]
+# Canonical pytest config for backend/tests/ (issue #293). Registering markers
+# here — rather than via conftest.py's pytest_configure — is what lets
+# `--strict-markers` actually take effect: addopts and strict-marker checking
+# are resolved from ini config before any conftest hook runs, so a marker
+# registered only at runtime cannot make `--strict-markers` fail on a typo.
+addopts = "--strict-markers"
+markers = [
+    "unit: fast, isolated tests with no cross-module or DB round-trip dependencies",
+    "contract: request/response schema and API-contract shape tests",
+    "integration: multi-component tests exercising router + service + DB together",
+    "reporting: report/document assembly, rendering, and i18n/localization tests",
+    "security: authN/authZ, RBAC, API-key scope, and bootstrap-admin tests",
+    "postgres: dialect-sensitive tests validated against PostgreSQL semantics",
+    "slow: long-running performance or heavy-fixture tests; deselect with -m 'not slow'",
+]

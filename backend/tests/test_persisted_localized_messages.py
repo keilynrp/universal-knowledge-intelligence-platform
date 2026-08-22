@@ -36,6 +36,8 @@ from backend.i18n.message_ref import (
     resolve_plain_or_key,
 )
 
+pytestmark = pytest.mark.reporting
+
 
 def _make_entity(db, name="Test Entity"):
     entity = models.RawEntity(primary_label=name, enrichment_status="processing")

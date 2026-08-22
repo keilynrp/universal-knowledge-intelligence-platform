@@ -23,6 +23,8 @@ import pytest
 from backend.i18n import catalog as catalog_module
 from backend.services.impact_projection import ImpactProjectionService
 
+pytestmark = pytest.mark.reporting
+
 #: The service reads `kpis` / `quality` / `top_entities`, not flat fields. A flat
 #: fixture yields `total_entities == 0` and silently takes the empty branch, so a
 #: test claiming to exercise a populated portfolio would exercise neither.

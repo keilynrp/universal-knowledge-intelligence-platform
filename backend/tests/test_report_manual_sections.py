@@ -1,4 +1,7 @@
 from backend.report_builder import _section_manual_note
+import pytest
+
+pytestmark = pytest.mark.reporting
 
 
 def test_manual_report_section_escapes_analyst_input():

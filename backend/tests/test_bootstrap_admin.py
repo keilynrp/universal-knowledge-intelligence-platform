@@ -4,6 +4,8 @@ from backend import models
 from backend.auth import verify_password
 from backend.bootstrap import ensure_bootstrap_super_admin, resolve_bootstrap_password_hash
 
+pytestmark = pytest.mark.security
+
 
 @pytest.mark.usefixtures("db_session")
 def test_bootstrap_creates_super_admin_when_missing(db_session, monkeypatch):

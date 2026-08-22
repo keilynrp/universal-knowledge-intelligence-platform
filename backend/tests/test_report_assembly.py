@@ -10,6 +10,8 @@ import pytest
 
 from backend.reporting.section_data import Materiality, SectionData
 
+pytestmark = pytest.mark.reporting
+
 
 def _summary(html: str) -> str:
     match = re.search(r"<h2>Executive Summary</h2>.*?</section>", html, re.S)

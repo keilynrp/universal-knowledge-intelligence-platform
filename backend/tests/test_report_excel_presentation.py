@@ -13,6 +13,9 @@ import openpyxl
 
 from backend import models
 from backend.exporters.excel_exporter import EnterpriseExcelExporter
+import pytest
+
+pytestmark = pytest.mark.reporting
 
 _SECTIONS = ["entity_stats", "journal_portfolio", "harmonization_log"]
 

@@ -14,6 +14,9 @@ from pptx import Presentation
 
 from backend import models, report_builder
 from backend.exporters.pptx_exporter import generate_pptx
+import pytest
+
+pytestmark = pytest.mark.reporting
 
 _BRANDING = {
     "platform_name": "UKIP",

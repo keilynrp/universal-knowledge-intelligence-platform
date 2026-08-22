@@ -17,6 +17,9 @@ from backend.db_revision import (
     evaluate_drift,
     migration_drift,
 )
+import pytest
+
+pytestmark = pytest.mark.postgres
 
 
 # ── Pure decision ────────────────────────────────────────────────────────────

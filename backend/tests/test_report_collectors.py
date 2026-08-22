@@ -13,6 +13,9 @@ from backend.reporting.section_data import (
     StatGrid,
     Table,
 )
+import pytest
+
+pytestmark = pytest.mark.reporting
 
 
 def _labelled(label: str) -> str:

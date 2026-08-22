@@ -26,6 +26,8 @@ from backend.reporting.section_data import (
     Table,
 )
 
+pytestmark = pytest.mark.reporting
+
 
 def _section(**overrides) -> SectionData:
     base = dict(

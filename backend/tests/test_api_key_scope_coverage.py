@@ -31,6 +31,8 @@ from backend.api_key_scopes import (
 )
 from backend.main import app
 
+pytestmark = pytest.mark.security
+
 #: Routes served by the framework or intentionally public; they never carry an
 #: API key, so they are excluded from table-liveness accounting.
 _INFRA_PREFIXES = ("/docs", "/redoc", "/openapi.json", "/static", "/embed", "/health")

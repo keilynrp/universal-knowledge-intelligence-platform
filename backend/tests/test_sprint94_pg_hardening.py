@@ -26,6 +26,8 @@ from fastapi.testclient import TestClient
 from backend import models
 from backend.database import SQLALCHEMY_DATABASE_URL
 
+pytestmark = pytest.mark.postgres
+
 # Which dialect this run is meant to exercise. Mirrors conftest.
 _EXPECT_POSTGRES = os.environ.get("UKIP_DB_MODE", "sqlite").lower() == "postgres"
 

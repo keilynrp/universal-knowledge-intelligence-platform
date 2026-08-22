@@ -19,6 +19,8 @@ import pytest
 from backend import models
 from backend.i18n import catalog as catalog_module
 
+pytestmark = pytest.mark.reporting
+
 
 @pytest.fixture(autouse=True)
 def _fresh_rate_limit():

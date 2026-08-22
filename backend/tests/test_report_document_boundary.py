@@ -30,6 +30,8 @@ from backend.reporting.localize import (
 from backend.reporting.pptx_renderer import render_pptx
 from backend.reporting.section_data import SectionData
 
+pytestmark = pytest.mark.reporting
+
 
 def _raw_section(**overrides) -> SectionData:
     base = dict(

@@ -17,6 +17,9 @@ import json
 from backend import models
 from backend.services.pattern_discovery import PatternDiscoveryService
 from backend.services.researcher_topic_analytics import _executive_summary
+import pytest
+
+pytestmark = pytest.mark.reporting
 
 
 def _seed(db_session):

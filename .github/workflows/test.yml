@@ -11,63 +11,150 @@ env:
   ADMIN_USERNAME: testadmin
   ADMIN_PASSWORD: testpassword
   JWT_SECRET_KEY: test-jwt-secret-key-for-ci-only-not-production
-  # ENCRYPTION_KEY is intentionally NOT hardcoded here: the test suite supplies a
-  # CI default via conftest (os.environ.setdefault), and the postgres-smoke job
-  # generates an ephemeral Fernet key at runtime. Keeps a real key out of VCS.
   ALLOWED_ORIGINS: "http://localhost:3004"
   UKIP_SKIP_STARTUP_SIDE_EFFECTS: "1"
   SENTRY_ENABLED: "0"
 
 jobs:
-  test:
+  test-shard:
+    name: test-shard-${{ matrix.shard }} (py3.13)
     runs-on: ubuntu-latest
-
     strategy:
       fail-fast: false
       matrix:
-        # 3.13 is what ships — Dockerfile.backend builds FROM python:3.13-slim.
-        # 3.11 was dropped rather than kept: no artifact runs it (the image is
-        # the only deliverable, and the repo declares no packaging metadata),
-        # and requirements.lock pins the set the 3.13 image resolves, which has
-        # no 3.11 distribution for numpy. Testing it would mean loosening the
-        # lock and reopening the drift this pin exists to close.
-        #
-        # This matrix is the ONLY place a version other than 3.13 is deliberate:
-        # 3.12 stays for breadth, to catch code that quietly depends on 3.13-only
-        # behaviour. Every standalone `python-version:` in this repo's workflows
-        # is 3.13, so single-version jobs exercise the runtime that ships.
-        python-version: ["3.12", "3.13"]
+        shard: [0, 1, 2, 3, 4, 5]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python 3.13
         uses: actions/setup-python@v7
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt -c requirements.lock
+          pip install pytest-cov -c requirements.lock
+
+      - name: Collect deterministic shard
+        run: |
+          python scripts/backend_test_partitions.py list-shard \
+            --index "${{ matrix.shard }}" \
+            --count 6 \
+            --out "shard-${{ matrix.shard }}.txt"
+          echo "Shard ${{ matrix.shard }} count: $(wc -l < shard-${{ matrix.shard }}.txt)"
+
+      - name: Run shard with coverage
+        env:
+          DATABASE_URL: "sqlite:///:memory:"
+          UKIP_DB_MODE: sqlite
+          COVERAGE_FILE: "coverage-shard-${{ matrix.shard }}"
+        shell: bash
+        run: |
+          mapfile -t ids < "shard-${{ matrix.shard }}.txt"
+          if [ "${#ids[@]}" -eq 0 ]; then
+            echo "Shard ${{ matrix.shard }} unexpectedly collected zero tests" >&2
+            exit 1
+          fi
+          pytest "${ids[@]}" \
+            --tb=short \
+            --cov=backend \
+            --cov-report= \
+            -q
+
+      - name: Upload shard evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-shard-${{ matrix.shard }}
+          path: |
+            shard-${{ matrix.shard }}.txt
+            coverage-shard-${{ matrix.shard }}
+          retention-days: 14
+
+  test-py312-compat:
+    name: test-py312-compat
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
           cache: pip
 
       - name: Install dependencies
         run: pip install -r requirements.txt -c requirements.lock
 
-      - name: Run tests with coverage
+      - name: Run representative compatibility lane
         env:
           DATABASE_URL: "sqlite:///:memory:"
           UKIP_DB_MODE: sqlite
         run: |
-          pip install pytest-cov -c requirements.lock
           pytest backend/tests/ \
+            -m "unit or contract or security" \
             --tb=short \
-            --cov=backend \
-            --cov-report=term-missing \
-            --cov-report=xml:coverage.xml \
-            --cov-fail-under=75 \
             -q
 
-      - name: Upload coverage report
+  test-partition-guard:
+    name: test-partition-guard-and-coverage
+    runs-on: ubuntu-latest
+    needs: [test-shard]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt -c requirements.lock
+          pip install coverage pytest-cov -c requirements.lock
+
+      - name: Download all shard artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: backend-shard-*
+          merge-multiple: true
+          path: shard-artifacts
+
+      - name: Verify partition union equals exhaustive suite
+        run: |
+          python scripts/backend_test_partitions.py verify \
+            --count 6 \
+            --shard-file shard-artifacts/shard-0.txt \
+            --shard-file shard-artifacts/shard-1.txt \
+            --shard-file shard-artifacts/shard-2.txt \
+            --shard-file shard-artifacts/shard-3.txt \
+            --shard-file shard-artifacts/shard-4.txt \
+            --shard-file shard-artifacts/shard-5.txt
+
+      - name: Audit pytest marker taxonomy
+        run: python scripts/backend_test_partitions.py audit-markers
+
+      - name: Combine shard coverage and enforce threshold
+        run: |
+          coverage combine shard-artifacts/coverage-shard-0 \
+            shard-artifacts/coverage-shard-1 \
+            shard-artifacts/coverage-shard-2 \
+            shard-artifacts/coverage-shard-3 \
+            shard-artifacts/coverage-shard-4 \
+            shard-artifacts/coverage-shard-5
+          coverage report --fail-under=75
+          coverage xml -o coverage.xml
+
+      - name: Upload combined coverage report
         uses: actions/upload-artifact@v7
-        if: matrix.python-version == '3.13'
         with:
           name: coverage-report
           path: coverage.xml
@@ -81,7 +168,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Set up Python 3.12
+      - name: Set up Python 3.13
         uses: actions/setup-python@v7
         with:
           python-version: "3.13"
@@ -101,7 +188,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Set up Python 3.12
+      - name: Set up Python 3.13
         uses: actions/setup-python@v7
         with:
           python-version: "3.13"
@@ -111,8 +198,6 @@ jobs:
         run: pip install -r requirements.txt -c requirements.lock
 
       - name: Prepare ephemeral CI secrets
-        # Generate all per-run secrets at runtime so none are hardcoded in VCS
-        # (keeps the secret scanner clean). Exposed only to later steps in this job.
         run: |
           python - >> "$GITHUB_ENV" <<'PY'
           import secrets
@@ -126,9 +211,6 @@ jobs:
           PY
 
       - name: Start PostgreSQL (retry pull to absorb Docker Hub hiccups)
-        # Replaces a `services:` container, whose image pull cannot be retried and
-        # was the top cause of unrelated CI failures (issue #20). Authenticates
-        # when DOCKERHUB_* secrets exist; retries the pull either way.
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -168,47 +250,19 @@ jobs:
           done
 
       - name: Validate PostgreSQL migrations
-        # DATABASE_URL and UKIP_DB_MODE come from the prepare step via $GITHUB_ENV.
         run: python -m alembic upgrade head
 
       - name: Smoke-test real startup against PostgreSQL
-        # Runs the FastAPI lifespan bootstrap (create_all + seed + migrate) and
-        # /health against Postgres — the path unit tests skip via
-        # UKIP_SKIP_STARTUP_SIDE_EFFECTS=1. Catches dialect/schema startup
-        # failures before they reach a production deploy.
-        # DATABASE_URL, UKIP_DB_MODE, SESSION_SECRET_KEY, ENCRYPTION_KEY come from
-        # the prepare step via $GITHUB_ENV.
         env:
           UKIP_SKIP_STARTUP_SIDE_EFFECTS: "0"
           PYTHONPATH: .
         run: python scripts/ci_lifespan_smoke.py
 
       - name: Run the backend suite against PostgreSQL
-        # Issue #234: until this step existed, CI ran `backend/tests/` on SQLite
-        # only and the jobs above validated migrations and startup — nothing
-        # else. Production is PostgreSQL, so dialect-specific SQL shipped
-        # unseen. Two live 500s reached production that way and both were
-        # invisible to a fully green suite:
-        #
-        #   /audit-log/stats               — DATE('now', '-6 days') is SQLite-only (#236)
-        #   /analyzers/correlation/{id}    — :named params never bound by psycopg2 (#237)
-        #
-        # No coverage flags here on purpose: the SQLite matrix above already
-        # gates coverage, and running it twice would double the wall clock to
-        # measure the same lines. This job answers a different question — does
-        # the SQL run at all on the dialect production uses.
-        #
-        # DATABASE_URL and UKIP_DB_MODE come from the prepare step via $GITHUB_ENV.
         env:
           UKIP_SKIP_STARTUP_SIDE_EFFECTS: "1"
         run: pytest backend/tests/ --tb=short -q
 
-  # ── Generated SDK client smoke tests (live) ───────────────────────────────
-  # Exercises sdk/typescript and sdk/python against a real running backend:
-  # authenticate, list entities, get a typed result, and (with enforcement on)
-  # confirm a read-scoped key is blocked from a write with a scope-naming 403.
-  # Unit tests cannot cover this — it needs a server, real auth, and the
-  # generated clients installed the way an integrator would install them.
   sdk-smoke:
     runs-on: ubuntu-latest
 
@@ -216,7 +270,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Set up Python 3.12
+      - name: Set up Python 3.13
         uses: actions/setup-python@v7
         with:
           python-version: "3.13"
@@ -231,9 +285,6 @@ jobs:
         run: pip install -r requirements.txt -c requirements.lock
 
       - name: Prepare ephemeral CI secrets
-        # Per-run secrets generated at runtime (keeps the secret scanner clean).
-        # ADMIN_USERNAME / ADMIN_PASSWORD / JWT_SECRET_KEY come from the workflow
-        # env block; the smoke logs in with those same values.
         run: |
           python - >> "$GITHUB_ENV" <<'PY'
           import secrets
@@ -278,8 +329,6 @@ jobs:
         run: python -m alembic upgrade head
 
       - name: Start the backend (scopes enforced) and wait for health
-        # Enforcement ON so the scope-403 check (3.4) is exercised. Side effects
-        # ON so the admin user is seeded and login works.
         env:
           UKIP_API_KEY_SCOPES_ENFORCED: "1"
           UKIP_SKIP_STARTUP_SIDE_EFFECTS: "0"

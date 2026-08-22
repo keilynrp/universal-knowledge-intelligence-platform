@@ -21,6 +21,8 @@ from backend.auth import (
 )
 from backend import models
 
+pytestmark = pytest.mark.security
+
 
 
 # ── Unit: token creation ─────────────────────────────────────────────────────

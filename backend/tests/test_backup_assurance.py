@@ -19,6 +19,8 @@ from backend.backup_assurance import (
     record_event,
 )
 
+pytestmark = pytest.mark.postgres
+
 
 def _backend_test_fixtures():
     expected = Path(__file__).with_name("conftest.py").resolve()

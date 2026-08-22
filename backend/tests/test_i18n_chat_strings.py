@@ -18,6 +18,8 @@ from backend.services.agentic_research_chat import (
     AgenticResearchChatService,
 )
 
+pytestmark = pytest.mark.reporting
+
 
 def _ask(db_session, question: str, **overrides):
     user = db_session.query(models.User).filter(models.User.role == "super_admin").first()

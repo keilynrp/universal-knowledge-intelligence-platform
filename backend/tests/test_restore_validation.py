@@ -20,6 +20,8 @@ from backend.scripts.validate_restore import (
     validate_tenant_isolation,
 )
 
+pytestmark = pytest.mark.postgres
+
 
 def test_production_like_url_requires_explicit_override():
     with pytest.raises(ValueError, match="production-like"):

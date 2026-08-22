@@ -9,6 +9,9 @@ import json
 
 from backend import models
 from backend.routers.scheduled_reports import _execute_report
+import pytest
+
+pytestmark = pytest.mark.reporting
 
 
 def _make_schedule(db, fmt, sections):

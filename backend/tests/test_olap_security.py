@@ -8,6 +8,8 @@ import duckdb
 
 from backend.olap import _is_safe_identifier, DuckDBOLAPEngine
 
+pytestmark = pytest.mark.security
+
 
 # ── Unit: identifier validation ──────────────────────────────────────────────
 

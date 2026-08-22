@@ -32,6 +32,8 @@ from backend.exporters.pptx_exporter import generate_pptx
 from backend.reporting import format_support
 from backend.reporting.section_data import Table as PayloadTable
 
+pytestmark = pytest.mark.reporting
+
 
 # How each section is expected to appear, per format. For HTML/PDF it is the
 # section's <h2> label; for Excel it is the sheet name; for PPTX the slide

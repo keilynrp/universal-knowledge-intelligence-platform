@@ -14,6 +14,8 @@ RBAC regression tests:
 import io
 import pytest
 
+pytestmark = pytest.mark.security
+
 
 # ── /users requires auth ──────────────────────────────────────────────────────
 

@@ -19,6 +19,8 @@ import pytest
 from backend import models
 from backend.routers.api_keys import verify_api_key
 
+pytestmark = pytest.mark.postgres
+
 
 def _create_key(client, auth_headers, **overrides) -> dict:
     payload = {"name": "test-key", "scopes": ["read"]}

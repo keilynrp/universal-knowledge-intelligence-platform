@@ -35,6 +35,8 @@ from sqlalchemy import text
 from backend import models
 from backend.database import SessionLocal
 
+pytestmark = pytest.mark.postgres
+
 
 @pytest.fixture
 def fk_db():

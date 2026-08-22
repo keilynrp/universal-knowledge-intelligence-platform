@@ -4,6 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
+pytestmark = pytest.mark.security
+
 
 class TestPublicSsoSettings:
     """GET /auth/sso/settings — public, no auth required."""

@@ -4,6 +4,8 @@ and accept valid tokens. Also verifies credential encryption in store endpoints.
 """
 import pytest
 
+pytestmark = pytest.mark.security
+
 
 # ── Protected route: store endpoints ─────────────────────────────────────────
 

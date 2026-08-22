@@ -1,6 +1,9 @@
 from pathlib import Path
 
 from backend.scripts.validate_restore import _parser
+import pytest
+
+pytestmark = pytest.mark.postgres
 
 
 ROOT = Path(__file__).resolve().parents[2]

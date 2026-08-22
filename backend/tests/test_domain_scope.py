@@ -10,6 +10,8 @@ from backend.domain_scope import (
     resolve_domain_filter,
 )
 
+pytestmark = pytest.mark.postgres
+
 # ---------------------------------------------------------------------------
 # Minimal stub model for filter expression tests
 # ---------------------------------------------------------------------------

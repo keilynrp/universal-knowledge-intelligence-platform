@@ -217,6 +217,9 @@ def test_authority_backlog_threshold_is_configurable(db_session, monkeypatch):
 # ── 3. Collaboration graph ──────────────────────────────────────────────────
 
 from datetime import datetime, timedelta, timezone  # noqa: E402
+import pytest
+
+pytestmark = pytest.mark.reporting
 
 
 def _seed_coauthorship(db, org_id=None, *, computed_at="now") -> None:

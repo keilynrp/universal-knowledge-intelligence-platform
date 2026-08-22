@@ -19,6 +19,8 @@ from backend.i18n import DEFAULT_LANGUAGE
 from backend.i18n import locale as locale_module
 from backend.i18n.locale import resolve_language, resolve_report_language
 
+pytestmark = pytest.mark.reporting
+
 
 class TestPrecedenceChain:
     def test_explicit_parameter_beats_the_header(self):

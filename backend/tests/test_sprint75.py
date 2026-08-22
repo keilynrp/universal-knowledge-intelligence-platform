@@ -26,6 +26,8 @@ from backend.routers.graph_export import (
     _to_jsonld,
 )
 
+pytestmark = pytest.mark.postgres
+
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

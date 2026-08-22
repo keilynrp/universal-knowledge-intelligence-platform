@@ -51,6 +51,8 @@ from backend.exporters.excel_exporter import EnterpriseExcelExporter
 from backend.exporters.pptx_exporter import generate_pptx
 from backend.i18n.catalog import SURFACE_PREFIXES
 
+pytestmark = pytest.mark.reporting
+
 #: Built from the catalog's own prefix list rather than a copy of it, so a new
 #: surface is covered the day it is declared.
 _KEY_RE = re.compile(

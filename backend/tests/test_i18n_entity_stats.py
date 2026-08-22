@@ -32,6 +32,8 @@ from backend.i18n import catalog as catalog_module
 from backend.report_builder import collect_entity_stats
 from backend.reporting.localize import localize_section, looks_like_key
 
+pytestmark = pytest.mark.reporting
+
 
 @pytest.fixture()
 def section(db_session):

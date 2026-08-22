@@ -18,6 +18,8 @@ import pytest
 
 from backend.i18n import catalog as catalog_module
 
+pytestmark = pytest.mark.reporting
+
 
 def _generate(client, auth_headers, **overrides) -> str:
     body = {"domain_id": "default", "sections": ["entity_stats"], "title": "T"}

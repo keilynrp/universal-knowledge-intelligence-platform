@@ -14,6 +14,9 @@ import io
 from pptx import Presentation
 
 from backend import models
+import pytest
+
+pytestmark = pytest.mark.reporting
 
 
 _UNKNOWN = "definitely_not_a_section"

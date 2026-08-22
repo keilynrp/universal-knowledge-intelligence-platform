@@ -26,6 +26,8 @@ import pytest
 
 from backend import models
 
+pytestmark = pytest.mark.security
+
 ENFORCE_FLAG = "UKIP_API_KEY_SCOPES_ENFORCED"
 
 

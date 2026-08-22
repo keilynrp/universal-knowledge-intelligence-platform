@@ -8,6 +8,9 @@ module-level URL is already frozen to the test sqlite URL by conftest).
 import importlib
 import logging
 import os
+import pytest
+
+pytestmark = pytest.mark.postgres
 
 
 def _reload_db_config():

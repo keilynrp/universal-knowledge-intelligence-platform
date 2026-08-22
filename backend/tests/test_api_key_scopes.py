@@ -18,6 +18,8 @@ from backend.api_key_scopes import (
     scope_required,
 )
 
+pytestmark = pytest.mark.security
+
 
 # ── Method derivation ─────────────────────────────────────────────────────────
 

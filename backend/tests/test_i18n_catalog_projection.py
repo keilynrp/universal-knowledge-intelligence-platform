@@ -19,6 +19,8 @@ import pytest
 
 from backend.i18n import CATALOG_DIR, LANGUAGES
 
+pytestmark = pytest.mark.reporting
+
 
 def _load(language: str) -> dict:
     path = CATALOG_DIR / f"catalog.{language}.json"

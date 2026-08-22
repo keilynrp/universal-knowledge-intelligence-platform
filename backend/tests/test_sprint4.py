@@ -14,6 +14,8 @@ from pydantic import ValidationError
 # Import must happen after conftest.py sets env vars
 from backend.routers.ai_rag import RAGQueryPayload
 
+pytestmark = pytest.mark.postgres
+
 
 def test_top_k_default_is_5():
     p = RAGQueryPayload(question="hello")

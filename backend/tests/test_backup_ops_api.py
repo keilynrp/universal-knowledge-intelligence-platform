@@ -6,6 +6,9 @@ from sqlalchemy.dialects import postgresql
 from backend import models
 from backend.routers import backup_ops
 from backend.routers.backup_ops import backup_event_ordering
+import pytest
+
+pytestmark = pytest.mark.postgres
 
 
 def _payload(**overrides):

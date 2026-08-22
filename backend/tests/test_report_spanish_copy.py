@@ -40,6 +40,8 @@ import pytest
 from backend import models, report_builder
 from backend.i18n.catalog import translate
 
+pytestmark = pytest.mark.reporting
+
 #: Sections needed for the keys below to render at all. Two of them —
 #: topic_clusters and collaboration_graph — are absent from the render-boundary
 #: guard's own list, which is why nothing checked their copy until now.
