@@ -29,7 +29,8 @@ cryptography
 # ── Sprint 6: Rate limiting ──────────────────────────────────
 slowapi
 # ── Sprint 40: Enterprise Export ─────────────────────────────
-weasyprint
+# >=70.0: PYSEC-2026-3940 / CVE-2026-55073 (EPS rendering, URL-fetcher bypass).
+weasyprint>=70.0
 # ── Phase 10 Sprint 47: PowerPoint Export ────────────────────
 python-pptx>=1.0.2
 # ── Sprint 64: Production Databases ──────────────────────────
