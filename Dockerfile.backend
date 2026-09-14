@@ -15,7 +15,13 @@ LABEL org.opencontainers.image.revision=$APP_VERSION
 # because the report stylesheet resolves to a generic `sans-serif`
 # (backend/report_builder.py) — with no font installed the PDF renders blank
 # rather than failing loudly.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# `apt-get upgrade` applies Debian security updates the upstream python:3.13-slim
+# tag has not been rebuilt with yet. Without it the image inherits whatever
+# package versions were current when Docker Hub last published the tag, e.g.
+# perl-base 5.40.1-6 with three CRITICAL CVEs that Debian had already fixed in
+# 5.40.1-6+deb13u1 (issue 336).
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
     libxml2-dev libxslt-dev libpq-dev gcc curl \
     libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
