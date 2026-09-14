@@ -256,8 +256,14 @@ jobs:
             -e POSTGRES_DB=ukip_test \
             -p 5432:5432 \
             postgres:16-alpine
+          # Probe over TCP (-h 127.0.0.1), the same transport alembic and the tests
+          # use. Without -h, pg_isready asks the Unix socket, which the image's
+          # init-time temporary server (listen_addresses='') answers before the
+          # real server is listening on TCP. The first connection then races the
+          # temp-stop/real-start handover and fails with "server closed the
+          # connection unexpectedly" or "the database system is starting up".
           for attempt in $(seq 1 30); do
-            if docker exec "ukip-postgres-${{ matrix.shard }}" pg_isready -U ukip_test >/dev/null 2>&1; then
+            if docker exec "ukip-postgres-${{ matrix.shard }}" pg_isready -h 127.0.0.1 -U ukip_test >/dev/null 2>&1; then
               echo "PostgreSQL ready"
               break
             fi
@@ -387,8 +393,9 @@ jobs:
             -e POSTGRES_DB=ukip_test \
             -p 5432:5432 \
             postgres:16-alpine
+          # TCP probe, not the Unix socket: see the note in postgres-shard.
           for attempt in $(seq 1 30); do
-            if docker exec ukip-postgres pg_isready -U ukip_test >/dev/null 2>&1; then
+            if docker exec ukip-postgres pg_isready -h 127.0.0.1 -U ukip_test >/dev/null 2>&1; then
               echo "PostgreSQL ready"; break
             fi
             [ "${attempt}" -eq 30 ] && { docker logs ukip-postgres || true; exit 1; }
