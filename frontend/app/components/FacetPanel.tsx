@@ -162,9 +162,9 @@ export default function FacetPanel({ activeFacets, onFacetChange, search, minQua
   };
 
   return (
-    <aside className="h-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)] lg:min-h-[72rem]">
+    <aside className="flex max-h-[32rem] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[var(--ukip-panel)] lg:sticky lg:top-20 lg:max-h-[calc(100vh-7rem)]">
       {/* Header */}
-      <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 dark:border-white/10">
+      <div className="flex shrink-0 items-start justify-between border-b border-slate-200 px-5 py-4 dark:border-white/10">
         <div>
           <h3 className="text-base font-bold text-slate-950 dark:text-[var(--ukip-text-strong)]">Filtros</h3>
         </div>
@@ -179,10 +179,10 @@ export default function FacetPanel({ activeFacets, onFacetChange, search, minQua
       </div>
 
       {loading && (
-        <div className="animate-pulse px-5 py-4 text-xs text-slate-400">{t("page.facets.loading")}</div>
+        <div className="shrink-0 animate-pulse px-5 py-4 text-xs text-slate-400">{t("page.facets.loading")}</div>
       )}
 
-      <div className="max-h-[28rem] overflow-y-auto px-5 py-4 lg:max-h-[calc(100vh-8rem)]">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
         {FIELD_ORDER.map((field) => {
           const values = facets[field] ?? [];
           if (values.length === 0) return null;
