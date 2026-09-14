@@ -6,7 +6,7 @@
     "frontend_vitest_tests": 333,
     "api_operations": 420,
     "python_runtime_shipped": "3.13",
-    "nextjs_version": "16.3.1",
+    "nextjs_version": "16.3.5",
     "react_version": "19.2.8",
     "typescript_version": "6.0.3"
   },
