@@ -18,7 +18,10 @@ services:
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ukip -d ukip"]
+      # TCP (-h 127.0.0.1), not the Unix socket: on first init the image runs a
+      # temporary socket-only server (listen_addresses='') that a socket probe
+      # reports healthy, so dependants start before Postgres listens on TCP.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ukip -d ukip"]
       interval: 10s
       timeout: 5s
       retries: 5
