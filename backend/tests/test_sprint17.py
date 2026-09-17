@@ -5,12 +5,17 @@ schema_registry helpers (save_domain, delete_domain, is_builtin).
 from __future__ import annotations
 
 import os
-import shutil
+
 import pytest
 
-from backend import models
-from backend.schema_registry import SchemaRegistry, DomainSchema, AttributeSchema, _BUILTIN_DOMAIN_IDS
 import backend.schema_registry as _sr_mod
+from backend import models
+from backend.schema_registry import (
+    _BUILTIN_DOMAIN_IDS,
+    AttributeSchema,
+    DomainSchema,
+    SchemaRegistry,
+)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
