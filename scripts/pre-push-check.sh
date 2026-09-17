@@ -18,6 +18,18 @@ BASE="${1:-origin/main}"
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
+# Interpreter: the repo's own venv, not whatever `python` the shell resolves.
+# Inside WSL a bare `python` picked up ~/.local user-site packages -- a set that
+# requirements.lock does not pin -- so the gates were not testing what ships.
+# The venv is what CI builds: `pip install -r requirements.txt -c requirements.lock`.
+if [ -x "$ROOT/.venv/bin/python" ]; then
+  PY="$ROOT/.venv/bin/python"
+elif [ -x "$ROOT/.venv/Scripts/python.exe" ]; then
+  PY="$ROOT/.venv/Scripts/python.exe"
+else
+  PY="python"
+fi
+
 # Collect changed files vs. BASE (added + modified, no deletes)
 mapfile -t CHANGED < <(git diff --name-only --diff-filter=AM "$BASE"...HEAD)
 
@@ -67,8 +79,22 @@ gate_key() {
 gate_hit()    { [ -n "$1" ] && [ -f "$CACHE_DIR/$1" ]; }
 gate_record() { [ -n "$1" ] && : > "$CACHE_DIR/$1"; }
 
+# xdist_available → exit 0 when pytest will actually accept `-n`.
+# Ask what pytest itself uses to load the plugin — the `pytest11` entry point —
+# not `import xdist`. `pip uninstall pytest-xdist` leaves an `xdist/` directory
+# behind, and a directory with no __init__.py still imports as a PEP 420
+# namespace package: the import check said yes, pytest then died on
+# `unrecognized arguments: -n`, and the push was blocked instead of falling back.
+xdist_available() {
+  "$PY" - >/dev/null 2>&1 <<'PYEOF'
+import importlib.metadata as m, sys
+sys.exit(0 if any(e.name == "xdist" for e in m.entry_points(group="pytest11")) else 1)
+PYEOF
+}
+
 echo "── Pre-push check vs. $BASE ──"
 echo "Changed files: ${#CHANGED[@]} (TS: ${#TS_CHANGED[@]}, Py: ${#PYTHON_CHANGED[@]})"
+echo "Python: $PY"
 echo
 
 # 1. Frontend ESLint (BLOCKING gate in CI: --max-warnings=0 on changed files)
@@ -96,10 +122,10 @@ fi
 # 3. Domain-scope contract lint (BLOCKING in CI when backend touched)
 if [ ${#PYTHON_CHANGED[@]} -gt 0 ]; then
   echo "▶ scripts/lint_domain_scope.py…"
-  python scripts/lint_domain_scope.py || EXIT=1
+  "$PY" scripts/lint_domain_scope.py || EXIT=1
   echo
   echo "▶ scripts/lint_entity_query.py…"
-  python scripts/lint_entity_query.py || EXIT=1
+  "$PY" scripts/lint_entity_query.py || EXIT=1
   echo
 fi
 
@@ -150,7 +176,7 @@ fi
 if [ ${#PY_SOURCE_CHANGED[@]} -eq 0 ] && [ ${#BACKEND_TESTS_CHANGED[@]} -gt 0 ]; then
   # Only test files changed — nothing else can have broken.
   echo "▶ pytest (scoped: only test files changed): ${BACKEND_TESTS_CHANGED[*]}"
-  python -m pytest -x -q "${BACKEND_TESTS_CHANGED[@]}" || EXIT=1
+  "$PY" -m pytest -x -q "${BACKEND_TESTS_CHANGED[@]}" || EXIT=1
   echo
 elif [ ${#PYTHON_CHANGED[@]} -gt 0 ]; then
   # conftest.py sits at the repo root and requirements pin the interpreter's
@@ -159,8 +185,38 @@ elif [ ${#PYTHON_CHANGED[@]} -gt 0 ]; then
   if gate_hit "$PYTEST_KEY"; then
     echo "▶ pytest backend/tests — SKIPPED (this backend/ tree already passed the full suite)"
   else
-    echo "▶ pytest backend/tests (full suite — backend source changed)…"
-    if python -m pytest -x -q backend/tests/; then
+    # Parallel when pytest-xdist is installed. The suite is CPU-bound and
+    # single-threaded (user time was 98% of wall time), so on a 2-core/3-vCPU
+    # host `-n auto` took it from 1h34m to 38m51s with the identical result
+    # (4044 passed / 9 skipped across serial, -n 2 and -n 3). It is test-only
+    # tooling, so -- like pytest-cov -- it stays out of requirements.txt and the
+    # lock, which must equal the production image's freeze.
+    #
+    # Never parallel against Postgres: conftest pins one fixed database and
+    # truncates it before and after every test, so workers would wipe each
+    # other. SQLite mode is safe -- each worker process gets its own :memory: DB.
+    # The mode is lowercased exactly as conftest.py does, so POSTGRES or Postgres
+    # cannot slip through as SQLite.
+    #
+    # Never parallel with PYTEST_DISABLE_PLUGIN_AUTOLOAD set: pytest skips
+    # entry-point plugins for ANY non-empty value (even "0"), so xdist would be
+    # installed yet `-n` rejected.
+    #
+    # Scoped runs above stay serial: worker startup outweighs a handful of files.
+    DB_MODE="$(printf '%s' "${UKIP_DB_MODE:-sqlite}" | tr '[:upper:]' '[:lower:]')"
+    PYTEST_PAR=()
+    if [ "$DB_MODE" = "postgres" ]; then
+      echo "▶ pytest backend/tests (full suite, serial: UKIP_DB_MODE=postgres — backend source changed)…"
+    elif [ -n "${PYTEST_DISABLE_PLUGIN_AUTOLOAD:-}" ]; then
+      echo "▶ pytest backend/tests (full suite, serial: PYTEST_DISABLE_PLUGIN_AUTOLOAD is set — backend source changed)…"
+    elif xdist_available; then
+      PYTEST_PAR=(-n auto)
+      echo "▶ pytest backend/tests (full suite, parallel -n auto — backend source changed)…"
+    else
+      echo "▶ pytest backend/tests (full suite, serial — backend source changed)…"
+      echo "  Hint: \`$PY -m pip install pytest-xdist\` runs this ~2.4x faster."
+    fi
+    if "$PY" -m pytest -x -q ${PYTEST_PAR[@]+"${PYTEST_PAR[@]}"} backend/tests/; then
       gate_record "$PYTEST_KEY"
     else
       EXIT=1

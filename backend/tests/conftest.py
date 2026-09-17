@@ -3,7 +3,9 @@ Shared pytest fixtures for UKIP backend tests.
 Supports both SQLite (local dev) and PostgreSQL (CI / production parity).
 """
 import os
+import shutil
 from contextlib import contextmanager
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
@@ -41,8 +43,9 @@ else:
     os.environ.setdefault("DATABASE_URL", _TEST_DB_URL)
 
 
-from backend import models, database  # noqa: E402 — env vars must be set first
-from backend.main import app  # noqa: E402
+# Imported only now: the env vars above must be set before the backend loads.
+from backend import database, models
+from backend.main import app
 
 # ── Create the test engine ──────────────────────────────────────────────────
 if _IS_POSTGRES:
@@ -118,7 +121,8 @@ with test_engine.connect() as _fts_conn:
     _fts_conn.commit()
 
 # Override dependency — imported from database to match auth.py's import
-from backend.database import get_db  # noqa: E402
+from backend.database import get_db
+
 app.dependency_overrides[get_db] = override_get_db
 
 # Rebind module-level engine/session factories that were captured at import
@@ -127,14 +131,15 @@ database.engine = test_engine
 database.SessionLocal = TestingSessionLocal
 
 # Override modules that imported engine/SessionLocal directly.
-import backend.audit as _audit_module  # noqa: E402
-import backend.analyzers.author_metrics as _author_metrics_module  # noqa: E402
-import backend.analyzers.coauthorship as _coauthorship_module  # noqa: E402
-import backend.analyzers.correlation as _correlation_module  # noqa: E402
-import backend.analyzers.geographic as _geographic_module  # noqa: E402
-import backend.analyzers.topic_modeling as _topic_modeling_module  # noqa: E402
-import backend.olap as _olap_module  # noqa: E402
-import backend.routers.analytics as _analytics_router  # noqa: E402
+import backend.analyzers.author_metrics as _author_metrics_module
+import backend.analyzers.coauthorship as _coauthorship_module
+import backend.analyzers.correlation as _correlation_module
+import backend.analyzers.geographic as _geographic_module
+import backend.analyzers.topic_modeling as _topic_modeling_module
+import backend.audit as _audit_module
+import backend.olap as _olap_module
+import backend.routers.analytics as _analytics_router
+
 _audit_module.SessionLocal = TestingSessionLocal
 _author_metrics_module.engine = test_engine
 _coauthorship_module.engine = test_engine
@@ -144,7 +149,7 @@ _topic_modeling_module.engine = test_engine
 _olap_module.engine = test_engine
 
 # Seed the super_admin in the test DB so the login fixture works.
-from backend.auth import hash_password as _hash_pw  # noqa: E402
+from backend.auth import hash_password as _hash_pw
 
 
 def _ensure_test_admin() -> None:
@@ -489,7 +494,7 @@ def _reset_test_state(db):
         # Ensure we start with a clean transaction (prior test may have left it aborted)
         try:
             db.rollback()
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 — a prior test may leave the connection unusable; start clean regardless
             pass
         # PostgreSQL: use savepoints so a missing table doesn't abort the tx
         backup_table = "backup_assurance_events"
@@ -504,13 +509,13 @@ def _reset_test_state(db):
                 nested = db.begin_nested()
                 _delete_test_table(db, table)
                 nested.commit()
-            except Exception:
+            except Exception:  # noqa: BLE001 — the table may not exist in this schema; drop the savepoint and continue
                 nested.rollback()
         try:
             nested = db.begin_nested()
             db.execute(text("UPDATE users SET org_id = NULL"))
             nested.commit()
-        except Exception:
+        except Exception:  # noqa: BLE001 — same savepoint tolerance as the table sweep above
             nested.rollback()
         db.commit()
     else:
@@ -556,6 +561,33 @@ def _join_webhook_dispatch_threads() -> None:
     _deps._webhook_dispatch_threads[:] = [
         t for t in _deps._webhook_dispatch_threads if t.is_alive()
     ]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _isolated_domains_dir(tmp_path_factory):
+    """Point the domain registry at a per-process copy of ``backend/domains``.
+
+    ``SchemaRegistry.save_domain``/``delete_domain`` write to the module-level
+    ``DOMAINS_DIR``, which is ``backend/domains`` inside the source tree. Tests
+    that POST/DELETE custom domains therefore mutated the repo, and under
+    pytest-xdist every worker shared that one directory: one worker's cleanup
+    deleted another's YAML mid-test (``DELETE /domains/del_admin_test`` -> 404).
+
+    A session fixture runs once per process, so each xdist worker gets its own
+    copy. The builtin schemas are copied along, so anything that reads the
+    directory still finds them. Guarded by ``TestDomainsDirIsolation``.
+    """
+    from backend import schema_registry
+
+    original = schema_registry.DOMAINS_DIR
+    isolated = tmp_path_factory.mktemp("domains")
+    if os.path.isdir(original):
+        shutil.copytree(original, isolated, dirs_exist_ok=True)
+    schema_registry.DOMAINS_DIR = str(isolated)
+    try:
+        yield schema_registry.DOMAINS_DIR
+    finally:
+        schema_registry.DOMAINS_DIR = original
 
 
 @pytest.fixture(autouse=True)

@@ -5,12 +5,17 @@ schema_registry helpers (save_domain, delete_domain, is_builtin).
 from __future__ import annotations
 
 import os
-import shutil
+
 import pytest
 
-from backend import models
-from backend.schema_registry import SchemaRegistry, DomainSchema, AttributeSchema, _BUILTIN_DOMAIN_IDS
 import backend.schema_registry as _sr_mod
+from backend import models
+from backend.schema_registry import (
+    _BUILTIN_DOMAIN_IDS,
+    AttributeSchema,
+    DomainSchema,
+    SchemaRegistry,
+)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -47,6 +52,28 @@ _SAMPLE_DOMAIN = {
         {"name": "score", "label": "Score", "type": "float", "required": False, "is_core": False},
     ],
 }
+
+
+# ── Isolation guard ───────────────────────────────────────────────────────────
+
+class TestDomainsDirIsolation:
+    """The registry must not write into the source tree during tests.
+
+    ``save_domain``/``delete_domain`` use the module-level ``DOMAINS_DIR``. When
+    that was ``backend/domains`` itself, every pytest-xdist worker shared one
+    directory and the autouse cleanup above deleted another worker's YAML
+    mid-test: ``DELETE /domains/del_admin_test`` answered 404 in 2 of 9 runs of
+    this file under ``-n 3``. It also left the repo dirty whenever a test died
+    between creating and deleting a domain.
+    """
+
+    def test_registry_directory_is_not_the_source_tree(self):
+        source_dir = os.path.join(os.path.dirname(_sr_mod.__file__), "domains")
+        assert os.path.realpath(_sr_mod.DOMAINS_DIR) != os.path.realpath(source_dir)
+
+    def test_builtin_schemas_are_still_readable(self):
+        for domain_id in _BUILTIN_DOMAIN_IDS:
+            assert os.path.isfile(os.path.join(_sr_mod.DOMAINS_DIR, f"{domain_id}.yaml"))
 
 
 # ── 17A · SchemaRegistry unit tests ──────────────────────────────────────────
