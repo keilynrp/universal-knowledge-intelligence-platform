@@ -18,6 +18,14 @@ Lookups, ops, and specialized analytics endpoints (extracted from analytics.py).
   GET  /analytics/domain-health/compare
   GET  /analytics/domain-health/{domain_id}
 """
+# ruff: noqa: B008 — every endpoint below uses FastAPI's own recommended
+# `Depends(...)`/`Query(...)` dependency-injection idiom in an argument default,
+# which is exactly what B008 (flake8-bugbear's "no function call as a default")
+# exists to catch in ordinary code. FastAPI resolves these once per request
+# rather than once at import time, so the call is not the footgun the rule is
+# written for; suppressing it file-wide avoids dozens of identical inline
+# per-line suppression comments on a pattern this file cannot avoid. Same
+# rationale and wording as backend/routers/reports.py.
 import logging
 import os
 import time
@@ -26,24 +34,27 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
-from backend import models
-from backend import schemas
-from backend.schemas import EnrichmentStatus
+from backend import db_revision, models, schemas
 from backend.analyzers.concept_hierarchy import (
     build_concept_tree,
     materialize_domain_concepts,
 )
-from backend.analyzers.journal_normalization import normalize_impact_factors
-from backend.analyzers.journal_normalization_bayes import normalize_impact_factors_bayes
 from backend.analyzers.domain_health import compute_health_metrics
 from backend.analyzers.epistemic_classifier import classify_batch
+from backend.analyzers.journal_normalization import normalize_impact_factors
+from backend.analyzers.journal_normalization_bayes import normalize_impact_factors_bayes
 from backend.auth import get_current_user, require_role
 from backend.cache import client as cache_client
 from backend.database import get_db
 from backend.enterprise_readiness import get_enterprise_readiness_report
 from backend.logging_utils import current_log_format
-from backend.ops_checks import _secrets_check, dispatch_operational_alert_if_needed, run_operational_checks
+from backend.ops_checks import (
+    _secrets_check,
+    dispatch_operational_alert_if_needed,
+    run_operational_checks,
+)
 from backend.routers.analytics import _validate_domain_id
+from backend.schemas import EnrichmentStatus
 from backend.secret_rotation import list_rotation_events
 from backend.services.analytics_service import AnalyticsService
 from backend.telemetry import telemetry_status
@@ -164,12 +175,28 @@ def health_check(request: Request, db: Session = Depends(get_db)):
     except Exception:
         db_status = "error"
         logger.exception("health_check_db_error")
-    status = "ok" if db_status == "ok" else "degraded"
+    # Connectivity is not health. Startup is fail-open on purpose -- a failed
+    # `alembic upgrade head` or DB bootstrap keeps the container serving so its
+    # logs stay readable -- so `SELECT 1` succeeding says nothing about whether
+    # the schema exists. Report the bootstrap outcome and the schema verdict, and
+    # degrade on either. The HTTP code stays 200 regardless: the container
+    # healthcheck is `curl -f /health`, and a 503 would bring back the opaque
+    # "container unhealthy" deploy failure the fail-open path exists to avoid.
+    bootstrap_status = getattr(request.app.state, "db_bootstrap", "not_run")
+    schema_status = (
+        db_revision.schema_state(db.get_bind()) if db_status == "ok" else db_revision.SCHEMA_UNKNOWN
+    )
+    degraded = (
+        db_status != "ok"
+        or bootstrap_status == "failed"
+        or schema_status in (db_revision.SCHEMA_STALE, db_revision.SCHEMA_UNKNOWN)
+    )
+    status = "degraded" if degraded else "ok"
     # Cache status is informational and fail-open: a Redis hiccup never degrades
     # the overall health status (the app keeps serving from cache misses).
     try:
         cache_health = cache_client.cache_status()
-    except Exception:  # noqa: BLE001 — never let the probe break /health
+    except Exception:  # never let the probe break /health
         logger.exception("health_check_cache_error")
         cache_health = {"backend": "unknown", "configured": None, "reachable": False}
     # Effective feature-flag state as seen by THIS running container — read via
@@ -179,8 +206,8 @@ def health_check(request: Request, db: Session = Depends(get_db)):
         from backend.auth import api_key_scopes_enforced
         from backend.authority.auto_enqueue import auto_resolve_enabled
         from backend.authority.entity_writeback import writeback_enabled
-        from backend.routers.deps import _blocking_enabled
         from backend.retrospective.emit import retro_events_enabled
+        from backend.routers.deps import _blocking_enabled
 
         features = {
             "auto_resolve_on_ingest": auto_resolve_enabled(),
@@ -189,7 +216,7 @@ def health_check(request: Request, db: Session = Depends(get_db)):
             "retro_events": retro_events_enabled(),
             "api_key_scopes_enforced": api_key_scopes_enforced(),
         }
-    except Exception:  # noqa: BLE001 — never let the probe break /health
+    except Exception:  # never let the probe break /health
         logger.exception("health_check_features_error")
         features = {}
     return {
@@ -201,6 +228,8 @@ def health_check(request: Request, db: Session = Depends(get_db)):
         # Never empty — an empty value would make that comparison vacuously pass.
         "version": os.getenv("UKIP_APP_VERSION") or "local",
         "database": db_status,
+        "bootstrap": bootstrap_status,
+        "schema": schema_status,
         "cache": cache_health,
         "features": features,
         "request_id": getattr(request.state, "request_id", None),
