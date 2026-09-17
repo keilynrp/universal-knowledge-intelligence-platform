@@ -47,7 +47,7 @@ sentry-sdk[fastapi]
 ftfy>=6.3.1
 
 # ── Engine (Rust gRPC) integration
-grpcio>=1.83.1
+grpcio>=1.84.0
 # grpcio-tools is build-only (regenerates the Python engine stubs; not in
 # requirements.lock / not a runtime dep). Pinned to the protobuf-6 line: 1.82+
 # hard-requires protobuf>=7.35.1, which would cascade a protobuf 6→7 major bump
