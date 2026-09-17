@@ -195,16 +195,26 @@ elif [ ${#PYTHON_CHANGED[@]} -gt 0 ]; then
     # Never parallel against Postgres: conftest pins one fixed database and
     # truncates it before and after every test, so workers would wipe each
     # other. SQLite mode is safe -- each worker process gets its own :memory: DB.
+    # The mode is lowercased exactly as conftest.py does, so POSTGRES or Postgres
+    # cannot slip through as SQLite.
+    #
+    # Never parallel with PYTEST_DISABLE_PLUGIN_AUTOLOAD set: pytest skips
+    # entry-point plugins for ANY non-empty value (even "0"), so xdist would be
+    # installed yet `-n` rejected.
+    #
     # Scoped runs above stay serial: worker startup outweighs a handful of files.
+    DB_MODE="$(printf '%s' "${UKIP_DB_MODE:-sqlite}" | tr '[:upper:]' '[:lower:]')"
     PYTEST_PAR=()
-    if [ "${UKIP_DB_MODE:-sqlite}" != "postgres" ] && xdist_available; then
+    if [ "$DB_MODE" = "postgres" ]; then
+      echo "▶ pytest backend/tests (full suite, serial: UKIP_DB_MODE=postgres — backend source changed)…"
+    elif [ -n "${PYTEST_DISABLE_PLUGIN_AUTOLOAD:-}" ]; then
+      echo "▶ pytest backend/tests (full suite, serial: PYTEST_DISABLE_PLUGIN_AUTOLOAD is set — backend source changed)…"
+    elif xdist_available; then
       PYTEST_PAR=(-n auto)
       echo "▶ pytest backend/tests (full suite, parallel -n auto — backend source changed)…"
     else
       echo "▶ pytest backend/tests (full suite, serial — backend source changed)…"
-      if [ "${UKIP_DB_MODE:-sqlite}" != "postgres" ]; then
-        echo "  Hint: \`$PY -m pip install pytest-xdist\` runs this ~2.4x faster."
-      fi
+      echo "  Hint: \`$PY -m pip install pytest-xdist\` runs this ~2.4x faster."
     fi
     if "$PY" -m pytest -x -q ${PYTEST_PAR[@]+"${PYTEST_PAR[@]}"} backend/tests/; then
       gate_record "$PYTEST_KEY"
