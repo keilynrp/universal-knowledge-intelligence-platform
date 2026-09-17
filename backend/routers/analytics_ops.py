@@ -183,8 +183,12 @@ def health_check(request: Request, db: Session = Depends(get_db)):
     # healthcheck is `curl -f /health`, and a 503 would bring back the opaque
     # "container unhealthy" deploy failure the fail-open path exists to avoid.
     bootstrap_status = getattr(request.app.state, "db_bootstrap", "not_run")
+    # Inspect through the connection this request already checked out. Going via
+    # the engine would take a SECOND pool slot while still holding the first, so
+    # concurrent probes could exhaust a small pool and hang this public endpoint
+    # past the compose healthcheck's timeout.
     schema_status = (
-        db_revision.schema_state(db.get_bind()) if db_status == "ok" else db_revision.SCHEMA_UNKNOWN
+        db_revision.schema_state(db.connection()) if db_status == "ok" else db_revision.SCHEMA_UNKNOWN
     )
     degraded = (
         db_status != "ok"

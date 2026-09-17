@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 
 import backend.main as m
 from backend import db_revision
@@ -82,7 +82,38 @@ def test_schema_state_behind_head_is_stale():
     assert schema_state(_engine_at("0000000000ff")) == "stale"
 
 
+def test_schema_state_accepts_an_already_checked_out_connection():
+    # /health passes its session's connection so the probe does not take a
+    # second pool slot; the verdict must be identical either way.
+    engine = _engine_at(_head())
+    with engine.connect() as conn:
+        assert schema_state(conn) == "current"
+
+
 # ── /health body ─────────────────────────────────────────────────────────────
+
+def test_health_takes_no_second_pool_connection(client, db_session):
+    """One /health request must check out exactly one connection.
+
+    Inspecting the schema through the engine instead of the request's own
+    connection made a public endpoint able to deadlock a small pool: every
+    concurrent probe held one slot while waiting for a second.
+    """
+    engine = db_session.get_bind()
+    opened = []
+
+    def _count(conn):
+        opened.append(1)
+
+    event.listen(engine, "engine_connect", _count)
+    try:
+        resp = client.get("/health")
+    finally:
+        event.remove(engine, "engine_connect", _count)
+    assert resp.status_code == 200
+    assert resp.json()["schema"] == "unversioned"
+    assert len(opened) <= 1, f"/health opened {len(opened)} connections"
+
 
 def test_health_reports_bootstrap_and_schema_in_the_test_environment(client):
     resp = client.get("/health")

@@ -23,6 +23,7 @@ from typing import Any
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
+from sqlalchemy.engine import Connection
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +51,14 @@ def evaluate_drift(current: str | None, heads: list[str] | tuple[str, ...]) -> d
     return {"current": current, "heads": heads_list, "is_stale": is_stale}
 
 
-def migration_drift(engine) -> dict[str, Any]:
-    """Inspect *engine*'s database and report whether it is at an Alembic head.
+def migration_drift(bind) -> dict[str, Any]:
+    """Inspect *bind*'s database and report whether it is at an Alembic head.
+
+    *bind* may be an Engine or an already-checked-out Connection. Passing a
+    Connection matters for /health: that request already holds one pool slot for
+    its `SELECT 1`, and opening a second one here would make concurrent probes
+    wait on the pool while holding a slot each — a public endpoint that can
+    deadlock the pool when it is small (`DB_POOL_SIZE=1`, no overflow).
 
     Returns ``{current, heads, is_stale, error}``. If the state cannot be
     determined (bad config, DB unreachable), ``error`` is set and ``is_stale``
@@ -60,8 +67,11 @@ def migration_drift(engine) -> dict[str, Any]:
     try:
         script = ScriptDirectory.from_config(_alembic_config())
         heads = script.get_heads()
-        with engine.connect() as conn:
-            current = MigrationContext.configure(conn).get_current_revision()
+        if isinstance(bind, Connection):
+            current = MigrationContext.configure(bind).get_current_revision()
+        else:
+            with bind.connect() as conn:
+                current = MigrationContext.configure(conn).get_current_revision()
         result = evaluate_drift(current, heads)
         result["error"] = None
         return result
@@ -95,9 +105,13 @@ def classify_drift(drift: dict[str, Any]) -> str:
     return SCHEMA_STALE if drift.get("is_stale") else SCHEMA_CURRENT
 
 
-def schema_state(engine) -> str:
-    """Inspect *engine* and return a coarse schema verdict. Never raises."""
-    return classify_drift(migration_drift(engine))
+def schema_state(bind) -> str:
+    """Inspect *bind* and return a coarse schema verdict. Never raises.
+
+    Prefer passing the caller's existing Connection over an Engine — see
+    ``migration_drift`` for why /health must not take a second pool slot.
+    """
+    return classify_drift(migration_drift(bind))
 
 
 def _main(argv: list[str]) -> int:
