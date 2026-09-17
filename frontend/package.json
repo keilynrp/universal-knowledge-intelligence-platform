@@ -20,8 +20,8 @@
   "dependencies": {
     "country-flag-emoji-polyfill": "^0.1.10",
     "next": "^16.3.1",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "react-is": "^19.2.8",
     "recharts": "^3.10.1"
   },
