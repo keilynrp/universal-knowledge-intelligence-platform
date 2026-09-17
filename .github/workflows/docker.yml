@@ -126,7 +126,7 @@ jobs:
           trivyignores: .trivyignore
 
       - name: Generate SBOM (SPDX)
-        uses: anchore/sbom-action@v0.24.0
+        uses: anchore/sbom-action@v0.24.2
         with:
           image: scan-target-backend:${{ github.sha }}
           format: spdx-json
@@ -217,7 +217,7 @@ jobs:
           trivyignores: .trivyignore
 
       - name: Generate SBOM (SPDX)
-        uses: anchore/sbom-action@v0.24.0
+        uses: anchore/sbom-action@v0.24.2
         with:
           image: scan-target-frontend:${{ github.sha }}
           format: spdx-json
@@ -296,7 +296,7 @@ jobs:
           trivyignores: .trivyignore
 
       - name: Generate SBOM (SPDX)
-        uses: anchore/sbom-action@v0.24.0
+        uses: anchore/sbom-action@v0.24.2
         with:
           image: scan-target-engine:${{ github.sha }}
           format: spdx-json
