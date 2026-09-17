@@ -49,6 +49,28 @@ _SAMPLE_DOMAIN = {
 }
 
 
+# ── Isolation guard ───────────────────────────────────────────────────────────
+
+class TestDomainsDirIsolation:
+    """The registry must not write into the source tree during tests.
+
+    ``save_domain``/``delete_domain`` use the module-level ``DOMAINS_DIR``. When
+    that was ``backend/domains`` itself, every pytest-xdist worker shared one
+    directory and the autouse cleanup above deleted another worker's YAML
+    mid-test: ``DELETE /domains/del_admin_test`` answered 404 in 2 of 9 runs of
+    this file under ``-n 3``. It also left the repo dirty whenever a test died
+    between creating and deleting a domain.
+    """
+
+    def test_registry_directory_is_not_the_source_tree(self):
+        source_dir = os.path.join(os.path.dirname(_sr_mod.__file__), "domains")
+        assert os.path.realpath(_sr_mod.DOMAINS_DIR) != os.path.realpath(source_dir)
+
+    def test_builtin_schemas_are_still_readable(self):
+        for domain_id in _BUILTIN_DOMAIN_IDS:
+            assert os.path.isfile(os.path.join(_sr_mod.DOMAINS_DIR, f"{domain_id}.yaml"))
+
+
 # ── 17A · SchemaRegistry unit tests ──────────────────────────────────────────
 
 class TestSchemaRegistryHelpers:

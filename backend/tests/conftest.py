@@ -3,6 +3,7 @@ Shared pytest fixtures for UKIP backend tests.
 Supports both SQLite (local dev) and PostgreSQL (CI / production parity).
 """
 import os
+import shutil
 from contextlib import contextmanager
 import pytest
 from fastapi.testclient import TestClient
@@ -556,6 +557,33 @@ def _join_webhook_dispatch_threads() -> None:
     _deps._webhook_dispatch_threads[:] = [
         t for t in _deps._webhook_dispatch_threads if t.is_alive()
     ]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _isolated_domains_dir(tmp_path_factory):
+    """Point the domain registry at a per-process copy of ``backend/domains``.
+
+    ``SchemaRegistry.save_domain``/``delete_domain`` write to the module-level
+    ``DOMAINS_DIR``, which is ``backend/domains`` inside the source tree. Tests
+    that POST/DELETE custom domains therefore mutated the repo, and under
+    pytest-xdist every worker shared that one directory: one worker's cleanup
+    deleted another's YAML mid-test (``DELETE /domains/del_admin_test`` -> 404).
+
+    A session fixture runs once per process, so each xdist worker gets its own
+    copy. The builtin schemas are copied along, so anything that reads the
+    directory still finds them. Guarded by ``TestDomainsDirIsolation``.
+    """
+    import backend.schema_registry as schema_registry
+
+    original = schema_registry.DOMAINS_DIR
+    isolated = tmp_path_factory.mktemp("domains")
+    if os.path.isdir(original):
+        shutil.copytree(original, isolated, dirs_exist_ok=True)
+    schema_registry.DOMAINS_DIR = str(isolated)
+    try:
+        yield schema_registry.DOMAINS_DIR
+    finally:
+        schema_registry.DOMAINS_DIR = original
 
 
 @pytest.fixture(autouse=True)
