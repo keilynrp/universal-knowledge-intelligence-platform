@@ -80,6 +80,16 @@ name: Backup Freshness
 #   until then, evidence ingestion is a manual/trusted-service operator
 #   step (see docs/operating/BACKUP_RESTORE_RUNBOOK.md §4 and §13).
 #
+# THE PREFIX IS A REPOSITORY VARIABLE, NOT A SECRET:
+#
+#   S3_BACKUP_PREFIX  the key prefix to observe. Dokploy writes each backup to
+#                     "<service appName>/<configured prefix>/<timestamp>", not
+#                     to the configured prefix alone, so this is usually longer
+#                     than "pg/". Unset, it falls back to "pg/".
+#
+#   It is not a credential, so it is `vars.*`, never `secrets.*`. A
+#   workflow_dispatch `prefix` input still overrides it.
+#
 # OPERATOR ACTION REQUIRED before this workflow can do anything but fail
 # fast: the four S3 read-only secrets referenced below do not exist yet.
 # Until they are configured, every run stops at the first step with a
@@ -92,9 +102,9 @@ on:
   workflow_dispatch:
     inputs:
       prefix:
-        description: "Override bucket prefix"
+        description: "Override bucket prefix (empty = vars.S3_BACKUP_PREFIX, else pg/)"
         required: false
-        default: "pg/"
+        default: ""
 
 permissions:
   contents: read
@@ -124,7 +134,7 @@ jobs:
           AWS_DEFAULT_REGION: auto
           S3_ENDPOINT: ${{ secrets.S3_BACKUP_ENDPOINT }}
           S3_BUCKET: ${{ secrets.S3_BACKUP_BUCKET }}
-          PREFIX: ${{ inputs.prefix || 'pg/' }}
+          PREFIX: ${{ inputs.prefix || vars.S3_BACKUP_PREFIX || 'pg/' }}
         run: |
           set -euo pipefail
           newest="$(aws s3api list-objects-v2 \

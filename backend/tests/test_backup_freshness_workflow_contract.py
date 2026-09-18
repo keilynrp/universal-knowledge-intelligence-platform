@@ -67,6 +67,33 @@ def test_workflow_only_references_the_expected_secrets():
     assert referenced == REQUIRED_SECRETS
 
 
+REPOSITORY_VARIABLES = {"S3_BACKUP_PREFIX"}
+
+
+def test_workflow_reads_prefix_from_a_non_secret_variable():
+    # Phase B (issue #320): the Phase A draft hardcoded the key prefix "pg/",
+    # but Dokploy writes to "<appName>/<prefix>/", so the scheduled run would
+    # report backup_missing against a bucket holding valid backups. The
+    # prefix is not a credential: it must be `vars.*`, keep the old fallback,
+    # and no variable may carry anything else.
+    text = _read(WORKFLOW)
+
+    assert "PREFIX: ${{ inputs.prefix || vars.S3_BACKUP_PREFIX || 'pg/' }}" in text
+
+    referenced = set(re.findall(r"vars\.([A-Z0-9_]+)", text))
+    assert referenced == REPOSITORY_VARIABLES
+
+
+def test_dispatch_prefix_input_does_not_shadow_the_repository_variable():
+    # A non-empty input default would win over vars.S3_BACKUP_PREFIX on every
+    # manual run, so a dispatch would observe a different prefix than the
+    # schedule does.
+    doc = yaml.safe_load(_read(WORKFLOW))
+    on = doc.get("on") or doc.get(True)
+
+    assert on["workflow_dispatch"]["inputs"]["prefix"]["default"] == ""
+
+
 def test_workflow_holds_no_application_credential():
     # Corrected on strategic review (PR #321, issue #320): the workflow must
     # not require a broad admin-scoped UKIP API key, and must not reference
