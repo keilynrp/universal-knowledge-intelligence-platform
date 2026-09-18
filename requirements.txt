@@ -68,4 +68,4 @@ cachetools>=7.1.8
 # ── Distributed cache (Redis-backed, optional; in-process fallback when REDIS_URL unset)
 redis>=8.1.0
 # test-only: in-memory Redis used by the cache test suite
-fakeredis>=2.37.1
+fakeredis>=2.38.0
