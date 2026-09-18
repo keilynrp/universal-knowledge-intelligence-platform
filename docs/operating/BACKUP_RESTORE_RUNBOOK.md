@@ -305,7 +305,10 @@ collected. None of these have been executed by this change.
 1. **Configure the S3-compatible backup destination in Dokploy** — create the
    bucket, write credentials, schedule, and retention per sections 1–3 above.
    Verify read-only via `aws s3api list-objects-v2 --endpoint-url <endpoint>
-   --bucket <bucket> --prefix pg/` using the read-only credentials only.
+   --bucket <bucket> --prefix <prefix>` using the read-only credentials only.
+   Dokploy writes each backup to `<service appName>/<configured prefix>/`,
+   not to the configured prefix alone — read the real key from the bucket
+   and scope IAM policies and lifecycle rules to that full path.
    Rollback: remove the Dokploy backup destination; the bucket and its objects
    are unaffected by application code either way.
 2. **Create two S3 credential sets scoped to the backup bucket only** — write
@@ -316,7 +319,9 @@ collected. None of these have been executed by this change.
 3. **Add repository secrets** `S3_BACKUP_ENDPOINT`, `S3_BACKUP_BUCKET`,
    `S3_BACKUP_RO_ACCESS_KEY_ID`, `S3_BACKUP_RO_SECRET_ACCESS_KEY` — used only
    by `backup-freshness.yml`, read-only. No UKIP application secret is
-   required by this workflow. Verify by re-running the workflow via
+   required by this workflow. Also set the non-secret repository
+   **variable** `S3_BACKUP_PREFIX` to the full key prefix Dokploy writes to
+   (unset falls back to `pg/`, which Dokploy never writes to on its own). Verify by re-running the workflow via
    `workflow_dispatch` and confirming it passes the first guard step.
    Rollback: delete the secrets; the workflow fails closed at the same guard
    step it fails at today.
