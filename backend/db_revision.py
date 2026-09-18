@@ -15,8 +15,12 @@ share one implementation:
 """
 from __future__ import annotations
 
+import contextvars
+import functools
 import logging
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +41,46 @@ _ALEMBIC_INI = Path(__file__).resolve().parent.parent / "alembic.ini"
 
 def _alembic_config() -> Config:
     return Config(str(_ALEMBIC_INI))
+
+
+@functools.lru_cache(maxsize=1)
+def _script_heads() -> tuple[str, ...]:
+    """The migration heads shipped with this process, parsed once.
+
+    Finding them means importing every script under alembic/versions (~60-70 ms
+    for ~50 scripts), and /health asks on every probe. The scripts are baked
+    into the image and cannot change while the process runs, so one parse is
+    enough. A failure is not cached: lru_cache only stores returned values.
+    """
+    return tuple(ScriptDirectory.from_config(_alembic_config()).get_heads())
+
+
+# MigrationContext logs "Context impl ..." and "Will assume ... DDL" at INFO
+# from its constructor, with no switch to turn that off. Useful during a real
+# `alembic upgrade`, pure noise from a health probe that runs every 30 s. The
+# filter drops sub-WARNING records only while this module is inspecting, on the
+# inspecting thread or task: a ContextVar, not a logger level, so a concurrent
+# migration elsewhere in the process keeps its log lines.
+_inspecting: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "ukip_schema_inspection", default=False
+)
+
+
+class _DropInspectionInfo(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not (_inspecting.get() and record.levelno < logging.WARNING)
+
+
+logging.getLogger("alembic.runtime.migration").addFilter(_DropInspectionInfo())
+
+
+@contextmanager
+def _quiet_schema_inspection() -> Iterator[None]:
+    token = _inspecting.set(True)
+    try:
+        yield
+    finally:
+        _inspecting.reset(token)
 
 
 def evaluate_drift(current: str | None, heads: list[str] | tuple[str, ...]) -> dict[str, Any]:
@@ -65,13 +109,13 @@ def migration_drift(bind) -> dict[str, Any]:
     defaults to True — fail-safe: surface a problem rather than hide it.
     """
     try:
-        script = ScriptDirectory.from_config(_alembic_config())
-        heads = script.get_heads()
-        if isinstance(bind, Connection):
-            current = MigrationContext.configure(bind).get_current_revision()
-        else:
-            with bind.connect() as conn:
-                current = MigrationContext.configure(conn).get_current_revision()
+        heads = _script_heads()
+        with _quiet_schema_inspection():
+            if isinstance(bind, Connection):
+                current = MigrationContext.configure(bind).get_current_revision()
+            else:
+                with bind.connect() as conn:
+                    current = MigrationContext.configure(conn).get_current_revision()
         result = evaluate_drift(current, heads)
         result["error"] = None
         return result

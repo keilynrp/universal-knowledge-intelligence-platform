@@ -22,7 +22,10 @@ enums — never exception text.
 from __future__ import annotations
 
 import asyncio
+import logging
+import threading
 
+from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, event, text
 
@@ -88,6 +91,78 @@ def test_schema_state_accepts_an_already_checked_out_connection():
     engine = _engine_at(_head())
     with engine.connect() as conn:
         assert schema_state(conn) == "current"
+
+
+# ── The probe is quiet and cheap ─────────────────────────────────────────────
+#
+# /health runs every 30 s (container healthcheck) plus every external probe.
+# Before this, each call logged two alembic INFO lines ("Context impl ...",
+# "Will assume ... DDL") from MigrationContext's constructor, and re-parsed all
+# migration scripts to find the head (~60-70 ms per call).
+
+_MIGRATION_LOGGER = "alembic.runtime.migration"
+
+
+def _alembic_records(caplog):
+    return [r for r in caplog.records if r.name == _MIGRATION_LOGGER]
+
+
+def test_schema_state_emits_no_alembic_info_logs(caplog):
+    caplog.set_level(logging.INFO, logger=_MIGRATION_LOGGER)
+    engine = _engine_at(_head())
+    with engine.connect() as conn:
+        assert schema_state(conn) == "current"
+    assert _alembic_records(caplog) == []
+
+
+def test_alembic_logs_outside_the_probe_are_untouched(caplog):
+    # Guards the test above against passing vacuously (a disabled logger) and
+    # proves the filter is scoped: real migrations keep their log lines.
+    caplog.set_level(logging.INFO, logger=_MIGRATION_LOGGER)
+    with _engine_at(None).connect() as conn:
+        MigrationContext.configure(conn)
+    assert any("Context impl" in r.getMessage() for r in _alembic_records(caplog))
+
+
+def test_the_probe_still_surfaces_alembic_warnings(caplog):
+    caplog.set_level(logging.INFO, logger=_MIGRATION_LOGGER)
+    with db_revision._quiet_schema_inspection():
+        logging.getLogger(_MIGRATION_LOGGER).info("dropped")
+        logging.getLogger(_MIGRATION_LOGGER).warning("kept")
+    assert [r.getMessage() for r in _alembic_records(caplog)] == ["kept"]
+
+
+def test_the_quiet_scope_does_not_leak_to_other_threads(caplog):
+    # A concurrent migration on another thread must keep its INFO lines while a
+    # probe is inspecting: the scope is a ContextVar, not a logger level.
+    caplog.set_level(logging.INFO, logger=_MIGRATION_LOGGER)
+    other = threading.Thread(
+        target=lambda: logging.getLogger(_MIGRATION_LOGGER).info("other thread")
+    )
+    with db_revision._quiet_schema_inspection():
+        other.start()
+        other.join()
+    assert [r.getMessage() for r in _alembic_records(caplog)] == ["other thread"]
+
+
+def test_script_heads_are_parsed_once_per_process(monkeypatch):
+    calls = []
+    real = db_revision.ScriptDirectory.from_config
+
+    def counting(cfg):
+        calls.append(cfg)
+        return real(cfg)
+
+    engine = _engine_at(_head())  # before counting: _head() parses scripts too
+    db_revision._script_heads.cache_clear()
+    monkeypatch.setattr(db_revision.ScriptDirectory, "from_config", counting)
+    try:
+        with engine.connect() as conn:
+            assert schema_state(conn) == "current"
+            assert schema_state(conn) == "current"
+        assert len(calls) == 1
+    finally:
+        db_revision._script_heads.cache_clear()
 
 
 # ── /health body ─────────────────────────────────────────────────────────────
