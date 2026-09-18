@@ -7,9 +7,8 @@ All domain logic lives in backend/routers/*.py
 import asyncio
 import logging
 import os
-from contextlib import asynccontextmanager
-
 import pathlib
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,46 +16,39 @@ from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-
 from sqlalchemy import text
 
 from backend import database, enrichment_worker, models
 from backend.bootstrap import ensure_bootstrap_super_admin
-from backend.services.enrichment_scheduler import EnrichmentScheduler, scheduler as _enrichment_scheduler_instance
 from backend.logging_utils import RequestLoggingMiddleware, configure_logging
 from backend.openapi_ids import operation_id_for
-from backend.telemetry import initialize_telemetry
-from backend.routers.limiter import limiter
 
 # ── Domain routers ────────────────────────────────────────────────────────────
 from backend.routers import (
     admin_data_fixes,
-    ai_rag,
-    data_lifecycle,
     agentic_chat,
+    ai_rag,
     alert_channels,
-    assistant_actions,
-    api_import,
     analytics,
     analytics_analyzers,
     analytics_ops,
-    retrospective,
-    jobs as jobs_router,
-    journals,
     annotations,
+    api_import,
     api_keys,
     artifacts,
+    assistant_actions,
     audit_log,
     auth_users,
     authority,
     authority_institutions,
     authority_records,
-    branding,
     backup_ops,
+    branding,
     catalogs,
     coauthorship,
     context,
     dashboards,
+    data_lifecycle,
     demo,
     derived_status,
     disambiguation,
@@ -65,35 +57,45 @@ from backend.routers import (
     entities,
     entity_linker,
     external_attention,
-    governance_sources,
     governance_field_correspondence,
     governance_field_correspondence_ops,
+    governance_sources,
     graph_export,
     harmonization,
     ingest,
+    journals,
     nlq,
     notifications,
+    onboarding,
+    openalex_lake_admin,
     organizations,
-    scheduled_reports,
+    platform_auth_settings,
     quality,
     relationships,
     reports,
+    retrospective,
     sales_deck,
     scheduled_imports,
+    scheduled_reports,
     scientific_import,
     scrapers,
     search,
     stores,
     transformations,
     webhooks,
-    onboarding,
-    openalex_lake_admin,
-    platform_auth_settings,
     widgets,
-    workspace_reset,
     workflows,
+    workspace_reset,
     ws,
 )
+from backend.routers import (
+    jobs as jobs_router,
+)
+from backend.routers.limiter import limiter
+from backend.services.enrichment_scheduler import (
+    scheduler as _enrichment_scheduler_instance,
+)
+from backend.telemetry import initialize_telemetry
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -266,8 +268,12 @@ async def lifespan(app: FastAPI):
 
     warn_if_sqlite_engine(database.SQLALCHEMY_DATABASE_URL)
 
+    # The bootstrap outcome is recorded on app.state for /health: the bootstrap
+    # below is fail-open, so a traceback in the logs was its only trace and the
+    # probe kept answering "ok" on a service with no usable schema.
     if not _startup_side_effects_enabled():
         logger.info("Startup side effects disabled via UKIP_SKIP_STARTUP_SIDE_EFFECTS=1")
+        app.state.db_bootstrap = "skipped"
         yield
         return
 
@@ -277,7 +283,9 @@ async def lifespan(app: FastAPI):
     from backend.authority import batch_worker as _authority_batch_worker
     try:
         _run_db_bootstrap()
+        app.state.db_bootstrap = "ok"
     except Exception:
+        app.state.db_bootstrap = "failed"
         logger.exception(
             "Startup DB bootstrap FAILED — continuing so the service stays up and "
             "/health responds. The app may run with an incomplete schema; fix the "
@@ -441,13 +449,16 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
-from backend.audit import AuditMiddleware  # noqa: E402 — after app init
+# Imported after app init.
+from backend.audit import AuditMiddleware
+
 app.add_middleware(AuditMiddleware)
 
 # ── Security headers middleware ────────────────────────────────────────────────
 
-from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
-from starlette.requests import Request as StarletteRequest  # noqa: E402
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: StarletteRequest, call_next):
@@ -505,6 +516,7 @@ class EmbedCorsMiddleware(BaseHTTPMiddleware):
 app.add_middleware(EmbedCorsMiddleware)
 
 from starlette.middleware.sessions import SessionMiddleware
+
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.environ.get("SESSION_SECRET_KEY", os.environ.get("JWT_SECRET_KEY", "fallback_cookie_secret")),
@@ -579,6 +591,7 @@ app.include_router(workflows.router)
 app.include_router(ws.router)
 
 from backend.routers import engine as engine_router
+
 app.include_router(engine_router.router)
 
 # ── Static file serving (uploaded logos etc.) ─────────────────────────────────
