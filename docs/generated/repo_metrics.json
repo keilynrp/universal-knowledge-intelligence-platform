@@ -3,7 +3,7 @@
   "metrics": {
     "backend_tests_collected": 4072,
     "backend_test_files": 315,
-    "frontend_vitest_tests": 333,
+    "frontend_vitest_tests": 289,
     "api_operations": 420,
     "python_runtime_shipped": "3.13",
     "nextjs_version": "16.3.5",

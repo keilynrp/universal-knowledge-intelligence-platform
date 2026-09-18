@@ -39,7 +39,7 @@
     "@types/react-dom": "^19",
     "@types/topojson-client": "^3.1.5",
     "@vitejs/plugin-react": "^6.1.1",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^5.0.1",
     "d3-force": "^3.0.0",
     "d3-geo": "^3.1.1",
     "eslint": "^10",
@@ -48,7 +48,7 @@
     "tailwindcss": "^4",
     "topojson-client": "^3.1.0",
     "typescript": "^6",
-    "vitest": "^4.1.0",
+    "vitest": "^5.0.1",
     "world-atlas": "^2.0.2"
   }
 }

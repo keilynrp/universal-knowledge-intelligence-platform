@@ -147,7 +147,7 @@ UKIP manages major product and implementation decisions as architecture decision
 | Analytics | pandas, DuckDB, PyArrow, NumPy, SciPy |
 | Background Jobs | Durable PostgreSQL lease queue (broker-free, at-least-once) with worker/scheduler processes |
 <!-- BEGIN GENERATED REPOSITORY METRICS: techstack-testing -->
-| Testing | pytest (4072 tests collected), Vitest (333 tests), Playwright |
+| Testing | pytest (4072 tests collected), Vitest (289 tests), Playwright |
 <!-- END GENERATED REPOSITORY METRICS: techstack-testing -->
 | Deployment | Docker Compose, GHCR images, Dokploy-oriented production compose |
 | Monitoring | Sentry (opt-in), structured logging |
@@ -159,7 +159,7 @@ UKIP manages major product and implementation decisions as architecture decision
 ### Prerequisites
 
 - Python 3.11 or 3.12
-- Node.js 20+
+- Node.js 22.22+ (the frontend toolchain requires it: jsdom 30 needs , Vitest 5 needs ; CI runs Node 22)
 - npm
 - Docker and Docker Compose (recommended for PostgreSQL-first local development)
 - Rust toolchain (only needed when working on `engine/`)
@@ -284,7 +284,7 @@ cd frontend && npx tsc --noEmit
 ```
 
 <!-- BEGIN GENERATED REPOSITORY METRICS: summary-test-stats -->
-**Current test stats:** 4072 backend tests collected across 315 test files. Frontend: 333 Vitest tests.
+**Current test stats:** 4072 backend tests collected across 315 test files. Frontend: 289 Vitest tests.
 <!-- END GENERATED REPOSITORY METRICS: summary-test-stats -->
 
 ---
