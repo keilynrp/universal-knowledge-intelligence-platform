@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "metrics": {
-    "backend_tests_collected": 4079,
-    "backend_test_files": 315,
+    "backend_tests_collected": 4096,
+    "backend_test_files": 316,
     "frontend_vitest_tests": 289,
     "api_operations": 420,
     "python_runtime_shipped": "3.13",
