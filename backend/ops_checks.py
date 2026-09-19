@@ -9,13 +9,12 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.backup_assurance import (
     evaluate_backup_freshness,
-    evaluate_provider_reachability,
     latest_completed_backup,
+    resolve_provider_reachability,
 )
 from backend.db_revision import migration_drift
 from backend.notifications.alert_sender import dispatch_event
 from backend.routers import scheduled_imports, scheduled_reports
-
 
 logger = logging.getLogger(__name__)
 
@@ -94,13 +93,13 @@ def _scheduler_check(
     overdue_before = now - timedelta(seconds=overdue_tolerance_seconds)
     recent_error_after = now - timedelta(hours=24)
     overdue_count = db.query(model).filter(
-        model.is_active == True,  # noqa: E712
+        model.is_active == True,
         model.next_run_at.isnot(None),
         model.next_run_at < overdue_before,
         model.last_status != "running",
     ).count()
     recent_error_count = db.query(model).filter(
-        model.is_active == True,  # noqa: E712
+        model.is_active == True,
         model.last_status == "error",
         model.last_run_at.isnot(None),
         model.last_run_at >= recent_error_after,
@@ -209,7 +208,7 @@ def _migrations_check() -> dict:
 
 def _alert_channel_check(db: Session) -> dict:
     active_channels = db.query(models.AlertChannel).filter(
-        models.AlertChannel.is_active == True,  # noqa: E712
+        models.AlertChannel.is_active == True,
     ).all()
 
     subscribed = 0
@@ -217,7 +216,7 @@ def _alert_channel_check(db: Session) -> dict:
     for channel in active_channels:
         try:
             events = json.loads(channel.events or "[]")
-        except Exception:
+        except Exception:  # noqa: BLE001 - one bad row must not fail the check
             invalid_payloads += 1
             events = []
         if OPS_ALERT_EVENT in events:
@@ -303,7 +302,8 @@ def _secrets_check(db: Session) -> dict:
               retiring keys are still configured (encryption or JWT).
     Reads the in-process module state (what the app actually uses), not os.environ.
     """
-    from backend import auth, encryption, secret_rotation as sr
+    from backend import auth, encryption
+    from backend import secret_rotation as sr
 
     jwt_default = auth.SECRET_KEY == auth._INSECURE_DEFAULT_KEY
     no_enc_key = not encryption.has_primary_key()
@@ -351,11 +351,7 @@ def _backup_freshness_check(db: Session, *, now: datetime) -> dict:
         )
 
     environment = os.environ.get("UKIP_BACKUP_ENVIRONMENT", "production")
-    reachability = evaluate_provider_reachability(
-        reported_reachable=os.environ.get("UKIP_BACKUP_PROVIDER_REACHABLE"),
-        observed_at=os.environ.get("UKIP_BACKUP_PROVIDER_REACHABLE_AT"),
-        now=now,
-    )
+    reachability = resolve_provider_reachability(now=now)
     provider_reachable = reachability["reachable"]
     try:
         latest = latest_completed_backup(db, environment)

@@ -3,17 +3,104 @@
 from __future__ import annotations
 
 import json
+import os
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from backend.models import BackupAssuranceEvent
 
-
 BACKUP_RPO_HOURS = 24
 BACKUP_CRITICAL_AFTER_HOURS = 26
 PROVIDER_REACHABILITY_MAX_AGE_MINUTES = 15
+
+# B4 (#320). The two call sites used to read the reachability assertion straight
+# from the environment, but a running container's environment cannot change, so
+# nothing could keep a 15-minute-fresh signal current without restarting the
+# backend every few minutes. A probe colocated with production (systemd timer or
+# Dokploy schedule) instead writes a heartbeat document that this process reads
+# on every evaluation. The application still holds no provider credential: the
+# document carries a boolean and a timestamp, nothing else.
+REACHABILITY_FILE_ENV = "UKIP_BACKUP_PROVIDER_REACHABILITY_FILE"
+# The document is two fields. Anything larger is not one of ours; refuse it
+# instead of reading an arbitrary file into memory.
+REACHABILITY_FILE_MAX_BYTES = 4096
+
+
+class _ReachabilityFileError(Exception):
+    """Internal: carries the non-secret source label to report."""
+
+    def __init__(self, source: str) -> None:
+        super().__init__(source)
+        self.source = source
+
+
+def _load_reachability_file(path: str) -> tuple[str, str | None]:
+    """Read the heartbeat document, or raise with the source label to report."""
+    document_path = Path(path)
+    try:
+        size = document_path.stat().st_size
+    except FileNotFoundError as exc:
+        raise _ReachabilityFileError("missing_reachability_file") from exc
+    except OSError as exc:
+        raise _ReachabilityFileError("invalid_reachability_file") from exc
+
+    if size > REACHABILITY_FILE_MAX_BYTES:
+        raise _ReachabilityFileError("invalid_reachability_file")
+
+    try:
+        document = json.loads(document_path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:  # removed between stat() and read()
+        raise _ReachabilityFileError("missing_reachability_file") from exc
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        raise _ReachabilityFileError("invalid_reachability_file") from exc
+
+    if not isinstance(document, dict):
+        raise _ReachabilityFileError("invalid_reachability_file")
+    reachable = document.get("reachable")
+    if not isinstance(reachable, bool):
+        raise _ReachabilityFileError("invalid_reachability_file")
+    observed_at = document.get("observed_at")
+    if observed_at is not None and not isinstance(observed_at, str):
+        raise _ReachabilityFileError("invalid_reachability_file")
+
+    return ("1" if reachable else "0", observed_at)
+
+
+def resolve_provider_reachability(
+    *,
+    now: datetime,
+    env: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """Evaluate the reachability signal from whichever channel is configured.
+
+    With ``UKIP_BACKUP_PROVIDER_REACHABILITY_FILE`` set, the heartbeat document
+    is the only source: falling back to the environment when the probe's file
+    is missing would turn a dead probe into a green signal, which is the exact
+    failure this channel exists to prevent. Without it, the environment
+    variables behave exactly as before.
+    """
+    environment = os.environ if env is None else env
+    path = (environment.get(REACHABILITY_FILE_ENV) or "").strip()
+    if path:
+        try:
+            reported_reachable, observed_at = _load_reachability_file(path)
+        except _ReachabilityFileError as exc:
+            return {"reachable": False, "source": exc.source}
+        return evaluate_provider_reachability(
+            reported_reachable=reported_reachable,
+            observed_at=observed_at,
+            now=now,
+            origin="file",
+        )
+    return evaluate_provider_reachability(
+        reported_reachable=environment.get("UKIP_BACKUP_PROVIDER_REACHABLE"),
+        observed_at=environment.get("UKIP_BACKUP_PROVIDER_REACHABLE_AT"),
+        now=now,
+    )
 
 _VALID_EVENT_STATUSES = {
     "backup": {"completed", "failed"},
@@ -34,7 +121,15 @@ def evaluate_provider_reachability(
     reported_reachable: str | None,
     observed_at: str | None,
     now: datetime,
+    origin: str = "environment",
 ) -> dict[str, Any]:
+    """Decide whether *reported_reachable* is a usable assertion right now.
+
+    *origin* only labels the reported source, so a stale heartbeat file is
+    distinguishable from a stale environment variable in /ops output. The rules
+    themselves — an assertion must say "1", carry a UTC timestamp, and be no
+    older than PROVIDER_REACHABILITY_MAX_AGE_MINUTES — are the same for both.
+    """
     if reported_reachable != "1":
         return {
             "reachable": False,
@@ -47,7 +142,7 @@ def evaluate_provider_reachability(
     if not observed_at:
         return {
             "reachable": False,
-            "source": "environment_assertion_missing_timestamp",
+            "source": f"{origin}_assertion_missing_timestamp",
         }
     try:
         observed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
@@ -56,7 +151,7 @@ def evaluate_provider_reachability(
     except (TypeError, ValueError):
         return {
             "reachable": False,
-            "source": "invalid_environment_assertion",
+            "source": f"invalid_{origin}_assertion",
         }
 
     observed_utc = observed.astimezone(timezone.utc)
@@ -65,16 +160,16 @@ def evaluate_provider_reachability(
     if age < -timedelta(minutes=5):
         return {
             "reachable": False,
-            "source": "future_environment_assertion",
+            "source": f"future_{origin}_assertion",
         }
     if age > timedelta(minutes=PROVIDER_REACHABILITY_MAX_AGE_MINUTES):
         return {
             "reachable": False,
-            "source": "stale_environment_assertion",
+            "source": f"stale_{origin}_assertion",
         }
     return {
         "reachable": True,
-        "source": "timestamped_environment_assertion",
+        "source": f"timestamped_{origin}_assertion",
     }
 
 
