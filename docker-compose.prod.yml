@@ -134,11 +134,19 @@ services:
       UKIP_BACKUP_ENVIRONMENT: ${UKIP_BACKUP_ENVIRONMENT:-production}
       UKIP_BACKUP_PROVIDER_REACHABLE: ${UKIP_BACKUP_PROVIDER_REACHABLE:-0}
       UKIP_BACKUP_PROVIDER_REACHABLE_AT: ${UKIP_BACKUP_PROVIDER_REACHABLE_AT:-}
+      # B4 (#320): when set, the heartbeat document written by the host probe
+      # is the reachability signal and the two variables above are ignored. A
+      # container's environment cannot be refreshed while it runs, so only this
+      # channel can carry a signal that must stay fresh within 15 minutes.
+      # Empty by default: unset, reachability stays fail-closed exactly as
+      # before. The mount below is read-only — the app never writes it.
+      UKIP_BACKUP_PROVIDER_REACHABILITY_FILE: ${UKIP_BACKUP_PROVIDER_REACHABILITY_FILE:-}
       UKIP_BACKUP_RPO_HOURS: ${UKIP_BACKUP_RPO_HOURS:-24}
       UKIP_BACKUP_CRITICAL_AFTER_HOURS: ${UKIP_BACKUP_CRITICAL_AFTER_HOURS:-26}
     volumes:
       - ukip_static_data:/app/static
       - ukip_openalex_lake:/data
+      - ${UKIP_BACKUP_SIGNAL_DIR:-/var/lib/ukip/signals}:/run/ukip-signals:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
       interval: 30s

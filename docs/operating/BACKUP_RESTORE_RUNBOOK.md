@@ -171,6 +171,94 @@ into `backup_assurance_events` is a manual or trusted-service operator step
 Until the required secrets exist, every run of this workflow fails fast with
 a clear, non-secret error rather than silently no-op'ing.
 
+### 5b. Provider Reachability Probe (B4)
+
+`evaluate_provider_reachability` treats an assertion older than
+`PROVIDER_REACHABILITY_MAX_AGE_MINUTES` (15) as stale. A container's
+environment cannot be changed while it runs, so `UKIP_BACKUP_PROVIDER_REACHABLE`
+/ `..._AT` can never carry a signal that stays fresh — they are kept only for
+compatibility. The refreshable channel is a heartbeat document:
+
+`scripts/ukip-backup-reachability-probe.sh` runs on the production host every
+5 minutes, lists the backup prefix with the **read-only** provider credential,
+and writes `{"reachable": <bool>, "observed_at": "<UTC ISO-8601>"}` atomically
+to `UKIP_REACHABILITY_OUT`. The backend reads that file through a **read-only**
+mount and applies the same staleness rule, so a probe that dies makes the
+signal fail closed on its own. The application still holds no provider
+credential, and the document carries no bucket, path or key material.
+
+**OPERATOR ACTION REQUIRED — install on the production host:**
+
+1. Create the signal directory and install the script:
+
+```bash
+install -d -m 0755 /var/lib/ukip/signals
+install -m 0755 scripts/ukip-backup-reachability-probe.sh \
+  /usr/local/bin/ukip-backup-reachability-probe.sh
+```
+
+2. Create `/etc/ukip/backup-probe.env`, **root-owned, mode 0600**, holding the
+   read-only credential and the non-secret endpoint/bucket/prefix. This is the
+   only place the credential exists on the host; never put it in the script,
+   in the compose file, or in the application environment.
+
+```
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_DEFAULT_REGION=...
+S3_BACKUP_ENDPOINT=...
+S3_BACKUP_BUCKET=...
+S3_BACKUP_PREFIX=...
+```
+
+3. Install the systemd units and start the timer:
+
+```ini
+# /etc/systemd/system/ukip-backup-probe.service
+[Unit]
+Description=UKIP backup provider reachability probe
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/ukip/backup-probe.env
+ExecStart=/usr/local/bin/ukip-backup-reachability-probe.sh
+```
+
+```ini
+# /etc/systemd/system/ukip-backup-probe.timer
+[Unit]
+Description=Run the UKIP backup provider reachability probe every 5 minutes
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+[Install]
+WantedBy=timers.target
+```
+
+```bash
+systemctl daemon-reload && systemctl enable --now ukip-backup-probe.timer
+```
+
+If the host has no AWS CLI, run the same command through a container image in
+`ExecStart` instead; the script only needs `aws` on `PATH`.
+
+4. In Dokploy, set `UKIP_BACKUP_SIGNAL_DIR=/var/lib/ukip/signals` and
+   `UKIP_BACKUP_PROVIDER_REACHABILITY_FILE=/run/ukip-signals/backup-provider-reachability.json`,
+   then redeploy so the read-only mount and the variable take effect.
+
+**Verify** (no secrets in any output):
+
+```bash
+systemctl list-timers ukip-backup-probe.timer
+cat /var/lib/ukip/signals/backup-provider-reachability.json
+curl -s -H "Authorization: Bearer $TOKEN" https://<api-host>/ops/backups/status
+```
+
+`provider_reachability_source` must read `timestamped_file_assertion`, and
+`provider_unreachable` must be gone from `reason_codes`. Stop the timer for
+20 minutes and the source must become `stale_file_assertion` with the reason
+back — that check is what proves the signal is measured rather than asserted.
+
 ## 6. Prepare an Isolated Restore Drill
 
 Every drill requires an isolated restore environment with a separate network,
@@ -339,17 +427,15 @@ collected. None of these have been executed by this change.
    section 4 above using a trusted operator identity or a trusted colocated
    service — never a GitHub Actions secret. Rollback: none required; this is
    the current, intended fail-closed state, not a temporary gap to revert.
-5. **Keep `UKIP_BACKUP_PROVIDER_REACHABLE` / `UKIP_BACKUP_PROVIDER_REACHABLE_AT`
-   fresh in production** — nothing in the repository does this yet, on either
-   branch (see the reconciliation doc's "gap this audit surfaced" section).
-   This needs a mechanism colocated with production that can refresh a
-   timestamp inside `PROVIDER_REACHABILITY_MAX_AGE_MINUTES` (15 minutes); a
-   daily GitHub Actions job cannot do this honestly. Decide and implement the
-   mechanism (for example, a Dokploy-side health probe or a short-interval
-   systemd timer) as a follow-up; until then, `provider_reachable` will
-   correctly report `false` and this is expected, not a defect. Verify via
-   `GET /ops/backups/status` once implemented. Rollback: unset the two
-   environment variables to return to the fail-closed default.
+5. **Install the provider reachability probe (§5b)** — the repository now
+   ships the mechanism, but it must be installed on the production host. Until
+   it is, `provider_reachable` correctly reports `false` and
+   `GET /ops/backups/status` stays `critical` with reason
+   `provider_unreachable`; that is expected, not a defect, and it must never
+   be papered over by setting `UKIP_BACKUP_PROVIDER_REACHABLE=1` by hand — a
+   static assertion goes stale after 15 minutes anyway and, before it does, it
+   claims something nobody measured. Rollback: unset
+   `UKIP_BACKUP_PROVIDER_REACHABILITY_FILE` and stop the timer.
 6. **Observe the first two backup cycles and run the first isolated restore
    drill** against a demonstrably non-production target per sections 5–12,
    using the

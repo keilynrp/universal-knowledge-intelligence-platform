@@ -102,7 +102,7 @@ signal current, so `.github/workflows/backup-freshness.yml` deliberately does
 **not** attempt to assert reachability itself — doing so would either leave
 the workflow permanently red for an unrelated reason, or turn it into a second
 authority for a signal that is supposed to come from something colocated with
-production. This is recorded as a residual risk, not as an
+production. **Closed in Phase B4 (2026-09-19)**: the signal now has a refreshable channel — a host probe writes a heartbeat document that the backend reads through a read-only mount (`scripts/ukip-backup-reachability-probe.sh`, runbook §5b). The environment variables remain supported and unchanged. The gap below is kept as the record of why the environment-only design could not work. This was recorded as a residual risk, not as an
 `ARCHITECTURE DECISION REQUIRED`, because it changes no RPO/RTO commitment,
 backup scope, recovery authority, or supported topology — it is an
 unimplemented operational mechanism, not a disputed one. See the PR

@@ -1,5 +1,11 @@
 """Admin-only backup assurance metadata endpoints."""
 
+# ruff: noqa: B008 — every endpoint below uses FastAPI's own recommended
+# `Depends(...)`/`Query(...)` dependency-injection idiom in an argument default,
+# which is exactly what B008 ("no function call as a default") exists to catch
+# in ordinary code. Same justification, and same file-level waiver, as
+# backend/routers/analytics_ops.py.
+
 from __future__ import annotations
 
 import os
@@ -12,12 +18,12 @@ from backend import models
 from backend.auth import require_role
 from backend.backup_assurance import (
     evaluate_backup_freshness,
-    evaluate_provider_reachability,
     failure_reason_from_event,
     latest_completed_backup,
     latest_failed_backup,
     parse_event_evidence,
     record_event,
+    resolve_provider_reachability,
 )
 from backend.database import get_db
 from backend.schemas_backup import (
@@ -25,7 +31,6 @@ from backend.schemas_backup import (
     BackupEventResponse,
     BackupStatusResponse,
 )
-
 
 router = APIRouter(
     prefix="/ops/backups",
@@ -123,11 +128,7 @@ def backup_status(
     evaluated_at = utc_now()
     latest = latest_completed_backup(db, environment)
     latest_failure = latest_failed_backup(db, environment)
-    reachability = evaluate_provider_reachability(
-        reported_reachable=os.environ.get("UKIP_BACKUP_PROVIDER_REACHABLE"),
-        observed_at=os.environ.get("UKIP_BACKUP_PROVIDER_REACHABLE_AT"),
-        now=evaluated_at,
-    )
+    reachability = resolve_provider_reachability(now=evaluated_at)
     provider_reachable = reachability["reachable"]
     result = evaluate_backup_freshness(
         latest_completed_at=latest.completed_at if latest else None,
