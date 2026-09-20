@@ -15,8 +15,10 @@ from pydantic import (
     model_validator,
 )
 
-
 EventType = Literal["backup", "restore_drill"]
+# What the event covers. `database` governs freshness; `volume` is reported
+# next to it and never substitutes for it (#320).
+EventScope = Literal["database", "volume"]
 EventStatus = Literal["completed", "failed", "passed", "passed_with_risk"]
 
 _VALID_EVENT_STATUSES = {
@@ -59,6 +61,7 @@ class BackupEventCreate(BaseModel):
 
     event_type: EventType
     status: EventStatus
+    scope: EventScope = "database"
     environment: str = Field(min_length=1, max_length=50)
     provider: str = Field(min_length=1, max_length=80)
     backup_id: str | None = Field(default=None, max_length=200)
@@ -128,6 +131,7 @@ class BackupEventResponse(BaseModel):
     id: int
     event_type: str
     status: str
+    scope: str
     environment: str
     provider: str
     backup_id: str | None
@@ -166,6 +170,9 @@ class BackupStatusResponse(BaseModel):
     last_failure_at: datetime | None
     last_failure_reason: str | None
     latest_backup: BackupEventResponse | None
+    # The newest volume archive, reported as its own evidence. It is not part
+    # of the freshness decision (#320).
+    latest_volume_backup: BackupEventResponse | None = None
 
     @field_serializer("evidence_collected_at", "last_failure_at")
     def serialize_datetimes(self, value: datetime | None) -> str | None:
