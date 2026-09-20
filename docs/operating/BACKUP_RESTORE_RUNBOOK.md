@@ -239,8 +239,27 @@ WantedBy=timers.target
 systemctl daemon-reload && systemctl enable --now ukip-backup-probe.timer
 ```
 
-If the host has no AWS CLI, run the same command through a container image in
-`ExecStart` instead; the script only needs `aws` on `PATH`.
+The script picks its runner itself (`UKIP_AWS_RUNNER`, default `auto`): it uses
+`aws` when the host has the CLI, and otherwise runs the pinned
+`amazon/aws-cli` image through Docker, forwarding the credential by variable
+name so it never reaches the host's process list. `ExecStart` is the same in
+both cases — do not hand-write a wrapper on the server, or production ends up
+running code that no review ever saw.
+
+On a Docker-only host, pull the image once before enabling the timer, so a slow
+first pull is not mistaken for an unreachable provider:
+
+```bash
+docker pull amazon/aws-cli:latest
+```
+
+The service unit then needs Docker available:
+
+```ini
+[Unit]
+After=docker.service
+Requires=docker.service
+```
 
 4. In Dokploy, set `UKIP_BACKUP_SIGNAL_DIR=/var/lib/ukip/signals` and
    `UKIP_BACKUP_PROVIDER_REACHABILITY_FILE=/run/ukip-signals/backup-provider-reachability.json`,

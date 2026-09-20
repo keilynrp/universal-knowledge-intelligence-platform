@@ -21,7 +21,6 @@ own, and the environment variables keep working when no file is configured.
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 from datetime import datetime, timedelta, timezone
@@ -182,34 +181,60 @@ def test_backup_status_reports_the_file_assertion(client, auth_headers, tmp_path
 PROBE = Path(__file__).resolve().parents[2] / "scripts" / "ukip-backup-reachability-probe.sh"
 
 
-def _run_probe(tmp_path, *, aws_exit_code: int):
+def _stub(bin_dir: Path, name: str, exit_code: int, argv_log: Path | None = None) -> None:
+    """A fake `aws`/`docker` that records how the probe invoked it."""
+    log = f'printf "%s\\n" "$*" >> {argv_log}\n' if argv_log else ""
+    (bin_dir / name).write_text(f"#!/usr/bin/env bash\n{log}exit {exit_code}\n", encoding="utf-8")
+    (bin_dir / name).chmod(0o755)
+
+
+def _run_probe(
+    tmp_path,
+    *,
+    aws_exit_code: int | None = 0,
+    docker_exit_code: int | None = None,
+    runner: str | None = None,
+    expect_success: bool = True,
+):
     bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    stub = bin_dir / "aws"
-    stub.write_text(f"#!/usr/bin/env bash\nexit {aws_exit_code}\n", encoding="utf-8")
-    stub.chmod(0o755)
+    bin_dir.mkdir(exist_ok=True)
+    argv_log = tmp_path / "argv.log"
+    if aws_exit_code is not None:
+        _stub(bin_dir, "aws", aws_exit_code, argv_log)
+    if docker_exit_code is not None:
+        _stub(bin_dir, "docker", docker_exit_code, argv_log)
 
     out = tmp_path / "signals" / "backup-provider-reachability.json"
+    env = {
+        # An empty PATH would break `date`/`mktemp`; point only at the stubs
+        # plus the system tools the script needs.
+        "PATH": f"{bin_dir}:/usr/bin:/bin",
+        "UKIP_REACHABILITY_OUT": str(out),
+        "S3_BACKUP_ENDPOINT": "https://s3.example.invalid",
+        "S3_BACKUP_BUCKET": "bucket",
+        "S3_BACKUP_PREFIX": "prefix/",
+        "AWS_ACCESS_KEY_ID": "AKIAEXAMPLEONLYNOTREAL",
+        "AWS_SECRET_ACCESS_KEY": "not-a-real-secret-value-for-the-test-only",
+        "AWS_DEFAULT_REGION": "us-east-2",
+    }
+    if runner is not None:
+        env["UKIP_AWS_RUNNER"] = runner
+
     completed = subprocess.run(
         ["bash", str(PROBE)],
         capture_output=True,
         text=True,
-        check=False,  # the assertion below reports the probe's own exit code
-        env={
-            "PATH": f"{bin_dir}:{os.environ.get('PATH', '')}",
-            "UKIP_REACHABILITY_OUT": str(out),
-            "S3_BACKUP_ENDPOINT": "https://s3.example.invalid",
-            "S3_BACKUP_BUCKET": "bucket",
-            "S3_BACKUP_PREFIX": "prefix/",
-        },
+        check=False,  # the assertions below report the probe's own exit code
+        env=env,
     )
-    assert completed.returncode == 0, completed.stderr
-    return out, completed
+    if expect_success:
+        assert completed.returncode == 0, completed.stderr
+    return out, completed, (argv_log.read_text(encoding="utf-8") if argv_log.exists() else "")
 
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="bash is required to run the probe")
 def test_probe_output_is_read_as_reachable_when_the_provider_answers(tmp_path):
-    out, completed = _run_probe(tmp_path, aws_exit_code=0)
+    out, completed, _ = _run_probe(tmp_path, aws_exit_code=0)
 
     assert "provider_reachable=true" in completed.stdout
     result = resolve_provider_reachability(
@@ -223,7 +248,7 @@ def test_probe_output_is_read_as_reachable_when_the_provider_answers(tmp_path):
 def test_probe_records_an_explicit_false_when_the_provider_fails(tmp_path):
     # A failed listing must be recorded, not left as a missing file: the
     # backend then says explicit_unreachable instead of a dead-probe state.
-    out, completed = _run_probe(tmp_path, aws_exit_code=1)
+    out, completed, _ = _run_probe(tmp_path, aws_exit_code=1)
 
     assert "provider_reachable=false" in completed.stdout
     result = resolve_provider_reachability(
@@ -237,6 +262,82 @@ def test_probe_records_an_explicit_false_when_the_provider_fails(tmp_path):
 def test_probe_leaves_no_temporary_file_behind(tmp_path):
     # The document is renamed into place; a leftover .XXXXXX file would mean a
     # reader could catch a half-written document.
-    out, _ = _run_probe(tmp_path, aws_exit_code=0)
+    out, _, _ = _run_probe(tmp_path, aws_exit_code=0)
 
     assert sorted(child.name for child in out.parent.iterdir()) == [out.name]
+
+
+# ── Running the AWS CLI from a container ─────────────────────────────────────
+#
+# The production host has no AWS CLI, only Docker. The script therefore has to
+# support both runners itself: a hand-written wrapper living only on the server
+# would mean the host runs code no one reviewed.
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="bash is required to run the probe")
+def test_docker_runner_produces_the_same_document(tmp_path):
+    out, completed, argv = _run_probe(
+        tmp_path, aws_exit_code=None, docker_exit_code=0, runner="docker"
+    )
+
+    assert "provider_reachable=true" in completed.stdout
+    assert "amazon/aws-cli" in argv
+    result = resolve_provider_reachability(
+        now=datetime.now(timezone.utc),
+        env={"UKIP_BACKUP_PROVIDER_REACHABILITY_FILE": str(out)},
+    )
+    assert result == {"reachable": True, "source": "timestamped_file_assertion"}
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="bash is required to run the probe")
+def test_docker_runner_passes_credentials_by_name_not_by_value(tmp_path):
+    # `docker run -e NAME` forwards the value from the environment; writing
+    # `-e NAME=value` would publish the secret in the host's process list.
+    _, _, argv = _run_probe(tmp_path, aws_exit_code=None, docker_exit_code=0, runner="docker")
+
+    assert "-e AWS_ACCESS_KEY_ID" in argv
+    assert "-e AWS_SECRET_ACCESS_KEY" in argv
+    assert "not-a-real-secret-value-for-the-test-only" not in argv
+    assert "AKIAEXAMPLEONLYNOTREAL" not in argv
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="bash is required to run the probe")
+def test_docker_runner_records_an_unreachable_provider(tmp_path):
+    out, completed, _ = _run_probe(
+        tmp_path, aws_exit_code=None, docker_exit_code=1, runner="docker"
+    )
+
+    assert "provider_reachable=false" in completed.stdout
+    result = resolve_provider_reachability(
+        now=datetime.now(timezone.utc),
+        env={"UKIP_BACKUP_PROVIDER_REACHABILITY_FILE": str(out)},
+    )
+    assert result == {"reachable": False, "source": "explicit_unreachable"}
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="bash is required to run the probe")
+def test_auto_falls_back_to_docker_when_no_aws_cli_is_installed(tmp_path):
+    # This is the production host: Docker, no AWS CLI.
+    _, completed, argv = _run_probe(tmp_path, aws_exit_code=None, docker_exit_code=0)
+
+    assert "provider_reachable=true" in completed.stdout
+    assert "amazon/aws-cli" in argv
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="bash is required to run the probe")
+def test_auto_prefers_the_aws_cli_when_it_is_installed(tmp_path):
+    _, completed, argv = _run_probe(tmp_path, aws_exit_code=0, docker_exit_code=0)
+
+    assert "provider_reachable=true" in completed.stdout
+    assert "amazon/aws-cli" not in argv
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="bash is required to run the probe")
+def test_an_unknown_runner_fails_loudly_instead_of_reporting_unreachable(tmp_path):
+    # A typo must not silently look like "the provider is down".
+    out, completed, _ = _run_probe(
+        tmp_path, aws_exit_code=0, runner="podman", expect_success=False
+    )
+
+    assert completed.returncode != 0
+    assert "UKIP_AWS_RUNNER" in completed.stderr
+    assert not out.exists()
