@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.auth import require_role
 from backend.backup_assurance import (
+    classify_legacy_scope,
     evaluate_backup_freshness,
     failure_reason_from_event,
     latest_completed_backup,
@@ -56,7 +57,10 @@ def _event_response(event: models.BackupAssuranceEvent) -> BackupEventResponse:
         id=event.id,
         event_type=event.event_type,
         status=event.status,
-        scope=event.scope,
+        # Derived for pre-column rows, whose scope is NULL because the
+        # append-only table forbids backfilling them.
+        scope=event.scope
+        or classify_legacy_scope(provider=event.provider, backup_id=event.backup_id),
         environment=event.environment,
         provider=event.provider,
         backup_id=event.backup_id,

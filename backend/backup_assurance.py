@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import and_, func, not_, or_
 from sqlalchemy.orm import Session
 
 from backend.models import BackupAssuranceEvent
@@ -108,13 +109,41 @@ VALID_SCOPES = ("database", "volume")
 DEFAULT_SCOPE = "database"
 
 
+def _legacy_volume_expression():
+    """The SQL half of `classify_legacy_scope`, for rows whose scope is NULL.
+
+    Kept next to the Python rule, and pinned to it by a test, because the two
+    decide the same question in different places.
+    """
+    provider = func.lower(func.coalesce(BackupAssuranceEvent.provider, ""))
+    backup_id = func.lower(func.coalesce(BackupAssuranceEvent.backup_id, ""))
+    return or_(provider.like("%volume%"), backup_id.like("%.tar"))
+
+
+def scope_filter(scope: str):
+    """Match events of *scope*, including pre-column rows with a NULL scope."""
+    if scope not in VALID_SCOPES:
+        raise ValueError(f"Unsupported scope: {scope!r}")
+    legacy_volume = _legacy_volume_expression()
+    if scope == "volume":
+        return or_(
+            BackupAssuranceEvent.scope == "volume",
+            and_(BackupAssuranceEvent.scope.is_(None), legacy_volume),
+        )
+    return or_(
+        BackupAssuranceEvent.scope == DEFAULT_SCOPE,
+        and_(BackupAssuranceEvent.scope.is_(None), not_(legacy_volume)),
+    )
+
+
 def classify_legacy_scope(*, provider: str | None, backup_id: str | None) -> str:
     """Infer the scope of a row written before the column existed.
 
     Production holds three such rows: two PostgreSQL dumps and one volume
-    archive. Defaulting all of them to `database` would mislabel the archive as
+    archive. Treating all of them as `database` would mislabel the archive as
     the object that governs freshness — the exact defect this change fixes — so
-    the backfill reads what each row already recorded about itself.
+    the scope is derived from what each row already recorded about itself. The
+    rows themselves are never rewritten: the table is append-only.
     """
     haystack = f"{provider or ''} {backup_id or ''}".casefold()
     if "volume" in haystack or haystack.rstrip().endswith(".tar"):
@@ -336,15 +365,13 @@ def latest_completed_backup(
     10 KB tar of an empty directory hold the freshness signal green while the
     database goes unbacked (#320).
     """
-    if scope not in VALID_SCOPES:
-        raise ValueError(f"Unsupported scope: {scope!r}")
     return (
         db.query(BackupAssuranceEvent)
         .filter(
             BackupAssuranceEvent.event_type == "backup",
             BackupAssuranceEvent.status == "completed",
             BackupAssuranceEvent.environment == environment,
-            BackupAssuranceEvent.scope == scope,
+            scope_filter(scope),
             BackupAssuranceEvent.completed_at.is_not(None),
         )
         .order_by(

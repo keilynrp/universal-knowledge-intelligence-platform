@@ -1257,13 +1257,13 @@ class BackupAssuranceEvent(Base):
     status = Column(String(20), nullable=False, index=True)
     # What this event backed up. Freshness is judged per scope: a volume
     # archive must never stand in for a missing database dump (#320).
-    scope = Column(
-        String(20),
-        nullable=False,
-        index=True,
-        default="database",
-        server_default="database",
-    )
+    #
+    # Nullable on purpose. Rows written before the column existed cannot be
+    # backfilled: this table is append-only and the trigger refuses UPDATE —
+    # that refusal IS the control ER-BCP-001 is about. Those rows keep NULL and
+    # are classified when read (see backup_assurance.scope_filter). Everything
+    # written since carries its own scope.
+    scope = Column(String(20), nullable=True, index=True, default="database")
     environment = Column(String(50), nullable=False, index=True)
     provider = Column(String(80), nullable=False)
     backup_id = Column(String(200), nullable=True, index=True)

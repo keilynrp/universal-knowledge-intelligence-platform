@@ -18,11 +18,11 @@ that decides freshness.
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from sqlalchemy import text
 
 from backend.backup_assurance import (
     classify_legacy_scope,
@@ -212,55 +212,152 @@ def test_legacy_rows_are_classified_from_what_they_recorded(provider, backup_id,
     assert classify_legacy_scope(provider=provider, backup_id=backup_id) == expected
 
 
-# ── The migration's SQL must agree with the Python classifier ────────────────
+# ── Rows written before the column existed ──────────────────────────────────
+#
+# The first attempt backfilled them with an UPDATE. Production refused it:
+#
+#     psycopg2.errors.RaiseException: backup_assurance_events is append-only
+#
+# That trigger is the control ER-BCP-001 is about — recorded evidence is not
+# rewritten — so the migration must not punch through it, not even to fix a
+# defect of ours. Legacy rows keep a NULL scope and are classified when read,
+# from what they already recorded. New rows always carry their own scope.
 
-MIGRATION = (
-    Path(__file__).resolve().parents[2]
-    / "alembic"
-    / "versions"
-    / "b8c9d0e1f2a3_backup_event_scope.py"
-)
+def _legacy_row(db, *, provider, backup_id, hours_ago, environment=ENV):
+    """Insert a row with a NULL scope, as it was before the column existed.
 
-LEGACY_ROWS = [
-    # The three rows production already holds, plus two shapes the rule must
-    # not get wrong.
-    ("aws-s3 via dokploy postgres backup", "ukip-db/pg/2026-09-19T03-00-00-134Z.sql.gz"),
-    ("aws-s3 via dokploy postgres backup", "ukip-db/pg/2026-09-20T03-00-00-076Z.sql.gz"),
-    ("aws-s3 via dokploy volume backup", "app_ukip-backend/static/vol-2026-09-20T03-05-00-066Z.tar"),
-    ("dokploy", None),
-    ("dokploy", "pg/plain.sql.gz"),
-]
-
-
-def _backfill_sql() -> str:
-    source = MIGRATION.read_text(encoding="utf-8")
-    start = source.index("UPDATE backup_assurance_events")
-    end = source.index('"""', start)
-    return source[start:end].strip()
-
-
-def test_the_backfill_sql_classifies_exactly_like_the_python_rule(tmp_path):
-    connection = sqlite3.connect(tmp_path / "legacy.db")
-    connection.execute(
-        "CREATE TABLE backup_assurance_events "
-        "(id INTEGER PRIMARY KEY, provider TEXT, backup_id TEXT, scope TEXT NOT NULL DEFAULT 'database')"
+    Raw SQL on purpose: through the ORM, `scope=None` means "apply the column
+    default", so the row would come out as `database` and the test would prove
+    nothing. INSERT is allowed — the append-only trigger only refuses UPDATE
+    and DELETE.
+    """
+    completed = (datetime.now(timezone.utc) - timedelta(hours=hours_ago)).replace(tzinfo=None)
+    db.execute(
+        text(
+            "INSERT INTO backup_assurance_events "
+            "(event_type, status, scope, environment, provider, backup_id, "
+            " started_at, completed_at, operator, size_bytes, integrity_ref, created_at) "
+            "VALUES ('backup', 'completed', NULL, :environment, :provider, :backup_id, "
+            " :started_at, :completed_at, 'legacy', 4096, :integrity_ref, :created_at)"
+        ),
+        {
+            "environment": environment,
+            "provider": provider,
+            "backup_id": backup_id,
+            "started_at": completed - timedelta(minutes=1),
+            "completed_at": completed,
+            "integrity_ref": "sha256:" + "1" * 64,
+            # Python-side default, so a raw INSERT has to supply it; every real
+            # row has one.
+            "created_at": completed,
+        },
     )
-    connection.executemany(
-        "INSERT INTO backup_assurance_events (provider, backup_id) VALUES (?, ?)",
-        LEGACY_ROWS,
+    db.commit()
+    stored = db.execute(
+        text("SELECT scope FROM backup_assurance_events ORDER BY id DESC LIMIT 1")
+    ).scalar()
+    assert stored is None, "the fixture must produce a pre-column row, not a defaulted one"
+
+
+def test_a_legacy_dump_still_counts_as_the_database_scope(db_session):
+    _legacy_row(
+        db_session,
+        provider="aws-s3 via dokploy postgres backup",
+        backup_id="ukip-db/pg/2026-09-20T03-00-00-076Z.sql.gz",
+        hours_ago=2,
     )
 
-    connection.execute(_backfill_sql())
+    latest = latest_completed_backup(db_session, ENV)
 
-    rows = connection.execute(
-        "SELECT provider, backup_id, scope FROM backup_assurance_events ORDER BY id"
-    ).fetchall()
-    connection.close()
+    assert latest is not None
+    assert latest.backup_id.endswith(".sql.gz")
 
-    assert [row[2] for row in rows] == [
-        classify_legacy_scope(provider=provider, backup_id=backup_id)
-        for provider, backup_id in LEGACY_ROWS
+
+def test_a_legacy_volume_archive_is_not_mistaken_for_a_dump(db_session):
+    # The row production already holds. Treating it as `database` would be the
+    # original defect, preserved in the data.
+    _legacy_row(
+        db_session,
+        provider="aws-s3 via dokploy volume backup",
+        backup_id="app_ukip-backend/static/vol-2026-09-20T03-05-00-066Z.tar",
+        hours_ago=1,
+    )
+
+    assert latest_completed_backup(db_session, ENV) is None
+    volume = latest_completed_backup(db_session, ENV, scope="volume")
+    assert volume is not None and volume.backup_id.endswith(".tar")
+
+
+def test_the_three_rows_production_holds_classify_as_recorded(db_session):
+    _legacy_row(db_session, provider="aws-s3 via dokploy postgres backup",
+                backup_id="ukip-db/pg/2026-09-19T03-00-00-134Z.sql.gz", hours_ago=26)
+    _legacy_row(db_session, provider="aws-s3 via dokploy postgres backup",
+                backup_id="ukip-db/pg/2026-09-20T03-00-00-076Z.sql.gz", hours_ago=2)
+    _legacy_row(db_session, provider="aws-s3 via dokploy volume backup",
+                backup_id="app_ukip-backend/static/vol.tar", hours_ago=1)
+
+    assert latest_completed_backup(db_session, ENV).backup_id.endswith("076Z.sql.gz")
+    assert latest_completed_backup(db_session, ENV, scope="volume").backup_id.endswith(".tar")
+
+
+def test_a_legacy_volume_archive_cannot_mask_a_stale_legacy_dump(
+    client, auth_headers, db_session
+):
+    # The defect, expressed entirely in rows that predate the column.
+    _legacy_row(db_session, provider="dokploy postgres backup",
+                backup_id="pg/stale.sql.gz", hours_ago=30)
+    _legacy_row(db_session, provider="dokploy volume backup",
+                backup_id="static/fresh.tar", hours_ago=0.2)
+
+    body = client.get(f"/ops/backups/status?environment={ENV}", headers=auth_headers).json()
+
+    assert body["status"] == "critical"
+    assert "backup_stale" in body["reason_codes"]
+    assert body["latest_backup"]["backup_id"] == "pg/stale.sql.gz"
+    assert body["latest_volume_backup"]["backup_id"] == "static/fresh.tar"
+
+
+def test_the_query_and_the_python_classifier_agree_on_legacy_rows(db_session):
+    # One rule, two implementations (SQL filter and classify_legacy_scope);
+    # this is what stops them drifting.
+    rows = [
+        ("aws-s3 via dokploy postgres backup", "ukip-db/pg/a.sql.gz"),
+        ("aws-s3 via dokploy volume backup", "app/static/v.tar"),
+        ("dokploy", "app/static/ukip_static_data-2026.tar"),
+        ("dokploy", None),
+        ("dokploy", "pg/plain.sql.gz"),
     ]
-    # And concretely: the volume archive production already stored is the one
-    # row that must move off the default.
-    assert [row[2] for row in rows] == ["database", "database", "volume", "database", "database"]
+    for index, (provider, backup_id) in enumerate(rows):
+        _legacy_row(
+            db_session,
+            provider=provider,
+            backup_id=backup_id,
+            hours_ago=1,
+            environment=f"{ENV}-{index}",
+        )
+
+    for index, (provider, backup_id) in enumerate(rows):
+        expected = classify_legacy_scope(provider=provider, backup_id=backup_id)
+        environment = f"{ENV}-{index}"
+        for scope in ("database", "volume"):
+            found = latest_completed_backup(db_session, environment, scope=scope)
+            assert (found is not None) == (scope == expected), (provider, backup_id, scope)
+
+
+def test_the_migration_does_not_rewrite_evidence():
+    # Guard against re-introducing the backfill: an UPDATE against this table
+    # is refused by the append-only trigger, in production and in SQLite.
+    migration = (
+        Path(__file__).resolve().parents[2]
+        / "alembic"
+        / "versions"
+        / "b8c9d0e1f2a3_backup_event_scope.py"
+    ).read_text(encoding="utf-8")
+
+    lowered = migration.lower()
+    assert "update backup_assurance_events" not in lowered
+    assert "delete from backup_assurance_events" not in lowered
+    assert "disable trigger" not in lowered
+    assert "session_replication_role" not in lowered
+    # And the column must stay optional: NOT NULL would require a backfill.
+    assert "nullable=True" in migration
