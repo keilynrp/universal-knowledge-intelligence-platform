@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 from attrs import define as _attrs_define
 
 from ..models.backup_event_create_event_type import BackupEventCreateEventType
+from ..models.backup_event_create_scope import BackupEventCreateScope
 from ..models.backup_event_create_status import BackupEventCreateStatus
 from ..types import UNSET, Unset
 
@@ -38,6 +39,7 @@ class BackupEventCreate:
         integrity_ref (None | str | Unset):
         release (None | str | Unset):
         retention_class (None | str | Unset):
+        scope (BackupEventCreateScope | Unset):  Default: BackupEventCreateScope.DATABASE.
         size_bytes (int | None | Unset):
         storage_region (None | str | Unset):
     """
@@ -59,6 +61,7 @@ class BackupEventCreate:
     integrity_ref: None | str | Unset = UNSET
     release: None | str | Unset = UNSET
     retention_class: None | str | Unset = UNSET
+    scope: BackupEventCreateScope | Unset = BackupEventCreateScope.DATABASE
     size_bytes: int | None | Unset = UNSET
     storage_region: None | str | Unset = UNSET
 
@@ -151,6 +154,10 @@ class BackupEventCreate:
         else:
             retention_class = self.retention_class
 
+        scope: str | Unset = UNSET
+        if not isinstance(self.scope, Unset):
+            scope = self.scope.value
+
         size_bytes: int | None | Unset
         if isinstance(self.size_bytes, Unset):
             size_bytes = UNSET
@@ -198,6 +205,8 @@ class BackupEventCreate:
             field_dict["release"] = release
         if retention_class is not UNSET:
             field_dict["retention_class"] = retention_class
+        if scope is not UNSET:
+            field_dict["scope"] = scope
         if size_bytes is not UNSET:
             field_dict["size_bytes"] = size_bytes
         if storage_region is not UNSET:
@@ -344,6 +353,13 @@ class BackupEventCreate:
 
         retention_class = _parse_retention_class(d.pop("retention_class", UNSET))
 
+        _scope = d.pop("scope", UNSET)
+        scope: BackupEventCreateScope | Unset
+        if isinstance(_scope, Unset):
+            scope = UNSET
+        else:
+            scope = BackupEventCreateScope(_scope)
+
         def _parse_size_bytes(data: object) -> int | None | Unset:
             if data is None:
                 return data
@@ -380,6 +396,7 @@ class BackupEventCreate:
             integrity_ref=integrity_ref,
             release=release,
             retention_class=retention_class,
+            scope=scope,
             size_bytes=size_bytes,
             storage_region=storage_region,
         )

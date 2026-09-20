@@ -629,6 +629,10 @@ export type BackupEventCreate = {
      */
     retention_class?: string | null;
     /**
+     * Scope
+     */
+    scope?: 'database' | 'volume';
+    /**
      * Size Bytes
      */
     size_bytes?: number | null;
@@ -725,6 +729,10 @@ export type BackupEventResponse = {
      */
     retention_class: string | null;
     /**
+     * Scope
+     */
+    scope: string;
+    /**
      * Size Bytes
      */
     size_bytes: number | null;
@@ -771,6 +779,7 @@ export type BackupStatusResponse = {
      */
     last_failure_reason: string | null;
     latest_backup: BackupEventResponse | null;
+    latest_volume_backup?: BackupEventResponse | null;
     /**
      * Provider Reachability Source
      */

@@ -2,14 +2,19 @@ import datetime as _dt
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+
 from backend.adapters.enrichment.openalex import _works_last_2_complete_years
 from backend.models import JournalMetric
 
 
-def test_single_head_is_nif_bayes():
+def test_migrations_have_a_single_head():
+    # This used to pin the head id itself, so every unrelated migration broke
+    # it and the habit became "edit the expected id". The invariant worth
+    # guarding is that the history does not fork: a second head is what breaks
+    # `alembic upgrade head` in the production entrypoint.
     cfg = Config("alembic.ini")
     heads = set(ScriptDirectory.from_config(cfg).get_heads())
-    assert heads == {"d1e2f3a4b5c6"}, f"expected single head d1e2f3a4b5c6, got {heads}"
+    assert len(heads) == 1, f"expected a single migration head, got {sorted(heads)}"
 
 
 def test_journalmetric_has_bayes_columns():
@@ -48,8 +53,8 @@ def test_works_last_2_complete_years_filters_non_numeric_works_count():
 
 
 def test_upsert_persists_works_2yr(db_session):
-    from backend.services.journal_metrics_service import upsert_journal_metric
     from backend.schemas_enrichment import JournalMetrics
+    from backend.services.journal_metrics_service import upsert_journal_metric
     jm = JournalMetrics(issn_l="1234-5678", two_yr_mean_citedness=3.0, works_2yr=120)
     row = upsert_journal_metric(db_session, jm, org_id=None)
     assert row.works_2yr == 120
@@ -61,7 +66,9 @@ def _mk(db, **kw):
 
 
 def test_bayes_shrinks_small_journal_toward_field(db_session):
-    from backend.analyzers.journal_normalization_bayes import normalize_impact_factors_bayes
+    from backend.analyzers.journal_normalization_bayes import (
+        normalize_impact_factors_bayes,
+    )
     for i in range(6):
         _mk(db_session, issn_l=f"A-{i}", nif_field="Medicine",
             two_yr_mean_citedness=5.0, works_2yr=400)
@@ -76,7 +83,9 @@ def test_bayes_shrinks_small_journal_toward_field(db_session):
 
 
 def test_bayes_large_journal_barely_moves(db_session):
-    from backend.analyzers.journal_normalization_bayes import normalize_impact_factors_bayes
+    from backend.analyzers.journal_normalization_bayes import (
+        normalize_impact_factors_bayes,
+    )
     for i in range(6):
         _mk(db_session, issn_l=f"B-{i}", nif_field="Physics",
             two_yr_mean_citedness=5.0, works_2yr=800)
@@ -88,7 +97,9 @@ def test_bayes_large_journal_barely_moves(db_session):
 
 
 def test_bayes_skips_rows_without_works_2yr(db_session):
-    from backend.analyzers.journal_normalization_bayes import normalize_impact_factors_bayes
+    from backend.analyzers.journal_normalization_bayes import (
+        normalize_impact_factors_bayes,
+    )
     r = _mk(db_session, issn_l="C-1", nif_field="Chemistry",
             two_yr_mean_citedness=4.0, works_2yr=None)
     normalize_impact_factors_bayes(db_session, org_id=None)
@@ -96,7 +107,9 @@ def test_bayes_skips_rows_without_works_2yr(db_session):
 
 
 def test_bayes_zero_citedness_ci_nonnegative(db_session):
-    from backend.analyzers.journal_normalization_bayes import normalize_impact_factors_bayes
+    from backend.analyzers.journal_normalization_bayes import (
+        normalize_impact_factors_bayes,
+    )
     for i in range(6):
         _mk(db_session, issn_l=f"D-{i}", nif_field="Biology",
             two_yr_mean_citedness=4.0, works_2yr=300)
@@ -107,13 +120,15 @@ def test_bayes_zero_citedness_ci_nonnegative(db_session):
 
 
 def test_bayes_small_bucket_uses_global_prior(db_session):
-    from backend.analyzers.journal_normalization_bayes import normalize_impact_factors_bayes
+    from backend.analyzers.journal_normalization_bayes import (
+        normalize_impact_factors_bayes,
+    )
     for i in range(8):
         _mk(db_session, issn_l=f"E-{i}", nif_field="Medicine",
             two_yr_mean_citedness=5.0, works_2yr=400)
     lone = _mk(db_session, issn_l="E-lone", nif_field="Mathematics",
                two_yr_mean_citedness=3.0, works_2yr=50)
-    n = normalize_impact_factors_bayes(db_session, org_id=None)
+    normalize_impact_factors_bayes(db_session, org_id=None)
     assert lone.nif_bayes is not None   # computed via global-prior fallback, not skipped
 
 

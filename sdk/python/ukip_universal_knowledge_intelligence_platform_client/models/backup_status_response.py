@@ -7,6 +7,7 @@ from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
 from ..models.backup_status_response_status import BackupStatusResponseStatus
+from ..types import UNSET, Unset
 
 if TYPE_CHECKING:
     from ..models.backup_event_response import BackupEventResponse
@@ -31,6 +32,7 @@ class BackupStatusResponse:
         reason_codes (list[str]):
         rpo_hours (int):
         status (BackupStatusResponseStatus):
+        latest_volume_backup (BackupEventResponse | None | Unset):
     """
 
     age_hours: float | None
@@ -45,6 +47,7 @@ class BackupStatusResponse:
     reason_codes: list[str]
     rpo_hours: int
     status: BackupStatusResponseStatus
+    latest_volume_backup: BackupEventResponse | None | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -82,6 +85,14 @@ class BackupStatusResponse:
 
         status = self.status.value
 
+        latest_volume_backup: dict[str, Any] | None | Unset
+        if isinstance(self.latest_volume_backup, Unset):
+            latest_volume_backup = UNSET
+        elif isinstance(self.latest_volume_backup, BackupEventResponse):
+            latest_volume_backup = self.latest_volume_backup.to_dict()
+        else:
+            latest_volume_backup = self.latest_volume_backup
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -100,6 +111,8 @@ class BackupStatusResponse:
                 "status": status,
             }
         )
+        if latest_volume_backup is not UNSET:
+            field_dict["latest_volume_backup"] = latest_volume_backup
 
         return field_dict
 
@@ -166,6 +179,23 @@ class BackupStatusResponse:
 
         status = BackupStatusResponseStatus(d.pop("status"))
 
+        def _parse_latest_volume_backup(data: object) -> BackupEventResponse | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                latest_volume_backup_type_0 = BackupEventResponse.from_dict(data)
+
+                return latest_volume_backup_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(BackupEventResponse | None | Unset, data)
+
+        latest_volume_backup = _parse_latest_volume_backup(d.pop("latest_volume_backup", UNSET))
+
         backup_status_response = cls(
             age_hours=age_hours,
             critical_after_hours=critical_after_hours,
@@ -179,6 +209,7 @@ class BackupStatusResponse:
             reason_codes=reason_codes,
             rpo_hours=rpo_hours,
             status=status,
+            latest_volume_backup=latest_volume_backup,
         )
 
         backup_status_response.additional_properties = d

@@ -1,4 +1,3 @@
-import json
 import pathlib
 import re
 
@@ -16,21 +15,24 @@ def test_single_alembic_head_after_migration():
     revs, downs = set(), set()
     for f in versions.glob("*.py"):
         t = f.read_text(encoding="utf-8")
-        for m in re.finditer(r'^revision\s*(?::[^=]*)?=\s*["\']([^"\']+)', t, re.M):
+        for m in re.finditer(r'^revision\s*(?::[^=]*)?=\s*["\']([^"\']+)', t, re.MULTILINE):
             revs.add(m.group(1))
         # Capture ALL revision ids on each down_revision line — handles plain
         # strings, typed annotations, AND tuple forms like ("x","y") in the repo.
         # Pattern accepts any alphanumeric ID (hex OR mixed like eng1prereq00001).
-        for m in re.finditer(r"down_revision[^=]*=.*?$", t, re.M):
+        for m in re.finditer(r"down_revision[^=]*=.*?$", t, re.MULTILINE):
             for rid in re.findall(r'["\']([a-zA-Z0-9_]{4,})["\']', m.group(0)):
                 downs.add(rid)
     heads = revs - downs
-    assert heads == {"d1e2f3a4b5c6"}, f"expected single head d1e2f3a4b5c6, got {heads}"
+    # Pinning the head id broke this on every unrelated migration; the
+    # invariant that matters is that the history does not fork.
+    assert len(heads) == 1, f"expected a single migration head, got {sorted(heads)}"
 
 
 def test_migration_backfills_issn_from_attributes(tmp_path):
     """Apply the migration's upgrade() against in-memory SQLite and confirm backfill."""
     import importlib.util
+
     import sqlalchemy as sa
     from alembic.migration import MigrationContext
     from alembic.operations import Operations

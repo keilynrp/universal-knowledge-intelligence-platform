@@ -1,7 +1,22 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, Column, ForeignKey, Integer, String, Boolean, DateTime, Text, Float, UniqueConstraint, Index, event, DDL
+from sqlalchemy import (
+    DDL,
+    BigInteger,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    event,
+)
 from sqlalchemy.orm import Session
+
 from .backup_assurance_ddl import (
     POSTGRES_CREATE_DELETE_TRIGGER,
     POSTGRES_CREATE_FUNCTION,
@@ -1240,6 +1255,15 @@ class BackupAssuranceEvent(Base):
     id = Column(Integer, primary_key=True, index=True)
     event_type = Column(String(30), nullable=False, index=True)
     status = Column(String(20), nullable=False, index=True)
+    # What this event backed up. Freshness is judged per scope: a volume
+    # archive must never stand in for a missing database dump (#320).
+    scope = Column(
+        String(20),
+        nullable=False,
+        index=True,
+        default="database",
+        server_default="database",
+    )
     environment = Column(String(50), nullable=False, index=True)
     provider = Column(String(80), nullable=False)
     backup_id = Column(String(200), nullable=True, index=True)

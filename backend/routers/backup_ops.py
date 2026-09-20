@@ -56,6 +56,7 @@ def _event_response(event: models.BackupAssuranceEvent) -> BackupEventResponse:
         id=event.id,
         event_type=event.event_type,
         status=event.status,
+        scope=event.scope,
         environment=event.environment,
         provider=event.provider,
         backup_id=event.backup_id,
@@ -127,6 +128,7 @@ def backup_status(
 ):
     evaluated_at = utc_now()
     latest = latest_completed_backup(db, environment)
+    latest_volume = latest_completed_backup(db, environment, scope="volume")
     latest_failure = latest_failed_backup(db, environment)
     reachability = resolve_provider_reachability(now=evaluated_at)
     provider_reachable = reachability["reachable"]
@@ -150,4 +152,5 @@ def backup_status(
         ),
         "last_failure_reason": failure_reason_from_event(latest_failure),
         "latest_backup": _event_response(latest) if latest else None,
+        "latest_volume_backup": _event_response(latest_volume) if latest_volume else None,
     }

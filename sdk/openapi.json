@@ -1258,6 +1258,15 @@
             ],
             "title": "Retention Class"
           },
+          "scope": {
+            "default": "database",
+            "enum": [
+              "database",
+              "volume"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
           "size_bytes": {
             "anyOf": [
               {
@@ -1474,6 +1483,10 @@
             ],
             "title": "Retention Class"
           },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
           "size_bytes": {
             "anyOf": [
               {
@@ -1516,6 +1529,7 @@
           "id",
           "event_type",
           "status",
+          "scope",
           "environment",
           "provider",
           "backup_id",
@@ -1594,6 +1608,16 @@
             "title": "Last Failure Reason"
           },
           "latest_backup": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BackupEventResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_volume_backup": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/BackupEventResponse"

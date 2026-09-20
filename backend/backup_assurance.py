@@ -102,6 +102,26 @@ def resolve_provider_reachability(
         now=now,
     )
 
+# What a backup event covers. `database` governs the overall freshness
+# verdict; `volume` is reported alongside it but cannot stand in for it.
+VALID_SCOPES = ("database", "volume")
+DEFAULT_SCOPE = "database"
+
+
+def classify_legacy_scope(*, provider: str | None, backup_id: str | None) -> str:
+    """Infer the scope of a row written before the column existed.
+
+    Production holds three such rows: two PostgreSQL dumps and one volume
+    archive. Defaulting all of them to `database` would mislabel the archive as
+    the object that governs freshness — the exact defect this change fixes — so
+    the backfill reads what each row already recorded about itself.
+    """
+    haystack = f"{provider or ''} {backup_id or ''}".casefold()
+    if "volume" in haystack or haystack.rstrip().endswith(".tar"):
+        return "volume"
+    return DEFAULT_SCOPE
+
+
 _VALID_EVENT_STATUSES = {
     "backup": {"completed", "failed"},
     "restore_drill": {"passed", "passed_with_risk", "failed"},
@@ -215,7 +235,11 @@ def record_event(
     achieved_rpo_hours: float | None = None,
     achieved_rto_hours: float | None = None,
     evidence: dict[str, Any] | None = None,
+    scope: str | None = None,
 ) -> BackupAssuranceEvent:
+    scope = DEFAULT_SCOPE if scope is None else scope
+    if scope not in VALID_SCOPES:
+        raise ValueError(f"Unsupported scope: {scope!r}")
     if event_type not in _VALID_EVENT_STATUSES:
         raise ValueError(f"Unsupported event_type: {event_type!r}")
     if status not in _VALID_EVENT_STATUSES[event_type]:
@@ -228,6 +252,7 @@ def record_event(
     event = BackupAssuranceEvent(
         event_type=event_type,
         status=status,
+        scope=scope,
         environment=environment,
         provider=provider,
         backup_id=backup_id,
@@ -302,13 +327,24 @@ def evaluate_backup_freshness(
 def latest_completed_backup(
     db: Session,
     environment: str,
+    scope: str = DEFAULT_SCOPE,
 ) -> BackupAssuranceEvent | None:
+    """The newest completed backup *of that scope*.
+
+    Scoped deliberately: the volume job runs minutes after the database job, so
+    an unscoped query reports the volume archive as the latest backup and lets a
+    10 KB tar of an empty directory hold the freshness signal green while the
+    database goes unbacked (#320).
+    """
+    if scope not in VALID_SCOPES:
+        raise ValueError(f"Unsupported scope: {scope!r}")
     return (
         db.query(BackupAssuranceEvent)
         .filter(
             BackupAssuranceEvent.event_type == "backup",
             BackupAssuranceEvent.status == "completed",
             BackupAssuranceEvent.environment == environment,
+            BackupAssuranceEvent.scope == scope,
             BackupAssuranceEvent.completed_at.is_not(None),
         )
         .order_by(

@@ -98,6 +98,16 @@ encryption state, storage region, retention class, and provider state. Do not
 include database URLs, passwords, tokens, credentials, connection strings,
 bucket keys, or backup contents.
 
+**Set `scope` on every event**: `database` for a PostgreSQL dump (the default)
+and `volume` for a `ukip_static_data` archive. Freshness is judged per scope
+and the database scope governs the overall verdict, so a volume archive can
+never stand in for a missing dump. Before the field existed, the status
+endpoint reported whichever job finished last — with the volume job running
+five minutes after the database job, a failing dump would have been masked by
+a 10 KB archive of an empty directory. `GET /ops/backups/status` reports the
+newest volume archive separately in `latest_volume_backup`; an environment with
+no volume backup is not thereby unhealthy.
+
 The immutable `operator` field is derived from the authenticated UKIP identity.
 Any provider-reported actor belongs only in clearly labeled non-secret evidence.
 
