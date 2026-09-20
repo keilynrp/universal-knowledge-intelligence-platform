@@ -30,6 +30,7 @@ from .avatar_payload import AvatarPayload
 from .backup_event_create import BackupEventCreate
 from .backup_event_create_event_type import BackupEventCreateEventType
 from .backup_event_create_evidence_type_0 import BackupEventCreateEvidenceType0
+from .backup_event_create_scope import BackupEventCreateScope
 from .backup_event_create_status import BackupEventCreateStatus
 from .backup_event_response import BackupEventResponse
 from .backup_event_response_evidence_type_0 import BackupEventResponseEvidenceType0
@@ -304,6 +305,7 @@ __all__ = (
     "BackupEventCreate",
     "BackupEventCreateEventType",
     "BackupEventCreateEvidenceType0",
+    "BackupEventCreateScope",
     "BackupEventCreateStatus",
     "BackupEventResponse",
     "BackupEventResponseEvidenceType0",

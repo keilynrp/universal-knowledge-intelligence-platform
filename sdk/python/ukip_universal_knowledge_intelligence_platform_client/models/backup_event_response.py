@@ -35,6 +35,7 @@ class BackupEventResponse:
         provider (str):
         release (None | str):
         retention_class (None | str):
+        scope (str):
         size_bytes (int | None):
         started_at (None | str):
         status (str):
@@ -59,6 +60,7 @@ class BackupEventResponse:
     provider: str
     release: None | str
     retention_class: None | str
+    scope: str
     size_bytes: int | None
     started_at: None | str
     status: str
@@ -120,6 +122,8 @@ class BackupEventResponse:
         retention_class: None | str
         retention_class = self.retention_class
 
+        scope = self.scope
+
         size_bytes: int | None
         size_bytes = self.size_bytes
 
@@ -153,6 +157,7 @@ class BackupEventResponse:
                 "provider": provider,
                 "release": release,
                 "retention_class": retention_class,
+                "scope": scope,
                 "size_bytes": size_bytes,
                 "started_at": started_at,
                 "status": status,
@@ -277,6 +282,8 @@ class BackupEventResponse:
 
         retention_class = _parse_retention_class(d.pop("retention_class"))
 
+        scope = d.pop("scope")
+
         def _parse_size_bytes(data: object) -> int | None:
             if data is None:
                 return data
@@ -319,6 +326,7 @@ class BackupEventResponse:
             provider=provider,
             release=release,
             retention_class=retention_class,
+            scope=scope,
             size_bytes=size_bytes,
             started_at=started_at,
             status=status,
