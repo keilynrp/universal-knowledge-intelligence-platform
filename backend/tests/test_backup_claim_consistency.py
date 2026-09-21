@@ -21,7 +21,7 @@ HONEST_STATUS = (
     "Provider configured and two scheduled backup cycles evidenced; the first "
     "isolated restore drill (2026-09-21) restored the backup within RTO but failed "
     "two required checks (RPO of the chosen recovery point, tenant isolation) and "
-    "is recorded as failed; the readiness dossier awaits owner approval."
+    "is recorded as failed; the owner approved the readiness dossier on 2026-09-21."
 )
 
 
@@ -105,10 +105,10 @@ def test_er_bcp_001_remains_specified_until_a_drill_passes():
     assert re.search(r"\| Recovery medido \|[^\n]*\| specified \|", traceability)
 
 
-def test_next_gate_requires_owner_approval_and_a_passing_drill():
+def test_next_gate_requires_a_passing_drill():
     expected_gate = (
-        "Approve the readiness dossier, decide how tenant isolation is "
-        "demonstrated, and run an isolated restore drill that passes."
+        "Decide how tenant isolation is demonstrated, and run an isolated "
+        "restore drill that passes."
     )
     assert _bcp_control().next_gate == expected_gate
     assert expected_gate in _read("docs/product/ENTERPRISE_CONTROL_REGISTER.md")

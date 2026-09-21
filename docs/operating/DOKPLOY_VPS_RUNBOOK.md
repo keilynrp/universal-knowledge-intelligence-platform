@@ -34,7 +34,7 @@ still intentionally conservative:
 - Backup, restore, and disaster recovery procedure:
   [BACKUP_RESTORE_RUNBOOK.md](BACKUP_RESTORE_RUNBOOK.md)
 
-Provider provisioning is complete and two scheduled backup cycles are evidenced. The first isolated restore drill (2026-09-21) is recorded as failed; owner approval of the evidence and a passing drill remain pending operator actions. See [ER-BCP-001-READINESS-EVIDENCE-2026-09-21.md](ER-BCP-001-READINESS-EVIDENCE-2026-09-21.md). Do not treat this document or a configured checkbox as passing recovery evidence.
+Provider provisioning is complete and two scheduled backup cycles are evidenced. The first isolated restore drill (2026-09-21) is recorded as failed and its evidence was approved on 2026-09-21; a passing drill remains among the pending operator actions. See [ER-BCP-001-READINESS-EVIDENCE-2026-09-21.md](ER-BCP-001-READINESS-EVIDENCE-2026-09-21.md). Do not treat this document or a configured checkbox as passing recovery evidence.
 
 ## Before Touching the VPS
 

@@ -11,7 +11,7 @@ For the full step-by-step rollout path, use:
 This guide defines the minimum operational bar for a UKIP "pilot production"
 deployment on a VPS managed with Dokploy.
 
-Provider provisioning is complete and two scheduled backup cycles are evidenced. The first isolated restore drill (2026-09-21) is recorded as failed; owner approval of the evidence and a passing drill remain pending operator actions. See [ER-BCP-001-READINESS-EVIDENCE-2026-09-21.md](ER-BCP-001-READINESS-EVIDENCE-2026-09-21.md).
+Provider provisioning is complete and two scheduled backup cycles are evidenced. The first isolated restore drill (2026-09-21) is recorded as failed and its evidence was approved on 2026-09-21; a passing drill remains among the pending operator actions. See [ER-BCP-001-READINESS-EVIDENCE-2026-09-21.md](ER-BCP-001-READINESS-EVIDENCE-2026-09-21.md).
 
 ## Target Topology
 

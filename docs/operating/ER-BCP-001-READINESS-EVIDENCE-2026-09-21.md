@@ -21,7 +21,7 @@ maturity change.
 - Operator: the repository owner, using the platform admin identity for
   `POST /ops/backups/events` (the event's `operator` field is derived from the
   authenticated identity, not supplied by the client)
-- Approver: _pending — owner decision_
+- Approver: repository owner (`keilynrp`), approved 2026-09-21 — see the approval section at the end
 - Evidence retention target: 12 months from dossier date (until 2027-09-21)
 
 ## 1. Provider configuration evidence
@@ -262,3 +262,17 @@ was written.
 Still open, unchanged: residual risks 1–6. `ALTER TABLE … DISABLE TRIGGER`
 and table ownership remain ways around any trigger; that is a database-privilege
 question and is added here as residual risk 8.
+
+## Approval — 2026-09-21
+
+The repository owner (`keilynrp`) reviewed this dossier, including the
+addendum, and approved it on 2026-09-21. Approval is of the evidence as
+recorded: that the provider configuration, both backup cycles and the first
+isolated restore drill happened as described, and that the drill is **failed**
+on two required checks.
+
+Approval does not promote the control. ER-BCP-001 stays `specified`. The next
+gate is a decision on how tenant isolation is demonstrated (residual risk 1)
+and an isolated restore drill that passes. With this approval, issue #320's
+exit condition is met and the owner authorized closing it.
+
