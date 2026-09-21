@@ -23,7 +23,7 @@ prefer an honest register over an impressive one.
 | Retention policies | Configurable per-org retention + purge mechanism (operator-triggered) | EPIC-016 Slice 4 (PR #43); `docs/operating/DATA_LIFECYCLE_POLICY.md` |
 | Secrets rotation program | Staged dual-key zero-downtime rotation; 90-day cadence; evidence table; first production rotation executed 2026-06-06 | EPIC-017 (PRs #48–#51); `docs/operating/SECRETS_ROTATION_RUNBOOK.md`; `GET /ops/secrets`; `secret_rotation_events` table |
 | Operational health & secrets posture checks | Automated checks flag insecure defaults, missing encryption key, stale (>90d) or lingering retiring keys | `GET /ops/checks`; `backend/ops_checks.py` |
-| Backup & restore program | RPO 24h / RTO 4h repository controls, freshness monitor, restore validator, and operator runbook. **Repository controls and runbook implemented; provider configuration, two successful backup cycles, and the first isolated restore drill remain pending.** | US-073 / ER-BCP-001; `docs/operating/BACKUP_RESTORE_RUNBOOK.md`; backup assurance tests |
+| Backup & restore program | RPO 24h / RTO 4h repository controls, freshness monitor, restore validator, and operator runbook. **Provider configured and two scheduled backup cycles evidenced; the first isolated restore drill (2026-09-21) restored the backup within RTO but failed two required checks (RPO of the chosen recovery point, tenant isolation) and is recorded as failed; the readiness dossier awaits owner approval.** | US-073 / ER-BCP-001; `docs/operating/BACKUP_RESTORE_RUNBOOK.md`; backup assurance tests |
 | CI security gates | CodeQL SAST, gitleaks, pip-audit, npm-audit, Trivy image scan, SBOM. **Implemented; operator enforcement steps pending** | EPIC-019; `.github/workflows/` |
 | Optional telemetry / LLM egress off by default | Sentry gated by `SENTRY_ENABLED` (default false); LLM providers engaged only via customer-activated AI integration | `backend/telemetry.py`; [SUBPROCESSOR_REGISTER.md](SUBPROCESSOR_REGISTER.md) |
 
@@ -34,7 +34,7 @@ prefer an honest register over an impressive one.
 | Formal incident response plan (incl. breach-notification SLA backing) | ER-IR-001 | Open — DPA breach clause carries a placeholder timeframe until this lands |
 | External penetration test | ER-ASSURE-001 | Open — no third-party assessment report available yet |
 | Data residency commitments | ER-DEP-001 | Open — residency follows hosting region; no contractual commitment defined |
-| Backup provider configuration and evidence cycles | US-073 / ER-BCP-001 | Pending — configure the provider, observe two successful backup cycles, and complete the first isolated restore drill |
+| Backup/restore evidence approval and a passing drill | US-073 / ER-BCP-001 | Pending — provider configured and two backup cycles evidenced; the first isolated restore drill (2026-09-21) is recorded as failed; owner approval of the dossier and a passing drill remain |
 | Professional legal review of this pack | EPIC-020 | Pending — gap register `privacy_legal_pack` = partial |
 
 ## Questions

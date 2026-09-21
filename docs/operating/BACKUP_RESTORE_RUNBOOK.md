@@ -1,10 +1,7 @@
 # UKIP Backup, Restore, and Disaster Recovery Runbook
 
 This runbook is the repository procedure for protecting and recovering UKIP.
-It does not prove that provider resources are provisioned or that a restore
-drill has passed. Provider provisioning, two successful backup cycles, and the
-first isolated restore drill remain pending operator actions until evidence is
-completed and approved.
+It does not prove that a restore drill has passed. The provider is configured and two scheduled backup cycles are evidenced; the first isolated restore drill (2026-09-21) is recorded as failed. See [ER-BCP-001-READINESS-EVIDENCE-2026-09-21.md](ER-BCP-001-READINESS-EVIDENCE-2026-09-21.md).
 
 ## Objectives and Thresholds
 

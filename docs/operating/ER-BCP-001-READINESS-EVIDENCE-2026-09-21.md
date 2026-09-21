@@ -247,3 +247,18 @@ Recorded as `restore_drill` event **id 4**, status **`failed`**.
   `docs/product/ENTERPRISE_CONTROL_REGISTER.md` and
   `backend/enterprise_controls.py` in the same change.
 - Register and control updated in this change: NO (nothing to update).
+
+## Addendum — 2026-09-21, after the dossier
+
+The sections above are unchanged. The following happened after this dossier
+was written.
+
+| Item | Change | Reference |
+| --- | --- | --- |
+| Residual risk 7, "CI never runs migrations" | **Resolved.** A blocking `migration-rehearsal (pg18)` job runs the newest migrations over seeded rows, downgrades and re-upgrades the newest, and fails any UPDATE/DELETE/TRUNCATE on an append-only table even when no row matches. It fails on the #359 migration that caused the Phase C incident. | #361, PR #364 |
+| New finding: `TRUNCATE` bypassed the append-only control | Row-level triggers never fire on `TRUNCATE`; one statement could empty `backup_assurance_events`. **Resolved** with a statement-level `BEFORE TRUNCATE` trigger, deployed to production as `460b8ec` (migration `c9d0e1f2a3b4`). | #363, PR #365 |
+| Register reconciliation (§8) | `ENTERPRISE_CONTROL_REGISTER.md`, `backend/enterprise_controls.py`, the traceability matrix and the legal pack now state the drill outcome instead of "remain pending". Maturity is **still `specified`**; the next gate is owner approval of this dossier, a decision on how tenant isolation is demonstrated, and a passing drill. | #320 |
+
+Still open, unchanged: residual risks 1–6. `ALTER TABLE … DISABLE TRIGGER`
+and table ownership remain ways around any trigger; that is a database-privilege
+question and is added here as residual risk 8.
