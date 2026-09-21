@@ -179,8 +179,16 @@ Recorded as `restore_drill` event **id 4**, status **`failed`**.
 - To delete: the drill container and its network, the downloaded archive and
   its decompressed copy, the restore log, the metadata file and the `0600`
   connection file. The static volume was already deleted during the drill.
-- Status: **pending at the time of writing.** It will be recorded here when it
-  is done.
+- Status: **done, 2026-09-21.** The operator confirmed the listing and the
+  script removed the container, the network and the directory. Checked
+  independently afterwards: no `ukip-drill` container, network or volume
+  remains; the directory is gone; no `*.pgc`, downloaded archive or connection
+  file is left under the operator's home or `/tmp`. The drill connection string
+  was never exported in a shell, and the container credential died with the
+  container.
+- The first, failed attempt had run under `root`. Its working directory was
+  moved to the operator's home before the second attempt, so this cleanup
+  covered it too.
 
 ## 5. Provider reachability / freshness
 
