@@ -6,6 +6,7 @@ SQLITE_DELETE_TRIGGER = "trg_backup_assurance_events_no_delete"
 POSTGRES_FUNCTION = "reject_backup_assurance_event_mutation"
 POSTGRES_UPDATE_TRIGGER = "trg_backup_assurance_events_no_update"
 POSTGRES_DELETE_TRIGGER = "trg_backup_assurance_events_no_delete"
+POSTGRES_TRUNCATE_TRIGGER = "trg_backup_assurance_events_no_truncate"
 
 # NOTE: ``IF NOT EXISTS`` makes SQLite trigger creation idempotent without
 # weakening the append-only enforcement. It matters for the test harness, where
@@ -55,12 +56,26 @@ BEFORE DELETE ON {BACKUP_ASSURANCE_TABLE}
 FOR EACH ROW EXECUTE FUNCTION {POSTGRES_FUNCTION}()
 """
 
+# Row-level triggers never fire on TRUNCATE, and PostgreSQL rejects
+# ``FOR EACH ROW ... ON TRUNCATE``, so without this statement-level trigger one
+# TRUNCATE empties the evidence table (#363). SQLite has no TRUNCATE; its
+# unqualified DELETE still fires the row trigger above.
+POSTGRES_CREATE_TRUNCATE_TRIGGER = f"""
+CREATE TRIGGER {POSTGRES_TRUNCATE_TRIGGER}
+BEFORE TRUNCATE ON {BACKUP_ASSURANCE_TABLE}
+FOR EACH STATEMENT EXECUTE FUNCTION {POSTGRES_FUNCTION}()
+"""
+
 POSTGRES_DROP_UPDATE_TRIGGER = (
     f"DROP TRIGGER IF EXISTS {POSTGRES_UPDATE_TRIGGER} "
     f"ON {BACKUP_ASSURANCE_TABLE}"
 )
 POSTGRES_DROP_DELETE_TRIGGER = (
     f"DROP TRIGGER IF EXISTS {POSTGRES_DELETE_TRIGGER} "
+    f"ON {BACKUP_ASSURANCE_TABLE}"
+)
+POSTGRES_DROP_TRUNCATE_TRIGGER = (
+    f"DROP TRIGGER IF EXISTS {POSTGRES_TRUNCATE_TRIGGER} "
     f"ON {BACKUP_ASSURANCE_TABLE}"
 )
 POSTGRES_DROP_FUNCTION = f"DROP FUNCTION IF EXISTS {POSTGRES_FUNCTION}()"
