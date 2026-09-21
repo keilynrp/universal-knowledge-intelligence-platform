@@ -172,6 +172,16 @@ Recorded as `restore_drill` event **id 4**, status **`failed`**.
   are rebuilt from PostgreSQL and are outside the backup boundary. No re-index
   result is claimed.
 
+### Drill sanitization (runbook §11)
+
+- Kept outside the drill directory, non-secret: the validator report and the
+  static-volume restore listing.
+- To delete: the drill container and its network, the downloaded archive and
+  its decompressed copy, the restore log, the metadata file and the `0600`
+  connection file. The static volume was already deleted during the drill.
+- Status: **pending at the time of writing.** It will be recorded here when it
+  is done.
+
 ## 5. Provider reachability / freshness
 
 - Mechanism: `scripts/ukip-backup-reachability-probe.sh`, run on the
