@@ -118,6 +118,18 @@ def test_guard_allows_everything_else(statement):
     assert rehearsal.violation(statement, APPEND_ONLY) is None
 
 
+def test_a_downgrade_may_drop_only_the_triggers_its_migration_created():
+    drop_new = "DROP TRIGGER IF EXISTS trg_new ON backup_assurance_events"
+    drop_old = "DROP TRIGGER IF EXISTS trg_old ON backup_assurance_events"
+    allowed = frozenset({"trg_new"})
+
+    assert rehearsal.violation(drop_new, APPEND_ONLY, allowed) is None
+    assert rehearsal.violation(drop_old, APPEND_ONLY, allowed) is not None
+    assert rehearsal.violation(drop_new, APPEND_ONLY) is not None
+    disable = "ALTER TABLE backup_assurance_events DISABLE TRIGGER trg_new"
+    assert rehearsal.violation(disable, APPEND_ONLY, allowed) is not None
+
+
 def test_guard_only_refuses_the_operations_the_trigger_refuses():
     delete_only = {"events": {"DELETE"}}
     update_only = {"events": {"UPDATE"}}

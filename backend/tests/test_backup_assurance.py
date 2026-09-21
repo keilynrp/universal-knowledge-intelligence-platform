@@ -22,6 +22,11 @@ from backend.backup_assurance import (
 pytestmark = pytest.mark.postgres
 
 
+def _utc_naive(*parts: int) -> datetime:
+    """A UTC wall-clock time without tzinfo, the form the model persists."""
+    return datetime(*parts, tzinfo=timezone.utc).replace(tzinfo=None)
+
+
 def _backend_test_fixtures():
     expected = Path(__file__).with_name("conftest.py").resolve()
     for module in sys.modules.values():
@@ -42,9 +47,30 @@ def test_postgres_create_all_registers_append_only_function_and_triggers():
 
     rendered = "\n".join(statements)
     assert "CREATE FUNCTION reject_backup_assurance_event_mutation" in rendered
-    assert rendered.count("CREATE TRIGGER trg_backup_assurance_events_no_") == 2
+    assert rendered.count("CREATE TRIGGER trg_backup_assurance_events_no_") == 3
     assert "BEFORE UPDATE ON backup_assurance_events" in rendered
     assert "BEFORE DELETE ON backup_assurance_events" in rendered
+    # Row triggers cannot fire on TRUNCATE, so this one must be per statement (#363).
+    assert (
+        "BEFORE TRUNCATE ON backup_assurance_events\nFOR EACH STATEMENT" in rendered
+    )
+
+
+def test_postgres_drop_removes_the_truncate_trigger_before_its_function():
+    statements = []
+    engine = create_mock_engine(
+        "postgresql+psycopg2://",
+        lambda sql, *_args, **_kwargs: statements.append(str(sql)),
+    )
+
+    models.BackupAssuranceEvent.__table__.drop(engine)
+
+    rendered = [" ".join(s.split()) for s in statements]
+    drop_truncate = next(
+        i for i, s in enumerate(rendered) if "no_truncate" in s and "DROP TRIGGER" in s
+    )
+    drop_function = next(i for i, s in enumerate(rendered) if "DROP FUNCTION" in s)
+    assert drop_truncate < drop_function
 
 
 def test_postgres_test_cleanup_drops_deletes_and_recreates_triggers(monkeypatch):
@@ -55,8 +81,6 @@ def test_postgres_test_cleanup_drops_deletes_and_recreates_triggers(monkeypatch)
         def execute(self, statement):
             rendered = " ".join(str(statement).split())
             statements.append(rendered)
-            if rendered == "DELETE FROM backup_assurance_events":
-                return None
 
     monkeypatch.setattr(test_fixtures, "_IS_POSTGRES", True)
     test_fixtures._delete_test_table(
@@ -65,17 +89,25 @@ def test_postgres_test_cleanup_drops_deletes_and_recreates_triggers(monkeypatch)
     )
 
     assert statements == [
-        "DROP TRIGGER IF EXISTS trg_backup_assurance_events_no_update "
-        "ON backup_assurance_events",
-        "DROP TRIGGER IF EXISTS trg_backup_assurance_events_no_delete "
-        "ON backup_assurance_events",
+        (
+            "DROP TRIGGER IF EXISTS trg_backup_assurance_events_no_update "
+            "ON backup_assurance_events"
+        ),
+        (
+            "DROP TRIGGER IF EXISTS trg_backup_assurance_events_no_delete "
+            "ON backup_assurance_events"
+        ),
         "DELETE FROM backup_assurance_events",
-        "CREATE TRIGGER trg_backup_assurance_events_no_update "
-        "BEFORE UPDATE ON backup_assurance_events FOR EACH ROW "
-        "EXECUTE FUNCTION reject_backup_assurance_event_mutation()",
-        "CREATE TRIGGER trg_backup_assurance_events_no_delete "
-        "BEFORE DELETE ON backup_assurance_events FOR EACH ROW "
-        "EXECUTE FUNCTION reject_backup_assurance_event_mutation()",
+        (
+            "CREATE TRIGGER trg_backup_assurance_events_no_update "
+            "BEFORE UPDATE ON backup_assurance_events FOR EACH ROW "
+            "EXECUTE FUNCTION reject_backup_assurance_event_mutation()"
+        ),
+        (
+            "CREATE TRIGGER trg_backup_assurance_events_no_delete "
+            "BEFORE DELETE ON backup_assurance_events FOR EACH ROW "
+            "EXECUTE FUNCTION reject_backup_assurance_event_mutation()"
+        ),
     ]
 
 
@@ -133,8 +165,8 @@ def test_record_backup_event_persists_non_secret_metadata(db_session):
     persisted = db_session.query(models.BackupAssuranceEvent).one()
     assert persisted.backup_id == "backup-20260612-001"
     assert json.loads(persisted.evidence_json) == {"provider_state": "completed"}
-    assert persisted.started_at == datetime(2026, 6, 12, 11, 55)
-    assert persisted.completed_at == datetime(2026, 6, 12, 12)
+    assert persisted.started_at == _utc_naive(2026, 6, 12, 11, 55)
+    assert persisted.completed_at == _utc_naive(2026, 6, 12, 12)
 
 
 def test_record_backup_event_supports_sizes_above_two_gibibytes(db_session):
@@ -173,8 +205,8 @@ def test_record_event_persists_all_datetimes_as_utc_naive(db_session):
         completed_at=datetime(2026, 6, 12, 6, tzinfo=source_timezone),
     )
 
-    assert event.started_at == datetime(2026, 6, 12, 11, 30)
-    assert event.completed_at == datetime(2026, 6, 12, 12)
+    assert event.started_at == _utc_naive(2026, 6, 12, 11, 30)
+    assert event.completed_at == _utc_naive(2026, 6, 12, 12)
     assert event.started_at.tzinfo is None
     assert event.completed_at.tzinfo is None
     assert event.created_at.tzinfo is None
@@ -395,16 +427,17 @@ def test_persisted_backup_event_rejects_text_delete(db_session):
 def test_application_engine_rejects_core_and_text_mutation(db_session, statement):
     _persist_backup(db_session)
 
-    with db_session.get_bind().connect() as connection:
-        with pytest.raises(DBAPIError, match="append-only"):
-            connection.execute(statement)
+    with (
+        db_session.get_bind().connect() as connection,
+        pytest.raises(DBAPIError, match="append-only"),
+    ):
+        connection.execute(statement)
 
 
 @pytest.mark.parametrize(
     "statement",
     [
-        "UPDATE /* append-only bypass */ backup_assurance_events "
-        "SET provider = 'changed'",
+        ("UPDATE /* append-only bypass */ backup_assurance_events SET provider = 'changed'"),
         "DELETE /* append-only bypass */ FROM backup_assurance_events",
     ],
 )
@@ -432,9 +465,27 @@ def test_exec_driver_sql_cannot_bypass_append_only_triggers(
 ):
     _persist_backup(db_session)
 
-    with db_session.get_bind().connect() as connection:
-        with pytest.raises(DBAPIError, match="append-only"):
-            connection.exec_driver_sql(statement)
+    with (
+        db_session.get_bind().connect() as connection,
+        pytest.raises(DBAPIError, match="append-only"),
+    ):
+        connection.exec_driver_sql(statement)
+
+
+def test_truncate_cannot_empty_the_evidence_table(db_session):
+    """#363: before the statement-level trigger, TRUNCATE emptied the table."""
+    if db_session.get_bind().dialect.name != "postgresql":
+        pytest.skip("SQLite has no TRUNCATE; its DELETE is covered above")
+    _persist_backup(db_session)
+
+    with pytest.raises(DBAPIError, match="append-only"):
+        db_session.execute(text("TRUNCATE backup_assurance_events"))
+    db_session.rollback()
+
+    count = db_session.execute(
+        text("SELECT count(*) FROM backup_assurance_events")
+    ).scalar()
+    assert count >= 1
 
 
 def test_freshness_is_ok_at_24_hours():

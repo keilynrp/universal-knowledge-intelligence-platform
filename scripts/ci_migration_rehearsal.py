@@ -28,6 +28,8 @@ statement guard: an UPDATE, DELETE or TRUNCATE aimed at an append-only table
 trigger, fails the rehearsal whether or not it matches a row. The append-only
 tables are read from the catalog, not hard-coded.
 
+A downgrade may drop only the triggers its own migration created.
+
 Known limits: the guard reads the append-only tables once per migration step,
 so a migration that creates such a trigger and rewrites the same table in one
 ``upgrade()`` is not caught; and on a merge revision the window follows the
@@ -257,16 +259,36 @@ _TRUNCATE_RE = re.compile(
     r"\bTRUNCATE\s+(?:TABLE\s+)?((?:(?:ONLY\s+)?[\w\".]+\s*,\s*)*(?:ONLY\s+)?[\w\".]+)",
     re.IGNORECASE,
 )
-_TRIGGER_OFF_RE = re.compile(
+_TRIGGER_DISABLE_RE = re.compile(
     r"\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?"
     + _NAME
-    + r"\s+DISABLE\s+TRIGGER"
-    r"|\bDROP\s+TRIGGER\s+(?:IF\s+EXISTS\s+)?\S+\s+ON\s+(?:ONLY\s+)?" + _NAME,
+    + r"\s+DISABLE\s+TRIGGER",
+    re.IGNORECASE,
+)
+_TRIGGER_DROP_RE = re.compile(
+    r'\bDROP\s+TRIGGER\s+(?:IF\s+EXISTS\s+)?"?([A-Za-z_][A-Za-z0-9_]*)"?'
+    r"\s+ON\s+(?:ONLY\s+)?" + _NAME,
     re.IGNORECASE,
 )
 _SQL_COMMENT_RE = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
 # plpgsql: `RAISE EXCEPTION ...` and a bare `RAISE 'msg'` both abort the statement.
 _RAISES = r"\mraise\s+(exception\M|')"
+
+
+_RAISING_TRIGGERS_SQL = (
+    "SELECT c.relname, t.tgname, t.tgtype FROM pg_trigger t "
+    "JOIN pg_class c ON c.oid = t.tgrelid "
+    "JOIN pg_namespace n ON n.oid = c.relnamespace "
+    "JOIN pg_proc p ON p.oid = t.tgfoid "
+    "WHERE NOT t.tgisinternal AND n.nspname = 'public' "
+    "AND p.prosrc ~* :raises"
+)
+
+
+def raising_triggers(conn: Connection) -> set[str]:
+    """Names of the triggers that make tables append-only."""
+    rows = conn.execute(text(_RAISING_TRIGGERS_SQL), {"raises": _RAISES})
+    return {name for _table, name, tgtype in rows if tgtype & _TRIGGER_BEFORE}
 
 
 def refusing_tables(conn: Connection) -> dict[str, set[str]]:
@@ -277,19 +299,9 @@ def refusing_tables(conn: Connection) -> dict[str, set[str]]:
     under some condition is treated as always raising: the guard would rather
     stop a legitimate migration for review than let an unsafe one through.
     """
-    rows = conn.execute(
-        text(
-            "SELECT c.relname, t.tgtype FROM pg_trigger t "
-            "JOIN pg_class c ON c.oid = t.tgrelid "
-            "JOIN pg_namespace n ON n.oid = c.relnamespace "
-            "JOIN pg_proc p ON p.oid = t.tgfoid "
-            "WHERE NOT t.tgisinternal AND n.nspname = 'public' "
-            "AND p.prosrc ~* :raises"
-        ),
-        {"raises": _RAISES},
-    )
+    rows = conn.execute(text(_RAISING_TRIGGERS_SQL), {"raises": _RAISES})
     refused: dict[str, set[str]] = {}
-    for table, tgtype in rows:
+    for table, _name, tgtype in rows:
         if tgtype & _TRIGGER_BEFORE:
             ops = {op for op, bit in _TRIGGER_OPS.items() if tgtype & bit}
             refused.setdefault(table, set()).update(ops)
@@ -305,7 +317,11 @@ def _truncated_tables(statement: str) -> list[str]:
     return names
 
 
-def violation(statement: str, refused: dict[str, set[str]]) -> str | None:
+def violation(
+    statement: str,
+    refused: dict[str, set[str]],
+    allowed_drops: frozenset[str] = frozenset(),
+) -> str | None:
     """Why ``statement`` rewrites or unguards an append-only table, or None.
 
     Row count does not matter: an UPDATE that matches no row here matches the
@@ -315,6 +331,12 @@ def violation(statement: str, refused: dict[str, set[str]]) -> str | None:
     (PostgreSQL rejects ``FOR EACH ROW ... ON TRUNCATE``), so a table that
     refuses DELETE row by row can still be emptied with one TRUNCATE; the
     trigger does not stop it, and so this guard must.
+
+    ``allowed_drops`` names triggers a downgrade may remove: the ones the
+    migration being reverted created. Reverting a migration that added a
+    protection takes that protection away and nothing else; dropping any trigger
+    that was there before it is still a violation. DISABLE TRIGGER never is
+    allowed.
     """
     statement = _SQL_COMMENT_RE.sub(" ", statement)
     for match in _ROW_WRITE_RE.finditer(statement):
@@ -325,10 +347,13 @@ def violation(statement: str, refused: dict[str, set[str]]) -> str | None:
     for table in _truncated_tables(statement):
         if refused.get(table, set()) & {"DELETE", "TRUNCATE"}:
             return f"TRUNCATE on append-only table {table!r} (bypasses its row trigger)"
-    for match in _TRIGGER_OFF_RE.finditer(statement):
-        table = match.group(1) or match.group(2)
-        if table in refused:
-            return f"disables or drops the trigger that makes {table!r} append-only"
+    for match in _TRIGGER_DISABLE_RE.finditer(statement):
+        if match.group(1) in refused:
+            return f"disables the trigger that makes {match.group(1)!r} append-only"
+    for match in _TRIGGER_DROP_RE.finditer(statement):
+        trigger, table = match.group(1), match.group(2)
+        if table in refused and trigger not in allowed_drops:
+            return f"drops trigger {trigger!r}, which makes {table!r} append-only"
     return None
 
 
@@ -337,7 +362,9 @@ class AppendOnlyViolation(RuntimeError):
 
 
 @contextmanager
-def append_only_guard(engine: Engine) -> Iterator[None]:
+def append_only_guard(
+    engine: Engine, allowed_drops: frozenset[str] = frozenset()
+) -> Iterator[None]:
     """Fail any statement, on any engine, that would rewrite an append-only table.
 
     Alembic's ``env.py`` builds its own engine, so the listener goes on the
@@ -347,7 +374,7 @@ def append_only_guard(engine: Engine) -> Iterator[None]:
         refused = refusing_tables(conn)
 
     def check(_conn, _cursor, statement, _params, _context, _many):
-        reason = violation(statement, refused)
+        reason = violation(statement, refused, allowed_drops)
         if reason:
             shown = " ".join(statement.split())[:300]
             raise AppendOnlyViolation(f"{reason}\n  statement: {shown}")
@@ -398,13 +425,23 @@ def _seed_and_check(engine: Engine, label: str) -> None:
         print(f"  append-only tables: {listed}")
 
 
-def _step(engine: Engine, label: str, action: Callable[[], None]) -> None:
+def _step(
+    engine: Engine,
+    label: str,
+    action: Callable[[], None],
+    allowed_drops: frozenset[str] = frozenset(),
+) -> None:
     print(label)
     try:
-        with append_only_guard(engine):
+        with append_only_guard(engine, allowed_drops):
             action()
     except AppendOnlyViolation as exc:
         raise SystemExit(f"migration rewrites append-only evidence: {exc}") from None
+
+
+def _raising_triggers(engine: Engine) -> set[str]:
+    with engine.connect() as conn:
+        return raising_triggers(conn)
 
 
 def rehearse(steps: int) -> None:
@@ -423,16 +460,22 @@ def rehearse(steps: int) -> None:
     command.upgrade(config, window[0])
     _seed_and_check(engine, window[0])
     for revision in window[1:]:
+        if revision == window[-1]:
+            before_head = _raising_triggers(engine)
         _step(
             engine,
             f"upgrade -> {revision} (over seeded rows)",
             lambda rev=revision: command.upgrade(config, rev),
         )
         _seed_and_check(engine, revision)
+    created_by_head = frozenset(_raising_triggers(engine) - before_head)
+    if created_by_head:
+        print(f"  the newest migration added: {', '.join(sorted(created_by_head))}")
     _step(
         engine,
         f"downgrade {window[-1]} -> {window[-2]} (over seeded rows)",
         lambda: command.downgrade(config, "-1"),
+        allowed_drops=created_by_head,
     )
     _step(
         engine,
