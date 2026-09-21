@@ -339,6 +339,85 @@ jobs:
             --shard-file pg-shard-artifacts/shard-pg-4.txt \
             --shard-file pg-shard-artifacts/shard-pg-5.txt
 
+  migration-rehearsal:
+    # Issue #361. The postgres-shard jobs run `alembic upgrade head` on an EMPTY
+    # database, where a migration that rewrites rows cannot fail. This job runs
+    # the newest migrations over seeded rows, downgrades and upgrades the newest
+    # one again, and fails any UPDATE/DELETE aimed at an append-only table even
+    # when it matches no row (how #359 would have passed on seeded data).
+    # PostgreSQL 18 because production runs 18.6 (#320 Phase D drill).
+    name: migration-rehearsal (pg18)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -c requirements.lock
+
+      - name: Prepare ephemeral CI secrets
+        run: |
+          python - >> "$GITHUB_ENV" <<'PY'
+          import secrets
+          from cryptography.fernet import Fernet
+          pw = secrets.token_hex(16)
+          print(f"ENCRYPTION_KEY={Fernet.generate_key().decode()}")
+          print(f"SESSION_SECRET_KEY={secrets.token_urlsafe(32)}")
+          print(f"PG_PASSWORD={pw}")
+          print(f"DATABASE_URL=postgresql+psycopg2://ukip_test:{pw}@localhost:5432/ukip_test")
+          print("UKIP_DB_MODE=postgres")
+          PY
+
+      - name: Start PostgreSQL 18 (retry pull to absorb Docker Hub hiccups)
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
+            echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+          fi
+          for attempt in 1 2 3 4 5; do
+            if docker pull postgres:18-alpine; then
+              break
+            fi
+            if [ "${attempt}" -eq 5 ]; then
+              echo "postgres image pull failed after 5 attempts" >&2
+              exit 1
+            fi
+            echo "pull failed (attempt ${attempt}) — retrying after backoff…"
+            sleep $((attempt * 5))
+          done
+          docker run -d --name ukip-postgres-rehearsal \
+            -e POSTGRES_USER=ukip_test \
+            -e POSTGRES_PASSWORD="${PG_PASSWORD}" \
+            -e POSTGRES_DB=ukip_test \
+            -p 5432:5432 \
+            postgres:18-alpine
+          # Probe over TCP, as the postgres-shard job explains.
+          for attempt in $(seq 1 30); do
+            if docker exec ukip-postgres-rehearsal pg_isready -h 127.0.0.1 -U ukip_test >/dev/null 2>&1; then
+              echo "PostgreSQL ready"
+              break
+            fi
+            if [ "${attempt}" -eq 30 ]; then
+              echo "PostgreSQL did not become ready in time" >&2
+              docker logs ukip-postgres-rehearsal || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Rehearse the newest migrations over seeded data
+        run: python scripts/ci_migration_rehearsal.py --steps 3
+
   sdk-smoke:
     runs-on: ubuntu-latest
 
@@ -457,7 +536,7 @@ jobs:
     name: backend-required-gate
     runs-on: ubuntu-latest
     if: always()
-    needs: [test-shard, test-py312-compat, test-partition-guard, eval-quality, postgres-shard, postgres-partition-guard, sdk-smoke]
+    needs: [test-shard, test-py312-compat, test-partition-guard, eval-quality, postgres-shard, postgres-partition-guard, migration-rehearsal, sdk-smoke]
     steps:
       - name: Require every backend gate job to have succeeded
         env:
