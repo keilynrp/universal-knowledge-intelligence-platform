@@ -1,9 +1,8 @@
-from pathlib import Path
 import re
 import subprocess
+from pathlib import Path
 
 from backend.enterprise_controls import ENTERPRISE_CONTROLS
-
 
 ROOT = Path(__file__).resolve().parents[2]
 LEGAL_DOCS = (
@@ -16,9 +15,13 @@ CLAIM_DOCS = LEGAL_DOCS + (
     "docs/product/ENTERPRISE_CONTROL_REGISTER.md",
     "docs/product/TRACEABILITY_MATRIX.md",
 )
+# Reconciled after the first drill (#320, 2026-09-21). It states the failure;
+# a status that says "passed" needs committed evidence (see the test below).
 HONEST_STATUS = (
-    "Repository controls and runbook implemented; provider configuration, two "
-    "successful backup cycles, and the first isolated restore drill remain pending."
+    "Provider configured and two scheduled backup cycles evidenced; the first "
+    "isolated restore drill (2026-09-21) restored the backup within RTO but failed "
+    "two required checks (RPO of the chosen recovery point, tenant isolation) and "
+    "is recorded as failed; the readiness dossier awaits owner approval."
 )
 
 
@@ -91,7 +94,7 @@ def test_legal_backup_claims_use_rpo_24h_and_rto_4h():
         assert not re.search(r"RTO(?: target)?:? (?!4h)\d+h", content, re.IGNORECASE), path
 
 
-def test_er_bcp_001_remains_specified_until_provider_configuration():
+def test_er_bcp_001_remains_specified_until_a_drill_passes():
     control = _bcp_control()
     assert control.current_maturity == "specified"
     assert control.current_maturity != "verified"
@@ -102,10 +105,10 @@ def test_er_bcp_001_remains_specified_until_provider_configuration():
     assert re.search(r"\| Recovery medido \|[^\n]*\| specified \|", traceability)
 
 
-def test_next_gate_requires_two_backup_cycles_and_one_isolated_restore_drill():
+def test_next_gate_requires_owner_approval_and_a_passing_drill():
     expected_gate = (
-        "Configure the provider, observe two successful backup cycles, and "
-        "complete the first isolated restore drill."
+        "Approve the readiness dossier, decide how tenant isolation is "
+        "demonstrated, and run an isolated restore drill that passes."
     )
     assert _bcp_control().next_gate == expected_gate
     assert expected_gate in _read("docs/product/ENTERPRISE_CONTROL_REGISTER.md")
