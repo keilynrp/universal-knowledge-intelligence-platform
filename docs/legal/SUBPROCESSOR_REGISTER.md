@@ -30,7 +30,7 @@ Notes:
   [ROPA.md](ROPA.md) activity 2 for transparency.
 - No entry in this register is invented: provider-specific values the
   engineering team cannot attest to are left as `[OPERATOR TO FILL]`.
-- **Provider configured and two scheduled backup cycles evidenced; the first isolated restore drill (2026-09-21) restored the backup within RTO but failed two required checks (RPO of the chosen recovery point, tenant isolation) and is recorded as failed; the readiness dossier awaits owner approval.**
+- **Provider configured and two scheduled backup cycles evidenced; the first isolated restore drill (2026-09-21) restored the backup within RTO but failed two required checks (RPO of the chosen recovery point, tenant isolation) and is recorded as failed; the owner approved the readiness dossier on 2026-09-21.**
 
 ## Review and change management
 

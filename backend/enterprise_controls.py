@@ -69,9 +69,9 @@ ENTERPRISE_CONTROLS = (
         "auditable",
         "Operations owner",
         ("US-073",),
-        "Approve the readiness dossier, decide how tenant isolation is demonstrated, and run an isolated restore drill that passes.",
+        "Decide how tenant isolation is demonstrated, and run an isolated restore drill that passes.",
         (
-            "Provider configured and two scheduled backup cycles evidenced; the first isolated restore drill (2026-09-21) restored the backup within RTO but failed two required checks (RPO of the chosen recovery point, tenant isolation) and is recorded as failed; the readiness dossier awaits owner approval.",
+            "Provider configured and two scheduled backup cycles evidenced; the first isolated restore drill (2026-09-21) restored the backup within RTO but failed two required checks (RPO of the chosen recovery point, tenant isolation) and is recorded as failed; the owner approved the readiness dossier on 2026-09-21.",
         ),
     ),
     EnterpriseControl("ER-SDLC-001", "Secure software supply chain", "Enforce release security, dependency, image, and provenance gates.", "P0", "implemented", "operated", "Security/platform owner", ("US-074",), "Enable required repository checks and preserve 30 days of gate operation evidence.", ("CodeQL, Gitleaks, dependency audits, Trivy, and SBOM workflows exist.",)),

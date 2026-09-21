@@ -81,13 +81,13 @@ operating documentation, except where explicitly marked otherwise.
 | Retention | Configurable per-org retention policies with purge mechanism (purge execution is currently operator-triggered, not scheduled) | EPIC-016 Slice 4; `docs/operating/DATA_LIFECYCLE_POLICY.md` |
 | Secrets rotation | Staged dual-key zero-downtime rotation for encryption and JWT keys; 90-day cadence; rotation evidence table; first production rotation executed 2026-06-06 | EPIC-017, PRs #48–#51; `docs/operating/SECRETS_ROTATION_RUNBOOK.md`; `secret_rotation_events` table; `GET /ops/secrets` |
 | Operational health checks | Automated checks including secrets posture (insecure defaults, stale keys) exposed to operators | `GET /ops/checks` |
-| Backups & recovery | RPO 24h / RTO 4h repository controls, backup evidence, freshness monitoring, restore validation, and operator procedure. **Provider configured and two scheduled backup cycles evidenced; the first isolated restore drill (2026-09-21) restored the backup within RTO but failed two required checks (RPO of the chosen recovery point, tenant isolation) and is recorded as failed; the readiness dossier awaits owner approval.** | US-073 / ER-BCP-001; `docs/operating/BACKUP_RESTORE_RUNBOOK.md`; backup assurance tests |
+| Backups & recovery | RPO 24h / RTO 4h repository controls, backup evidence, freshness monitoring, restore validation, and operator procedure. **Provider configured and two scheduled backup cycles evidenced; the first isolated restore drill (2026-09-21) restored the backup within RTO but failed two required checks (RPO of the chosen recovery point, tenant isolation) and is recorded as failed; the owner approved the readiness dossier on 2026-09-21.** | US-073 / ER-BCP-001; `docs/operating/BACKUP_RESTORE_RUNBOOK.md`; backup assurance tests |
 | Supply-chain / CI security gates | CodeQL SAST, gitleaks secret scanning, pip-audit, npm-audit, Trivy image scanning, SBOM generation. **Status: implemented in CI; operator enforcement steps pending (EPIC-019).** | `.github/workflows/` |
 | Data minimization — optional telemetry/LLM egress disabled by default | Sentry error telemetry gated by `SENTRY_ENABLED` (default false); LLM providers (OpenAI) engaged only via customer-activated AI integration (opt-in) | `backend/telemetry.py`; see Section 8 and [SUBPROCESSOR_REGISTER.md](SUBPROCESSOR_REGISTER.md) |
 
 **Known open measures (disclosed, not represented as in place):** formal
 incident response plan (ER-IR-001), external penetration test (ER-ASSURE-001),
-contractual data-residency commitments (ER-DEP-001), a passing isolated restore drill and owner-approved backup/restore evidence (US-073 / ER-BCP-001; the provider is configured and the first drill, recorded as failed, is documented), and CI security-gate operator enforcement steps
+contractual data-residency commitments (ER-DEP-001), a passing isolated restore drill (US-073 / ER-BCP-001; the provider is configured and the first drill, recorded as failed, is documented), and CI security-gate operator enforcement steps
 (EPIC-019). See
 [PRIVACY_CONTROLS_OVERVIEW.md](PRIVACY_CONTROLS_OVERVIEW.md) for the full
 open-item register.

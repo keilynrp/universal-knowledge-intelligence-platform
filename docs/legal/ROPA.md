@@ -62,7 +62,7 @@ controllers (*responsables*). One section per activity.
 | Data categories | Encrypted database backups covering all of the above, plus encrypted `ukip_static_data` customer branding and persistent static uploads |
 | Data subjects | Same as activities 1–4 |
 | Retention | Per backup retention cycle in `docs/operating/BACKUP_RESTORE_RUNBOOK.md` (EPIC-018) |
-| Security measures | Repository-side backup evidence, freshness monitoring, restore validation, and the operator runbook target RPO 24h and RTO 4h. **Provider configured and two scheduled backup cycles evidenced; the first isolated restore drill (2026-09-21) restored the backup within RTO but failed two required checks (RPO of the chosen recovery point, tenant isolation) and is recorded as failed; the readiness dossier awaits owner approval.** |
+| Security measures | Repository-side backup evidence, freshness monitoring, restore validation, and the operator runbook target RPO 24h and RTO 4h. **Provider configured and two scheduled backup cycles evidenced; the first isolated restore drill (2026-09-21) restored the backup within RTO but failed two required checks (RPO of the chosen recovery point, tenant isolation) and is recorded as failed; the owner approved the readiness dossier on 2026-09-21.** |
 | Recipients / transfers | Backup storage provider `[OPERATOR TO FILL: S3 backup provider]` in `[OPERATOR TO FILL: backup storage region]` (see register) |
 
 ---
