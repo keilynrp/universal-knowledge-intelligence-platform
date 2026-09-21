@@ -310,13 +310,22 @@ Before loading data:
 ## 7. Restore PostgreSQL and Static Data
 
 1. Verify the selected backup's integrity reference before restore.
-2. Restore PostgreSQL into the empty isolated drill database using the
+2. Read the archive header before choosing tools. Dokploy stores
+   `pg_dump -Fc` piped through `gzip`, so `gunzip` first, then list the
+   header with `pg_restore --list` from the newest client available. Use a
+   drill server of the major in `Dumped from database version`, and a
+   `pg_restore` at least as new as `Dumped by pg_dump version`. Dokploy's
+   `pg_dump` can be newer than the production server, and an older
+   `pg_restore` stops with `unsupported version (1.x) in file header`. Never
+   assume either version: the first drill (2026-09-21) lost 30 minutes to a
+   script that did.
+3. Restore PostgreSQL into the empty isolated drill database using the
    provider-supported restore operation.
-3. Do not run migrations during validation. The restored Alembic revision must
+4. Do not run migrations during validation. The restored Alembic revision must
    match the expected revision for the selected release.
-4. Restore the matching `ukip_static_data` snapshot into the isolated volume.
-5. Start only the minimum read-only services needed for validation.
-6. Record provider job IDs, timestamps, warnings, and failures without secrets.
+5. Restore the matching `ukip_static_data` snapshot into the isolated volume.
+6. Start only the minimum read-only services needed for validation.
+7. Record provider job IDs, timestamps, warnings, and failures without secrets.
 
 ## 8. Run the Restore Validator
 
