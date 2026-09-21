@@ -28,6 +28,11 @@ statement guard: an UPDATE, DELETE or TRUNCATE aimed at an append-only table
 trigger, fails the rehearsal whether or not it matches a row. The append-only
 tables are read from the catalog, not hard-coded.
 
+Known limits: the guard reads the append-only tables once per migration step,
+so a migration that creates such a trigger and rewrites the same table in one
+``upgrade()`` is not caught; and on a merge revision the window follows the
+first parent only (the chain is linear today).
+
 It fails if any migration fails, if the guard trips, or if a table still has
 no row when the migrations run over it (a table the seeder cannot fill is a
 table the rehearsal proves nothing about).
@@ -241,23 +246,36 @@ def seed_empty_tables(engine: Engine) -> SeedReport:
 _TRIGGER_BEFORE = 1 << 1
 _TRIGGER_OPS = {"DELETE": 1 << 3, "UPDATE": 1 << 4, "TRUNCATE": 1 << 5}
 
-_IDENT = r'(?:"?public"?\.)?"?([A-Za-z_][A-Za-z0-9_]*)"?'
+# Any schema qualifier is accepted and ignored: over-matching a same-named
+# table elsewhere is the safe direction for a guard.
+_NAME = r'(?:"?[A-Za-z_][A-Za-z0-9_]*"?\.)?"?([A-Za-z_][A-Za-z0-9_]*)"?'
 _ROW_WRITE_RE = re.compile(
-    r"\b(UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\s+(?:ONLY\s+)?" + _IDENT,
+    r"\b(UPDATE|DELETE\s+FROM)\s+(?:ONLY\s+)?" + _NAME,
+    re.IGNORECASE,
+)
+_TRUNCATE_RE = re.compile(
+    r"\bTRUNCATE\s+(?:TABLE\s+)?((?:(?:ONLY\s+)?[\w\".]+\s*,\s*)*(?:ONLY\s+)?[\w\".]+)",
     re.IGNORECASE,
 )
 _TRIGGER_OFF_RE = re.compile(
-    r"\bALTER\s+TABLE\s+(?:ONLY\s+)?" + _IDENT + r"\s+DISABLE\s+TRIGGER"
-    r"|\bDROP\s+TRIGGER\s+(?:IF\s+EXISTS\s+)?\S+\s+ON\s+" + _IDENT,
+    r"\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?"
+    + _NAME
+    + r"\s+DISABLE\s+TRIGGER"
+    r"|\bDROP\s+TRIGGER\s+(?:IF\s+EXISTS\s+)?\S+\s+ON\s+(?:ONLY\s+)?" + _NAME,
     re.IGNORECASE,
 )
+_SQL_COMMENT_RE = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
+# plpgsql: `RAISE EXCEPTION ...` and a bare `RAISE 'msg'` both abort the statement.
+_RAISES = r"\mraise\s+(exception\M|')"
 
 
 def refusing_tables(conn: Connection) -> dict[str, set[str]]:
     """Tables whose BEFORE triggers raise on UPDATE/DELETE/TRUNCATE, with those ops.
 
     These are the append-only tables. A migration may not rewrite their rows,
-    and it may not switch the trigger off to do so.
+    and it may not switch the trigger off to do so. A trigger that raises only
+    under some condition is treated as always raising: the guard would rather
+    stop a legitimate migration for review than let an unsafe one through.
     """
     rows = conn.execute(
         text(
@@ -266,8 +284,9 @@ def refusing_tables(conn: Connection) -> dict[str, set[str]]:
             "JOIN pg_namespace n ON n.oid = c.relnamespace "
             "JOIN pg_proc p ON p.oid = t.tgfoid "
             "WHERE NOT t.tgisinternal AND n.nspname = 'public' "
-            "AND p.prosrc ~* 'raise\\s+exception'"
-        )
+            "AND p.prosrc ~* :raises"
+        ),
+        {"raises": _RAISES},
     )
     refused: dict[str, set[str]] = {}
     for table, tgtype in rows:
@@ -277,17 +296,35 @@ def refusing_tables(conn: Connection) -> dict[str, set[str]]:
     return refused
 
 
+def _truncated_tables(statement: str) -> list[str]:
+    names: list[str] = []
+    for match in _TRUNCATE_RE.finditer(statement):
+        for item in match.group(1).split(","):
+            item = re.sub(r"(?i)^\s*ONLY\s+", "", item).strip()
+            names.append(item.split(".")[-1].strip('"'))
+    return names
+
+
 def violation(statement: str, refused: dict[str, set[str]]) -> str | None:
     """Why ``statement`` rewrites or unguards an append-only table, or None.
 
     Row count does not matter: an UPDATE that matches no row here matches the
     rows production has. That is exactly how #359 passed on seeded data.
+
+    TRUNCATE counts as a DELETE. Row-level triggers cannot fire on TRUNCATE
+    (PostgreSQL rejects ``FOR EACH ROW ... ON TRUNCATE``), so a table that
+    refuses DELETE row by row can still be emptied with one TRUNCATE; the
+    trigger does not stop it, and so this guard must.
     """
+    statement = _SQL_COMMENT_RE.sub(" ", statement)
     for match in _ROW_WRITE_RE.finditer(statement):
         op = match.group(1).split()[0].upper()
         table = match.group(2)
         if op in refused.get(table, set()):
             return f"{op} on append-only table {table!r}"
+    for table in _truncated_tables(statement):
+        if refused.get(table, set()) & {"DELETE", "TRUNCATE"}:
+            return f"TRUNCATE on append-only table {table!r} (bypasses its row trigger)"
     for match in _TRIGGER_OFF_RE.finditer(statement):
         table = match.group(1) or match.group(2)
         if table in refused:

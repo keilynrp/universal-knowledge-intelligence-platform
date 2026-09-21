@@ -343,7 +343,7 @@ jobs:
     # Issue #361. The postgres-shard jobs run `alembic upgrade head` on an EMPTY
     # database, where a migration that rewrites rows cannot fail. This job runs
     # the newest migrations over seeded rows, downgrades and upgrades the newest
-    # one again, and fails any UPDATE/DELETE aimed at an append-only table even
+    # one again, and fails any UPDATE/DELETE/TRUNCATE aimed at an append-only table even
     # when it matches no row (how #359 would have passed on seeded data).
     # PostgreSQL 18 because production runs 18.6 (#320 Phase D drill).
     name: migration-rehearsal (pg18)

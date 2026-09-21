@@ -85,6 +85,10 @@ def test_window_rejects_multiple_heads():
         "ALTER TABLE backup_assurance_events DISABLE TRIGGER ALL",
         "ALTER TABLE ONLY public.backup_assurance_events DISABLE TRIGGER t_reject",
         "DROP TRIGGER IF EXISTS t_reject ON backup_assurance_events",
+        "UPDATE audit.backup_assurance_events SET scope = 'x'",
+        # Row triggers cannot fire on TRUNCATE, so it must be refused here.
+        "TRUNCATE backup_assurance_events",
+        "TRUNCATE TABLE ONLY raw_entities, public.backup_assurance_events CASCADE",
     ],
 )
 def test_guard_flags_rewrites_of_append_only_tables(statement):
@@ -104,8 +108,10 @@ def test_guard_flags_rewrites_of_append_only_tables(statement):
             "FOR EACH ROW EXECUTE FUNCTION f()"
         ),
         "ALTER TABLE x ADD FOREIGN KEY (a) REFERENCES y (b) ON UPDATE CASCADE",
-        # The trigger refuses UPDATE/DELETE, not TRUNCATE.
-        "TRUNCATE backup_assurance_events",
+        "TRUNCATE raw_entities, audit_logs",
+        # A statement that is only a comment executes nothing.
+        "-- UPDATE backup_assurance_events SET scope = 'x'\nSELECT 1",
+        "/* DELETE FROM backup_assurance_events */ SELECT 1",
     ],
 )
 def test_guard_allows_everything_else(statement):
@@ -114,8 +120,11 @@ def test_guard_allows_everything_else(statement):
 
 def test_guard_only_refuses_the_operations_the_trigger_refuses():
     delete_only = {"events": {"DELETE"}}
+    update_only = {"events": {"UPDATE"}}
     assert rehearsal.violation("UPDATE events SET a = 1", delete_only) is None
     assert rehearsal.violation("DELETE FROM events", delete_only) is not None
+    assert rehearsal.violation("TRUNCATE events", delete_only) is not None
+    assert rehearsal.violation("TRUNCATE events", update_only) is None
 
 
 def test_guard_listener_fires_on_any_engine_and_is_removed(monkeypatch):
