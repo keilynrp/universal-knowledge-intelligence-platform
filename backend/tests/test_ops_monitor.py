@@ -17,7 +17,7 @@ BOTH = frozenset({"backup_freshness", "secrets"})
 
 @pytest.fixture(autouse=True)
 def _fresh_monitor(monkeypatch):
-    monkeypatch.setattr(ops_monitor, "_last", None)
+    monkeypatch.setitem(ops_monitor._memory, "last", None)
     monkeypatch.setattr(ops_monitor, "_thread", None)
     for key in list(ops_monitor._state):
         monkeypatch.setitem(ops_monitor._state, key, None)
@@ -273,3 +273,23 @@ def test_run_once_reads_the_real_report(db_session):
         # Under tests no alert channel exists, so ops_alerting is a warning.
         assert kind == "degraded"
         assert "ops_alerting" in sent[0]["failing_checks"]
+
+
+def test_alert_text_uses_only_the_fixed_vocabulary():
+    """CodeQL: nothing from a check's payload reaches the log line verbatim."""
+    sent = []
+    ops_monitor.run_once(
+        None,
+        now=NOW,
+        remind_after=REMIND,
+        run_checks=lambda _db: _report("degraded", ["secrets", "an_unlisted_check"]),
+        dispatch=lambda _db, event, message, details: sent.append((message, details)),
+    )
+    message, details = sent[0]
+    assert "an_unlisted_check" not in message
+    assert details["failing_checks"] == "other, secrets"
+
+
+def test_the_vocabulary_covers_every_real_check(db_session):
+    report = ops_checks.run_operational_checks(db_session)
+    assert {check["id"] for check in report["checks"]} <= set(ops_monitor.KNOWN_CHECKS)

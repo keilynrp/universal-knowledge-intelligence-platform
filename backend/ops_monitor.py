@@ -20,6 +20,7 @@ State lives in memory. A restart while unhealthy therefore alerts once more;
 that is deliberate — a deploy that does not fix the problem should say so.
 Production runs one uvicorn process, like the other in-process schedulers.
 """
+
 from __future__ import annotations
 
 import logging
@@ -77,9 +78,13 @@ def load_config() -> MonitorConfig:
     return MonitorConfig(
         enabled=os.environ.get("UKIP_OPS_MONITOR_ENABLED", "1").strip() != "0",
         interval_seconds=_int_env(
-            "UKIP_OPS_MONITOR_INTERVAL_SECONDS", DEFAULT_INTERVAL_SECONDS, MIN_INTERVAL_SECONDS
+            "UKIP_OPS_MONITOR_INTERVAL_SECONDS",
+            DEFAULT_INTERVAL_SECONDS,
+            MIN_INTERVAL_SECONDS,
         ),
-        remind_after=timedelta(hours=_float_env("UKIP_OPS_MONITOR_REMIND_HOURS", DEFAULT_REMIND_HOURS)),
+        remind_after=timedelta(
+            hours=_float_env("UKIP_OPS_MONITOR_REMIND_HOURS", DEFAULT_REMIND_HOURS)
+        ),
     )
 
 
@@ -131,15 +136,45 @@ def _failed_evaluation_report(exc: Exception, now: datetime) -> dict:
     }
 
 
+# Log and alert text is built only from this fixed vocabulary, never from the
+# report's payload: the secrets check derives its status from key material, and
+# nothing that flows from it should reach a log line verbatim.
+KNOWN_CHECKS = (
+    "database",
+    "migrations",
+    "scheduled_imports",
+    "scheduled_reports",
+    "ops_alerting",
+    "scheduled_detection",
+    "secrets",
+    "backup_freshness",
+    EVALUATION_FAILED,
+)
+_CHECK_LABELS = {name: name for name in KNOWN_CHECKS}
+_STATUS_LABELS = {"ok": "ok", "degraded": "degraded", "critical": "critical"}
+
+
+def _labels(failing: frozenset[str]) -> str:
+    return (
+        ", ".join(sorted(_CHECK_LABELS.get(name, "other") for name in failing))
+        or "none"
+    )
+
+
+def _status_label(status: str) -> str:
+    return _STATUS_LABELS.get(status, "unknown")
+
+
 def _failing_checks(report: dict) -> frozenset[str]:
-    return frozenset(c["id"] for c in report["checks"] if c["status"] in {"warning", "critical"})
+    return frozenset(
+        c["id"] for c in report["checks"] if c["status"] in {"warning", "critical"}
+    )
 
 
 def _message(kind: str, report: dict, failing: frozenset[str]) -> str:
     if kind == "recovered":
         return "Operational checks recovered: all checks are ok again"
-    names = ", ".join(sorted(failing)) or "none"
-    return f"Operational checks {kind}: status {report['status']} ({names})"
+    return f"Operational checks {kind}: status {_status_label(report['status'])} ({_labels(failing)})"
 
 
 # ── runtime state, exposed to the `scheduled_detection` check ────────────────
@@ -156,7 +191,7 @@ _state: dict[str, Any] = {
     "last_loop_error": None,
     "last_loop_error_at": None,
 }
-_last: Observation | None = None
+_memory: dict[str, Observation | None] = {"last": None}
 
 
 def _update(**updates: Any) -> None:
@@ -183,7 +218,10 @@ def get_status(now: datetime | None = None) -> dict:
         "last_heartbeat_age_seconds": (
             round((now - heartbeat).total_seconds(), 2) if heartbeat else None
         ),
-        **{key: _iso(value) if isinstance(value, datetime) else value for key, value in snapshot.items()},
+        **{
+            key: _iso(value) if isinstance(value, datetime) else value
+            for key, value in snapshot.items()
+        },
     }
 
 
@@ -196,7 +234,6 @@ def run_once(
     dispatch: Callable[..., None] | None = None,
 ) -> str | None:
     """Evaluate the checks once and alert if the state calls for it. Returns the alert kind."""
-    global _last
     from backend import ops_checks
 
     now = now or datetime.now(timezone.utc)
@@ -211,7 +248,8 @@ def run_once(
             pass
         report = _failed_evaluation_report(exc, now)
     failing = _failing_checks(report)
-    kind = alert_kind(_last, report["status"], failing, now, remind_after)
+    previous = _memory["last"]
+    kind = alert_kind(previous, report["status"], failing, now, remind_after)
 
     if kind is not None:
         message = _message(kind, report, failing)
@@ -223,17 +261,19 @@ def run_once(
             message,
             {
                 "kind": kind,
-                "status": report["status"],
+                "status": _status_label(report["status"]),
                 "checked_at": report["checked_at"],
-                "failing_checks": ", ".join(sorted(failing)),
+                "failing_checks": _labels(failing),
                 "critical_checks": report["summary"].get("critical", 0),
                 "warning_checks": report["summary"].get("warning", 0),
             },
         )
         _update(last_alert_kind=kind, last_alert_at=now)
 
-    alerted_at = now if kind is not None else (_last.alerted_at if _last else None)
-    _last = Observation(report["status"], failing, alerted_at)
+    alerted_at = (
+        now if kind is not None else (previous.alerted_at if previous else None)
+    )
+    _memory["last"] = Observation(report["status"], failing, alerted_at)
     _update(last_run_at=now, last_status=report["status"])
     return kind
 
@@ -267,11 +307,15 @@ def start_monitor() -> bool:
     global _thread
     config = load_config()
     if not config.enabled:
-        logger.warning("[ops-monitor] disabled (UKIP_OPS_MONITOR_ENABLED=0): no scheduled detection")
+        logger.warning(
+            "[ops-monitor] disabled (UKIP_OPS_MONITOR_ENABLED=0): no scheduled detection"
+        )
         return False
     if _thread is not None and _thread.is_alive():
         return True
-    _thread = threading.Thread(target=_loop, args=(config,), daemon=True, name="ops-monitor")
+    _thread = threading.Thread(
+        target=_loop, args=(config,), daemon=True, name="ops-monitor"
+    )
     _thread.start()
     _update(started_at=datetime.now(timezone.utc))
     logger.info(
