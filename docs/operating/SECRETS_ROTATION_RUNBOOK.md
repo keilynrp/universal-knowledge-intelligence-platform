@@ -78,13 +78,35 @@ the new key, then you drop the old one.
 6. **Verify** (see [Evidence verification](#evidence-verification)): `rows_reencrypted`
    matches expectation and `/ops/checks` `secrets` is no longer warning about a
    stale `ENCRYPTION_KEY`.
-7. **Drop the retiring key.** Once re-encryption succeeded, remove
-   `ENCRYPTION_KEYS_RETIRING` from the environment and **redeploy**. The old key
-   is now unused and can be destroyed. The `secrets` check stops warning about
+7. **Archive the old key before dropping it — do not destroy it.** Backups
+   taken before this rotation still hold ciphertext encrypted with the old key,
+   and restoring one of them needs that key. Retention today is roughly **120
+   days** (Dokploy keeps the latest 30 backups; non-current object versions
+   expire after 90 — see #320). Store it where only the operator can read it (a
+   password manager), labelled with the secret name and the date it was
+   retired. Delete it once no retained backup predates the rotation.
+8. **Drop the retiring key.** Remove `ENCRYPTION_KEYS_RETIRING` from the
+   environment and **redeploy**. The `secrets` check stops warning about
    lingering retiring keys.
+9. **Confirm the container was recreated.** Saving the environment in Dokploy
+   does **not** by itself restart anything, and a redeploy that did not happen
+   looks exactly like one that did until you check:
+   ```bash
+   docker inspect -f '{{.State.StartedAt}}' <backend-container>
+   docker exec <backend-container> python -c "import os;print(len(os.environ.get('ENCRYPTION_KEYS_RETIRING') or ''))"
+   ```
+   Expect a start time after the redeploy and a length of `0`. On 2026-09-22
+   this step caught a redeploy that never recreated the container: the old key
+   was still live while the check reported the rotation as done.
 
 > **Do not drop the retiring key before step 5 completes.** Any value still on the
 > old key becomes undecryptable once the old key is gone.
+
+> **Exception — an exposed key is destroyed, not archived.** After a leak
+> (see [Post-exposure incident rotation](#post-exposure-incident-rotation)),
+> keeping the old key anywhere defeats the rotation. Destroy it, and accept
+> that restoring a pre-rotation backup will leave values encrypted with it
+> unreadable; record that consequence in the incident evidence.
 
 ---
 
@@ -208,7 +230,11 @@ incident, compromised host), rotate **immediately** — do not wait for the cade
 
 1. **Triage:** identify which secret(s) are exposed and the blast radius.
 2. **`ENCRYPTION_KEY` exposed:** perform [section 1](#1-rotate-encryption_key-staged-dual-key--eager-re-encrypt)
-   end-to-end **now**, then destroy the old key once re-encryption completes.
+   end-to-end **now**, then destroy the old key once re-encryption completes —
+   this is the one case where it is destroyed rather than archived (section 1,
+   step 7). Restoring a backup taken before the rotation will leave values
+   encrypted with the destroyed key unreadable; record that in the incident
+   evidence rather than keeping the exposed key to avoid it.
    Treat any data the old key could decrypt as potentially compromised.
 3. **`JWT_SECRET_KEY` exposed:** perform [section 2](#2-rotate-jwt_secret_key-staged-verify-drop-after-grace),
    but **shorten or skip the grace window** and drop the retiring key
