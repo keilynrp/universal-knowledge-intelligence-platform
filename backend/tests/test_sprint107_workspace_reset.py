@@ -376,6 +376,7 @@ def test_workspace_reset_records_a_lifecycle_event(client, session_factory):
         assert event.action == "deletion"
         assert event.status == "completed"
         assert event.requested_by == admin_id
+        assert event.subject_type == "org"
         assert event.subject_ref == str(primary_org_id)
         scope = json.loads(event.scope_json)
         evidence = json.loads(event.evidence_json)

@@ -289,6 +289,9 @@ def _delete_annotations(
     return int(db.execute(stmt, params).rowcount or 0)
 
 
+# Neither helper takes audit ids any more: the audit trail is evidence and the
+# workspace reset keeps it (#368). Deleting it needs a deliberate new code path,
+# not a list that happens to be non-empty.
 def _hard_delete_reset_rows(
     db: Session,
     *,
@@ -299,7 +302,6 @@ def _hard_delete_reset_rows(
     harmonization_ids: list[int],
     store_ids: list[int],
     workflow_ids: list[int],
-    audit_ids: list[int],
     existing_tables: set[str],
 ) -> None:
     """Run an idempotent SQL cleanup pass before committing the reset."""
@@ -325,8 +327,6 @@ def _hard_delete_reset_rows(
         ("sync_queue", "store_id", store_ids),
         ("store_sync_queue", "store_id", store_ids),
         ("workflow_runs", "workflow_id", workflow_ids),
-        ("audit_logs", "id", audit_ids),
-        ("user_notification_reads", "audit_log_id", audit_ids),
     ]
 
     if _table_exists(db, "annotations", existing_tables):
@@ -377,7 +377,6 @@ def _delete_reset_dependencies_orm(
     harmonization_ids: list[int],
     store_ids: list[int],
     workflow_ids: list[int],
-    audit_ids: list[int],
 ) -> None:
     annotation_filters = []
     if entity_ids:
@@ -386,12 +385,6 @@ def _delete_reset_dependencies_orm(
         annotation_filters.append(models.Annotation.authority_id.in_(authority_ids))
     if annotation_filters:
         db.query(models.Annotation).filter(or_(*annotation_filters)).delete(synchronize_session=False)
-
-    if audit_ids:
-        db.query(models.UserNotificationRead).filter(
-            models.UserNotificationRead.audit_log_id.in_(audit_ids)
-        ).delete(synchronize_session=False)
-        db.query(models.AuditLog).filter(models.AuditLog.id.in_(audit_ids)).delete(synchronize_session=False)
 
     if entity_ids:
         db.query(models.LinkDismissal).filter(
@@ -508,17 +501,6 @@ def _audit_log_query(
     if not conditions:
         return query.filter(text("1=0"))
     return query.filter(or_(*conditions))
-
-
-def _delete_audit_logs(db: Session, audit_ids: list[int]) -> int:
-    if not audit_ids:
-        return 0
-    return int(
-        db.query(models.AuditLog)
-        .filter(models.AuditLog.id.in_(audit_ids))
-        .delete(synchronize_session=False)
-        or 0
-    )
 
 
 def _member_user_ids(db: Session, org_id: int | None) -> list[int]:

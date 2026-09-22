@@ -137,8 +137,10 @@ def reset_workspace_data(
         db,
         org_id=org_id,
         action="deletion",
-        subject_type="org" if org_id is not None else "entity_owner",
-        subject_ref=str(org_id) if org_id is not None else "global",
+        # Always "org": this is a workspace-wide reset, not the erasure of one
+        # data subject, and the policy's taxonomy separates the two.
+        subject_type="org",
+        subject_ref=str(org_id) if org_id is not None else "legacy_global",
         requested_by=operator_id,
         scope={
             "operation": "workspace_reset",
@@ -310,7 +312,6 @@ def reset_workspace_data(
             harmonization_ids=harmonization_ids,
             store_ids=store_ids,
             workflow_ids=workflow_ids,
-            audit_ids=[],  # evidence is retained
             existing_tables=existing_tables,
         )
         db.commit()
@@ -323,7 +324,6 @@ def reset_workspace_data(
             harmonization_ids=harmonization_ids,
             store_ids=store_ids,
             workflow_ids=workflow_ids,
-            audit_ids=[],  # evidence is retained
             existing_tables=existing_tables,
         )
         _delete_reset_dependencies_orm(
@@ -333,7 +333,6 @@ def reset_workspace_data(
             harmonization_ids=harmonization_ids,
             store_ids=store_ids,
             workflow_ids=workflow_ids,
-            audit_ids=[],  # evidence is retained
         )
         _reset_workspace_counters_sql(db, org_id=org_id, store_ids=store_ids)
         _delete_reset_dependencies_orm(
@@ -343,7 +342,6 @@ def reset_workspace_data(
             harmonization_ids=harmonization_ids,
             store_ids=store_ids,
             workflow_ids=workflow_ids,
-            audit_ids=[],  # evidence is retained
         )
         db.commit()
     except Exception as exc:
