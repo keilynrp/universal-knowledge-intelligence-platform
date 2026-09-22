@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from backend import models
+from backend import models, ops_monitor
 from backend.backup_assurance import (
     evaluate_backup_freshness,
     latest_completed_backup,
@@ -253,6 +253,53 @@ def _alert_channel_check(db: Session) -> dict:
     )
 
 
+def _scheduled_detection_check(now: datetime) -> dict:
+    """Whether the checks are evaluated on a schedule, not only on request (#368)."""
+    if not _startup_side_effects_enabled():
+        return _make_check(
+            "scheduled_detection",
+            "skipped",
+            "Scheduled detection skipped because startup side effects are disabled.",
+            {"startup_side_effects_enabled": False},
+        )
+    status = ops_monitor.get_status(now=now)
+    if not status["enabled"]:
+        return _make_check(
+            "scheduled_detection",
+            "warning",
+            "Scheduled detection is disabled; these checks run only when someone asks.",
+            status,
+        )
+    if not status["alive"]:
+        return _make_check(
+            "scheduled_detection",
+            "critical",
+            "Scheduled detection thread is not alive.",
+            status,
+        )
+    age = status["last_heartbeat_age_seconds"]
+    if age is not None and age > status["stale_after_seconds"]:
+        return _make_check(
+            "scheduled_detection",
+            "critical",
+            "Scheduled detection heartbeat is stale.",
+            status,
+        )
+    if status["last_loop_error"]:
+        return _make_check(
+            "scheduled_detection",
+            "warning",
+            "Scheduled detection is running but its last evaluation failed.",
+            status,
+        )
+    return _make_check(
+        "scheduled_detection",
+        "ok",
+        f"Operational checks are evaluated every {status['interval_seconds']}s.",
+        status,
+    )
+
+
 def _recommended_actions(checks: list[dict]) -> list[str]:
     actions: list[str] = []
     for check in checks:
@@ -269,6 +316,11 @@ def _recommended_actions(checks: list[dict]) -> list[str]:
             actions.append(f"Review overdue or failed jobs for {check['id']} and inspect recent scheduler logs.")
         if check["id"] == "ops_alerting" and check["status"] == "warning":
             actions.append("Create at least one active Alert Channel subscribed to ops.check_failed.")
+        if check["id"] == "scheduled_detection" and check["status"] in {"warning", "critical"}:
+            actions.append(
+                "Restore scheduled detection (UKIP_OPS_MONITOR_ENABLED=1, then inspect the "
+                "ops-monitor thread and logs); until then failures are only seen on request."
+            )
         if check["id"] == "secrets" and check["status"] == "critical":
             actions.append("Set JWT_SECRET_KEY and ENCRYPTION_KEY to strong unique values; see docs/operating/SECRETS_ROTATION_RUNBOOK.md.")
         if check["id"] == "secrets" and check["status"] == "warning":
@@ -421,6 +473,7 @@ def run_operational_checks(db: Session) -> dict:
             overdue_tolerance_seconds=scheduled_reports.SCHEDULER_POLL_SECONDS * 3,
         ),
         _alert_channel_check(db),
+        _scheduled_detection_check(now),
         _secrets_check(db),
         _backup_freshness_check(db, now=now),
     ]

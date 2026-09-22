@@ -128,6 +128,13 @@ services:
       # A domain crossing DOWN through this value on a quality recompute fires
       # the quality.low alert-channel event. Default 60. See docs/NOTIFICATIONS.md.
       UKIP_QUALITY_LOW_THRESHOLD: ${UKIP_QUALITY_LOW_THRESHOLD:-60}
+      # Scheduled detection (#368): evaluate the /ops/checks suite on a timer and
+      # send ops.check_failed on state changes (degraded, escalated, changed,
+      # reminder, recovered). Alerts reach a channel only if one is subscribed
+      # to ops.check_failed; every alert is also logged at WARNING.
+      UKIP_OPS_MONITOR_ENABLED: ${UKIP_OPS_MONITOR_ENABLED:-1}
+      UKIP_OPS_MONITOR_INTERVAL_SECONDS: ${UKIP_OPS_MONITOR_INTERVAL_SECONDS:-300}
+      UKIP_OPS_MONITOR_REMIND_HOURS: ${UKIP_OPS_MONITOR_REMIND_HOURS:-6}
       # Provider-neutral backup assurance metadata only. Backup payload and
       # storage credentials remain in Dokploy/provider-owned configuration.
       UKIP_BACKUP_MONITOR_ENABLED: ${UKIP_BACKUP_MONITOR_ENABLED:-1}
