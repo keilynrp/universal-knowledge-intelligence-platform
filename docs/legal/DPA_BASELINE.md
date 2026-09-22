@@ -85,8 +85,10 @@ operating documentation, except where explicitly marked otherwise.
 | Supply-chain / CI security gates | CodeQL SAST, gitleaks secret scanning, pip-audit, npm-audit, Trivy image scanning, SBOM generation. **Status: implemented in CI; operator enforcement steps pending (EPIC-019).** | `.github/workflows/` |
 | Data minimization — optional telemetry/LLM egress disabled by default | Sentry error telemetry gated by `SENTRY_ENABLED` (default false); LLM providers (OpenAI) engaged only via customer-activated AI integration (opt-in) | `backend/telemetry.py`; see Section 8 and [SUBPROCESSOR_REGISTER.md](SUBPROCESSOR_REGISTER.md) |
 
-**Known open measures (disclosed, not represented as in place):** formal
-incident response plan (ER-IR-001), external penetration test (ER-ASSURE-001),
+**Known open measures (disclosed, not represented as in place):** an
+exercised incident response plan (ER-IR-001 — the plan is published and its
+severity model, authority and notification workflow are decided; the first
+tabletop is pending), external penetration test (ER-ASSURE-001),
 contractual data-residency commitments (ER-DEP-001), a passing isolated restore drill (US-073 / ER-BCP-001; the provider is configured and the first drill, recorded as failed, is documented), and CI security-gate operator enforcement steps
 (EPIC-019). See
 [PRIVACY_CONTROLS_OVERVIEW.md](PRIVACY_CONTROLS_OVERVIEW.md) for the full
@@ -144,15 +146,22 @@ acts on the controller's instructions.
 
 The processor shall notify the controller without undue delay after becoming
 aware of a personal data breach affecting the controller's data, and in any
-case within `[NEGOTIATED — pending ER-IR-001 incident response plan]`.
+case **within 72 hours**. "Becoming aware" means a credible suspicion that
+customer data was accessed, lost or altered without authorization, not its
+confirmation.
 
-> **Pending control (disclosed):** A formal incident response plan is an open
-> item in the operator's gap register (ER-IR-001). Until it lands, the
-> notification timeframe above cannot be committed with operational backing
-> and must be negotiated with that limitation in view. Notifications will
-> include the nature of the breach, categories and approximate number of data
-> subjects and records concerned, likely consequences, and measures taken or
-> proposed.
+Notifications include the nature of the breach, the categories and approximate
+number of data subjects and records concerned, the likely consequences, and the
+measures taken or proposed.
+
+> **Operational backing and its limits (disclosed):** the commitment rests on
+> [INCIDENT_RESPONSE_PLAN.md](../operating/INCIDENT_RESPONSE_PLAN.md)
+> (ER-IR-001), published 2026-09-22, which sets the severity model, the
+> declaration authority and this workflow. Two limitations are disclosed rather
+> than papered over: the plan **has not yet been exercised** (the first tabletop
+> is pending), and incident response is currently carried by **one person with
+> no deputy and no paging outside a chat channel**. The internal target is 48
+> hours; 72 is what a single responder can commit to contractually.
 
 ## 12. Audit and information rights
 

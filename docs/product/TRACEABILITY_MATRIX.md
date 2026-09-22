@@ -35,7 +35,7 @@ Cada fila debe poder seguir este hilo:
 | Privacy assurance | EPIC-018 | US-076 / ER-PRIV-001 | Unscheduled | `docs/legal/` | Legal review y pack aprobado | specified |
 | Identity lifecycle | EPIC-018 | US-077 / ER-IAM-001 | Unscheduled | auth, SSO, API keys, tenant isolation | Offboarding y break-glass drills | identified |
 | Residency governance | EPIC-018 | US-078 / ER-DEP-001 | Unscheduled | production compose, topology docs | Region, data-flow y exit evidence | identified |
-| Incident response | EPIC-018 | US-079 / ER-IR-001 | Unscheduled | telemetry, ops checks, audit | Tabletop y notification workflow | identified |
+| Incident response | EPIC-018 | US-079 / ER-IR-001 | Unscheduled | telemetry, ops checks, audit, `docs/operating/INCIDENT_RESPONSE_PLAN.md` | Plan y notification workflow aprobados 2026-09-22; falta el primer tabletop | identified |
 | Capacity envelope | EPIC-018 | US-080 / ER-PERF-001 | Unscheduled | load scripts and metrics | Repeatable load report and alerts | identified |
 | Independent assurance | EPIC-018 | US-081 / ER-ASSURE-001 | Unscheduled | control evidence packs | Pentest, retest, pilot and exit decision | identified |
 
