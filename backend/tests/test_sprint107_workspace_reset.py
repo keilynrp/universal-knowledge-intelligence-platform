@@ -1,12 +1,14 @@
+import json
 from datetime import datetime, timezone
 
 from backend import models
 from backend.auth import create_access_token, hash_password
 
 
-def _admin_headers(db_session):
+def _admin_headers(db_session, suffix=""):
+    """Admin + two orgs. `suffix` keeps usernames and slugs unique per test."""
     admin = models.User(
-        username="org_admin_reset",
+        username=f"org_admin_reset{suffix}",
         password_hash=hash_password("admin-pass-123"),
         role="admin",
         is_active=True,
@@ -16,13 +18,13 @@ def _admin_headers(db_session):
 
     primary_org = models.Organization(
         name="Primary Org",
-        slug="primary-org-reset",
+        slug=f"primary-org-reset{suffix}",
         owner_id=admin.id,
         is_active=True,
     )
     secondary_org = models.Organization(
         name="Secondary Org",
-        slug="secondary-org-reset",
+        slug=f"secondary-org-reset{suffix}",
         owner_id=admin.id,
         is_active=True,
     )
@@ -254,14 +256,19 @@ def test_workspace_reset_clears_only_active_org_scope(client, session_factory):
         assert verify_db.query(models.AuthorityRecord).filter(models.AuthorityRecord.org_id == primary_org_id).count() == 0
         assert verify_db.query(models.AuthorityRecord).filter(models.AuthorityRecord.org_id == secondary_org_id).count() == 1
         assert verify_db.query(models.Annotation).count() == 1
+        # #368: the audit trail is evidence and survives the reset — both the
+        # row for the deleted entity and the one for the other org's entity.
         remaining_entity_audits = (
             verify_db.query(models.AuditLog)
             .filter(models.AuditLog.entity_type == "entity")
             .all()
         )
-        assert len(remaining_entity_audits) == 1
+        assert len(remaining_entity_audits) == 2
         surviving_secondary = verify_db.query(models.RawEntity).filter(models.RawEntity.org_id == secondary_org_id).one()
-        assert remaining_entity_audits[0].entity_id == surviving_secondary.id
+        assert surviving_secondary.id in {a.entity_id for a in remaining_entity_audits}
+        assert payload["deleted"]["audit_logs"] == 0
+        assert "audit trail (audit_logs)" in payload["preserved"]
+        assert verify_db.query(models.UserNotificationRead).count() == 2
         assert verify_db.query(models.StoreSyncMapping).count() == 1
         assert verify_db.query(models.WorkflowRun).filter(models.WorkflowRun.org_id == primary_org_id).count() == 0
         assert verify_db.query(models.WorkflowRun).filter(models.WorkflowRun.org_id == secondary_org_id).count() == 1
@@ -294,5 +301,89 @@ def test_workspace_reset_clears_only_active_org_scope(client, session_factory):
         assert primary_scraper.total_runs == 0
         assert primary_scraper.total_enriched == 0
         assert secondary_scraper.total_runs == 3
+    finally:
+        verify_db.close()
+
+
+def test_workspace_reset_keeps_the_audit_trail_of_deleted_entities(client, session_factory):
+    """#368: an admin must not be able to erase the record of their own actions."""
+    seed_db = session_factory()
+    try:
+        admin_headers, admin, primary_org, secondary_org = _admin_headers(seed_db, suffix="_audit")
+        _seed_workspace_data(seed_db, admin, primary_org, secondary_org)
+        primary_org_id = primary_org.id
+        deleted_entity_id = (
+            seed_db.query(models.RawEntity)
+            .filter(models.RawEntity.org_id == primary_org_id)
+            .one()
+            .id
+        )
+        admin_username = admin.username
+    finally:
+        seed_db.close()
+
+    response = client.post(
+        "/admin/workspace-reset",
+        json={"confirmation_text": "RESET"},
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+
+    verify_db = session_factory()
+    try:
+        assert (
+            verify_db.query(models.RawEntity).filter(models.RawEntity.id == deleted_entity_id).count() == 0
+        )
+        surviving = (
+            verify_db.query(models.AuditLog)
+            .filter(models.AuditLog.entity_id == deleted_entity_id)
+            .all()
+        )
+        assert len(surviving) == 1
+        assert surviving[0].username == admin_username
+    finally:
+        verify_db.close()
+
+
+def test_workspace_reset_records_a_lifecycle_event(client, session_factory):
+    """The reset itself is evidence: who, what scope, what it removed and kept."""
+    seed_db = session_factory()
+    try:
+        admin_headers, admin, primary_org, secondary_org = _admin_headers(seed_db, suffix="_lifecycle")
+        _seed_workspace_data(seed_db, admin, primary_org, secondary_org)
+        primary_org_id = primary_org.id
+        admin_id = admin.id
+        before = seed_db.query(models.DataLifecycleEvent).count()
+    finally:
+        seed_db.close()
+
+    response = client.post(
+        "/admin/workspace-reset",
+        json={"confirmation_text": "RESET"},
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+
+    verify_db = session_factory()
+    try:
+        events = (
+            verify_db.query(models.DataLifecycleEvent)
+            .order_by(models.DataLifecycleEvent.id.desc())
+            .all()
+        )
+        assert len(events) == before + 1
+        event = events[0]
+        assert event.action == "deletion"
+        assert event.status == "completed"
+        assert event.requested_by == admin_id
+        assert event.subject_type == "org"
+        assert event.subject_ref == str(primary_org_id)
+        scope = json.loads(event.scope_json)
+        evidence = json.loads(event.evidence_json)
+        assert scope["operation"] == "workspace_reset"
+        assert scope["audit_logs_retained"] == 1
+        assert evidence["deleted"]["raw_entities"] == 1
+        assert evidence["deleted"]["audit_logs"] == 0
+        assert evidence["audit_logs_retained"] == 1
     finally:
         verify_db.close()

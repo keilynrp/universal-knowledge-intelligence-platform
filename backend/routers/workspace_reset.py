@@ -1,3 +1,4 @@
+# ruff: noqa: B008 — Depends(...) in defaults is the FastAPI dependency idiom.
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,7 +14,6 @@ from backend.routers.workspace_reset_ops import (
     PRESERVED_RESOURCES,
     _audit_log_query,
     _delete_annotations,
-    _delete_audit_logs,
     _delete_link_dismissals,
     _delete_reset_dependencies_orm,
     _delete_scoped_model,
@@ -28,6 +28,7 @@ from backend.routers.workspace_reset_ops import (
     _scope_details,
     _scoped_query,
 )
+from backend.services import data_lifecycle
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,23 @@ class WorkspaceResetResponse(BaseModel):
     preserved: list[str] = Field(default_factory=lambda: PRESERVED_RESOURCES.copy())
 
 
+def _close_lifecycle_event(db: Session, event_id: int, *, status: str, evidence: dict) -> None:
+    """Finish the reset's lifecycle event.
+
+    The reset expunges the session mid-way, so the event recorded before it is
+    detached by now: re-load it by id. Evidence that cannot be written must not
+    turn a completed reset into a 500, so a failure here is logged, loudly.
+    """
+    event = db.get(models.DataLifecycleEvent, event_id)
+    if event is None:
+        logger.error("Lifecycle event %s for the workspace reset disappeared", event_id)
+        return
+    try:
+        data_lifecycle.complete_event(db, event, status=status, evidence=evidence)
+    except Exception:
+        logger.exception("Could not close lifecycle event %s for the workspace reset", event_id)
+
+
 @router.get("/preview", response_model=WorkspaceResetPreview)
 def preview_workspace_reset(
     db: Session = Depends(get_db),
@@ -78,12 +96,14 @@ def reset_workspace_data(
         raise HTTPException(status_code=422, detail=f'Type "{CONFIRMATION_TEXT}" to confirm the reset')
 
     org_id, scope_type, scope_label = _scope_details(db, current_user)
+    # Read the operator BEFORE anything commits: recording the lifecycle event
+    # commits, which expires these attributes, and the reset then expunges the
+    # session, leaving current_user detached and unreadable.
+    operator_id, operator_username = current_user.id, current_user.username
     existing_tables = _existing_tables(db)
 
     entity_query = _scoped_query(db, models.RawEntity, org_id)
-    relationship_query = _scoped_query(db, models.EntityRelationship, org_id)
     authority_query = _scoped_query(db, models.AuthorityRecord, org_id)
-    authority_link_query = _scoped_query(db, models.AuthorityRecordLink, org_id)
     rule_query = _scoped_query(db, models.NormalizationRule, org_id)
     harmonization_query = _scoped_query(db, models.HarmonizationLog, org_id)
     store_query = _scoped_query(db, models.StoreConnection, org_id)
@@ -101,24 +121,43 @@ def reset_workspace_data(
     workflow_ids = _ids(workflow_query, models.Workflow.id)
     member_ids = _member_user_ids(db, org_id)
 
+    # The audit trail is EVIDENCE, not workspace content: the data lifecycle
+    # policy retains operational audit events indefinitely, and an incident is
+    # exactly when someone would want them gone (#368). The reset counts them
+    # and keeps them; the ids are never handed to a delete path.
     audit_query = _audit_log_query(db, entity_ids, authority_ids, rule_ids)
-    audit_ids = _ids(audit_query, models.AuditLog.id)
+    retained_audit_logs = audit_query.count()
 
     deleted: dict[str, int] = {}
     reset_counters: dict[str, int] = {}
+
+    # Recorded before anything is deleted, so an interrupted reset still leaves
+    # a trace of what was attempted, by whom.
+    lifecycle_event_id = data_lifecycle.record_event(
+        db,
+        org_id=org_id,
+        action="deletion",
+        # Always "org": this is a workspace-wide reset, not the erasure of one
+        # data subject, and the policy's taxonomy separates the two.
+        subject_type="org",
+        subject_ref=str(org_id) if org_id is not None else "legacy_global",
+        requested_by=operator_id,
+        scope={
+            "operation": "workspace_reset",
+            "scope_type": scope_type,
+            "scope_label": scope_label,
+            "entities": len(entity_ids),
+            "authority_records": len(authority_ids),
+            "audit_logs_retained": retained_audit_logs,
+        },
+    ).id
 
     try:
         db.flush()
         db.expunge_all()
 
-        if audit_ids:
-            deleted["notification_reads"] = (
-                db.query(models.UserNotificationRead)
-                .filter(models.UserNotificationRead.audit_log_id.in_(audit_ids))
-                .delete(synchronize_session=False)
-            )
-        else:
-            deleted["notification_reads"] = 0
+        # Read markers point at retained audit rows, so they stay too.
+        deleted["notification_reads"] = 0
 
         if member_ids:
             reset_counters["notification_states"] = (
@@ -164,7 +203,7 @@ def reset_workspace_data(
         else:
             deleted["workflow_runs"] = workflow_run_query.delete(synchronize_session=False)
 
-        deleted["audit_logs"] = 0
+        deleted["audit_logs"] = 0  # retained on purpose; see above
 
         reset_counters["store_connections"] = _safe_update(
             db, store_query, models.StoreConnection, {
@@ -248,11 +287,9 @@ def reset_workspace_data(
         try:
             db.execute(text("DELETE FROM search_index"))
         except Exception:
-            # FTS table exists only in SQLite test mode.
-            pass
+            logger.debug("search_index not present; skipping its reset", exc_info=True)
 
         with db.no_autoflush:
-            deleted["audit_logs"] = _delete_audit_logs(db, audit_ids)
             deleted["annotations"] = _delete_annotations(
                 db,
                 entity_ids,
@@ -275,7 +312,6 @@ def reset_workspace_data(
             harmonization_ids=harmonization_ids,
             store_ids=store_ids,
             workflow_ids=workflow_ids,
-            audit_ids=audit_ids,
             existing_tables=existing_tables,
         )
         db.commit()
@@ -288,7 +324,6 @@ def reset_workspace_data(
             harmonization_ids=harmonization_ids,
             store_ids=store_ids,
             workflow_ids=workflow_ids,
-            audit_ids=audit_ids,
             existing_tables=existing_tables,
         )
         _delete_reset_dependencies_orm(
@@ -298,7 +333,6 @@ def reset_workspace_data(
             harmonization_ids=harmonization_ids,
             store_ids=store_ids,
             workflow_ids=workflow_ids,
-            audit_ids=audit_ids,
         )
         _reset_workspace_counters_sql(db, org_id=org_id, store_ids=store_ids)
         _delete_reset_dependencies_orm(
@@ -308,20 +342,35 @@ def reset_workspace_data(
             harmonization_ids=harmonization_ids,
             store_ids=store_ids,
             workflow_ids=workflow_ids,
-            audit_ids=audit_ids,
         )
         db.commit()
-    except Exception:
+    except Exception as exc:
         db.rollback()
+        _close_lifecycle_event(
+            db,
+            lifecycle_event_id,
+            status="failed",
+            evidence={"error": type(exc).__name__, "deleted_before_failure": deleted},
+        )
         logger.exception("Workspace reset failed for scope %s (%s)", scope_label, scope_type)
         raise HTTPException(
             status_code=500,
             detail="Workspace reset failed. Check server logs for details.",
         )
 
+    _close_lifecycle_event(
+        db,
+        lifecycle_event_id,
+        status="completed",
+        evidence={
+            "deleted": deleted,
+            "reset_counters": reset_counters,
+            "audit_logs_retained": retained_audit_logs,
+        },
+    )
     logger.warning(
         "Workspace data reset executed by %s for scope %s (%s)",
-        current_user.username,
+        operator_username,
         scope_label,
         scope_type,
     )
