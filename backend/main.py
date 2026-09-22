@@ -333,6 +333,11 @@ async def lifespan(app: FastAPI):
             logger.info("In-process schedulers disabled (UKIP_INPROCESS_SCHEDULERS=0) "
                         "— durable-queue workers are authoritative")
 
+        # Scheduled detection (#368) is monitoring, not a job domain, so it runs
+        # whether or not the in-process schedulers do.
+        from backend import ops_monitor
+        ops_monitor.start_monitor()
+
         # ── Rust engine gRPC client ──────────────────────────────────────────
         engine_url = os.environ.get("ENGINE_GRPC_URL", "")
         engine_token = os.environ.get("ENGINE_AUTH_TOKEN", "")
