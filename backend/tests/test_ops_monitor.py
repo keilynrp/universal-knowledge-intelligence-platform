@@ -1,4 +1,5 @@
 """Scheduled detection (#368): alert policy, one evaluation, config, start, self-check."""
+
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -116,6 +117,43 @@ def test_run_once_alerts_on_change_stays_quiet_then_announces_recovery():
     assert status["last_status"] == "ok"
 
 
+def test_an_evaluation_that_raises_is_a_critical_incident_with_a_recovery():
+    """Review finding: an unguarded check raising (DB down) must not go silent."""
+    sent = []
+
+    class _Session:
+        rolled_back = False
+
+        def rollback(self):
+            self.rolled_back = True
+
+    def broken(_db):
+        raise RuntimeError("connection refused")
+
+    session = _Session()
+    kinds = [
+        ops_monitor.run_once(
+            session,
+            now=NOW,
+            remind_after=REMIND,
+            run_checks=broken,
+            dispatch=lambda _db, event, message, details: sent.append(details),
+        ),
+        ops_monitor.run_once(
+            session,
+            now=NOW + timedelta(minutes=5),
+            remind_after=REMIND,
+            run_checks=lambda _db: _report("ok"),
+            dispatch=lambda _db, event, message, details: sent.append(details),
+        ),
+    ]
+
+    assert kinds == ["degraded", "recovered"]
+    assert sent[0]["status"] == "critical"
+    assert sent[0]["failing_checks"] == ops_monitor.EVALUATION_FAILED
+    assert session.rolled_back
+
+
 def test_run_once_logs_alerts_even_without_a_channel(caplog):
     with caplog.at_level("WARNING", logger="backend.ops_monitor"):
         ops_monitor.run_once(
@@ -146,7 +184,9 @@ def test_config_defaults():
         ("900", "1.5", 900, 1.5),
     ],
 )
-def test_config_is_validated(monkeypatch, interval, remind, expected_interval, expected_remind):
+def test_config_is_validated(
+    monkeypatch, interval, remind, expected_interval, expected_remind
+):
     monkeypatch.setenv("UKIP_OPS_MONITOR_INTERVAL_SECONDS", interval)
     monkeypatch.setenv("UKIP_OPS_MONITOR_REMIND_HOURS", remind)
     config = ops_monitor.load_config()
@@ -196,7 +236,9 @@ def _status(**overrides):
 )
 def test_scheduled_detection_check(monkeypatch, overrides, expected):
     monkeypatch.setattr(ops_checks, "_startup_side_effects_enabled", lambda: True)
-    monkeypatch.setattr(ops_monitor, "get_status", lambda now=None: _status(**overrides))
+    monkeypatch.setattr(
+        ops_monitor, "get_status", lambda now=None: _status(**overrides)
+    )
     check = ops_checks._scheduled_detection_check(NOW)
     assert check["id"] == "scheduled_detection"
     assert check["status"] == expected

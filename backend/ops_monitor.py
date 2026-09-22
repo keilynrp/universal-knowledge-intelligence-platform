@@ -106,6 +106,31 @@ def alert_kind(
     return None
 
 
+EVALUATION_FAILED = "ops_checks_evaluation"
+
+
+def _failed_evaluation_report(exc: Exception, now: datetime) -> dict:
+    """What an evaluation that raised is reported as: critical, not silence.
+
+    Some checks query the database without their own guard, so the outage they
+    exist to catch can make ``run_operational_checks`` raise. Treating that as
+    "no data" would hide the incident and, later, its recovery.
+    """
+    return {
+        "status": "critical",
+        "checked_at": now.isoformat(),
+        "checks": [
+            {
+                "id": EVALUATION_FAILED,
+                "status": "critical",
+                "summary": f"Operational checks could not be evaluated: {type(exc).__name__}",
+                "details": {},
+            }
+        ],
+        "summary": {"critical": 1, "warning": 0},
+    }
+
+
 def _failing_checks(report: dict) -> frozenset[str]:
     return frozenset(c["id"] for c in report["checks"] if c["status"] in {"warning", "critical"})
 
@@ -176,7 +201,15 @@ def run_once(
 
     now = now or datetime.now(timezone.utc)
     remind_after = remind_after or load_config().remind_after
-    report = (run_checks or ops_checks.run_operational_checks)(db)
+    try:
+        report = (run_checks or ops_checks.run_operational_checks)(db)
+    except Exception as exc:  # becomes a critical observation, and is logged
+        logger.exception("[ops-monitor] operational checks raised")
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001, S110 — the session may already be unusable
+            pass
+        report = _failed_evaluation_report(exc, now)
     failing = _failing_checks(report)
     kind = alert_kind(_last, report["status"], failing, now, remind_after)
 
@@ -215,7 +248,11 @@ def _loop(config: MonitorConfig) -> None:
         try:
             with database.SessionLocal() as db:
                 run_once(db, remind_after=config.remind_after)
-            _update(last_loop_error=None, last_loop_error_at=None)
+            _update(
+                last_heartbeat_at=datetime.now(timezone.utc),
+                last_loop_error=None,
+                last_loop_error_at=None,
+            )
         except Exception:
             logger.exception("[ops-monitor] evaluation failed")
             _update(
