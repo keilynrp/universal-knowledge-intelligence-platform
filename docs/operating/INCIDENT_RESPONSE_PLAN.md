@@ -8,10 +8,11 @@ It describes **what exists today**, and marks what does not. A plan that
 claims capabilities the team does not have is worse than no plan: it is
 discovered to be fiction during the incident it was written for.
 
-Two things in it are deliberately unset and must be decided by the owner
-before this control can advance (#368 phase B): **who may declare an incident
-and authorize customer notification**, and **the breach-notification timeframe
-committed in the DPA**.
+Both decisions this plan waited on were made on 2026-09-22 (#368 phase B):
+the repository owner declares incidents and authorizes customer notification,
+and the DPA commits notification **within 72 hours** of becoming aware, with
+an internal target of 48. Both are recorded in §2 and §8, and are revisited
+when the team grows past one person.
 
 ---
 
@@ -37,15 +38,21 @@ the top residual risk of this control.
 
 | Role | Responsibility | Who |
 |---|---|---|
-| Incident commander | Declares the incident and its severity, runs the response, owns the timeline | `[OPERATOR TO FILL]` |
-| Operator | Executes containment and recovery steps | `[OPERATOR TO FILL]` |
-| Security lead | Judges blast radius, decides whether data was affected | `[OPERATOR TO FILL]` |
-| Notification approver | Authorizes what is told to customers and when | `[OWNER DECISION — #368 phase B]` |
-| Deputy | Takes over if the commander is unreachable | `[OPERATOR TO FILL — none today]` |
+| Incident commander | Declares the incident and its severity, runs the response, owns the timeline | the repository owner (`keilynrp`) |
+| Operator | Executes containment and recovery steps | the repository owner (`keilynrp`) |
+| Security lead | Judges blast radius, decides whether data was affected | the repository owner (`keilynrp`) |
+| Notification approver | Authorizes what is told to customers and when | the repository owner (`keilynrp`) |
+| Deputy | Takes over if the commander is unreachable | **None.** See §11 gap 1 |
 
-**Declaration authority:** `[OWNER DECISION — #368 phase B]`. Until it is set,
-anyone who suspects an incident declares it. Over-declaring is cheap;
-under-declaring is how incidents are discovered by customers.
+**Declaration authority (decided 2026-09-22):** the repository owner (`keilynrp`) declares incidents and
+authorizes customer notification. Anyone who suspects an incident raises it
+immediately; over-declaring is cheap, under-declaring is how incidents are
+discovered by customers.
+
+This concentration of roles is accepted deliberately, not overlooked: it is
+what a one-person team can commit to today. **It is revisited when funding and
+staffing allow a second responder**, and the deputy row is the first thing that
+changes then.
 
 ## 3. Severity model
 
@@ -175,19 +182,24 @@ fingerprint, never its value.
 loss of, customer data. Availability alone does not trigger it unless the
 contract says so.
 
-**Timeframe.** `[OWNER DECISION — #368 phase B]`. The DPA currently records
-this as `[NEGOTIATED — pending ER-IR-001 incident response plan]` and discloses
-that the commitment has no operational backing until this plan lands. **This
-plan does not set it**: a timeframe is a contractual promise, not an
-engineering default. Once decided, update `docs/legal/DPA_BASELINE.md` §11 and
-this section together.
+**Timeframe (decided 2026-09-22).** The controller is notified **without
+undue delay and in any case within 72 hours** of the operator becoming aware
+of a personal data breach. The **internal target is 48 hours**; 72 is the
+committed limit, because a single responder with no paging cannot honestly
+promise less as a contractual floor. `docs/legal/DPA_BASELINE.md` §11 carries
+the same commitment; the two are changed together or not at all.
+
+"Becoming aware" means the moment a person forms a credible suspicion that
+customer data was accessed, lost or altered without authorization — not the
+moment it is confirmed. §5.1 requires that moment to be written down.
 
 **What a notification contains** (DPA §11, already agreed): the nature of the
 breach; the categories and approximate number of data subjects and records
 concerned; the likely consequences; and the measures taken or proposed.
 
-**Who approves it:** `[OWNER DECISION — #368 phase B]`. One person writes it,
-the approver releases it.
+**Who approves it:** the repository owner (`keilynrp`), per §2. Today the same person writes and
+releases it, which is a known weakness of a one-person team: there is no second
+reader before a customer communication goes out.
 
 **Mexico:** `docs/legal/MEXICO_ANNEX.md` applies in addition. Check it before
 notifying, do not assume the DPA covers everything.
@@ -222,6 +234,9 @@ timeline, the gaps found and corrective actions. `ER-IR-001` cannot reach
 Recorded here so nobody discovers them mid-incident:
 
 1. **One person holds every role**, with no deputy and no escalation path.
+   Accepted by the owner on 2026-09-22 as what the current team can commit to,
+   and revisited when funding and staffing allow a second responder. It is also
+   why the notification commitment is 72 hours rather than 24.
 2. **No paging.** Alerts reach Slack and the container log; nothing wakes
    anyone up.
 3. **No central log retention.** Container logs are ephemeral, so early capture

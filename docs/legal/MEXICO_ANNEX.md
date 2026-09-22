@@ -67,8 +67,9 @@ Art. 19 requires the responsable (and by extension the encargado) to establish
 and maintain administrative, technical, and physical security measures. The
 implemented measures and their evidence are documented in
 [PRIVACY_CONTROLS_OVERVIEW.md](PRIVACY_CONTROLS_OVERVIEW.md), including an
-honest register of measures not yet in place (incident response plan, external
-pentest, data residency, first restore drill).
+honest register of measures not yet in place (an exercised incident response
+plan — the plan itself is published, the first tabletop is pending — external
+pentest, data residency, a passing restore drill).
 
 ## 7. Data minimization note
 

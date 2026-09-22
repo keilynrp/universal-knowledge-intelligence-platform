@@ -26,7 +26,7 @@ specified, implemented, verified, operated, and auditable.
 | ER-PRIV-001 | Customer privacy review has a maintained legal/operational pack | P1 | specified | auditable | Privacy/legal owner | External legal review of the docs/legal pack |
 | ER-IAM-001 | Joiner/mover/leaver lifecycle prevents orphaned access | P1 | identified | operated | Security/platform owner | MFA, SCIM or governed alternative, session/API-key revocation drills |
 | ER-DEP-001 | Supported deployment and residency boundaries are explicit and testable | P1 | identified | auditable | Architecture/operations owner | Topology matrix, region policy, data-flow inventory, exit procedure |
-| ER-IR-001 | Security incidents are detected, classified, contained, and evidenced | P0 | identified | operated | Security/operations owner | Incident plan, severity model, tabletop exercise, notification workflow |
+| ER-IR-001 | Security incidents are detected, classified, contained, and evidenced | P0 | identified | operated | Security/operations owner | Tabletop exercise (plan, severity model and notification workflow approved 2026-09-22) |
 | ER-PERF-001 | Capacity and degradation behavior are known for supported workloads | P1 | identified | operated | Platform owner | Load model, performance tests, saturation alerts, capacity envelope |
 | ER-ASSURE-001 | Independent assessment validates security posture before broad GA | P0 | identified | auditable | Executive/security owner | External pentest and closure report |
 
@@ -42,7 +42,7 @@ specified, implemented, verified, operated, and auditable.
 | ER-PRIV-001 | US-076 | Privacy owner | Legal/privacy owner | Complete external legal review | Approved versioned pack with annual review ownership |
 | ER-IAM-001 | US-077 | Platform owner | Security owner | Specify MFA, provisioning, revocation, and break-glass | Joiner/mover/leaver and emergency-access drills |
 | ER-DEP-001 | US-078 | Architecture owner | Operations owner | Approve topology matrix and region policy | Versioned data-flow, residency, subprocessor, and exit evidence |
-| ER-IR-001 | US-079 | Security owner | Security/operations owner | Approve severity and notification workflow | Tabletop exercise, timeline, decisions, and corrective actions |
+| ER-IR-001 | US-079 | Security owner | Security/operations owner | Run the first tabletop exercise (plan, severity model, authority and notification workflow approved 2026-09-22) | Tabletop exercise, timeline, decisions, and corrective actions |
 | ER-PERF-001 | US-080 | Platform owner | Operations owner | Approve workload profiles and performance objectives | Repeatable load report, saturation alerts, and supported envelope |
 | ER-ASSURE-001 | US-081 | Security owner | Executive owner | Approve pentest and pilot-exit scope | Independent report, remediation/retest, pilot record, executive decision |
 
