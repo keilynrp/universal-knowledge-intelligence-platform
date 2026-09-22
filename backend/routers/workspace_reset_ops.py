@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 CONFIRMATION_TEXT = "RESET"
 PRESERVED_RESOURCES = [
+    "audit trail (audit_logs)",
     "users",
     "organization membership",
     "branding settings",
@@ -538,7 +539,6 @@ def _preview_counts(db: Session, org_id: int | None) -> dict[str, int]:
     entity_query = _scoped_query(db, models.RawEntity, org_id)
     authority_query = _scoped_query(db, models.AuthorityRecord, org_id)
     rule_query = _scoped_query(db, models.NormalizationRule, org_id)
-    harmonization_query = _scoped_query(db, models.HarmonizationLog, org_id)
     store_query = _scoped_query(db, models.StoreConnection, org_id)
 
     entity_ids = _ids(entity_query, models.RawEntity.id)
