@@ -85,10 +85,11 @@ operating documentation, except where explicitly marked otherwise.
 | Supply-chain / CI security gates | CodeQL SAST, gitleaks secret scanning, pip-audit, npm-audit, Trivy image scanning, SBOM generation. **Status: implemented in CI; operator enforcement steps pending (EPIC-019).** | `.github/workflows/` |
 | Data minimization — optional telemetry/LLM egress disabled by default | Sentry error telemetry gated by `SENTRY_ENABLED` (default false); LLM providers (OpenAI) engaged only via customer-activated AI integration (opt-in) | `backend/telemetry.py`; see Section 8 and [SUBPROCESSOR_REGISTER.md](SUBPROCESSOR_REGISTER.md) |
 
-**Known open measures (disclosed, not represented as in place):** an
-exercised incident response plan (ER-IR-001 — the plan is published and its
-severity model, authority and notification workflow are decided; the first
-tabletop is pending), external penetration test (ER-ASSURE-001),
+**Known open measures (disclosed, not represented as in place):** the
+corrective actions from the first incident-response exercise (ER-IR-001 — the
+plan is published, decided and exercised on 2026-09-22; read auditing,
+attributable request logs and a paging path remain open), external penetration
+test (ER-ASSURE-001),
 contractual data-residency commitments (ER-DEP-001), a passing isolated restore drill (US-073 / ER-BCP-001; the provider is configured and the first drill, recorded as failed, is documented), and CI security-gate operator enforcement steps
 (EPIC-019). See
 [PRIVACY_CONTROLS_OVERVIEW.md](PRIVACY_CONTROLS_OVERVIEW.md) for the full
@@ -157,11 +158,17 @@ measures taken or proposed.
 > **Operational backing and its limits (disclosed):** the commitment rests on
 > [INCIDENT_RESPONSE_PLAN.md](../operating/INCIDENT_RESPONSE_PLAN.md)
 > (ER-IR-001), published 2026-09-22, which sets the severity model, the
-> declaration authority and this workflow. Two limitations are disclosed rather
-> than papered over: the plan **has not yet been exercised** (the first tabletop
-> is pending), and incident response is currently carried by **one person with
-> no deputy and no paging outside a chat channel**. The internal target is 48
-> hours; 72 is what a single responder can commit to contractually.
+> declaration authority and this workflow. It was first exercised on
+> 2026-09-22
+> ([record](../operating/INCIDENT_TABLETOP_2026-09-22.md)), and the limitations
+> that exercise exposed are disclosed rather than papered over: incident
+> response is carried by **one person with no deputy and no paging outside a
+> chat channel** (detection of a simulated credential exposure took 6 h 22 min
+> and came from a third party); **read access is not recorded**, so the
+> categories and approximate record counts required by this section may have to
+> be reconstructed from backups rather than read from an audit trail, and a
+> first notification may be phased. The internal target is 48 hours; 72 is what
+> a single responder can commit to contractually.
 
 ## 12. Audit and information rights
 

@@ -31,7 +31,7 @@ prefer an honest register over an impressive one.
 
 | Open item | Tracking ID | Status |
 |-----------|-------------|--------|
-| Formal incident response plan (incl. breach-notification SLA backing) | ER-IR-001 | Open — DPA breach clause carries a placeholder timeframe until this lands |
+| Incident response capability (incl. breach-notification SLA backing) | ER-IR-001 | Partial — the plan is published, its authority and 72-hour notification commitment were decided on 2026-09-22, and it was first exercised on 2026-09-22. That exercise showed read access is not recorded and nothing pages, so scope may need reconstruction from backups and detection can be slow; corrective actions are open |
 | External penetration test | ER-ASSURE-001 | Open — no third-party assessment report available yet |
 | Data residency commitments | ER-DEP-001 | Open — residency follows hosting region; no contractual commitment defined |
 | A passing isolated restore drill | US-073 / ER-BCP-001 | Pending — provider configured and two backup cycles evidenced; the first isolated restore drill (2026-09-21) is recorded as failed and its dossier was approved on 2026-09-21; a passing drill remains |
