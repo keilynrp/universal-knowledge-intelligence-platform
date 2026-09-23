@@ -117,6 +117,31 @@ establish, in this order:
 3. **Is it ongoing?** An attacker with a live session needs containment before
    analysis.
 
+**When evidence and containment are not equally reachable.** "Capture first"
+assumes both are a command away. They are not. Containment runs from a phone
+through the admin UI in about a minute; capturing container logs needs a
+laptop, a network and an SSH key, and the first tabletop measured that at
+twenty minutes on a Sunday morning. Meanwhile the container log is the only
+source that sees reads at all, and it dies with the container.
+
+So: **if containment is reachable and evidence is not, contain first and say so
+in the timeline.** A live credential doing damage for twenty more minutes is a
+worse outcome than a gap in the record — and the gap is recoverable, because
+the database evidence in §7 survives containment by design. What is lost is the
+chance to watch the attacker act, which today is worth little: reads are not
+audited (#375) and the request log carries no identity (#376), so watching
+would not have identified them anyway.
+
+**Determining scope after the fact.** When telemetry cannot say which records
+were read, the request log plus a restore often can. List endpoints paginate
+deterministically — `GET /entities` defaults to `sort_by=id` and `order=asc` —
+so the `skip` and `limit` values recorded in the container log identify exact
+pages. Restore a backup that **predates** the access into an isolated target
+per the backup runbook, apply the compromised account's `org_id` scope, replay
+the same offsets, and the result is the list of records actually returned.
+Measured RTO is 4 h, which fits inside the notification target. Never replay
+against production.
+
 ### 5.3 Contain
 
 Containment beats tidiness. It is acceptable to log every user out or take a
@@ -161,8 +186,12 @@ containment destroys state. Minimum set:
 1. **Container logs**, first, because they vanish with the container:
    `docker logs <container> > incident-<id>-backend.log`
 2. **Database evidence**, which survives by design:
-   - `audit_logs` — who called what, over HTTP. Retained indefinitely by policy
-     and no longer deleted by a workspace reset (#372).
+   - `audit_logs` — who performed which **mutation**, over HTTP. Retained
+     indefinitely by policy and no longer deleted by a workspace reset (#372).
+     **It does not record reads** (#375): `AuditMiddleware` writes a row only
+     for `POST`, `PUT`, `PATCH` and `DELETE`. An empty result for a suspect
+     account therefore means "no writes", never "no access" — do not read it as
+     an all-clear.
    - `backup_assurance_events` — append-only; `UPDATE`, `DELETE` and `TRUNCATE`
      are all refused at the database (#365).
    - `data_lifecycle_events` — exports, deletions, purges, workspace resets.
@@ -192,6 +221,19 @@ the same commitment; the two are changed together or not at all.
 "Becoming aware" means the moment a person forms a credible suspicion that
 customer data was accessed, lost or altered without authorization — not the
 moment it is confirmed. §5.1 requires that moment to be written down.
+
+**When the deadline arrives and the scope is still unknown, the deadline wins.**
+Notify with what is proven, state plainly what is not yet established and what
+is being done to establish it, and complete the notification afterwards. GDPR
+Article 33 provides for exactly this phased notification; what it does not
+provide for is holding the notification back until the picture is complete.
+This plan already defines becoming aware as suspicion rather than confirmation,
+and it would be incoherent for the exit to demand a certainty the entry
+rejects. **Silence is never the default.**
+
+Set a working deadline for the investigation that is earlier than the
+notification target — early enough to absorb one failed attempt — and write it
+in the timeline. When it passes, draft from what is proven.
 
 **What a notification contains** (DPA §11, already agreed): the nature of the
 breach; the categories and approximate number of data subjects and records
@@ -226,8 +268,21 @@ shape a postmortem should take.
 
 This plan is not credible until it has been exercised. A tabletop uses
 [the tabletop template](templates/INCIDENT_TABLETOP_TEMPLATE.md) and produces a
-timeline, the gaps found and corrective actions. `ER-IR-001` cannot reach
-`operated` without at least one (#368 phase D).
+timeline, the gaps found and corrective actions.
+
+**First exercise: 2026-09-22, stolen admin token** —
+[the record](INCIDENT_TABLETOP_2026-09-22.md) (#368 phase D). It measured
+6 h 22 min from exposure to detection, which came from a third party, and
+16 min from detection to containment. It verified that containment works as
+§5.3 describes, and that scope is reconstructible after the fact. It found six
+gaps, of which four are new issues (#375, #376, #377, #378) and two were
+already known and are now measured. §5.2, §7, §8 and §11 were changed because
+of it.
+
+`ER-IR-001` does not advance past `specified` on the strength of one exercise
+that showed the control cannot yet attribute access or establish scope. The
+next exercise should use a different scenario and should be able to answer the
+questions this one could not.
 
 ## 11. Known gaps
 
@@ -237,12 +292,19 @@ Recorded here so nobody discovers them mid-incident:
    Accepted by the owner on 2026-09-22 as what the current team can commit to,
    and revisited when funding and staffing allow a second responder. It is also
    why the notification commitment is 72 hours rather than 24.
-2. **No paging.** Alerts reach Slack and the container log; nothing wakes
-   anyone up.
+2. **No paging** (#377). Alerts reach Slack and the container log; nothing
+   wakes anyone up. Measured in the 2026-09-22 tabletop: **6 h 22 min** from
+   exposure to detection, overnight, and the report came from a third party.
 3. **No central log retention.** Container logs are ephemeral, so early capture
-   is the only way to keep them.
+   is the only way to keep them — and since reads are unaudited, they are the
+   **only** record that a read happened at all.
 4. **No per-session revocation** (#368 phase C.3): containing one stolen token
-   means disabling the account or logging everyone out.
+   means disabling the account or logging everyone out. Worse than it reads:
+   `PUT` and `DELETE /users/{id}` refuse to deactivate **your own account** or
+   the **last active `super_admin`**. If the stolen credential is the operator's
+   own — the likeliest case in a one-person team — deactivation is unavailable
+   by design, and the only containment left is rotating `JWT_SECRET_KEY`, which
+   logs everyone out.
 5. **Error telemetry off by default** (`SENTRY_ENABLED=0`).
 6. **No anomaly detection** on logins or access patterns.
 7. **Tenant isolation is not demonstrable** from production data today
@@ -250,6 +312,15 @@ Recorded here so nobody discovers them mid-incident:
    in a multi-tenant incident.
 8. **Backup evidence ingestion is manual** (#370), so a stale-backup alert may
    mean "nobody recorded it" rather than "no backup exists". Check both.
+9. **Reads are not audited** (#375). `audit_logs` covers mutations only, so the
+   first question of any access incident — what did they read — has no answer
+   in the audit trail. Found by the 2026-09-22 tabletop.
+10. **The request log has no identity** (#376). Every request is logged with
+    method, path, status and client IP, but not who made it, so a read cannot
+    be attributed to an account even when it is visible. Found by the
+    2026-09-22 tabletop.
+11. **`GET /audit-log` cannot filter by `ip_address`** (#378), although every
+    row stores one. Correlating a suspect address across sources is manual.
 
 ## 12. Maintenance
 
