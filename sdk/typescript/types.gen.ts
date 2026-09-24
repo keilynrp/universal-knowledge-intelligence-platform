@@ -7431,6 +7431,12 @@ export type GetAuditLogData = {
          */
         ip_address?: string | null;
         /**
+         * Session Id
+         *
+         * Exact session id (the `sid` a token names), as shown in the sessions list.
+         */
+        session_id?: string | null;
+        /**
          * Skip
          */
         skip?: number;
@@ -7511,6 +7517,12 @@ export type GetAuditLogExportData = {
          * Exact client address, IPv4 or IPv6. Normalised before matching.
          */
         ip_address?: string | null;
+        /**
+         * Session Id
+         *
+         * Exact session id (the `sid` a token names), as shown in the sessions list.
+         */
+        session_id?: string | null;
     };
     url: '/audit-log/export';
 };
@@ -7541,6 +7553,12 @@ export type GetAuditLogStatsData = {
          * Exact client address, IPv4 or IPv6. Normalised before matching.
          */
         ip_address?: string | null;
+        /**
+         * Session Id
+         *
+         * Exact session id (the `sid` a token names), as shown in the sessions list.
+         */
+        session_id?: string | null;
     };
     url: '/audit-log/stats';
 };

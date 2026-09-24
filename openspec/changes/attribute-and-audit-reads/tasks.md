@@ -74,14 +74,14 @@ section is sized to ship as one PR, in order; later sections depend on 1.
 
 ## 5. Pivot on a session
 
-- [ ] 5.1 `session_id` filter on `/audit-log`, `/export` and `/stats` (the same
+- [x] 5.1 `session_id` filter on `/audit-log`, `/export` and `/stats` (the same
       pattern as `ip_address` in #384); `READ` and `EXPORT` in the action
       filter. Tests as for #384.
-- [ ] 5.2 Audit-log page: session field; action options; a session id in the
+- [x] 5.2 Audit-log page: session field; action options; a session id in the
       timeline pivots like an IP does.
-- [ ] 5.3 Sessions list (#383): each session links to `/audit-log` filtered by
+- [x] 5.3 Sessions list (#383): each session links to `/audit-log` filtered by
       it.
-- [ ] 5.4 Regenerate OpenAPI, SDK clients, i18n projection, repo metrics.
+- [x] 5.4 Regenerate OpenAPI, SDK clients, i18n projection, repo metrics.
 
 ## 6. Close the loop
 

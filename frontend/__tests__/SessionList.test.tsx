@@ -147,3 +147,22 @@ test("a failed load says so and can be retried", async () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByText("This device")).toBeInTheDocument();
 });
+
+test("with showActivity, each session links to what it did in the audit log", async () => {
+    mockFetch.mockResolvedValue(ok({ items: [session(1, { current: true }), session(2)] }));
+    renderList({ showActivity: true });
+
+    const links = await screen.findAllByRole("link", { name: "See what this session did" });
+    expect(links.map((a) => a.getAttribute("href"))).toEqual([
+        "/audit-log?session_id=sid-1",
+        "/audit-log?session_id=sid-2",
+    ]);
+});
+
+test("without showActivity there is no link to an audit log the viewer cannot read", async () => {
+    mockFetch.mockResolvedValue(ok({ items: [session(1, { current: true })] }));
+    renderList();
+
+    await screen.findByText("This device");
+    expect(screen.queryByRole("link")).toBeNull();
+});

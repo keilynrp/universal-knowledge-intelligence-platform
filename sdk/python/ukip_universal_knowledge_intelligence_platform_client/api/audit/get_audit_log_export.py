@@ -18,6 +18,7 @@ def _get_kwargs(
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
     ip_address: None | str | Unset = UNSET,
+    session_id: None | str | Unset = UNSET,
 ) -> dict[str, Any]:
 
     params: dict[str, Any] = {}
@@ -68,6 +69,13 @@ def _get_kwargs(
         json_ip_address = ip_address
     params["ip_address"] = json_ip_address
 
+    json_session_id: None | str | Unset
+    if isinstance(session_id, Unset):
+        json_session_id = UNSET
+    else:
+        json_session_id = session_id
+    params["session_id"] = json_session_id
+
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
     _kwargs: dict[str, Any] = {
@@ -117,6 +125,7 @@ def sync_detailed(
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
     ip_address: None | str | Unset = UNSET,
+    session_id: None | str | Unset = UNSET,
 ) -> Response[Any | HTTPValidationError]:
     """Export Csv
 
@@ -130,6 +139,8 @@ def sync_detailed(
         to_date (datetime.datetime | None | Unset):
         ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
             matching.
+        session_id (None | str | Unset): Exact session id (the `sid` a token names), as shown in
+            the sessions list.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -146,6 +157,7 @@ def sync_detailed(
         from_date=from_date,
         to_date=to_date,
         ip_address=ip_address,
+        session_id=session_id,
     )
 
     response = client.get_httpx_client().request(
@@ -164,6 +176,7 @@ def sync(
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
     ip_address: None | str | Unset = UNSET,
+    session_id: None | str | Unset = UNSET,
 ) -> Any | HTTPValidationError | None:
     """Export Csv
 
@@ -177,6 +190,8 @@ def sync(
         to_date (datetime.datetime | None | Unset):
         ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
             matching.
+        session_id (None | str | Unset): Exact session id (the `sid` a token names), as shown in
+            the sessions list.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -194,6 +209,7 @@ def sync(
         from_date=from_date,
         to_date=to_date,
         ip_address=ip_address,
+        session_id=session_id,
     ).parsed
 
 
@@ -206,6 +222,7 @@ async def asyncio_detailed(
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
     ip_address: None | str | Unset = UNSET,
+    session_id: None | str | Unset = UNSET,
 ) -> Response[Any | HTTPValidationError]:
     """Export Csv
 
@@ -219,6 +236,8 @@ async def asyncio_detailed(
         to_date (datetime.datetime | None | Unset):
         ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
             matching.
+        session_id (None | str | Unset): Exact session id (the `sid` a token names), as shown in
+            the sessions list.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -235,6 +254,7 @@ async def asyncio_detailed(
         from_date=from_date,
         to_date=to_date,
         ip_address=ip_address,
+        session_id=session_id,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -251,6 +271,7 @@ async def asyncio(
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
     ip_address: None | str | Unset = UNSET,
+    session_id: None | str | Unset = UNSET,
 ) -> Any | HTTPValidationError | None:
     """Export Csv
 
@@ -264,6 +285,8 @@ async def asyncio(
         to_date (datetime.datetime | None | Unset):
         ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
             matching.
+        session_id (None | str | Unset): Exact session id (the `sid` a token names), as shown in
+            the sessions list.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -282,5 +305,6 @@ async def asyncio(
             from_date=from_date,
             to_date=to_date,
             ip_address=ip_address,
+            session_id=session_id,
         )
     ).parsed

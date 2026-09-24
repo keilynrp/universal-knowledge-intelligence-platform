@@ -12,6 +12,7 @@ from ...types import UNSET, Response, Unset
 def _get_kwargs(
     *,
     ip_address: None | str | Unset = UNSET,
+    session_id: None | str | Unset = UNSET,
 ) -> dict[str, Any]:
 
     params: dict[str, Any] = {}
@@ -22,6 +23,13 @@ def _get_kwargs(
     else:
         json_ip_address = ip_address
     params["ip_address"] = json_ip_address
+
+    json_session_id: None | str | Unset
+    if isinstance(session_id, Unset):
+        json_session_id = UNSET
+    else:
+        json_session_id = session_id
+    params["session_id"] = json_session_id
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
@@ -67,17 +75,21 @@ def sync_detailed(
     *,
     client: AuthenticatedClient,
     ip_address: None | str | Unset = UNSET,
+    session_id: None | str | Unset = UNSET,
 ) -> Response[Any | HTTPValidationError]:
     """Audit Stats
 
-     Summary counters over the audit log, or over one client address.
+     Summary counters over the audit log, or over one address and/or session.
 
-    With `ip_address` every counter is scoped to that address, so an incident
-    can size what came from it in one request before paging through the rows.
+    With `ip_address` or `session_id` every counter is scoped to it, so an
+    incident can size what came from an address or a session in one request
+    before paging through the rows.
 
     Args:
         ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
             matching.
+        session_id (None | str | Unset): Exact session id (the `sid` a token names), as shown in
+            the sessions list.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -89,6 +101,7 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         ip_address=ip_address,
+        session_id=session_id,
     )
 
     response = client.get_httpx_client().request(
@@ -102,17 +115,21 @@ def sync(
     *,
     client: AuthenticatedClient,
     ip_address: None | str | Unset = UNSET,
+    session_id: None | str | Unset = UNSET,
 ) -> Any | HTTPValidationError | None:
     """Audit Stats
 
-     Summary counters over the audit log, or over one client address.
+     Summary counters over the audit log, or over one address and/or session.
 
-    With `ip_address` every counter is scoped to that address, so an incident
-    can size what came from it in one request before paging through the rows.
+    With `ip_address` or `session_id` every counter is scoped to it, so an
+    incident can size what came from an address or a session in one request
+    before paging through the rows.
 
     Args:
         ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
             matching.
+        session_id (None | str | Unset): Exact session id (the `sid` a token names), as shown in
+            the sessions list.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -125,6 +142,7 @@ def sync(
     return sync_detailed(
         client=client,
         ip_address=ip_address,
+        session_id=session_id,
     ).parsed
 
 
@@ -132,17 +150,21 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient,
     ip_address: None | str | Unset = UNSET,
+    session_id: None | str | Unset = UNSET,
 ) -> Response[Any | HTTPValidationError]:
     """Audit Stats
 
-     Summary counters over the audit log, or over one client address.
+     Summary counters over the audit log, or over one address and/or session.
 
-    With `ip_address` every counter is scoped to that address, so an incident
-    can size what came from it in one request before paging through the rows.
+    With `ip_address` or `session_id` every counter is scoped to it, so an
+    incident can size what came from an address or a session in one request
+    before paging through the rows.
 
     Args:
         ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
             matching.
+        session_id (None | str | Unset): Exact session id (the `sid` a token names), as shown in
+            the sessions list.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -154,6 +176,7 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         ip_address=ip_address,
+        session_id=session_id,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -165,17 +188,21 @@ async def asyncio(
     *,
     client: AuthenticatedClient,
     ip_address: None | str | Unset = UNSET,
+    session_id: None | str | Unset = UNSET,
 ) -> Any | HTTPValidationError | None:
     """Audit Stats
 
-     Summary counters over the audit log, or over one client address.
+     Summary counters over the audit log, or over one address and/or session.
 
-    With `ip_address` every counter is scoped to that address, so an incident
-    can size what came from it in one request before paging through the rows.
+    With `ip_address` or `session_id` every counter is scoped to it, so an
+    incident can size what came from an address or a session in one request
+    before paging through the rows.
 
     Args:
         ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
             matching.
+        session_id (None | str | Unset): Exact session id (the `sid` a token names), as shown in
+            the sessions list.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -189,5 +216,6 @@ async def asyncio(
         await asyncio_detailed(
             client=client,
             ip_address=ip_address,
+            session_id=session_id,
         )
     ).parsed

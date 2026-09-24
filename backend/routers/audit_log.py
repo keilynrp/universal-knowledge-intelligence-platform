@@ -61,6 +61,22 @@ _IP_FILTER = Query(
 )
 
 
+# "Everything this session did": the pivot once a session is known to be
+# hostile (openspec attribute-and-audit-reads). A session id is opaque, so it is
+# matched exactly and only trimmed.
+_SESSION_FILTER = Query(
+    default=None,
+    max_length=64,
+    description="Exact session id (the `sid` a token names), as shown in the sessions list.",
+)
+
+
+def _session(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return value.strip() or None
+
+
 def _normalise_ip(value: str | None) -> str | None:
     """Canonical form of an address filter, or a 422 if it is not an address.
 
@@ -85,6 +101,7 @@ def _base_query(
     from_date: datetime | None,
     to_date: datetime | None,
     ip_address: str | None = None,
+    session_id: str | None = None,
 ):
     q = db.query(models.AuditLog)
     if action:
@@ -98,6 +115,8 @@ def _base_query(
         q = q.filter(models.AuditLog.username == username)
     if ip_address:
         q = q.filter(models.AuditLog.ip_address == ip_address)
+    if session_id:
+        q = q.filter(models.AuditLog.session_id == session_id)
     if from_date:
         q = q.filter(models.AuditLog.created_at >= from_date)
     if to_date:
@@ -143,13 +162,17 @@ def list_audit_log(
     from_date:     datetime | None = Query(default=None),
     to_date:       datetime | None = Query(default=None),
     ip_address:    str | None      = _IP_FILTER,
+    session_id:    str | None      = _SESSION_FILTER,
     skip:          int                = Query(default=0, ge=0),
     limit:         int                = Query(default=50, ge=1, le=200),
     db:            Session            = Depends(get_db),
     _:             models.User        = Depends(require_role("super_admin", "admin")),
 ):
     """Paginated audit log, newest first. Admin+ only."""
-    q = _base_query(db, action, resource_type, username, from_date, to_date, _normalise_ip(ip_address))
+    q = _base_query(
+        db, action, resource_type, username, from_date, to_date,
+        _normalise_ip(ip_address), _session(session_id),
+    )
     total = q.count()
     rows  = q.order_by(models.AuditLog.created_at.desc()).offset(skip).limit(limit).all()
     return {
@@ -163,18 +186,25 @@ def list_audit_log(
 @router.get("/stats")
 def audit_stats(
     ip_address: str | None = _IP_FILTER,
+    session_id: str | None = _SESSION_FILTER,
     db: Session    = Depends(get_db),
     _: models.User = Depends(require_role("super_admin", "admin")),
 ):
-    """Summary counters over the audit log, or over one client address.
+    """Summary counters over the audit log, or over one address and/or session.
 
-    With `ip_address` every counter is scoped to that address, so an incident
-    can size what came from it in one request before paging through the rows.
+    With `ip_address` or `session_id` every counter is scoped to it, so an
+    incident can size what came from an address or a session in one request
+    before paging through the rows.
     """
     ip = _normalise_ip(ip_address)
+    sid = _session(session_id)
 
     def scoped(q):
-        return q.filter(models.AuditLog.ip_address == ip) if ip else q
+        if ip:
+            q = q.filter(models.AuditLog.ip_address == ip)
+        if sid:
+            q = q.filter(models.AuditLog.session_id == sid)
+        return q
 
     total = scoped(db.query(models.AuditLog)).count()
 
@@ -244,6 +274,7 @@ def export_csv(
     from_date:     datetime | None = Query(default=None),
     to_date:       datetime | None = Query(default=None),
     ip_address:    str | None      = _IP_FILTER,
+    session_id:    str | None      = _SESSION_FILTER,
     db:            Session            = Depends(get_db),
     current_user:  models.User        = Depends(require_role("super_admin", "admin")),
 ):
@@ -252,7 +283,10 @@ def export_csv(
         require_assistant_action(current_user, "audit-export")
 
     rows = (
-        _base_query(db, action, resource_type, username, from_date, to_date, _normalise_ip(ip_address))
+        _base_query(
+            db, action, resource_type, username, from_date, to_date,
+            _normalise_ip(ip_address), _session(session_id),
+        )
         .order_by(models.AuditLog.created_at.desc())
         .limit(10_000)          # safety cap
         .all()
@@ -263,6 +297,7 @@ def export_csv(
     writer.writerow([
         "id", "username", "action", "resource_type", "resource_id",
         "endpoint", "method", "status_code", "ip_address", "created_at", "details",
+        "session_id", "api_key_id",
     ])
     for r in rows:
         writer.writerow([
@@ -270,6 +305,7 @@ def export_csv(
             str(r.entity_id) if r.entity_id else "", r.endpoint, r.method,
             r.status_code or "", r.ip_address or "",
             r.created_at.isoformat() if r.created_at else "", r.details or "",
+            r.session_id or "", r.api_key_id or "",
         ])
 
     ts  = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
