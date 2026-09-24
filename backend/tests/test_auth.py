@@ -28,19 +28,19 @@ pytestmark = pytest.mark.security
 # ── Unit: token creation ─────────────────────────────────────────────────────
 
 def test_create_access_token_contains_subject():
-    token = create_access_token(subject="testadmin", role="super_admin")
+    token = create_access_token(subject="testadmin", role="super_admin", sid="sid-under-test")
     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     assert payload["sub"] == "testadmin"
 
 
 def test_create_access_token_has_expiry():
-    token = create_access_token(subject="testadmin", role="super_admin")
+    token = create_access_token(subject="testadmin", role="super_admin", sid="sid-under-test")
     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     assert "exp" in payload
 
 
 def test_create_access_token_custom_expiry():
-    token = create_access_token(subject="testadmin", role="super_admin", expires_delta=timedelta(minutes=1))
+    token = create_access_token(subject="testadmin", role="super_admin", sid="sid-under-test", expires_delta=timedelta(minutes=1))
     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     assert payload["sub"] == "testadmin"
 

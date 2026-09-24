@@ -10,7 +10,7 @@ import json
 from uuid import uuid4
 
 from backend import models
-from backend.auth import create_access_token
+from backend.auth import issue_access_token
 
 
 def _tenant_user(session_factory, *, role: str = "admin", with_org: bool = True):
@@ -47,7 +47,7 @@ def _tenant_user(session_factory, *, role: str = "admin", with_org: bool = True)
         db.commit()
         user_id = user.id
 
-    token = create_access_token(subject=username, role=role)
+    token = issue_access_token(subject=username, role=role)
     return {
         "headers": {"Authorization": f"Bearer {token}"},
         "user_id": user_id,

@@ -149,6 +149,7 @@ function offline. Record each action and its time.
 
 | Situation | Action today | Cost |
 |---|---|---|
+| Stolen token or a session you do not recognise | **Revoke that session.** `GET /auth/sessions` lists your own with their device and address; `DELETE /auth/sessions/{id}` stops one and `DELETE /auth/sessions` stops all but the one you are using. For someone else's, `GET` and `DELETE /users/{user_id}/sessions[/{id}]` as `super_admin`. Rejection is immediate: every request resolves the user through its session | Only that session. The account keeps working, nobody else is logged out, no key is rotated |
 | Compromised user account | Set `is_active = False` for that user. Every request re-resolves the user and requires `is_active`, so **live sessions stop immediately**, not at token expiry | That person cannot work |
 | Compromised API key | `DELETE /api-keys/{id}` (revoke) | Only that integration stops |
 | JWT signing key exposed | Rotate `JWT_SECRET_KEY` — secrets rotation runbook §2, shortening or skipping the grace window | **Everyone is logged out** |
@@ -157,9 +158,18 @@ function offline. Record each action and its time.
 | Data loss or corruption | Backup and restore runbook. Objectives: RPO 24 h, RTO 4 h. **Restore into an isolated target first**, never over production | Data written after the recovery point is lost |
 | Host or provider compromise | Treat every credential on that host as exposed and rotate all of them; the writer credential cannot delete backup versions and Object Lock protects them for 7 days | Wide blast radius; expect a long response |
 
-**What cannot be contained today:** a single session or device cannot be
-revoked without disabling the account or rotating the global signing key
-(#368 phase C.3).
+**Reach for the narrowest step that works.** Revoking a session is almost
+always the right first move for a stolen token: it is immediate, it is
+reversible only in the sense that the holder can log in again with valid
+credentials, and it costs nobody else anything. Escalate to deactivating the
+account when the credentials themselves are suspect, and to rotating
+`JWT_SECRET_KEY` only when the signing key is.
+
+**This works on your own account**, which matters here: `PUT` and
+`DELETE /users/{id}` refuse to deactivate your own account or the last active
+`super_admin`, so before per-session revocation existed a stolen operator token
+had no containment short of logging everyone out (#368 phase C.3, found by the
+first tabletop).
 
 ### 5.4 Eradicate and recover
 
@@ -298,13 +308,12 @@ Recorded here so nobody discovers them mid-incident:
 3. **No central log retention.** Container logs are ephemeral, so early capture
    is the only way to keep them — and since reads are unaudited, they are the
    **only** record that a read happened at all.
-4. **No per-session revocation** (#368 phase C.3): containing one stolen token
-   means disabling the account or logging everyone out. Worse than it reads:
-   `PUT` and `DELETE /users/{id}` refuse to deactivate **your own account** or
-   the **last active `super_admin`**. If the stolen credential is the operator's
-   own — the likeliest case in a one-person team — deactivation is unavailable
-   by design, and the only containment left is rotating `JWT_SECRET_KEY`, which
-   logs everyone out.
+4. ~~**No per-session revocation.**~~ **Closed 2026-09-23** (#368 phase C.3).
+   Tokens now name their session and a session can be revoked on its own,
+   including one belonging to the operator's own account. See §5.3. What
+   remains open is narrower: there is still no way to revoke a session you have
+   not yet recognised as hostile, because nothing flags an unfamiliar device
+   (gap 6).
 5. **Error telemetry off by default** (`SENTRY_ENABLED=0`).
 6. **No anomaly detection** on logins or access patterns.
 7. **Tenant isolation is not demonstrable** from production data today

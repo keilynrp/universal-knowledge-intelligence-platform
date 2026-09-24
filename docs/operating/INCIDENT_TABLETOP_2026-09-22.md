@@ -93,6 +93,19 @@ and reads the message. No UKIP alert has fired overnight.
 | A stolen token belonging to the operator's **own** account cannot be contained by deactivation: `PUT`/`DELETE /users/{id}` refuse both self-deactivation and deactivating the last active `super_admin`. The only remaining containment is rotating the global signing key, which logs everyone out | High — the single credential most likely to be stolen is the one that cannot be revoked in isolation | Per-session revocation | #368 phase C.3 | Security/operations owner |
 | Blast radius could not be determined from telemetry: reads are unaudited, the log holds the route and not the body, and with tenants unpopulated in production an admin without an `org_id` falls into the legacy global scope (`org_id IS NULL`) and reads essentially everything | High — the DPA requires categories and approximate record counts that could not be produced | Tenant-isolation method, already the open gate of ER-BCP-001 | #320 residual risk 1 | Operations owner |
 
+### Corrective action status
+
+Added after the exercise; the record above is left as it was written.
+
+| Gap | Status |
+|---|---|
+| Per-session revocation (#368 phase C.3) | **Closed 2026-09-23.** Tokens carry a `sid` naming their session, every request resolves the user through it, and a session can be revoked alone — including the operator's own, which deactivation refuses. Plan §5.3 |
+| Reads are not audited (#375) | Open |
+| Request log has no identity (#376) | Open |
+| Nothing pages (#377) | Open |
+| No `ip_address` filter on the audit log (#378) | Open |
+| Blast radius undeterminable (ER-BCP-001 residual risk 1) | Open |
+
 ## What was verified to work
 
 A tabletop that reports only failures is not honest either. Two load-bearing

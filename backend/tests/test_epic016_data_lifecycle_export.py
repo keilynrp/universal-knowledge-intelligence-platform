@@ -11,7 +11,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 from backend import models
-from backend.auth import create_access_token
+from backend.auth import issue_access_token
 
 
 def _org_with_user(session_factory, *, role: str = "admin"):
@@ -32,7 +32,7 @@ def _org_with_user(session_factory, *, role: str = "admin"):
         user.org_id = org.id
         db.commit()
         uid, oid = user.id, org.id
-    token = create_access_token(subject=user.username, role=role)
+    token = issue_access_token(subject=user.username, role=role)
     return {"headers": {"Authorization": f"Bearer {token}"}, "user_id": uid, "org_id": oid}
 
 

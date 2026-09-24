@@ -6,7 +6,7 @@ treated None as "all orgs"."""
 from uuid import uuid4
 
 from backend import models
-from backend.auth import create_access_token
+from backend.auth import issue_access_token
 from backend.tenant_access import LEGACY_GLOBAL_ORG_ID
 
 
@@ -31,7 +31,7 @@ def _make_admin(session_factory, *, with_org: bool):
             user.org_id = org.id
             org_id = org.id
         db.commit()
-    token = create_access_token(subject=username, role="admin")
+    token = issue_access_token(subject=username, role="admin")
     return {"headers": {"Authorization": f"Bearer {token}"}, "org_id": org_id}
 
 

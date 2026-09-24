@@ -27,6 +27,10 @@ _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 # Paths to skip (auth handshakes, static docs, health probe, read-only,
 # and notification-center preference endpoints — Sprint 56)
+# `/auth/sessions` is deliberately NOT skipped: revoking a session is a
+# containment action and has to leave a trace (#368 phase C.3).
+_AUDITED_AUTH_PREFIXES = ("/auth/sessions",)
+
 _SKIP_PREFIXES = (
     "/auth/",
     "/health",
@@ -51,6 +55,7 @@ _RESOURCE_MAP: dict[str, str] = {
     "disambiguation":   "disambiguation",
     "domains":          "domain",
     "users":            "user",
+    "auth":             "session",
     "annotations":      "annotation",
     "rag":              "rag",
     "demo":             "demo",
@@ -114,7 +119,9 @@ class AuditMiddleware(BaseHTTPMiddleware):
             return response
 
         path = request.url.path
-        if any(path.startswith(p) for p in _SKIP_PREFIXES):
+        if any(path.startswith(p) for p in _SKIP_PREFIXES) and not any(
+            path.startswith(p) for p in _AUDITED_AUTH_PREFIXES
+        ):
             return response
 
         # Best-effort: never raise, never block the response

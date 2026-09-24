@@ -84,12 +84,15 @@ def _resolve_user(token: str, db: Session) -> models.User | None:
 
         payload = _decode_token(token)
         username: str | None = payload.get("sub")
-        if not username:
+        sid: str | None = payload.get("sid")
+        if not username or not sid:
             return None
-        return db.query(models.User).filter(
-            models.User.username == username,
-            models.User.is_active == True,  # noqa: E712
-        ).first()
+        # Resolved through the session, exactly like an HTTP request: a socket
+        # that outlived a revoked session would make the containment step in
+        # the incident response plan untrue (#368 phase C.3).
+        from backend.auth import _user_for_live_session
+
+        return _user_for_live_session(db, username, sid)
 
     except JWTError:
         return None

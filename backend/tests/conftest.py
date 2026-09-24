@@ -289,12 +289,32 @@ def client():
         yield c
 
 
+# Fixtures that wipe the database before the test body runs. A token names a
+# row in `user_sessions`, which they wipe along with everything else, so a
+# token minted before one of them runs is already revoked when the test uses
+# it. pytest sets up a test's fixtures in argument order, so
+# `def test_x(auth_headers, db_session)` would hit exactly that.
+_PRE_CLEANING_FIXTURES = ("db_session", "db")
+
+
+def _after_pre_test_cleanup(request) -> None:
+    """Set up whichever pre-cleaning fixture the test asked for, now.
+
+    Called by the token fixtures before they mint, so the session they start
+    outlives the wipe instead of preceding it.
+    """
+    for name in _PRE_CLEANING_FIXTURES:
+        if name in request.fixturenames:
+            request.getfixturevalue(name)
+
+
 @pytest.fixture()
-def auth_token():
+def auth_token(request):
     """Create a fresh JWT token for the deterministic super_admin test account."""
+    _after_pre_test_cleanup(request)
     _ensure_test_admin()
-    from backend.auth import create_access_token as _cat
-    return _cat(subject=os.environ["ADMIN_USERNAME"], role="super_admin")
+    from backend.auth import issue_access_token as _mint
+    return _mint(subject=os.environ["ADMIN_USERNAME"], role="super_admin")
 
 
 @pytest.fixture()
@@ -335,20 +355,22 @@ def _ensure_role_user(username: str, role: str) -> None:
 
 
 @pytest.fixture()
-def editor_headers():
+def editor_headers(request):
     """Create an editor user and return fresh auth headers."""
-    from backend.auth import create_access_token as _cat
+    _after_pre_test_cleanup(request)
+    from backend.auth import issue_access_token as _mint
     _ensure_role_user("test_editor", "editor")
-    token = _cat(subject="test_editor", role="editor")
+    token = _mint(subject="test_editor", role="editor")
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture()
-def viewer_headers():
+def viewer_headers(request):
     """Create a viewer user and return fresh auth headers."""
-    from backend.auth import create_access_token as _cat
+    _after_pre_test_cleanup(request)
+    from backend.auth import issue_access_token as _mint
     _ensure_role_user("test_viewer", "viewer")
-    token = _cat(subject="test_viewer", role="viewer")
+    token = _mint(subject="test_viewer", role="viewer")
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -430,6 +452,7 @@ _TABLES_TO_CLEAN = [
     "password_reset_tokens",
     "source_profiles",
     "user_dashboards",
+    "user_sessions",
     "organization_members",
     "organizations",
     "entity_relationships",

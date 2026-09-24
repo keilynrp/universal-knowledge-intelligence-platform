@@ -22,7 +22,7 @@ def test_token_signed_with_retiring_key_still_verifies(monkeypatch):
     old = "old-secret-key-0123456789"
     new = "new-secret-key-9876543210"
     auth_old = _reload_auth(monkeypatch, primary=old)
-    token = auth_old.create_access_token("alice", "admin")
+    token = auth_old.create_access_token("alice", "admin", "sid-rotation-test")
     auth_new = _reload_auth(monkeypatch, primary=new, retiring=old)
     payload = auth_new._decode_token(token)
     assert payload["sub"] == "alice"
@@ -39,7 +39,7 @@ def test_signing_uses_primary_only(monkeypatch):
     new = "new-secret-key-9876543210"
     old = "old-secret-key-0123456789"
     auth_new = _reload_auth(monkeypatch, primary=new, retiring=old)
-    token = auth_new.create_access_token("bob", "viewer")
+    token = auth_new.create_access_token("bob", "viewer", "sid-rotation-test")
     # Decodes under the primary directly
     assert jwt.decode(token, new, algorithms=["HS256"])["sub"] == "bob"
 
