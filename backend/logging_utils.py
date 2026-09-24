@@ -9,8 +9,18 @@ from datetime import datetime, timezone
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
+from backend.principal import principal_of
 
 request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
+
+# Fields copied from a record's `extra` into the formatted line, when present.
+# The identity fields (#376) come from the principal the auth dependency
+# recorded; they are absent, never placeholders, on anonymous or refused
+# requests, so a filter on user_id cannot match a line that had no identity.
+_RECORD_FIELDS = (
+    "event", "method", "path", "status_code", "duration_ms", "client_ip",
+    "user_id", "session_id", "api_key_id",
+)
 
 
 def current_log_format() -> str:
@@ -33,7 +43,7 @@ class StructuredFormatter(logging.Formatter):
             "request_id": getattr(record, "request_id", request_id_ctx.get()),
         }
 
-        for field in ("event", "method", "path", "status_code", "duration_ms", "client_ip"):
+        for field in _RECORD_FIELDS:
             value = getattr(record, field, None)
             if value is not None:
                 payload[field] = value
@@ -48,7 +58,7 @@ class StructuredFormatter(logging.Formatter):
                 f"logger={payload['logger']}",
                 f"request_id={payload['request_id']}",
             ]
-            for field in ("event", "method", "path", "status_code", "duration_ms", "client_ip"):
+            for field in _RECORD_FIELDS:
                 if field in payload:
                     parts.append(f"{field}={payload[field]}")
             parts.append(f"message={payload['message']}")
@@ -68,6 +78,12 @@ def configure_logging() -> None:
     root.handlers.clear()
     root.addHandler(handler)
     root.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
+
+
+def _identity(request: Request) -> dict[str, int | str]:
+    """Who the request acted as, for the log line; empty when nobody was accepted."""
+    principal = principal_of(request)
+    return principal.log_fields() if principal else {}
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
@@ -91,6 +107,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                     "duration_ms": duration_ms,
                     "client_ip": request.client.host if request.client else None,
                     "request_id": request_id,
+                    **_identity(request),
                 },
             )
             request_id_ctx.reset(token)
@@ -108,6 +125,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 "duration_ms": duration_ms,
                 "client_ip": request.client.host if request.client else None,
                 "request_id": request_id,
+                **_identity(request),
             },
         )
         request_id_ctx.reset(token)
