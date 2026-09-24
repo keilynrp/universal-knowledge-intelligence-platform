@@ -87,8 +87,9 @@ operating documentation, except where explicitly marked otherwise.
 
 **Known open measures (disclosed, not represented as in place):** the
 corrective actions from the first incident-response exercise (ER-IR-001 — the
-plan is published, decided and exercised on 2026-09-22; read auditing,
-attributable request logs and a paging path remain open), external penetration
+plan is published, decided and exercised on 2026-09-22; request logs are
+attributable to an account and session since 2026-09-24, while read auditing
+and a paging path remain open), external penetration
 test (ER-ASSURE-001),
 contractual data-residency commitments (ER-DEP-001), a passing isolated restore drill (US-073 / ER-BCP-001; the provider is configured and the first drill, recorded as failed, is documented), and CI security-gate operator enforcement steps
 (EPIC-019). See

@@ -22,14 +22,14 @@ section is sized to ship as one PR, in order; later sections depend on 1.
 
 ## 2. Identity in the request log (closes #376)
 
-- [ ] 2.1 Test first with `caplog`: authenticated JWT read → `user_id` and
+- [x] 2.1 Test first with `caplog`: authenticated JWT read → `user_id` and
       `session_id` on `request_completed`; API key → `user_id` and
       `api_key_id`; anonymous and `401` → none of the three fields present.
-- [ ] 2.2 `RequestLoggingMiddleware`: add the fields from the principal on
+- [x] 2.2 `RequestLoggingMiddleware`: add the fields from the principal on
       both `request_completed` and `request_failed`.
-- [ ] 2.3 Test that no token, key, header or query value appears in any record
+- [x] 2.3 Test that no token, key, header or query value appears in any record
       (serialise the formatted line and search it for the token string).
-- [ ] 2.4 Plan §7: container logs are now attributable. Update the DPA §5
+- [x] 2.4 Plan §7: container logs are now attributable. Update the DPA §5
       "attributable request logs … remain open" line to match.
 
 ## 3. Principal on audit rows
@@ -81,8 +81,9 @@ section is sized to ship as one PR, in order; later sections depend on 1.
 - [ ] 6.1 Plan §7: what `audit_logs` now covers, and the residual (reads
       outside the four classes are in the request log only, which vanishes
       with the container unless captured first).
-- [ ] 6.2 Plan §11: close gap 9 (reads not audited) and gap 10 (request log
-      has no identity), each with what remains of it stated. Gap 3 (no central
+- [ ] 6.2 Plan §11: close gap 9 (reads not audited) with what remains of it
+      stated. Gap 10 (request log identity) was closed in section 2's PR,
+      which is the one that closes #376. Gap 3 (no central
       log retention) stays open and now matters more: the request log is
       attributable but still ephemeral.
 - [x] 6.3 Plan §11 gap 11 (no IP filter) was closed by #384 and the plan does

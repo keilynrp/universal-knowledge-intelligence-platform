@@ -195,6 +195,10 @@ containment destroys state. Minimum set:
 
 1. **Container logs**, first, because they vanish with the container:
    `docker logs <container> > incident-<id>-backend.log`
+   Every authenticated request line carries `user_id` and either `session_id`
+   or `api_key_id` (#376), so the lines a suspect session produced can be
+   selected by that session, and that session can be revoked on its own
+   (§5.3). Anonymous and refused requests carry no identity fields at all.
 2. **Database evidence**, which survives by design:
    - `audit_logs` — who performed which **mutation**, over HTTP. Retained
      indefinitely by policy and no longer deleted by a workspace reset (#372).
@@ -324,10 +328,12 @@ Recorded here so nobody discovers them mid-incident:
 9. **Reads are not audited** (#375). `audit_logs` covers mutations only, so the
    first question of any access incident — what did they read — has no answer
    in the audit trail. Found by the 2026-09-22 tabletop.
-10. **The request log has no identity** (#376). Every request is logged with
-    method, path, status and client IP, but not who made it, so a read cannot
-    be attributed to an account even when it is visible. Found by the
-    2026-09-22 tabletop.
+10. ~~**The request log has no identity**~~ **Closed 2026-09-24** (#376).
+    Each authenticated request line names the user and the session or API key
+    that authentication accepted. What remains is where the log lives: it is
+    still the container's, and still vanishes with it (gap 3), so a read
+    outside the audited classes is attributable only if the log was captured
+    first.
 11. ~~**`GET /audit-log` cannot filter by `ip_address`**~~ **Closed 2026-09-24**
     (#378, #384). The list, the CSV export and the counters all take
     `ip_address`, and every address in the audit-log timeline pivots to
