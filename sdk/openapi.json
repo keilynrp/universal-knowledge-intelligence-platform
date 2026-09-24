@@ -14011,6 +14011,25 @@
             }
           },
           {
+            "description": "Exact client address, IPv4 or IPv6. Normalised before matching.",
+            "in": "query",
+            "name": "ip_address",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact client address, IPv4 or IPv6. Normalised before matching.",
+              "title": "Ip Address"
+            }
+          },
+          {
             "in": "query",
             "name": "skip",
             "required": false,
@@ -14196,6 +14215,25 @@
               ],
               "title": "To Date"
             }
+          },
+          {
+            "description": "Exact client address, IPv4 or IPv6. Normalised before matching.",
+            "in": "query",
+            "name": "ip_address",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact client address, IPv4 or IPv6. Normalised before matching.",
+              "title": "Ip Address"
+            }
           }
         ],
         "responses": {
@@ -14231,8 +14269,29 @@
     },
     "/audit-log/stats": {
       "get": {
-        "description": "Summary counters over the entire audit log.",
+        "description": "Summary counters over the audit log, or over one client address.\n\nWith `ip_address` every counter is scoped to that address, so an incident\ncan size what came from it in one request before paging through the rows.",
         "operationId": "get_audit_log_stats",
+        "parameters": [
+          {
+            "description": "Exact client address, IPv4 or IPv6. Normalised before matching.",
+            "in": "query",
+            "name": "ip_address",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact client address, IPv4 or IPv6. Normalised before matching.",
+              "title": "Ip Address"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -14241,6 +14300,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [

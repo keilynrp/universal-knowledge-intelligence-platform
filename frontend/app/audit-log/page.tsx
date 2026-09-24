@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAssistantContextRegistration } from "../contexts/AssistantContext";
 import { useLanguage } from "../contexts/LanguageContext";
-import { ErrorBanner, useToast } from "../components/ui";
+import { Button, ErrorBanner, Input, useToast } from "../components/ui";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { filterParams, NO_FILTERS, type AppliedFilters } from "../lib/auditFilters";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -110,15 +111,14 @@ export default function AuditLogPage() {
   const [filterAction,   setFilterAction]   = useState("");
   const [filterResource, setFilterResource] = useState("");
   const [filterUser,     setFilterUser]     = useState("");
+  const [filterIp,       setFilterIp]       = useState("");
   const [filterFrom,     setFilterFrom]     = useState("");
   const [filterTo,       setFilterTo]       = useState("");
   const [assistantOnly, setAssistantOnly] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<AuditEntry | null>(null);
 
   // Applied filters (only update on Apply)
-  const [applied, setApplied] = useState({
-    action: "", resource: "", user: "", from: "", to: "", assistantOnly: false,
-  });
+  const [applied, setApplied] = useState<AppliedFilters>(NO_FILTERS);
 
   // ── Data state
   const [page,  setPage]  = useState<AuditPage | null>(null);
@@ -130,10 +130,12 @@ export default function AuditLogPage() {
 
   // ── Fetch helpers
 
-  const fetchStats = useCallback(async () => {
+  // Scoped to the address filter when there is one, so the counters size what
+  // came from a suspect address before anyone pages through its rows (issue 378).
+  const fetchStats = useCallback(async (ip: string) => {
     setLoadingStats(true);
     try {
-      const res = await apiFetch("/audit-log/stats");
+      const res = await apiFetch(ip ? `/audit-log/stats?${new URLSearchParams({ ip_address: ip })}` : "/audit-log/stats");
       if (res.ok) setStats(await res.json());
     } catch {
       // stats are informational — don't block the page
@@ -142,25 +144,19 @@ export default function AuditLogPage() {
     }
   }, []);
 
-  const fetchPage = useCallback(async (currentSkip: number, filters: typeof applied) => {
+  const fetchPage = useCallback(async (currentSkip: number, filters: AppliedFilters) => {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams();
+      const params = filterParams(filters);
       params.set("skip",  String(currentSkip));
       params.set("limit", String(PAGE_SIZE));
-      if (filters.assistantOnly) {
-        params.set("action", "ASSISTANT_ACTION");
-        params.set("resource_type", "assistant_action");
-      } else if (filters.action) {
-        params.set("action", filters.action);
-      }
-      if (!filters.assistantOnly && filters.resource) params.set("resource_type", filters.resource);
-      if (filters.user)     params.set("username",      filters.user);
-      if (filters.from)     params.set("from_date",     filters.from);
-      if (filters.to)       params.set("to_date",       filters.to);
       const res = await apiFetch(`/audit-log?${params}`);
-      if (!res.ok) { setError(await res.text()); return; }
+      if (!res.ok) {
+        const body = await res.json().catch(() => null) as { detail?: unknown } | null;
+        setError(typeof body?.detail === "string" ? body.detail : t("page.audit.error_load"));
+        return;
+      }
       setPage(await res.json());
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("page.audit.error_load"));
@@ -172,8 +168,8 @@ export default function AuditLogPage() {
   // ── Effects
 
   useEffect(() => {
-    fetchStats();
-  }, [fetchStats]);
+    fetchStats(applied.ip);
+  }, [fetchStats, applied.ip]);
 
   useEffect(() => {
     fetchPage(skip, applied);
@@ -183,29 +179,31 @@ export default function AuditLogPage() {
 
   function handleApply() {
     setSkip(0);
-    setApplied({ action: filterAction, resource: filterResource, user: filterUser, from: filterFrom, to: filterTo, assistantOnly });
+    setApplied({
+      action: filterAction, resource: filterResource, user: filterUser,
+      ip: filterIp.trim(), from: filterFrom, to: filterTo, assistantOnly,
+    });
   }
 
   function handleReset() {
-    setFilterAction(""); setFilterResource(""); setFilterUser("");
+    setFilterAction(""); setFilterResource(""); setFilterUser(""); setFilterIp("");
     setFilterFrom(""); setFilterTo(""); setAssistantOnly(false);
     setSkip(0);
-    setApplied({ action: "", resource: "", user: "", from: "", to: "", assistantOnly: false });
+    setApplied(NO_FILTERS);
+  }
+
+  // The pivot an incident starts from: everything else that came from an
+  // address. It replaces the other filters rather than narrowing them, because
+  // the question is "what else", not "what else of this kind".
+  function handleFilterByIp(ip: string) {
+    setFilterAction(""); setFilterResource(""); setFilterUser(""); setFilterIp(ip);
+    setFilterFrom(""); setFilterTo(""); setAssistantOnly(false);
+    setSkip(0);
+    setApplied({ ...NO_FILTERS, ip });
   }
 
   async function handleExport() {
-    const params = new URLSearchParams();
-    if (applied.assistantOnly) {
-      params.set("action", "ASSISTANT_ACTION");
-      params.set("resource_type", "assistant_action");
-    } else if (applied.action) {
-      params.set("action", applied.action);
-    }
-    if (!applied.assistantOnly && applied.resource) params.set("resource_type", applied.resource);
-    if (applied.user)     params.set("username",      applied.user);
-    if (applied.from)     params.set("from_date",     applied.from);
-    if (applied.to)       params.set("to_date",       applied.to);
-    const qs = params.toString();
+    const qs = filterParams(applied).toString();
     try {
       const res = await apiFetch(`/audit-log/export${qs ? "?" + qs : ""}`);
       if (!res.ok) return;
@@ -229,16 +227,7 @@ export default function AuditLogPage() {
   const assistantErrors = assistantItems.filter((entry) => entry.details?.status === "error" || (entry.status_code ?? 0) >= 400).length;
   const assistantMutations = assistantItems.filter((entry) => entry.details?.kind === "mutation").length;
   const assistantRollbackCandidates = assistantItems.filter(canRollback).length;
-  const auditExportParams = new URLSearchParams();
-  if (applied.assistantOnly) {
-    auditExportParams.set("action", "ASSISTANT_ACTION");
-    auditExportParams.set("resource_type", "assistant_action");
-  } else if (applied.action) auditExportParams.set("action", applied.action);
-  if (!applied.assistantOnly && applied.resource) auditExportParams.set("resource_type", applied.resource);
-  if (applied.user) auditExportParams.set("username", applied.user);
-  if (applied.from) auditExportParams.set("from_date", applied.from);
-  if (applied.to) auditExportParams.set("to_date", applied.to);
-  const auditExportQuery = auditExportParams.toString();
+  const auditExportQuery = filterParams(applied).toString();
   useAssistantContextRegistration({
     route: "/audit-log",
     domainId: "all",
@@ -277,6 +266,11 @@ export default function AuditLogPage() {
     <div className="mx-auto max-w-7xl space-y-6 p-6">
 
       {/* ── Stats bar ─────────────────────────────────────────────────────── */}
+      {applied.ip && (
+        <p className="text-sm text-[var(--ukip-muted)]" role="status">
+          {t("page.audit.stats_scoped_ip", { ip: applied.ip })}
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-5">
         <StatCard
           label={t("page.audit.total_events")}
@@ -410,6 +404,21 @@ export default function AuditLogPage() {
               onChange={(e) => setFilterUser(e.target.value)}
               placeholder="testadmin"
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+            />
+          </div>
+
+          {/* Client address (issue 378) */}
+          <div className="min-w-[160px]">
+            <Input
+              id="audit-filter-ip"
+              label={t("page.audit.ip_address")}
+              value={filterIp}
+              onChange={(e) => setFilterIp(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleApply(); }}
+              placeholder="203.0.113.7"
+              inputMode="text"
+              autoComplete="off"
+              spellCheck={false}
             />
           </div>
 
@@ -595,7 +604,20 @@ export default function AuditLogPage() {
                           </span>
                         )}
                         {entry.ip_address && (
-                          <span>{entry.ip_address}</span>
+                          applied.ip === entry.ip_address ? (
+                            <span className="font-mono">{entry.ip_address}</span>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="-my-1.5 font-mono font-normal"
+                              title={t("page.audit.filter_by_ip", { ip: entry.ip_address })}
+                              aria-label={t("page.audit.filter_by_ip", { ip: entry.ip_address })}
+                              onClick={() => handleFilterByIp(entry.ip_address!)}
+                            >
+                              {entry.ip_address}
+                            </Button>
+                          )
                         )}
                         {entry.details?.module_label && <span>{entry.details.module_label}</span>}
                         {entry.details?.domain_id && <span>domain:{entry.details.domain_id}</span>}

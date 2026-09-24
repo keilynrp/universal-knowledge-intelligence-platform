@@ -17,6 +17,7 @@ def _get_kwargs(
     username: None | str | Unset = UNSET,
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
+    ip_address: None | str | Unset = UNSET,
 ) -> dict[str, Any]:
 
     params: dict[str, Any] = {}
@@ -59,6 +60,13 @@ def _get_kwargs(
     else:
         json_to_date = to_date
     params["to_date"] = json_to_date
+
+    json_ip_address: None | str | Unset
+    if isinstance(ip_address, Unset):
+        json_ip_address = UNSET
+    else:
+        json_ip_address = ip_address
+    params["ip_address"] = json_ip_address
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
@@ -108,6 +116,7 @@ def sync_detailed(
     username: None | str | Unset = UNSET,
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
+    ip_address: None | str | Unset = UNSET,
 ) -> Response[Any | HTTPValidationError]:
     """Export Csv
 
@@ -119,6 +128,8 @@ def sync_detailed(
         username (None | str | Unset):
         from_date (datetime.datetime | None | Unset):
         to_date (datetime.datetime | None | Unset):
+        ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
+            matching.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -134,6 +145,7 @@ def sync_detailed(
         username=username,
         from_date=from_date,
         to_date=to_date,
+        ip_address=ip_address,
     )
 
     response = client.get_httpx_client().request(
@@ -151,6 +163,7 @@ def sync(
     username: None | str | Unset = UNSET,
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
+    ip_address: None | str | Unset = UNSET,
 ) -> Any | HTTPValidationError | None:
     """Export Csv
 
@@ -162,6 +175,8 @@ def sync(
         username (None | str | Unset):
         from_date (datetime.datetime | None | Unset):
         to_date (datetime.datetime | None | Unset):
+        ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
+            matching.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -178,6 +193,7 @@ def sync(
         username=username,
         from_date=from_date,
         to_date=to_date,
+        ip_address=ip_address,
     ).parsed
 
 
@@ -189,6 +205,7 @@ async def asyncio_detailed(
     username: None | str | Unset = UNSET,
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
+    ip_address: None | str | Unset = UNSET,
 ) -> Response[Any | HTTPValidationError]:
     """Export Csv
 
@@ -200,6 +217,8 @@ async def asyncio_detailed(
         username (None | str | Unset):
         from_date (datetime.datetime | None | Unset):
         to_date (datetime.datetime | None | Unset):
+        ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
+            matching.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -215,6 +234,7 @@ async def asyncio_detailed(
         username=username,
         from_date=from_date,
         to_date=to_date,
+        ip_address=ip_address,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -230,6 +250,7 @@ async def asyncio(
     username: None | str | Unset = UNSET,
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
+    ip_address: None | str | Unset = UNSET,
 ) -> Any | HTTPValidationError | None:
     """Export Csv
 
@@ -241,6 +262,8 @@ async def asyncio(
         username (None | str | Unset):
         from_date (datetime.datetime | None | Unset):
         to_date (datetime.datetime | None | Unset):
+        ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
+            matching.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -258,5 +281,6 @@ async def asyncio(
             username=username,
             from_date=from_date,
             to_date=to_date,
+            ip_address=ip_address,
         )
     ).parsed

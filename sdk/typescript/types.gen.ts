@@ -7425,6 +7425,12 @@ export type GetAuditLogData = {
          */
         to_date?: string | null;
         /**
+         * Ip Address
+         *
+         * Exact client address, IPv4 or IPv6. Normalised before matching.
+         */
+        ip_address?: string | null;
+        /**
          * Skip
          */
         skip?: number;
@@ -7499,6 +7505,12 @@ export type GetAuditLogExportData = {
          * To Date
          */
         to_date?: string | null;
+        /**
+         * Ip Address
+         *
+         * Exact client address, IPv4 or IPv6. Normalised before matching.
+         */
+        ip_address?: string | null;
     };
     url: '/audit-log/export';
 };
@@ -7522,9 +7534,25 @@ export type GetAuditLogExportResponses = {
 export type GetAuditLogStatsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Ip Address
+         *
+         * Exact client address, IPv4 or IPv6. Normalised before matching.
+         */
+        ip_address?: string | null;
+    };
     url: '/audit-log/stats';
 };
+
+export type GetAuditLogStatsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAuditLogStatsError = GetAuditLogStatsErrors[keyof GetAuditLogStatsErrors];
 
 export type GetAuditLogStatsResponses = {
     /**

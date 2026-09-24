@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "metrics": {
-    "backend_tests_collected": 4220,
-    "backend_test_files": 320,
-    "frontend_vitest_tests": 299,
+    "backend_tests_collected": 4230,
+    "backend_test_files": 321,
+    "frontend_vitest_tests": 303,
     "api_operations": 426,
     "python_runtime_shipped": "3.13",
     "nextjs_version": "16.3.5",
