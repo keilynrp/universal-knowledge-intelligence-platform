@@ -2,8 +2,9 @@
 Tests for backend/auth.py — JWT creation, validation, and login endpoint.
 """
 import os
-import pytest
 from datetime import timedelta
+
+import pytest
 from jose import jwt
 
 # Ensure env vars are set before import (conftest.py handles this,
@@ -12,14 +13,14 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-not-for-production")
 os.environ.setdefault("ADMIN_USERNAME", "testadmin")
 os.environ.setdefault("ADMIN_PASSWORD", "testpassword")
 
+from backend import models
 from backend.auth import (
+    ALGORITHM,
+    SECRET_KEY,
     authenticate_user,
     create_access_token,
-    SECRET_KEY,
-    ALGORITHM,
     verify_password,
 )
-from backend import models
 
 pytestmark = pytest.mark.security
 
@@ -28,19 +29,19 @@ pytestmark = pytest.mark.security
 # ── Unit: token creation ─────────────────────────────────────────────────────
 
 def test_create_access_token_contains_subject():
-    token = create_access_token(subject="testadmin", role="super_admin")
+    token = create_access_token(subject="testadmin", role="super_admin", sid="sid-under-test")
     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     assert payload["sub"] == "testadmin"
 
 
 def test_create_access_token_has_expiry():
-    token = create_access_token(subject="testadmin", role="super_admin")
+    token = create_access_token(subject="testadmin", role="super_admin", sid="sid-under-test")
     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     assert "exp" in payload
 
 
 def test_create_access_token_custom_expiry():
-    token = create_access_token(subject="testadmin", role="super_admin", expires_delta=timedelta(minutes=1))
+    token = create_access_token(subject="testadmin", role="super_admin", sid="sid-under-test", expires_delta=timedelta(minutes=1))
     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     assert payload["sub"] == "testadmin"
 
@@ -155,8 +156,9 @@ def test_password_reset_confirm_updates_password(client, db_session):
         .first()
     )
     raw_token = "reset-token-for-test-12345678901234567890"
-    from backend.routers.auth_users import _password_reset_token_hash
     from datetime import datetime, timedelta, timezone
+
+    from backend.routers.auth_users import _password_reset_token_hash
 
     db_session.add(models.PasswordResetToken(
         user_id=user.id,

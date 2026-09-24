@@ -7647,6 +7647,62 @@ export type PostAuthRefreshResponses = {
     200: unknown;
 };
 
+export type DeleteAuthSessionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/auth/sessions';
+};
+
+export type DeleteAuthSessionsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type GetAuthSessionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/auth/sessions';
+};
+
+export type GetAuthSessionsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type DeleteAuthSessionsBySessionIdData = {
+    body?: never;
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: number;
+    };
+    query?: never;
+    url: '/auth/sessions/{session_id}';
+};
+
+export type DeleteAuthSessionsBySessionIdErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteAuthSessionsBySessionIdError = DeleteAuthSessionsBySessionIdErrors[keyof DeleteAuthSessionsBySessionIdErrors];
+
+export type DeleteAuthSessionsBySessionIdResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type GetAuthSsoSettingsData = {
     body?: never;
     path?: never;
@@ -16202,6 +16258,94 @@ export type PostUsersByUserIdActivateResponses = {
 };
 
 export type PostUsersByUserIdActivateResponse = PostUsersByUserIdActivateResponses[keyof PostUsersByUserIdActivateResponses];
+
+export type DeleteUsersByUserIdSessionsData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: number;
+    };
+    query?: never;
+    url: '/users/{user_id}/sessions';
+};
+
+export type DeleteUsersByUserIdSessionsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteUsersByUserIdSessionsError = DeleteUsersByUserIdSessionsErrors[keyof DeleteUsersByUserIdSessionsErrors];
+
+export type DeleteUsersByUserIdSessionsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type GetUsersByUserIdSessionsData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: number;
+    };
+    query?: never;
+    url: '/users/{user_id}/sessions';
+};
+
+export type GetUsersByUserIdSessionsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetUsersByUserIdSessionsError = GetUsersByUserIdSessionsErrors[keyof GetUsersByUserIdSessionsErrors];
+
+export type GetUsersByUserIdSessionsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type DeleteUsersByUserIdSessionsBySessionIdData = {
+    body?: never;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: number;
+        /**
+         * Session Id
+         */
+        session_id: number;
+    };
+    query?: never;
+    url: '/users/{user_id}/sessions/{session_id}';
+};
+
+export type DeleteUsersByUserIdSessionsBySessionIdErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteUsersByUserIdSessionsBySessionIdError = DeleteUsersByUserIdSessionsBySessionIdErrors[keyof DeleteUsersByUserIdSessionsBySessionIdErrors];
+
+export type DeleteUsersByUserIdSessionsBySessionIdResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type GetWebhooksData = {
     body?: never;

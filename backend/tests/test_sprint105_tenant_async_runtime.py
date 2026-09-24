@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from backend import models
-from backend.auth import create_access_token
+from backend.auth import issue_access_token
 from backend.enrichment_worker import enrich_with_web_scrapers
 
 
@@ -45,7 +45,7 @@ def _tenant_user(session_factory, *, role: str = "admin"):
 
         org_id = org.id
 
-    token = create_access_token(subject=username, role=role)
+    token = issue_access_token(subject=username, role=role)
     return {
         "headers": {"Authorization": f"Bearer {token}"},
         "org_id": org_id,

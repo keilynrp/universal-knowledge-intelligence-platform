@@ -10,7 +10,6 @@ Design principles:
 """
 import logging
 import re
-from typing import Optional
 
 from jose import JWTError
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -27,6 +26,10 @@ _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 # Paths to skip (auth handshakes, static docs, health probe, read-only,
 # and notification-center preference endpoints — Sprint 56)
+# `/auth/sessions` is deliberately NOT skipped: revoking a session is a
+# containment action and has to leave a trace (#368 phase C.3).
+_AUDITED_AUTH_PREFIXES = ("/auth/sessions",)
+
 _SKIP_PREFIXES = (
     "/auth/",
     "/health",
@@ -51,6 +54,7 @@ _RESOURCE_MAP: dict[str, str] = {
     "disambiguation":   "disambiguation",
     "domains":          "domain",
     "users":            "user",
+    "auth":             "session",
     "annotations":      "annotation",
     "rag":              "rag",
     "demo":             "demo",
@@ -80,12 +84,12 @@ def _resource_type(path: str) -> str:
     return _RESOURCE_MAP.get(parts[0], parts[0]) if parts else "unknown"
 
 
-def _resource_id(path: str) -> Optional[str]:
+def _resource_id(path: str) -> str | None:
     m = _RESOURCE_ID_RE.search(path)
     return m.group(1) if m else None
 
 
-def _decode_username(authorization: Optional[str]) -> Optional[str]:
+def _decode_username(authorization: str | None) -> str | None:
     """Extract the 'sub' claim from the Bearer JWT without hitting the DB."""
     if not authorization or not authorization.startswith("Bearer "):
         return None
@@ -114,7 +118,9 @@ class AuditMiddleware(BaseHTTPMiddleware):
             return response
 
         path = request.url.path
-        if any(path.startswith(p) for p in _SKIP_PREFIXES):
+        if any(path.startswith(p) for p in _SKIP_PREFIXES) and not any(
+            path.startswith(p) for p in _AUDITED_AUTH_PREFIXES
+        ):
             return response
 
         # Best-effort: never raise, never block the response
@@ -136,7 +142,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 db.commit()
             finally:
                 db.close()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — the response is already built; a failed audit write must not turn it into a 500
             logger.debug("AuditMiddleware: failed to persist entry: %s", exc)
 
         return response

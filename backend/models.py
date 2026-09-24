@@ -761,6 +761,32 @@ class ApiKey(Base):
     created_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class UserSession(Base):
+    """One login session, so that a single session can be revoked.
+
+    Access and refresh tokens carry the `sid` claim naming their session. That
+    is what makes containment proportionate: revoking a session does not
+    deactivate the account and does not rotate the global signing key, and it
+    works on the operator's own account, which the user endpoints refuse to
+    deactivate (#368 phase C.3, found by the 2026-09-22 tabletop).
+
+    `user_agent` and `ip_address` are recorded so an unfamiliar session can be
+    recognised as unfamiliar. No token or key material is ever stored here.
+    """
+    __tablename__ = "user_sessions"
+
+    id                 = Column(Integer, primary_key=True, index=True)
+    sid                = Column(String(64), nullable=False, unique=True, index=True)
+    user_id            = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_at         = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    last_seen_at       = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    expires_at         = Column(DateTime, nullable=True)
+    revoked_at         = Column(DateTime, nullable=True, index=True)
+    revoked_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_agent         = Column(String(400), nullable=True)
+    ip_address         = Column(String(64), nullable=True)
+
+
 # ── Sprint 80: Custom Dashboards ──────────────────────────────────────────────
 
 class UserDashboard(Base):

@@ -1,7 +1,7 @@
 import json
 
 from backend import models
-from backend.auth import create_access_token, hash_password
+from backend.auth import hash_password, issue_access_token
 
 
 def test_catalog_portal_create_and_results_global_scope(client, auth_headers, db_session):
@@ -260,8 +260,8 @@ def test_catalog_portal_is_scoped_to_active_organization(client, db_session):
     )
     db_session.commit()
 
-    admin_headers = {"Authorization": f"Bearer {create_access_token(subject=admin.username, role='admin')}"}
-    outsider_headers = {"Authorization": f"Bearer {create_access_token(subject=outsider.username, role='admin')}"}
+    admin_headers = {"Authorization": f"Bearer {issue_access_token(subject=admin.username, role='admin')}"}
+    outsider_headers = {"Authorization": f"Bearer {issue_access_token(subject=outsider.username, role='admin')}"}
 
     create_resp = client.post(
         "/catalogs",

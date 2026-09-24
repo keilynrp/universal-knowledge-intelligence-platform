@@ -3,11 +3,18 @@ JWT Authentication module for UKIP.
 Multi-user RBAC model: credentials stored in the 'users' table.
 Roles: super_admin | admin | editor | viewer
 """
+
+# ruff: noqa: B008 — every dependency below uses FastAPI's own recommended
+# `Depends(...)` dependency-injection idiom in an argument default, which is
+# exactly what B008 ("no function call as a default") exists to catch in
+# ordinary code. Same justification, and same file-level waiver, as
+# backend/routers/backup_ops.py.
+
 import json
 import logging
 import os
+import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 import bcrypt as _bcrypt
 from fastapi import Depends, HTTPException, Request, status
@@ -15,9 +22,9 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from backend.api_key_scopes import READ, satisfies, scope_required
-from backend.database import get_db
 from backend import models
+from backend.api_key_scopes import satisfies, scope_required
+from backend.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +60,7 @@ def _decode_token(token: str) -> dict:
     single decode path for ALL JWT verification sites.
     """
     keys = [SECRET_KEY, *RETIRING_SECRET_KEYS]
-    last_error: Optional[JWTError] = None
+    last_error: JWTError | None = None
     for key in keys:
         try:
             return jwt.decode(token, key, algorithms=[ALGORITHM])
@@ -73,7 +80,7 @@ def verify_password(plain: str, hashed: str) -> bool:
     """Verify a plaintext password against a bcrypt hash."""
     try:
         return _bcrypt.checkpw(plain.encode(), hashed.encode())
-    except Exception:
+    except Exception:  # noqa: BLE001 — a missing or malformed stored hash is a failed login, never a 500
         return False
 
 
@@ -82,33 +89,127 @@ def hash_password(password: str) -> str:
     return _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
 
 
-def create_access_token(subject: str, role: str, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(
+    subject: str,
+    role: str,
+    sid: str,
+    expires_delta: timedelta | None = None,
+) -> str:
+    """Mint an access token naming the session `sid`.
+
+    `sid` is required: a token nobody can name is a token nobody can revoke,
+    which is the gap the 2026-09-22 tabletop hit (#368 phase C.3).
+    """
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     return jwt.encode(
-        {"sub": subject, "role": role, "exp": expire, "type": "access"},
+        {"sub": subject, "role": role, "sid": sid, "exp": expire, "type": "access"},
         SECRET_KEY,
         algorithm=ALGORITHM,
     )
 
 
-def create_refresh_token(subject: str, role: str, expires_delta: Optional[timedelta] = None) -> str:
+def create_refresh_token(
+    subject: str,
+    role: str,
+    sid: str,
+    expires_delta: timedelta | None = None,
+) -> str:
+    """Mint a refresh token naming the same session as its access token.
+
+    They share the session deliberately: revoking a session that left its
+    refresh token alive would contain nothing, because the holder would simply
+    renew.
+    """
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES)
     )
     return jwt.encode(
-        {"sub": subject, "role": role, "exp": expire, "type": "refresh"},
+        {"sub": subject, "role": role, "sid": sid, "exp": expire, "type": "refresh"},
         SECRET_KEY,
         algorithm=ALGORITHM,
     )
+
+
+def start_session(
+    db: Session,
+    user: "models.User",
+    *,
+    user_agent: str | None = None,
+    ip_address: str | None = None,
+) -> "models.UserSession":
+    """Record a new login session and return it."""
+    session = models.UserSession(
+        sid=uuid.uuid4().hex,
+        user_id=user.id,
+        created_at=datetime.now(timezone.utc),
+        last_seen_at=datetime.now(timezone.utc),
+        expires_at=datetime.now(timezone.utc)
+        + timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES),
+        user_agent=(user_agent or None),
+        ip_address=(ip_address or None),
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+def _request_fingerprint(request) -> tuple[str | None, str | None]:
+    if request is None:
+        return None, None
+    agent = request.headers.get("user-agent")
+    return (agent[:400] if agent else None), (
+        request.client.host if request.client else None
+    )
+
+
+def issue_tokens(db: Session, user: "models.User", request=None) -> dict:
+    """Start a session and mint the token pair that names it."""
+    agent, ip = _request_fingerprint(request)
+    session = start_session(db, user, user_agent=agent, ip_address=ip)
+    return {
+        "access_token": create_access_token(user.username, user.role, session.sid),
+        "refresh_token": create_refresh_token(user.username, user.role, session.sid),
+        "token_type": "bearer",
+    }
+
+
+def issue_access_token(
+    subject: str,
+    role: str,
+    db: Session | None = None,
+    expires_delta: timedelta | None = None,
+) -> str:
+    """Start a session for `subject` and return an access token naming it.
+
+    A convenience for callers that hold a username rather than a `User` row.
+    With no session supplied it opens one, which is what makes it usable from
+    tests without each of them wiring a session factory.
+    """
+    from backend import database
+
+    owns_session = db is None
+    db = db or database.SessionLocal()
+    try:
+        user = (
+            db.query(models.User).filter(models.User.username == subject).first()
+        )
+        if user is None:
+            raise ValueError(f"No such user: {subject!r}")
+        session = start_session(db, user)
+        return create_access_token(subject, role, session.sid, expires_delta)
+    finally:
+        if owns_session:
+            db.close()
 
 
 _MAX_FAILED_ATTEMPTS = 5
 _LOCKOUT_MINUTES = 15
 
 
-def authenticate_user(db: Session, username: str, password: str) -> Optional[models.User]:
+def authenticate_user(db: Session, username: str, password: str) -> models.User | None:
     """Return the User if credentials are valid, None otherwise.
 
     Raises HTTP 423 if the account is currently locked out.
@@ -278,6 +379,26 @@ def enforce_api_key_scope(
         )
 
 
+def _user_for_live_session(db: Session, username: str, sid: str):
+    """Resolve the user behind a token, refusing revoked sessions.
+
+    One query, joined rather than two round trips: this runs on every
+    authenticated request.
+    """
+    row = (
+        db.query(models.User)
+        .join(models.UserSession, models.UserSession.user_id == models.User.id)
+        .filter(
+            models.User.username == username,
+            models.User.is_active == True,
+            models.UserSession.sid == sid,
+            models.UserSession.revoked_at.is_(None),
+        )
+        .first()
+    )
+    return row
+
+
 # ── Dependencies ─────────────────────────────────────────────────────────────
 
 async def get_current_user(
@@ -305,7 +426,7 @@ async def get_current_user(
             raise credentials_exc
         user = db.query(models.User).filter(
             models.User.id == key_record.user_id,
-            models.User.is_active == True,  # noqa: E712
+            models.User.is_active == True,
         ).first()
         if not user:
             raise credentials_exc
@@ -317,17 +438,15 @@ async def get_current_user(
     # ── JWT path ──────────────────────────────────────────────────────────────
     try:
         payload = _decode_token(token)
-        username: Optional[str] = payload.get("sub")
-        if not username:
+        username: str | None = payload.get("sub")
+        sid: str | None = payload.get("sid")
+        if not username or not sid:
+            # A token with no session cannot be revoked, so it is not accepted.
             raise credentials_exc
     except JWTError:
         raise credentials_exc
 
-    user = (
-        db.query(models.User)
-        .filter(models.User.username == username, models.User.is_active == True)
-        .first()
-    )
+    user = _user_for_live_session(db, username, sid)
     if not user:
         raise credentials_exc
     return user
@@ -335,9 +454,9 @@ async def get_current_user(
 
 async def get_current_user_optional(
     request: Request,
-    token: Optional[str] = Depends(optional_oauth2_scheme),
+    token: str | None = Depends(optional_oauth2_scheme),
     db: Session = Depends(get_db),
-) -> Optional[models.User]:
+) -> models.User | None:
     """
     Best-effort auth resolver for routes that may be publicly readable.
     Invalid, expired, or missing credentials are treated as anonymous access.
@@ -356,7 +475,7 @@ async def get_current_user_optional(
             return None
         user = db.query(models.User).filter(
             models.User.id == key_record.user_id,
-            models.User.is_active == True,  # noqa: E712
+            models.User.is_active == True,
         ).first()
         if user:
             enforce_api_key_scope(
@@ -366,17 +485,14 @@ async def get_current_user_optional(
 
     try:
         payload = _decode_token(token)
-        username: Optional[str] = payload.get("sub")
-        if not username:
+        username: str | None = payload.get("sub")
+        sid: str | None = payload.get("sid")
+        if not username or not sid:
             return None
     except JWTError:
         return None
 
-    return (
-        db.query(models.User)
-        .filter(models.User.username == username, models.User.is_active == True)
-        .first()
-    )
+    return _user_for_live_session(db, username, sid)
 
 
 def require_role(*roles: str):

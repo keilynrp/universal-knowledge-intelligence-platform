@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "metrics": {
-    "backend_tests_collected": 4200,
-    "backend_test_files": 319,
+    "backend_tests_collected": 4220,
+    "backend_test_files": 320,
     "frontend_vitest_tests": 289,
-    "api_operations": 420,
+    "api_operations": 426,
     "python_runtime_shipped": "3.13",
     "nextjs_version": "16.3.5",
     "react_version": "19.3.0",

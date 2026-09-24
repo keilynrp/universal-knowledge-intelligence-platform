@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 
 from backend import models
-from backend.auth import create_access_token, hash_password
+from backend.auth import hash_password, issue_access_token
 
 
 def _admin_headers(db_session, suffix=""):
@@ -40,7 +40,7 @@ def _admin_headers(db_session, suffix=""):
     admin.org_id = primary_org.id
     db_session.commit()
 
-    token = create_access_token(subject=admin.username, role="admin")
+    token = issue_access_token(subject=admin.username, role="admin")
     return {"Authorization": f"Bearer {token}"}, admin, primary_org, secondary_org
 
 

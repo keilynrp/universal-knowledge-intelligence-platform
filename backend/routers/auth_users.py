@@ -4,29 +4,47 @@ Authentication and user management endpoints.
   GET/POST/GET{id}/PUT/DELETE /users
   GET/POST /users/me  /users/me/password
 """
-from datetime import datetime, timedelta, timezone
-import hashlib
-import secrets
-from typing import List
 
+# ruff: noqa: B008 — every endpoint below uses FastAPI's own recommended
+# `Depends(...)`/`Query(...)` dependency-injection idiom in an argument default,
+# which is exactly what B008 ("no function call as a default") exists to catch
+# in ordinary code. Same justification, and same file-level waiver, as
+# backend/routers/backup_ops.py.
+import hashlib
+import os
+import secrets
+from datetime import datetime, timedelta, timezone
+
+from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.security import OAuth2PasswordRequestForm
+from jose import JWTError
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 from starlette.responses import RedirectResponse
-from authlib.integrations.starlette_client import OAuth
-import os
 
 from backend import models, schemas
+from backend.auth import (
+    REFRESH_TOKEN_EXPIRE_MINUTES,
+    _decode_token,
+    authenticate_user,
+    create_access_token,
+    create_refresh_token,
+    get_current_user,
+    hash_password,
+    issue_tokens,
+    require_role,
+)
+from backend.database import get_db
 from backend.i18n.catalog import translate
 from backend.i18n.locale import language_dependency
-from backend.auth import authenticate_user, create_access_token, create_refresh_token, get_current_user, require_role, _decode_token, hash_password
-from jose import JWTError
-from backend.database import get_db
-from backend.routers.platform_auth_settings import get_or_create_auth_settings, sso_provider_configured
-from backend.routers.limiter import limiter
 from backend.notifications.email_sender import send_plain_email
+from backend.routers.limiter import limiter
+from backend.routers.platform_auth_settings import (
+    get_or_create_auth_settings,
+    sso_provider_configured,
+)
 
 router = APIRouter(tags=["auth"])
 
@@ -51,9 +69,7 @@ async def login(
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    token = create_access_token(subject=user.username, role=user.role)
-    refresh_token = create_refresh_token(subject=user.username, role=user.role)
-    return {"access_token": token, "refresh_token": refresh_token, "token_type": "bearer"}
+    return issue_tokens(db, user, request)
 
 
 class RefreshTokenRequest(BaseModel):
@@ -100,7 +116,8 @@ def refresh_token(request: Request, payload: RefreshTokenRequest, db: Session = 
         token_payload = _decode_token(payload.refresh_token)
         username = token_payload.get("sub")
         token_type = token_payload.get("type")
-        if not username or token_type != "refresh":
+        sid = token_payload.get("sid")
+        if not username or token_type != "refresh" or not sid:
             raise credentials_exc
     except JWTError:
         raise credentials_exc
@@ -112,10 +129,190 @@ def refresh_token(request: Request, payload: RefreshTokenRequest, db: Session = 
     if not user:
         raise credentials_exc
 
-    new_access = create_access_token(subject=user.username, role=user.role)
-    new_refresh = create_refresh_token(subject=user.username, role=user.role)
+    session = (
+        db.query(models.UserSession)
+        .filter(
+            models.UserSession.sid == sid,
+            models.UserSession.user_id == user.id,
+            models.UserSession.revoked_at.is_(None),
+        )
+        .first()
+    )
+    if not session:
+        raise credentials_exc
 
-    return {"access_token": new_access, "refresh_token": new_refresh, "token_type": "bearer"}
+    # The refreshed pair keeps the same session: a refresh renews credentials,
+    # it does not start a new login. A revoked session therefore cannot be
+    # renewed back to life.
+    session.last_seen_at = datetime.now(timezone.utc)
+    session.expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=REFRESH_TOKEN_EXPIRE_MINUTES
+    )
+    db.commit()
+
+    return {
+        "access_token": create_access_token(user.username, user.role, session.sid),
+        "refresh_token": create_refresh_token(user.username, user.role, session.sid),
+        "token_type": "bearer",
+    }
+
+
+# ── Sessions (#368 phase C.3) ────────────────────────────────────────────────
+#
+# Revoking a session is the proportionate containment step the 2026-09-22
+# tabletop found missing: it stops one stolen token without deactivating the
+# account and without rotating the signing key, and it works on the operator's
+# own account, which `PUT`/`DELETE /users/{id}` refuse to deactivate.
+
+def _current_sid(request: Request):
+    """The session of the caller, so a listing can mark it and a bulk revoke
+    can spare it."""
+    header = request.headers.get("authorization") or ""
+    if not header.startswith("Bearer "):
+        return None
+    try:
+        return _decode_token(header.split(" ", 1)[1]).get("sid")
+    except JWTError:
+        return None
+
+
+def _serialize_session(row: models.UserSession, current_sid) -> dict:
+    return {
+        "id": row.id,
+        "sid": row.sid,
+        "created_at": row.created_at,
+        "last_seen_at": row.last_seen_at,
+        "expires_at": row.expires_at,
+        "user_agent": row.user_agent,
+        "ip_address": row.ip_address,
+        "current": row.sid == current_sid,
+    }
+
+
+def _live_sessions(db: Session, user_id: int):
+    return (
+        db.query(models.UserSession)
+        .filter(
+            models.UserSession.user_id == user_id,
+            models.UserSession.revoked_at.is_(None),
+        )
+        .order_by(models.UserSession.last_seen_at.desc())
+        .all()
+    )
+
+
+def _revoke(db: Session, rows, actor_id: int) -> int:
+    now = datetime.now(timezone.utc)
+    for row in rows:
+        row.revoked_at = now
+        row.revoked_by_user_id = actor_id
+    db.commit()
+    return len(rows)
+
+
+@router.get("/auth/sessions", tags=["auth"])
+def list_my_sessions(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """The caller's live sessions, most recently seen first."""
+    current = _current_sid(request)
+    return {
+        "items": [
+            _serialize_session(row, current)
+            for row in _live_sessions(db, current_user.id)
+        ]
+    }
+
+
+@router.delete("/auth/sessions/{session_id}", tags=["auth"])
+def revoke_my_session(
+    session_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Revoke one of the caller's own sessions.
+
+    A session that is not the caller's is reported as not found rather than
+    forbidden: whether someone else holds a given session id is not the
+    caller's business.
+    """
+    row = (
+        db.query(models.UserSession)
+        .filter(
+            models.UserSession.id == session_id,
+            models.UserSession.user_id == current_user.id,
+            models.UserSession.revoked_at.is_(None),
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found")
+    _revoke(db, [row], current_user.id)
+    return {"revoked": 1, "id": session_id}
+
+
+@router.delete("/auth/sessions", tags=["auth"])
+def revoke_my_other_sessions(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Revoke every session of the caller except the one making the call."""
+    current = _current_sid(request)
+    rows = [row for row in _live_sessions(db, current_user.id) if row.sid != current]
+    return {"revoked": _revoke(db, rows, current_user.id)}
+
+
+@router.get("/users/{user_id}/sessions", tags=["users"])
+def list_user_sessions(
+    user_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin")),
+):
+    """Another user's live sessions. Requires super_admin."""
+    if not db.query(models.User).filter(models.User.id == user_id).first():
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"items": [_serialize_session(row, None) for row in _live_sessions(db, user_id)]}
+
+
+@router.delete("/users/{user_id}/sessions/{session_id}", tags=["users"])
+def revoke_user_session(
+    user_id: int = Path(..., ge=1),
+    session_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin")),
+):
+    """Revoke one session belonging to another user. Requires super_admin.
+
+    Unlike deactivation there is no last-super_admin guard, and none is wanted:
+    this removes a credential, not a person, and the account keeps working from
+    its other sessions.
+    """
+    row = (
+        db.query(models.UserSession)
+        .filter(
+            models.UserSession.id == session_id,
+            models.UserSession.user_id == user_id,
+            models.UserSession.revoked_at.is_(None),
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found")
+    _revoke(db, [row], current_user.id)
+    return {"revoked": 1, "id": session_id}
+
+
+@router.delete("/users/{user_id}/sessions", tags=["users"])
+def revoke_all_user_sessions(
+    user_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("super_admin")),
+):
+    """Revoke every live session of a user, without deactivating the account."""
+    return {"revoked": _revoke(db, _live_sessions(db, user_id), current_user.id)}
 
 
 @router.post("/auth/password-reset/request", tags=["auth"])
@@ -228,7 +425,7 @@ async def sso_callback(request: Request, db: Session = Depends(get_db)):
     """OAuth2 callback handler."""
     try:
         token = await oauth.sso.authorize_access_token(request)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — authlib and its HTTP client raise many types; any of them is a failed SSO login
         raise HTTPException(status_code=400, detail=f"SSO authentication failed: {e}")
 
     user_info = token.get('userinfo')
@@ -262,6 +459,7 @@ async def sso_callback(request: Request, db: Session = Depends(get_db)):
             raise HTTPException(status_code=403, detail="SSO user auto-provisioning is disabled")
         # Auto-provision a viewer account
         import uuid
+
         from backend.auth import hash_password
         dummy_pass = str(uuid.uuid4())
         
@@ -282,8 +480,9 @@ async def sso_callback(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=403, detail="Account is deactivated")
 
     # Generate JWT
-    access_token = create_access_token(subject=user.username, role=user.role)
-    refresh_token = create_refresh_token(subject=user.username, role=user.role)
+    _sso_tokens = issue_tokens(db, user, request)
+    access_token = _sso_tokens["access_token"]
+    refresh_token = _sso_tokens["refresh_token"]
     frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
     return RedirectResponse(url=f"{frontend_url}/login?token={access_token}&refresh={refresh_token}")
 
@@ -327,7 +526,8 @@ def change_my_password(
     current_user: models.User = Depends(get_current_user),
 ):
     """Change the authenticated user's own password."""
-    from backend.auth import hash_password as _hp, verify_password
+    from backend.auth import hash_password as _hp
+    from backend.auth import verify_password
     if not verify_password(payload.current_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     current_user.password_hash = _hp(payload.new_password)
@@ -374,7 +574,6 @@ def user_stats(
     _: models.User = Depends(require_role("super_admin")),
 ):
     """Return user count statistics. Requires super_admin."""
-    from sqlalchemy import func
     all_users = db.query(models.User).all()
     by_role: dict[str, int] = {}
     for u in all_users:
@@ -389,7 +588,7 @@ def user_stats(
     }
 
 
-@router.get("/users", response_model=List[schemas.UserResponse], tags=["users"])
+@router.get("/users", response_model=list[schemas.UserResponse], tags=["users"])
 def list_users(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),

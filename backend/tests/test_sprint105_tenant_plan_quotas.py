@@ -3,7 +3,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 from backend import models
-from backend.auth import create_access_token
+from backend.auth import issue_access_token
 
 
 def _tenant_user(session_factory, *, plan: str = "free", role: str = "admin"):
@@ -41,7 +41,7 @@ def _tenant_user(session_factory, *, plan: str = "free", role: str = "admin"):
         db.commit()
         org_id = org.id
 
-    token = create_access_token(subject=username, role=role)
+    token = issue_access_token(subject=username, role=role)
     return {
         "headers": {"Authorization": f"Bearer {token}"},
         "org_id": org_id,

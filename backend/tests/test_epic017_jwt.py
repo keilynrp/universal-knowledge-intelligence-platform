@@ -1,9 +1,8 @@
 # backend/tests/test_epic017_jwt.py
 import importlib
-from datetime import timedelta
 
 import pytest
-from jose import jwt
+from jose import JWTError, jwt
 
 pytestmark = pytest.mark.security
 
@@ -14,7 +13,7 @@ def _reload_auth(monkeypatch, primary, retiring=None):
         monkeypatch.delenv("JWT_SECRET_KEYS_RETIRING", raising=False)
     else:
         monkeypatch.setenv("JWT_SECRET_KEYS_RETIRING", retiring)
-    import backend.auth as auth
+    from backend import auth
     return importlib.reload(auth)
 
 
@@ -22,7 +21,7 @@ def test_token_signed_with_retiring_key_still_verifies(monkeypatch):
     old = "old-secret-key-0123456789"
     new = "new-secret-key-9876543210"
     auth_old = _reload_auth(monkeypatch, primary=old)
-    token = auth_old.create_access_token("alice", "admin")
+    token = auth_old.create_access_token("alice", "admin", "sid-rotation-test")
     auth_new = _reload_auth(monkeypatch, primary=new, retiring=old)
     payload = auth_new._decode_token(token)
     assert payload["sub"] == "alice"
@@ -31,7 +30,7 @@ def test_token_signed_with_retiring_key_still_verifies(monkeypatch):
 def test_token_signed_with_unknown_key_is_rejected(monkeypatch):
     auth_new = _reload_auth(monkeypatch, primary="primary-key-aaa", retiring="retiring-key-bbb")
     forged = jwt.encode({"sub": "mallory"}, "unknown-key-zzz", algorithm="HS256")
-    with pytest.raises(Exception):
+    with pytest.raises(JWTError):
         auth_new._decode_token(forged)
 
 
@@ -39,7 +38,7 @@ def test_signing_uses_primary_only(monkeypatch):
     new = "new-secret-key-9876543210"
     old = "old-secret-key-0123456789"
     auth_new = _reload_auth(monkeypatch, primary=new, retiring=old)
-    token = auth_new.create_access_token("bob", "viewer")
+    token = auth_new.create_access_token("bob", "viewer", "sid-rotation-test")
     # Decodes under the primary directly
     assert jwt.decode(token, new, algorithms=["HS256"])["sub"] == "bob"
 

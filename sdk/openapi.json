@@ -14480,6 +14480,104 @@
         ]
       }
     },
+    "/auth/sessions": {
+      "delete": {
+        "description": "Revoke every session of the caller except the one making the call.",
+        "operationId": "delete_auth_sessions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Revoke My Other Sessions",
+        "tags": [
+          "auth",
+          "auth"
+        ]
+      },
+      "get": {
+        "description": "The caller's live sessions, most recently seen first.",
+        "operationId": "get_auth_sessions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List My Sessions",
+        "tags": [
+          "auth",
+          "auth"
+        ]
+      }
+    },
+    "/auth/sessions/{session_id}": {
+      "delete": {
+        "description": "Revoke one of the caller's own sessions.\n\nA session that is not the caller's is reported as not found rather than\nforbidden: whether someone else holds a given session id is not the\ncaller's business.",
+        "operationId": "delete_auth_sessions_by_session_id",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Session Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Revoke My Session",
+        "tags": [
+          "auth",
+          "auth"
+        ]
+      }
+    },
     "/auth/sso/settings": {
       "get": {
         "operationId": "get_auth_sso_settings",
@@ -30422,6 +30520,158 @@
           }
         ],
         "summary": "Activate User",
+        "tags": [
+          "auth",
+          "users"
+        ]
+      }
+    },
+    "/users/{user_id}/sessions": {
+      "delete": {
+        "description": "Revoke every live session of a user, without deactivating the account.",
+        "operationId": "delete_users_by_user_id_sessions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Revoke All User Sessions",
+        "tags": [
+          "auth",
+          "users"
+        ]
+      },
+      "get": {
+        "description": "Another user's live sessions. Requires super_admin.",
+        "operationId": "get_users_by_user_id_sessions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List User Sessions",
+        "tags": [
+          "auth",
+          "users"
+        ]
+      }
+    },
+    "/users/{user_id}/sessions/{session_id}": {
+      "delete": {
+        "description": "Revoke one session belonging to another user. Requires super_admin.\n\nUnlike deactivation there is no last-super_admin guard, and none is wanted:\nthis removes a credential, not a person, and the account keeps working from\nits other sessions.",
+        "operationId": "delete_users_by_user_id_sessions_by_session_id",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "User Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Session Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Revoke User Session",
         "tags": [
           "auth",
           "users"
