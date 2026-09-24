@@ -147,7 +147,7 @@ UKIP manages major product and implementation decisions as architecture decision
 | Analytics | pandas, DuckDB, PyArrow, NumPy, SciPy |
 | Background Jobs | Durable PostgreSQL lease queue (broker-free, at-least-once) with worker/scheduler processes |
 <!-- BEGIN GENERATED REPOSITORY METRICS: techstack-testing -->
-| Testing | pytest (4220 tests collected), Vitest (289 tests), Playwright |
+| Testing | pytest (4220 tests collected), Vitest (299 tests), Playwright |
 <!-- END GENERATED REPOSITORY METRICS: techstack-testing -->
 | Deployment | Docker Compose, GHCR images, Dokploy-oriented production compose |
 | Monitoring | Sentry (opt-in), structured logging |
@@ -284,7 +284,7 @@ cd frontend && npx tsc --noEmit
 ```
 
 <!-- BEGIN GENERATED REPOSITORY METRICS: summary-test-stats -->
-**Current test stats:** 4220 backend tests collected across 320 test files. Frontend: 289 Vitest tests.
+**Current test stats:** 4220 backend tests collected across 320 test files. Frontend: 299 Vitest tests.
 <!-- END GENERATED REPOSITORY METRICS: summary-test-stats -->
 
 ---

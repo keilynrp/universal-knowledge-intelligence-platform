@@ -3,13 +3,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useLanguage } from "../../contexts/LanguageContext";
-import { useToast } from "../../components/ui";
+import { Button, IconButton, useToast } from "../../components/ui";
 import type { ToastVariant } from "../../components/ui";
 import { apiFetch } from "../../../lib/api";
 import UserAvatar from "../../components/UserAvatar";
 import PasswordStrength from "../../components/PasswordStrength";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 import { formatDate as formatAppDate } from "../../lib/dateFormat";
+import SessionList from "../../components/SessionList";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -262,6 +263,66 @@ function UserFormSlider({ initial, onClose, onSaved, toast }: UserFormProps) {
   );
 }
 
+// ── Sessions slide-over ───────────────────────────────────────────────────────
+
+/**
+ * One user's live sessions, revocable without deactivating the account.
+ *
+ * For your own row it reads your own sessions instead of the admin endpoint:
+ * only that one knows which session is this browser, so it is the one that
+ * keeps you from revoking the session you are using.
+ */
+function SessionsSlider({
+  user,
+  isMe,
+  onClose,
+  toast,
+}: {
+  user: UserRecord;
+  isMe: boolean;
+  onClose: () => void;
+  toast: (msg: string, v?: ToastVariant) => void;
+}) {
+  const { t } = useLanguage();
+  const trapRef = useFocusTrap<HTMLDivElement>(true);
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden="true" />
+      <div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sessions-title"
+        onKeyDown={e => { if (e.key === "Escape") onClose(); }}
+        className="relative flex h-full w-full max-w-md flex-col bg-[var(--ukip-bg)] shadow-2xl"
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--ukip-border)] px-6 py-4">
+          <h2 id="sessions-title" className="min-w-0 truncate text-base font-semibold text-[var(--ukip-text-strong)]">
+            {t("sessions.panel_title", { username: user.username })}
+          </h2>
+          <IconButton label={t("common.close")} variant="ghost" onClick={onClose}>
+            <svg className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </IconButton>
+        </div>
+        <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+          <p className="text-sm text-[var(--ukip-muted)]">
+            {isMe ? t("sessions.description_self") : t("sessions.description_admin", { username: user.username })}
+          </p>
+          <SessionList
+            endpoint={isMe ? "/auth/sessions" : `/users/${user.id}/sessions`}
+            scope={isMe ? "self" : "admin"}
+            username={user.username}
+            toast={toast}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function UsersManagementPage() {
@@ -285,6 +346,7 @@ export default function UsersManagementPage() {
 
   // Slide-over state
   const [slideOver, setSlideOver] = useState<{ mode: "create" | "edit"; user?: UserRecord } | null>(null);
+  const [sessionsFor, setSessionsFor] = useState<UserRecord | null>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -518,6 +580,19 @@ export default function UsersManagementPage() {
                         <div>
                           <p className="font-medium text-gray-900 dark:text-white">{u.username}</p>
                           {isMe && <p className="text-[10px] font-semibold text-blue-500">you</p>}
+                          {/* On a phone the Actions column is several columns off-screen;
+                              revoking a session is the step most likely to be taken from one. */}
+                          <div className="mt-1 sm:hidden">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSessionsFor(u)}
+                              disabled={busy}
+                              aria-label={t("sessions.open_aria", { username: u.username })}
+                            >
+                              {t("sessions.open")}
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -569,6 +644,20 @@ export default function UsersManagementPage() {
                     {/* Actions */}
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-1">
+                        {/* Sessions: available for every row, including your own.
+                            Below `sm` the same button sits under the username instead. */}
+                        <div className="hidden sm:block">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSessionsFor(u)}
+                            disabled={busy}
+                            aria-label={t("sessions.open_aria", { username: u.username })}
+                          >
+                            {t("sessions.open")}
+                          </Button>
+                        </div>
+
                         {/* Edit */}
                         {!isMe && (
                           <button
@@ -620,6 +709,15 @@ export default function UsersManagementPage() {
           </table>
         )}
       </div>
+
+      {sessionsFor && (
+        <SessionsSlider
+          user={sessionsFor}
+          isMe={sessionsFor.id === me?.id}
+          onClose={() => setSessionsFor(null)}
+          toast={toast}
+        />
+      )}
 
       {/* Slide-over */}
       {slideOver && (
