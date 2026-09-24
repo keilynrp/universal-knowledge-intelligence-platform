@@ -1,13 +1,16 @@
 """
 Phase 12 Sprint 51 — Audit Middleware
 Intercepts every mutating request (POST/PUT/PATCH/DELETE) and writes an
-immutable AuditLog entry after the response is produced.
+immutable AuditLog entry after the response is produced. Since #375 it also
+writes READ/EXPORT entries for the reads ``backend/read_audit.py`` classifies:
+exports, reads of the audit log, API-key reads and bulk reads.
 
 Design principles:
 - Non-blocking: audit failures never break the main request.
 - Lightweight: only captures method, path, status code, user, and IP.
 - Selective: skips noisy / non-domain paths (auth, docs, health).
 """
+import json
 import logging
 import re
 
@@ -16,7 +19,8 @@ from starlette.requests import Request
 
 from backend import models
 from backend.database import SessionLocal
-from backend.principal import principal_of
+from backend.principal import Principal, principal_of
+from backend.read_audit import read_audit_class, read_details
 
 logger = logging.getLogger(__name__)
 
@@ -101,44 +105,81 @@ class AuditMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
 
-        if request.method not in _MUTATING_METHODS:
-            return response
-
         path = request.url.path
         if any(path.startswith(p) for p in _SKIP_PREFIXES) and not any(
             path.startswith(p) for p in _AUDITED_AUTH_PREFIXES
         ):
             return response
 
-        # Best-effort: never raise, never block the response
-        try:
-            # Who acted is whoever authentication accepted, not whatever the
-            # bearer token claims: decoding it named nobody for an API key and
-            # still named the user of a revoked session. No principal means the
-            # request was anonymous or refused, and the row says so by naming
-            # nobody.
-            principal = principal_of(request)
-            db = SessionLocal()
-            try:
-                user = db.get(models.User, principal.user_id) if principal else None
-                rid = _resource_id(path)
-                db.add(models.AuditLog(
-                    user_id=principal.user_id if principal else None,
-                    username=user.username if user else None,
-                    session_id=principal.session_id if principal else None,
-                    api_key_id=principal.api_key_id if principal else None,
-                    action=_ACTION_MAP.get(request.method, request.method),
-                    entity_type=_resource_type(path),
-                    entity_id=int(rid) if rid else None,
-                    endpoint=path,
-                    method=request.method,
-                    status_code=response.status_code,
-                    ip_address=request.client.host if request.client else None,
-                ))
-                db.commit()
-            finally:
-                db.close()
-        except Exception as exc:  # noqa: BLE001 — the response is already built; a failed audit write must not turn it into a 500
-            logger.debug("AuditMiddleware: failed to persist entry: %s", exc)
+        # Who acted is whoever authentication accepted, not whatever the
+        # bearer token claims: decoding it named nobody for an API key and
+        # still named the user of a revoked session. No principal means the
+        # request was anonymous or refused, and the row says so by naming
+        # nobody.
+        principal = principal_of(request)
 
+        if request.method in _MUTATING_METHODS:
+            _write_entry(
+                request, response.status_code, principal,
+                action=_ACTION_MAP.get(request.method, request.method),
+                endpoint=path,
+            )
+            return response
+
+        # Reads are audited by class, not blanket (#375). The endpoint is the
+        # route template, not the concrete path: a path segment can carry the
+        # same kind of value a query string does, and the entity id is kept in
+        # its own column anyway.
+        route = _route_template(request)
+        read_class = read_audit_class(request.method, route, request.query_params, principal)
+        if read_class is not None:
+            _write_entry(
+                request, response.status_code, principal,
+                action=read_class,
+                endpoint=route,
+                details=read_details(request.query_params),
+            )
         return response
+
+
+def _route_template(request: Request) -> str:
+    """The matched template (``/entities/{entity_id}``), or the path when no route matched."""
+    route = request.scope.get("route")
+    return getattr(route, "path", None) or request.url.path
+
+
+def _write_entry(
+    request: Request,
+    status_code: int,
+    principal: Principal | None,
+    *,
+    action: str,
+    endpoint: str,
+    details: dict | None = None,
+) -> None:
+    """Persist one audit row. Best-effort: never raises, never blocks the response."""
+    path = request.url.path
+    try:
+        db = SessionLocal()
+        try:
+            user = db.get(models.User, principal.user_id) if principal else None
+            rid = _resource_id(path)
+            db.add(models.AuditLog(
+                user_id=principal.user_id if principal else None,
+                username=user.username if user else None,
+                session_id=principal.session_id if principal else None,
+                api_key_id=principal.api_key_id if principal else None,
+                action=action,
+                entity_type=_resource_type(path),
+                entity_id=int(rid) if rid else None,
+                endpoint=endpoint,
+                method=request.method,
+                status_code=status_code,
+                ip_address=request.client.host if request.client else None,
+                details=json.dumps(details) if details is not None else None,
+            ))
+            db.commit()
+        finally:
+            db.close()
+    except Exception as exc:  # noqa: BLE001 — the response is already built; a failed audit write must not turn it into a 500
+        logger.debug("AuditMiddleware: failed to persist entry: %s", exc)

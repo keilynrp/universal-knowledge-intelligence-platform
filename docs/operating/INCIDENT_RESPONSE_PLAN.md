@@ -200,12 +200,16 @@ containment destroys state. Minimum set:
    selected by that session, and that session can be revoked on its own
    (§5.3). Anonymous and refused requests carry no identity fields at all.
 2. **Database evidence**, which survives by design:
-   - `audit_logs` — who performed which **mutation**, over HTTP. Retained
-     indefinitely by policy and no longer deleted by a workspace reset (#372).
-     **It does not record reads** (#375): `AuditMiddleware` writes a row only
-     for `POST`, `PUT`, `PATCH` and `DELETE`. An empty result for a suspect
-     account therefore means "no writes", never "no access" — do not read it as
-     an all-clear.
+   - `audit_logs` — every mutation, and the reads that matter (#375): exports
+     (`EXPORT`), reads of the audit log itself, every read made with an API
+     key, and bulk reads, meaning any page past the first or more than 500 rows
+     (`READ`). Each row names the user and the session or API key that
+     authentication accepted; filter with `session_id` or `ip_address`.
+     Retained indefinitely by policy and no longer deleted by a workspace reset
+     (#372). **Reads outside those classes are not in it**: a single first page
+     of an ordinary list leaves no row. For those, the request log (item 1) is
+     the only record, so an empty audit window for a suspect session means "no
+     writes, no exports, no sweeps", never "no access".
    - `backup_assurance_events` — append-only; `UPDATE`, `DELETE` and `TRUNCATE`
      are all refused at the database (#365).
    - `data_lifecycle_events` — exports, deletions, purges, workspace resets.
@@ -325,9 +329,11 @@ Recorded here so nobody discovers them mid-incident:
    in a multi-tenant incident.
 8. **Backup evidence ingestion is manual** (#370), so a stale-backup alert may
    mean "nobody recorded it" rather than "no backup exists". Check both.
-9. **Reads are not audited** (#375). `audit_logs` covers mutations only, so the
-   first question of any access incident — what did they read — has no answer
-   in the audit trail. Found by the 2026-09-22 tabletop.
+9. ~~**Reads are not audited**~~ **Closed 2026-09-24** (#375). Exports, reads
+   of the audit log, API-key reads and bulk reads are audited with the session
+   or key behind them (§7). What remains is by design: an ordinary first-page
+   read is not audited, and is attributable only through the request log,
+   which is only as durable as its capture (gap 3).
 10. ~~**The request log has no identity**~~ **Closed 2026-09-24** (#376).
     Each authenticated request line names the user and the session or API key
     that authentication accepted. What remains is where the log lives: it is
