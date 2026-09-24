@@ -328,8 +328,12 @@ Recorded here so nobody discovers them mid-incident:
     method, path, status and client IP, but not who made it, so a read cannot
     be attributed to an account even when it is visible. Found by the
     2026-09-22 tabletop.
-11. **`GET /audit-log` cannot filter by `ip_address`** (#378), although every
-    row stores one. Correlating a suspect address across sources is manual.
+11. ~~**`GET /audit-log` cannot filter by `ip_address`**~~ **Closed 2026-09-24**
+    (#378, #384). The list, the CSV export and the counters all take
+    `ip_address`, and every address in the audit-log timeline pivots to
+    everything that came from it. What remains is the reach of the audit log
+    itself: an address that only read shows nothing there until reads are
+    audited (gap 9).
 
 ## 12. Maintenance
 
