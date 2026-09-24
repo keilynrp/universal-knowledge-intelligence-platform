@@ -4,14 +4,21 @@ Phase 12 Sprint 51 — Audit Log endpoints
   GET  /audit-log/stats    — summary counters             (admin+)
   GET  /audit-log/export   — CSV download                 (admin+)
 """
+
+# ruff: noqa: B008 — every endpoint below uses FastAPI's own recommended
+# `Depends(...)`/`Query(...)` dependency-injection idiom in an argument default,
+# which is exactly what B008 ("no function call as a default") exists to catch
+# in ordinary code. Same justification, and same file-level waiver, as
+# backend/routers/backup_ops.py.
+
 import csv
 import io
+import ipaddress
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func
@@ -30,27 +37,54 @@ router = APIRouter(prefix="/audit-log", tags=["audit"])
 class AssistantActionAuditPayload(BaseModel):
     action_id: str = Field(..., min_length=1, max_length=120)
     label: str = Field(..., min_length=1, max_length=240)
-    href: Optional[str] = Field(default=None, max_length=512)
-    kind: Optional[str] = Field(default=None, max_length=40)
-    route: Optional[str] = Field(default=None, max_length=512)
-    module_label: Optional[str] = Field(default=None, max_length=160)
-    domain_id: Optional[str] = Field(default=None, max_length=120)
-    api_path: Optional[str] = Field(default=None, max_length=512)
-    method: Optional[str] = Field(default=None, max_length=12)
+    href: str | None = Field(default=None, max_length=512)
+    kind: str | None = Field(default=None, max_length=40)
+    route: str | None = Field(default=None, max_length=512)
+    module_label: str | None = Field(default=None, max_length=160)
+    domain_id: str | None = Field(default=None, max_length=120)
+    api_path: str | None = Field(default=None, max_length=512)
+    method: str | None = Field(default=None, max_length=12)
     status: str = Field(default="started", max_length=40)
-    status_code: Optional[int] = None
-    detail: Optional[str] = Field(default=None, max_length=1000)
+    status_code: int | None = None
+    detail: str | None = Field(default=None, max_length=1000)
 
 
 # ── Query helper ──────────────────────────────────────────────────────────────
 
+# The first question after finding a suspicious address in an incident is what
+# else came from it (#378). The description is shared by every endpoint that
+# takes the filter, so they cannot drift apart.
+_IP_FILTER = Query(
+    default=None,
+    max_length=64,
+    description="Exact client address, IPv4 or IPv6. Normalised before matching.",
+)
+
+
+def _normalise_ip(value: str | None) -> str | None:
+    """Canonical form of an address filter, or a 422 if it is not an address.
+
+    A typo must not look like "this address did nothing": an unparseable
+    filter would silently match no row, which is the same answer a clean
+    address gives. IPv6 is compared in its compressed form, the form the
+    server records from the connection.
+    """
+    if value is None or not value.strip():
+        return None
+    try:
+        return str(ipaddress.ip_address(value.strip()))
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"Not an IP address: {value!r}") from None
+
+
 def _base_query(
     db: Session,
-    action: Optional[str],
-    resource_type: Optional[str],
-    username: Optional[str],
-    from_date: Optional[datetime],
-    to_date: Optional[datetime],
+    action: str | None,
+    resource_type: str | None,
+    username: str | None,
+    from_date: datetime | None,
+    to_date: datetime | None,
+    ip_address: str | None = None,
 ):
     q = db.query(models.AuditLog)
     if action:
@@ -62,6 +96,8 @@ def _base_query(
         q = q.filter(models.AuditLog.entity_type == resource_type)
     if username:
         q = q.filter(models.AuditLog.username == username)
+    if ip_address:
+        q = q.filter(models.AuditLog.ip_address == ip_address)
     if from_date:
         q = q.filter(models.AuditLog.created_at >= from_date)
     if to_date:
@@ -101,18 +137,19 @@ def record_assistant_action(
 
 @router.get("")
 def list_audit_log(
-    action:        Optional[str]      = Query(default=None),
-    resource_type: Optional[str]      = Query(default=None),
-    username:      Optional[str]      = Query(default=None),
-    from_date:     Optional[datetime] = Query(default=None),
-    to_date:       Optional[datetime] = Query(default=None),
+    action:        str | None      = Query(default=None),
+    resource_type: str | None      = Query(default=None),
+    username:      str | None      = Query(default=None),
+    from_date:     datetime | None = Query(default=None),
+    to_date:       datetime | None = Query(default=None),
+    ip_address:    str | None      = _IP_FILTER,
     skip:          int                = Query(default=0, ge=0),
     limit:         int                = Query(default=50, ge=1, le=200),
     db:            Session            = Depends(get_db),
     _:             models.User        = Depends(require_role("super_admin", "admin")),
 ):
     """Paginated audit log, newest first. Admin+ only."""
-    q = _base_query(db, action, resource_type, username, from_date, to_date)
+    q = _base_query(db, action, resource_type, username, from_date, to_date, _normalise_ip(ip_address))
     total = q.count()
     rows  = q.order_by(models.AuditLog.created_at.desc()).offset(skip).limit(limit).all()
     return {
@@ -125,34 +162,44 @@ def list_audit_log(
 
 @router.get("/stats")
 def audit_stats(
+    ip_address: str | None = _IP_FILTER,
     db: Session    = Depends(get_db),
     _: models.User = Depends(require_role("super_admin", "admin")),
 ):
-    """Summary counters over the entire audit log."""
-    total = db.query(models.AuditLog).count()
+    """Summary counters over the audit log, or over one client address.
+
+    With `ip_address` every counter is scoped to that address, so an incident
+    can size what came from it in one request before paging through the rows.
+    """
+    ip = _normalise_ip(ip_address)
+
+    def scoped(q):
+        return q.filter(models.AuditLog.ip_address == ip) if ip else q
+
+    total = scoped(db.query(models.AuditLog)).count()
 
     by_action = {
         row.action: row.cnt
-        for row in db.query(
+        for row in scoped(db.query(
             models.AuditLog.action,
             func.count(models.AuditLog.id).label("cnt"),
-        ).group_by(models.AuditLog.action).all()
+        )).group_by(models.AuditLog.action).all()
     }
 
     by_resource = {
         row.entity_type: row.cnt
-        for row in db.query(
+        for row in scoped(db.query(
             models.AuditLog.entity_type,
             func.count(models.AuditLog.id).label("cnt"),
-        ).group_by(models.AuditLog.entity_type).all()
+        )).group_by(models.AuditLog.entity_type).all()
     }
 
     top_users = [
         {"username": row.username or "anonymous", "count": row.cnt}
-        for row in db.query(
+        for row in scoped(db.query(
             models.AuditLog.username,
             func.count(models.AuditLog.id).label("cnt"),
-        )
+        ))
         .group_by(models.AuditLog.username)
         .order_by(func.count(models.AuditLog.id).desc())
         .limit(10)
@@ -171,7 +218,7 @@ def audit_stats(
     )
     day = func.date(models.AuditLog.created_at)
     daily_rows = (
-        db.query(day.label("day"), func.count(models.AuditLog.id).label("cnt"))
+        scoped(db.query(day.label("day"), func.count(models.AuditLog.id).label("cnt")))
         .filter(models.AuditLog.created_at >= cutoff)
         .group_by(day)
         .order_by(day)
@@ -191,11 +238,12 @@ def audit_stats(
 @router.get("/export")
 def export_csv(
     request:       Request,
-    action:        Optional[str]      = Query(default=None),
-    resource_type: Optional[str]      = Query(default=None),
-    username:      Optional[str]      = Query(default=None),
-    from_date:     Optional[datetime] = Query(default=None),
-    to_date:       Optional[datetime] = Query(default=None),
+    action:        str | None      = Query(default=None),
+    resource_type: str | None      = Query(default=None),
+    username:      str | None      = Query(default=None),
+    from_date:     datetime | None = Query(default=None),
+    to_date:       datetime | None = Query(default=None),
+    ip_address:    str | None      = _IP_FILTER,
     db:            Session            = Depends(get_db),
     current_user:  models.User        = Depends(require_role("super_admin", "admin")),
 ):
@@ -204,7 +252,7 @@ def export_csv(
         require_assistant_action(current_user, "audit-export")
 
     rows = (
-        _base_query(db, action, resource_type, username, from_date, to_date)
+        _base_query(db, action, resource_type, username, from_date, to_date, _normalise_ip(ip_address))
         .order_by(models.AuditLog.created_at.desc())
         .limit(10_000)          # safety cap
         .all()

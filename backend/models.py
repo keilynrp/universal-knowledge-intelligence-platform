@@ -525,7 +525,7 @@ class AuditLog(Base):
     endpoint    = Column(String, nullable=True)              # /entities/42
     method      = Column(String, nullable=True)              # POST | PUT | DELETE
     status_code = Column(Integer, nullable=True)
-    ip_address  = Column(String, nullable=True)
+    ip_address  = Column(String, nullable=True, index=True)  # incident pivot (#378)
     created_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
 

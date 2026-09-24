@@ -17,6 +17,7 @@ def _get_kwargs(
     username: None | str | Unset = UNSET,
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
+    ip_address: None | str | Unset = UNSET,
     skip: int | Unset = 0,
     limit: int | Unset = 50,
 ) -> dict[str, Any]:
@@ -61,6 +62,13 @@ def _get_kwargs(
     else:
         json_to_date = to_date
     params["to_date"] = json_to_date
+
+    json_ip_address: None | str | Unset
+    if isinstance(ip_address, Unset):
+        json_ip_address = UNSET
+    else:
+        json_ip_address = ip_address
+    params["ip_address"] = json_ip_address
 
     params["skip"] = skip
 
@@ -114,6 +122,7 @@ def sync_detailed(
     username: None | str | Unset = UNSET,
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
+    ip_address: None | str | Unset = UNSET,
     skip: int | Unset = 0,
     limit: int | Unset = 50,
 ) -> Response[Any | HTTPValidationError]:
@@ -127,6 +136,8 @@ def sync_detailed(
         username (None | str | Unset):
         from_date (datetime.datetime | None | Unset):
         to_date (datetime.datetime | None | Unset):
+        ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
+            matching.
         skip (int | Unset):  Default: 0.
         limit (int | Unset):  Default: 50.
 
@@ -144,6 +155,7 @@ def sync_detailed(
         username=username,
         from_date=from_date,
         to_date=to_date,
+        ip_address=ip_address,
         skip=skip,
         limit=limit,
     )
@@ -163,6 +175,7 @@ def sync(
     username: None | str | Unset = UNSET,
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
+    ip_address: None | str | Unset = UNSET,
     skip: int | Unset = 0,
     limit: int | Unset = 50,
 ) -> Any | HTTPValidationError | None:
@@ -176,6 +189,8 @@ def sync(
         username (None | str | Unset):
         from_date (datetime.datetime | None | Unset):
         to_date (datetime.datetime | None | Unset):
+        ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
+            matching.
         skip (int | Unset):  Default: 0.
         limit (int | Unset):  Default: 50.
 
@@ -194,6 +209,7 @@ def sync(
         username=username,
         from_date=from_date,
         to_date=to_date,
+        ip_address=ip_address,
         skip=skip,
         limit=limit,
     ).parsed
@@ -207,6 +223,7 @@ async def asyncio_detailed(
     username: None | str | Unset = UNSET,
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
+    ip_address: None | str | Unset = UNSET,
     skip: int | Unset = 0,
     limit: int | Unset = 50,
 ) -> Response[Any | HTTPValidationError]:
@@ -220,6 +237,8 @@ async def asyncio_detailed(
         username (None | str | Unset):
         from_date (datetime.datetime | None | Unset):
         to_date (datetime.datetime | None | Unset):
+        ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
+            matching.
         skip (int | Unset):  Default: 0.
         limit (int | Unset):  Default: 50.
 
@@ -237,6 +256,7 @@ async def asyncio_detailed(
         username=username,
         from_date=from_date,
         to_date=to_date,
+        ip_address=ip_address,
         skip=skip,
         limit=limit,
     )
@@ -254,6 +274,7 @@ async def asyncio(
     username: None | str | Unset = UNSET,
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
+    ip_address: None | str | Unset = UNSET,
     skip: int | Unset = 0,
     limit: int | Unset = 50,
 ) -> Any | HTTPValidationError | None:
@@ -267,6 +288,8 @@ async def asyncio(
         username (None | str | Unset):
         from_date (datetime.datetime | None | Unset):
         to_date (datetime.datetime | None | Unset):
+        ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
+            matching.
         skip (int | Unset):  Default: 0.
         limit (int | Unset):  Default: 50.
 
@@ -286,6 +309,7 @@ async def asyncio(
             username=username,
             from_date=from_date,
             to_date=to_date,
+            ip_address=ip_address,
             skip=skip,
             limit=limit,
         )
