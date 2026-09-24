@@ -152,7 +152,8 @@ def get_db():
 
 **Exports:**
 - `authenticate_user(db, username, password)` → User | None
-- `create_access_token(subject, role, expires_delta=None)` → str
+- `issue_tokens(db, user, request=None)` → dict (starts a session, returns the access/refresh pair naming it)
+- `create_access_token(subject, role, sid, expires_delta=None)` → str (`sid` names a `user_sessions` row; a token without one is rejected)
 - `get_current_user(token, db)` → User
 - `require_role(*allowed_roles)` → Depends factory
 
@@ -160,8 +161,8 @@ def get_db():
 ```
 1. Login: POST /auth/token (OAuth2 form)
    → authenticate_user(username, password)
-   → create_access_token(user_id, user.role)
-   → Return JWT
+   → issue_tokens(db, user, request)  # new user_sessions row, sid claim in both tokens
+   → Return JWT pair
 
 2. Protected request: GET /entities?...
    → FastAPI extracts Bearer token

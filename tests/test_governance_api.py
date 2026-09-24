@@ -98,25 +98,33 @@ def db_session():
         db.close()
 
 
+def _headers(username: str, role: str) -> dict:
+    """Mint a token through a real session in this file's own database.
+
+    Tokens name a row in `user_sessions`; one minted without it is rejected.
+    """
+    from backend.auth import issue_access_token
+    db = _TestSession()
+    try:
+        token = issue_access_token(subject=username, role=role, db=db)
+    finally:
+        db.close()
+    return {"Authorization": f"Bearer {token}"}
+
+
 @pytest.fixture
 def auth_headers(client):
-    from backend.auth import create_access_token
-    token = create_access_token(subject="testadmin", role="super_admin")
-    return {"Authorization": f"Bearer {token}"}
+    return _headers("testadmin", "super_admin")
 
 
 @pytest.fixture
 def editor_headers(client):
-    from backend.auth import create_access_token
-    token = create_access_token(subject="editor1", role="editor")
-    return {"Authorization": f"Bearer {token}"}
+    return _headers("editor1", "editor")
 
 
 @pytest.fixture
 def viewer_headers(client):
-    from backend.auth import create_access_token
-    token = create_access_token(subject="viewer1", role="viewer")
-    return {"Authorization": f"Bearer {token}"}
+    return _headers("viewer1", "viewer")
 
 
 class TestSourceProfileAPI:
