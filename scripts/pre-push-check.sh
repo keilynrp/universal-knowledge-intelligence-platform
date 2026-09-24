@@ -127,6 +127,36 @@ if [ ${#PYTHON_CHANGED[@]} -gt 0 ]; then
   echo "▶ scripts/lint_entity_query.py…"
   "$PY" scripts/lint_entity_query.py || EXIT=1
   echo
+
+  # Every touched backend/**.py must be Ruff-clean as a whole file, not just no
+  # worse than the baseline (CI job backend-lint-changed). Missing it here is
+  # how #381 went red on 27 findings, most of them older than the branch.
+  #
+  # CI diffs against the PR's base sha; the merge base is the same commit
+  # locally. The script calls a bare `ruff`, and a hook does not inherit an
+  # activated venv, so the venv's own (pinned) ruff goes first on PATH.
+  echo "▶ scripts/lint_backend_changed.py…"
+  LINT_BASE="$(git merge-base "$BASE" HEAD 2>/dev/null || echo "$BASE")"
+  RUFF_PATH="$PATH"
+  case "$PY" in */*) RUFF_PATH="$(dirname "$PY"):$PATH";; esac
+  PATH="$RUFF_PATH" "$PY" scripts/lint_backend_changed.py check --base-sha "$LINT_BASE" || EXIT=1
+
+  # Ruff turns its EXE rules off under WSL, where the executable bit on a
+  # Windows-backed file means nothing. CI runs on Linux and reports EXE002 for
+  # a committed-executable .py without a shebang, so check the committed mode
+  # here rather than trust a local Ruff that cannot see it.
+  EXE_BAD=()
+  while IFS= read -r f; do
+    [ "$(git ls-files -s -- "$f" | cut -d' ' -f1)" = "100755" ] || continue
+    [ "$(git show "HEAD:$f" | head -c 2)" = "#!" ] || EXE_BAD+=("$f")
+  done < <(git diff --name-only --diff-filter=ACMR "$LINT_BASE" HEAD -- 'backend/*.py')
+  if [ ${#EXE_BAD[@]} -gt 0 ]; then
+    echo "  ✗ Executable without a shebang (Ruff EXE002 in CI):"
+    printf '    %s\n' "${EXE_BAD[@]}"
+    echo "  Fix: git update-index --chmod=-x <file> && chmod 644 <file>"
+    EXIT=1
+  fi
+  echo
 fi
 
 # 3b. Lock-file integrity (BLOCKING in CI: `npm ci` exits non-zero on drift)

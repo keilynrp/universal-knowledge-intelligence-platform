@@ -112,6 +112,11 @@ python scripts/lint_debt_ratchet.py measure
 python scripts/lint_backend_changed.py check --base-sha <merge-base-sha>
 ```
 
+`scripts/pre-push-check.sh` runs the changed-file gate against the merge base
+with the push target, using the venv's ruff. It also checks the committed mode
+of touched backend files: Ruff disables its `EXE` rules under WSL, so a `.py`
+committed executable without a shebang passes locally and fails `EXE002` in CI.
+
 ## Path to full repo-wide blocking
 
 Both counts remain very large today (baseline: Ruff 3,560 violations;
