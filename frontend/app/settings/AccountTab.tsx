@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useLanguage } from "../contexts/LanguageContext";
-import { Badge, type ToastVariant } from "../components/ui";
+import { Badge, SectionHeader, Surface, type ToastVariant } from "../components/ui";
 import { apiFetch } from "@/lib/api";
 import AvatarUpload from "../components/AvatarUpload";
 import PasswordStrength from "../components/PasswordStrength";
+import SessionList from "../components/SessionList";
 import { ROLE_LABEL_KEYS, ROLE_VARIANTS, type UserRole } from "./userManagementTypes";
 
 type AccountUser = {
@@ -271,6 +272,15 @@ export default function AccountTab({
                     </button>
                 </form>
             </div>
+
+            <Surface className="p-6">
+                <SectionHeader
+                    className="mb-4"
+                    title={t("sessions.title")}
+                    description={t("sessions.description_self")}
+                />
+                <SessionList endpoint="/auth/sessions" scope="self" toast={toast} />
+            </Surface>
         </div>
     );
 }
