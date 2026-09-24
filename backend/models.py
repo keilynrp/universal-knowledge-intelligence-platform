@@ -526,6 +526,11 @@ class AuditLog(Base):
     method      = Column(String, nullable=True)              # POST | PUT | DELETE
     status_code = Column(Integer, nullable=True)
     ip_address  = Column(String, nullable=True, index=True)  # incident pivot (#378)
+    # The principal authentication accepted (attribute-and-audit-reads): the
+    # session a JWT named, or the API key used. No FK on api_key_id: the row
+    # outlives the key and must not block its deletion.
+    session_id  = Column(String(64), nullable=True, index=True)
+    api_key_id  = Column(Integer, nullable=True)
     created_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
 

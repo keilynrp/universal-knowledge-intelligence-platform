@@ -11,12 +11,12 @@ Design principles:
 import logging
 import re
 
-from jose import JWTError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 from backend import models
 from backend.database import SessionLocal
+from backend.principal import principal_of
 
 logger = logging.getLogger(__name__)
 
@@ -89,19 +89,6 @@ def _resource_id(path: str) -> str | None:
     return m.group(1) if m else None
 
 
-def _decode_username(authorization: str | None) -> str | None:
-    """Extract the 'sub' claim from the Bearer JWT without hitting the DB."""
-    if not authorization or not authorization.startswith("Bearer "):
-        return None
-    token = authorization.split(" ", 1)[1]
-    try:
-        from backend.auth import _decode_token
-        payload = _decode_token(token)
-        return payload.get("sub")
-    except JWTError:
-        return None
-
-
 # ── Middleware ─────────────────────────────────────────────────────────────────
 
 class AuditMiddleware(BaseHTTPMiddleware):
@@ -125,12 +112,21 @@ class AuditMiddleware(BaseHTTPMiddleware):
 
         # Best-effort: never raise, never block the response
         try:
-            username = _decode_username(request.headers.get("authorization"))
+            # Who acted is whoever authentication accepted, not whatever the
+            # bearer token claims: decoding it named nobody for an API key and
+            # still named the user of a revoked session. No principal means the
+            # request was anonymous or refused, and the row says so by naming
+            # nobody.
+            principal = principal_of(request)
             db = SessionLocal()
             try:
+                user = db.get(models.User, principal.user_id) if principal else None
                 rid = _resource_id(path)
                 db.add(models.AuditLog(
-                    username=username,
+                    user_id=principal.user_id if principal else None,
+                    username=user.username if user else None,
+                    session_id=principal.session_id if principal else None,
+                    api_key_id=principal.api_key_id if principal else None,
                     action=_ACTION_MAP.get(request.method, request.method),
                     entity_type=_resource_type(path),
                     entity_id=int(rid) if rid else None,

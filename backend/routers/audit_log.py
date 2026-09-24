@@ -300,6 +300,8 @@ def _serialize(r: models.AuditLog) -> dict:
         "method":        r.method,
         "status_code":   r.status_code,
         "ip_address":    r.ip_address,
+        "session_id":    r.session_id,
+        "api_key_id":    r.api_key_id,
         "created_at":    r.created_at.isoformat() if r.created_at else None,
         "details":       details,
     }
