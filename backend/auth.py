@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.api_key_scopes import satisfies, scope_required
 from backend.database import get_db
+from backend.principal import Principal, record_principal
 
 logger = logging.getLogger(__name__)
 
@@ -433,6 +434,7 @@ async def get_current_user(
         enforce_api_key_scope(
             db, key_record, request.method, _route_template(request)
         )
+        record_principal(request, Principal(user_id=user.id, api_key_id=key_record.id))
         return user
 
     # ── JWT path ──────────────────────────────────────────────────────────────
@@ -449,6 +451,7 @@ async def get_current_user(
     user = _user_for_live_session(db, username, sid)
     if not user:
         raise credentials_exc
+    record_principal(request, Principal(user_id=user.id, session_id=sid))
     return user
 
 
@@ -481,6 +484,7 @@ async def get_current_user_optional(
             enforce_api_key_scope(
                 db, key_record, request.method, _route_template(request)
             )
+            record_principal(request, Principal(user_id=user.id, api_key_id=key_record.id))
         return user
 
     try:
@@ -492,7 +496,10 @@ async def get_current_user_optional(
     except JWTError:
         return None
 
-    return _user_for_live_session(db, username, sid)
+    user = _user_for_live_session(db, username, sid)
+    if user:
+        record_principal(request, Principal(user_id=user.id, session_id=sid))
+    return user
 
 
 def require_role(*roles: str):

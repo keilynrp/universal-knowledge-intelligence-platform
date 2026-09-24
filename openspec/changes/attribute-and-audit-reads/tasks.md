@@ -5,17 +5,19 @@ section is sized to ship as one PR, in order; later sections depend on 1.
 
 ## 1. One principal per request (foundation)
 
-- [ ] 1.1 Test first: a throwaway route behind `get_current_user`, and a probe
+- [x] 1.1 Test first: a throwaway route behind `get_current_user`, and a probe
       middleware that reads `request.state.principal` after `call_next`. Assert
       it is visible for a JWT request, an API-key request, and absent for a
       refused one. **If it is not visible, switch to the holder fallback in
-      design.md before going further.**
-- [ ] 1.2 `backend/principal.py`: frozen `Principal(user_id, session_id,
+      design.md before going further.** It is visible: with both async and
+      sync dependencies, across two `BaseHTTPMiddleware` layers
+      (`test_request_principal.py`). No fallback needed.
+- [x] 1.2 `backend/principal.py`: frozen `Principal(user_id, session_id,
       api_key_id)`, no username.
-- [ ] 1.3 Record it in both branches of `get_current_user` and
+- [x] 1.3 Record it in both branches of `get_current_user` and
       `get_current_user_optional`, only after every check has passed (scope
       enforcement included for keys).
-- [ ] 1.4 Tests: revoked session, expired token, unknown key and insufficient
+- [x] 1.4 Tests: revoked session, expired token, unknown key and insufficient
       scope all leave no principal.
 
 ## 2. Identity in the request log (closes #376)
@@ -83,7 +85,7 @@ section is sized to ship as one PR, in order; later sections depend on 1.
       has no identity), each with what remains of it stated. Gap 3 (no central
       log retention) stays open and now matters more: the request log is
       attributable but still ephemeral.
-- [ ] 6.3 Plan §11 gap 11 (no IP filter) was closed by #384 and the plan does
+- [x] 6.3 Plan §11 gap 11 (no IP filter) was closed by #384 and the plan does
       not say so yet. Close it in section 1's PR rather than waiting for this
       one.
 - [ ] 6.4 After 30 days in production: report `READ`/`EXPORT` row volume, so
