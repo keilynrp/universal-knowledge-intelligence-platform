@@ -3,6 +3,13 @@ JWT Authentication module for UKIP.
 Multi-user RBAC model: credentials stored in the 'users' table.
 Roles: super_admin | admin | editor | viewer
 """
+
+# ruff: noqa: B008 — every dependency below uses FastAPI's own recommended
+# `Depends(...)` dependency-injection idiom in an argument default, which is
+# exactly what B008 ("no function call as a default") exists to catch in
+# ordinary code. Same justification, and same file-level waiver, as
+# backend/routers/backup_ops.py.
+
 import json
 import logging
 import os
@@ -15,9 +22,9 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
+from backend import models
 from backend.api_key_scopes import satisfies, scope_required
 from backend.database import get_db
-from backend import models
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +80,7 @@ def verify_password(plain: str, hashed: str) -> bool:
     """Verify a plaintext password against a bcrypt hash."""
     try:
         return _bcrypt.checkpw(plain.encode(), hashed.encode())
-    except Exception:
+    except Exception:  # noqa: BLE001 — a missing or malformed stored hash is a failed login, never a 500
         return False
 
 

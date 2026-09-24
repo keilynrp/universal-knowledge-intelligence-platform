@@ -10,7 +10,6 @@ Design principles:
 """
 import logging
 import re
-from typing import Optional
 
 from jose import JWTError
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -85,12 +84,12 @@ def _resource_type(path: str) -> str:
     return _RESOURCE_MAP.get(parts[0], parts[0]) if parts else "unknown"
 
 
-def _resource_id(path: str) -> Optional[str]:
+def _resource_id(path: str) -> str | None:
     m = _RESOURCE_ID_RE.search(path)
     return m.group(1) if m else None
 
 
-def _decode_username(authorization: Optional[str]) -> Optional[str]:
+def _decode_username(authorization: str | None) -> str | None:
     """Extract the 'sub' claim from the Bearer JWT without hitting the DB."""
     if not authorization or not authorization.startswith("Bearer "):
         return None
@@ -143,7 +142,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 db.commit()
             finally:
                 db.close()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — the response is already built; a failed audit write must not turn it into a 500
             logger.debug("AuditMiddleware: failed to persist entry: %s", exc)
 
         return response

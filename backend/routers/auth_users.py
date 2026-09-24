@@ -10,39 +10,41 @@ Authentication and user management endpoints.
 # which is exactly what B008 ("no function call as a default") exists to catch
 # in ordinary code. Same justification, and same file-level waiver, as
 # backend/routers/backup_ops.py.
-from datetime import datetime, timedelta, timezone
 import hashlib
+import os
 import secrets
-from typing import List
+from datetime import datetime, timedelta, timezone
 
+from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.security import OAuth2PasswordRequestForm
+from jose import JWTError
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 from starlette.responses import RedirectResponse
-from authlib.integrations.starlette_client import OAuth
-import os
 
 from backend import models, schemas
-from backend.i18n.catalog import translate
-from backend.i18n.locale import language_dependency
 from backend.auth import (
     REFRESH_TOKEN_EXPIRE_MINUTES,
+    _decode_token,
     authenticate_user,
     create_access_token,
     create_refresh_token,
     get_current_user,
+    hash_password,
     issue_tokens,
     require_role,
-    _decode_token,
-    hash_password,
 )
-from jose import JWTError
 from backend.database import get_db
-from backend.routers.platform_auth_settings import get_or_create_auth_settings, sso_provider_configured
-from backend.routers.limiter import limiter
+from backend.i18n.catalog import translate
+from backend.i18n.locale import language_dependency
 from backend.notifications.email_sender import send_plain_email
+from backend.routers.limiter import limiter
+from backend.routers.platform_auth_settings import (
+    get_or_create_auth_settings,
+    sso_provider_configured,
+)
 
 router = APIRouter(tags=["auth"])
 
@@ -423,7 +425,7 @@ async def sso_callback(request: Request, db: Session = Depends(get_db)):
     """OAuth2 callback handler."""
     try:
         token = await oauth.sso.authorize_access_token(request)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — authlib and its HTTP client raise many types; any of them is a failed SSO login
         raise HTTPException(status_code=400, detail=f"SSO authentication failed: {e}")
 
     user_info = token.get('userinfo')
@@ -457,6 +459,7 @@ async def sso_callback(request: Request, db: Session = Depends(get_db)):
             raise HTTPException(status_code=403, detail="SSO user auto-provisioning is disabled")
         # Auto-provision a viewer account
         import uuid
+
         from backend.auth import hash_password
         dummy_pass = str(uuid.uuid4())
         
@@ -523,7 +526,8 @@ def change_my_password(
     current_user: models.User = Depends(get_current_user),
 ):
     """Change the authenticated user's own password."""
-    from backend.auth import hash_password as _hp, verify_password
+    from backend.auth import hash_password as _hp
+    from backend.auth import verify_password
     if not verify_password(payload.current_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     current_user.password_hash = _hp(payload.new_password)
@@ -570,7 +574,6 @@ def user_stats(
     _: models.User = Depends(require_role("super_admin")),
 ):
     """Return user count statistics. Requires super_admin."""
-    from sqlalchemy import func
     all_users = db.query(models.User).all()
     by_role: dict[str, int] = {}
     for u in all_users:
@@ -585,7 +588,7 @@ def user_stats(
     }
 
 
-@router.get("/users", response_model=List[schemas.UserResponse], tags=["users"])
+@router.get("/users", response_model=list[schemas.UserResponse], tags=["users"])
 def list_users(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),

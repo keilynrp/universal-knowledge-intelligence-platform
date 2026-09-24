@@ -25,6 +25,13 @@ Server → Client messages (in addition to relayed client messages):
   {"type": "presence.leave",   "data": {user_info}}
   {"type": "system.event",     "data": {"event": "...", "payload": {...}}}
 """
+
+# ruff: noqa: B008 — every endpoint below uses FastAPI's own recommended
+# `Depends(...)` dependency-injection idiom in an argument default, which is
+# exactly what B008 ("no function call as a default") exists to catch in
+# ordinary code. Same justification, and same file-level waiver, as
+# backend/routers/backup_ops.py.
+
 from __future__ import annotations
 
 import logging
@@ -57,6 +64,7 @@ def _resolve_user(token: str, db: Session) -> models.User | None:
     Returns the active User on success, None otherwise.
     """
     from jose import JWTError
+
     from backend.auth import _decode_token
 
     try:
@@ -67,7 +75,7 @@ def _resolve_user(token: str, db: Session) -> models.User | None:
                 return None
             user = db.query(models.User).filter(
                 models.User.id == key_record.user_id,
-                models.User.is_active == True,  # noqa: E712
+                models.User.is_active == True,
             ).first()
             if user is None:
                 return None
@@ -154,6 +162,6 @@ async def websocket_endpoint(
 
     except WebSocketDisconnect:
         await manager.disconnect(websocket, room, user_info)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — last resort for the socket loop: always release the room slot
         logger.warning("WS error room=%s user=%s: %s", room, user.username, exc)
         await manager.disconnect(websocket, room, user_info)

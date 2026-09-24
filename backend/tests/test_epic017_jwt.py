@@ -1,9 +1,8 @@
 # backend/tests/test_epic017_jwt.py
 import importlib
-from datetime import timedelta
 
 import pytest
-from jose import jwt
+from jose import JWTError, jwt
 
 pytestmark = pytest.mark.security
 
@@ -14,7 +13,7 @@ def _reload_auth(monkeypatch, primary, retiring=None):
         monkeypatch.delenv("JWT_SECRET_KEYS_RETIRING", raising=False)
     else:
         monkeypatch.setenv("JWT_SECRET_KEYS_RETIRING", retiring)
-    import backend.auth as auth
+    from backend import auth
     return importlib.reload(auth)
 
 
@@ -31,7 +30,7 @@ def test_token_signed_with_retiring_key_still_verifies(monkeypatch):
 def test_token_signed_with_unknown_key_is_rejected(monkeypatch):
     auth_new = _reload_auth(monkeypatch, primary="primary-key-aaa", retiring="retiring-key-bbb")
     forged = jwt.encode({"sub": "mallory"}, "unknown-key-zzz", algorithm="HS256")
-    with pytest.raises(Exception):
+    with pytest.raises(JWTError):
         auth_new._decode_token(forged)
 
 
