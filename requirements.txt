@@ -59,7 +59,7 @@ grpcio-tools>=1.81.1,<1.82
 protobuf>=6.33.6,<7
 
 # ── Coauthorship V2: community detection (Sprint 2026-05-28 refactor)
-networkx>=3.6.1
+networkx>=3.7
 python-louvain==0.16
 
 # ── Authority resolver cache (Phase 1 — disambiguation/authority optimization)
