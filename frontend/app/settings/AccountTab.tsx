@@ -279,7 +279,12 @@ export default function AccountTab({
                     title={t("sessions.title")}
                     description={t("sessions.description_self")}
                 />
-                <SessionList endpoint="/auth/sessions" scope="self" toast={toast} />
+                <SessionList
+                    endpoint="/auth/sessions"
+                    scope="self"
+                    showActivity={user?.role === "super_admin" || user?.role === "admin"}
+                    toast={toast}
+                />
             </Surface>
         </div>
     );

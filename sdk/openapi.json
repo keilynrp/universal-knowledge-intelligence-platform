@@ -14030,6 +14030,25 @@
             }
           },
           {
+            "description": "Exact session id (the `sid` a token names), as shown in the sessions list.",
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact session id (the `sid` a token names), as shown in the sessions list.",
+              "title": "Session Id"
+            }
+          },
+          {
             "in": "query",
             "name": "skip",
             "required": false,
@@ -14234,6 +14253,25 @@
               "description": "Exact client address, IPv4 or IPv6. Normalised before matching.",
               "title": "Ip Address"
             }
+          },
+          {
+            "description": "Exact session id (the `sid` a token names), as shown in the sessions list.",
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact session id (the `sid` a token names), as shown in the sessions list.",
+              "title": "Session Id"
+            }
           }
         ],
         "responses": {
@@ -14269,7 +14307,7 @@
     },
     "/audit-log/stats": {
       "get": {
-        "description": "Summary counters over the audit log, or over one client address.\n\nWith `ip_address` every counter is scoped to that address, so an incident\ncan size what came from it in one request before paging through the rows.",
+        "description": "Summary counters over the audit log, or over one address and/or session.\n\nWith `ip_address` or `session_id` every counter is scoped to it, so an\nincident can size what came from an address or a session in one request\nbefore paging through the rows.",
         "operationId": "get_audit_log_stats",
         "parameters": [
           {
@@ -14289,6 +14327,25 @@
               ],
               "description": "Exact client address, IPv4 or IPv6. Normalised before matching.",
               "title": "Ip Address"
+            }
+          },
+          {
+            "description": "Exact session id (the `sid` a token names), as shown in the sessions list.",
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact session id (the `sid` a token names), as shown in the sessions list.",
+              "title": "Session Id"
             }
           }
         ],

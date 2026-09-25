@@ -6,7 +6,7 @@ import { useAssistantContextRegistration } from "../contexts/AssistantContext";
 import { useLanguage } from "../contexts/LanguageContext";
 import { Button, ErrorBanner, Input, useToast } from "../components/ui";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { filterParams, NO_FILTERS, type AppliedFilters } from "../lib/auditFilters";
+import { filterParams, NO_FILTERS, pivotFromQuery, type AppliedFilters } from "../lib/auditFilters";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -20,6 +20,8 @@ interface AuditEntry {
   method:        string | null;
   status_code:   number | null;
   ip_address:    string | null;
+  session_id?:   string | null;
+  api_key_id?:   number | null;
   created_at:    string | null;
   details?: {
     action_id?: string;
@@ -55,7 +57,7 @@ interface AuditStats {
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const ACTION_OPTIONS = ["", "CREATE", "UPDATE", "DELETE", "ASSISTANT_ACTION"];
+const ACTION_OPTIONS = ["", "CREATE", "UPDATE", "DELETE", "READ", "EXPORT", "ASSISTANT_ACTION"];
 const PAGE_SIZE      = 50;
 
 const ACTION_STYLES: Record<string, string> = {
@@ -63,6 +65,8 @@ const ACTION_STYLES: Record<string, string> = {
   UPDATE: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
   DELETE: "bg-red-100  text-red-700  dark:bg-red-900/30  dark:text-red-400",
   ASSISTANT_ACTION: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300",
+  READ: "bg-[var(--ukip-info-soft)] text-[var(--ukip-info)]",
+  EXPORT: "bg-[var(--ukip-warning-soft)] text-[var(--ukip-warning)]",
 };
 
 const ACTION_DOT: Record<string, string> = {
@@ -70,6 +74,8 @@ const ACTION_DOT: Record<string, string> = {
   UPDATE: "bg-amber-500",
   DELETE: "bg-red-500",
   ASSISTANT_ACTION: "bg-violet-500",
+  READ: "bg-[var(--ukip-info)]",
+  EXPORT: "bg-[var(--ukip-warning)]",
 };
 
 const STATUS_COLOR = (code: number | null) => {
@@ -95,6 +101,8 @@ function getActionLabel(action: string, t: (key: string) => string) {
   if (action === "UPDATE") return t("common.update");
   if (action === "DELETE") return t("common.delete");
   if (action === "ASSISTANT_ACTION") return "Assistant";
+  if (action === "READ") return t("page.audit.action_read");
+  if (action === "EXPORT") return t("page.audit.action_export");
   return action;
 }
 
@@ -112,6 +120,7 @@ export default function AuditLogPage() {
   const [filterResource, setFilterResource] = useState("");
   const [filterUser,     setFilterUser]     = useState("");
   const [filterIp,       setFilterIp]       = useState("");
+  const [filterSession,  setFilterSession]  = useState("");
   const [filterFrom,     setFilterFrom]     = useState("");
   const [filterTo,       setFilterTo]       = useState("");
   const [assistantOnly, setAssistantOnly] = useState(false);
@@ -130,12 +139,17 @@ export default function AuditLogPage() {
 
   // ── Fetch helpers
 
-  // Scoped to the address filter when there is one, so the counters size what
-  // came from a suspect address before anyone pages through its rows (issue 378).
-  const fetchStats = useCallback(async (ip: string) => {
+  // Scoped to the address and session filters when there are any, so the
+  // counters size what came from a suspect address or session before anyone
+  // pages through its rows (issues 378 and 375).
+  const fetchStats = useCallback(async (ip: string, session: string) => {
     setLoadingStats(true);
     try {
-      const res = await apiFetch(ip ? `/audit-log/stats?${new URLSearchParams({ ip_address: ip })}` : "/audit-log/stats");
+      const scope = new URLSearchParams();
+      if (ip) scope.set("ip_address", ip);
+      if (session) scope.set("session_id", session);
+      const qs = scope.toString();
+      const res = await apiFetch(qs ? `/audit-log/stats?${qs}` : "/audit-log/stats");
       if (res.ok) setStats(await res.json());
     } catch {
       // stats are informational — don't block the page
@@ -167,9 +181,19 @@ export default function AuditLogPage() {
 
   // ── Effects
 
+  // A link can open the page on a pivot (the sessions list links here with
+  // ?session_id=…). Read once on mount; the page's own filters take over after.
   useEffect(() => {
-    fetchStats(applied.ip);
-  }, [fetchStats, applied.ip]);
+    const pivot = pivotFromQuery(window.location.search);
+    if (!pivot.ip && !pivot.session) return;
+    setFilterIp(pivot.ip ?? "");
+    setFilterSession(pivot.session ?? "");
+    setApplied({ ...NO_FILTERS, ...pivot });
+  }, []);
+
+  useEffect(() => {
+    fetchStats(applied.ip, applied.session);
+  }, [fetchStats, applied.ip, applied.session]);
 
   useEffect(() => {
     fetchPage(skip, applied);
@@ -181,12 +205,12 @@ export default function AuditLogPage() {
     setSkip(0);
     setApplied({
       action: filterAction, resource: filterResource, user: filterUser,
-      ip: filterIp.trim(), from: filterFrom, to: filterTo, assistantOnly,
+      ip: filterIp.trim(), session: filterSession.trim(), from: filterFrom, to: filterTo, assistantOnly,
     });
   }
 
   function handleReset() {
-    setFilterAction(""); setFilterResource(""); setFilterUser(""); setFilterIp("");
+    setFilterAction(""); setFilterResource(""); setFilterUser(""); setFilterIp(""); setFilterSession("");
     setFilterFrom(""); setFilterTo(""); setAssistantOnly(false);
     setSkip(0);
     setApplied(NO_FILTERS);
@@ -196,10 +220,18 @@ export default function AuditLogPage() {
   // address. It replaces the other filters rather than narrowing them, because
   // the question is "what else", not "what else of this kind".
   function handleFilterByIp(ip: string) {
-    setFilterAction(""); setFilterResource(""); setFilterUser(""); setFilterIp(ip);
+    setFilterAction(""); setFilterResource(""); setFilterUser(""); setFilterIp(ip); setFilterSession("");
     setFilterFrom(""); setFilterTo(""); setAssistantOnly(false);
     setSkip(0);
     setApplied({ ...NO_FILTERS, ip });
+  }
+
+  // Same pivot for a session: everything one session did, reads included.
+  function handleFilterBySession(session: string) {
+    setFilterAction(""); setFilterResource(""); setFilterUser(""); setFilterIp(""); setFilterSession(session);
+    setFilterFrom(""); setFilterTo(""); setAssistantOnly(false);
+    setSkip(0);
+    setApplied({ ...NO_FILTERS, session });
   }
 
   async function handleExport() {
@@ -266,9 +298,11 @@ export default function AuditLogPage() {
     <div className="mx-auto max-w-7xl space-y-6 p-6">
 
       {/* ── Stats bar ─────────────────────────────────────────────────────── */}
-      {applied.ip && (
+      {(applied.ip || applied.session) && (
         <p className="text-sm text-[var(--ukip-muted)]" role="status">
-          {t("page.audit.stats_scoped_ip", { ip: applied.ip })}
+          {applied.ip && t("page.audit.stats_scoped_ip", { ip: applied.ip })}
+          {applied.ip && applied.session && " "}
+          {applied.session && t("page.audit.stats_scoped_session", { session: shortSession(applied.session) })}
         </p>
       )}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-5">
@@ -404,6 +438,19 @@ export default function AuditLogPage() {
               onChange={(e) => setFilterUser(e.target.value)}
               placeholder="testadmin"
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+            />
+          </div>
+
+          {/* Session (issue 375): everything one session did */}
+          <div className="min-w-[160px]">
+            <Input
+              id="audit-filter-session"
+              label={t("page.audit.session")}
+              value={filterSession}
+              onChange={(e) => setFilterSession(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleApply(); }}
+              autoComplete="off"
+              spellCheck={false}
             />
           </div>
 
@@ -619,6 +666,25 @@ export default function AuditLogPage() {
                             </Button>
                           )
                         )}
+                        {entry.session_id && (
+                          applied.session === entry.session_id ? (
+                            <span className="font-mono" title={entry.session_id}>{shortSession(entry.session_id)}</span>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="-my-1.5 font-mono font-normal"
+                              title={t("page.audit.filter_by_session", { session: entry.session_id })}
+                              aria-label={t("page.audit.filter_by_session", { session: entry.session_id })}
+                              onClick={() => handleFilterBySession(entry.session_id!)}
+                            >
+                              {shortSession(entry.session_id)}
+                            </Button>
+                          )
+                        )}
+                        {entry.api_key_id != null && (
+                          <span>{t("page.audit.via_api_key", { id: entry.api_key_id })}</span>
+                        )}
                         {entry.details?.module_label && <span>{entry.details.module_label}</span>}
                         {entry.details?.domain_id && <span>domain:{entry.details.domain_id}</span>}
                       </div>
@@ -682,7 +748,9 @@ export default function AuditLogPage() {
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
               <div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  Assistant execution #{selectedEntry.id}
+                  {selectedEntry.action === "ASSISTANT_ACTION"
+                    ? `Assistant execution #${selectedEntry.id}`
+                    : `${getActionLabel(selectedEntry.action, t)} #${selectedEntry.id}`}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   {selectedEntry.details?.label ?? selectedEntry.endpoint ?? "Evento de auditoria"}
@@ -733,6 +801,12 @@ function StatCard({ label, value, color }: { label: string; value: string; color
       <p className="mt-1 text-2xl font-bold tabular-nums">{value}</p>
     </div>
   );
+}
+
+// Session ids are long and opaque; the first characters are enough to tell two
+// apart on screen, and the full id stays in the title and in the filter.
+function shortSession(session: string): string {
+  return session.length > 12 ? `${session.slice(0, 8)}…` : session;
 }
 
 function Detail({ label, value }: { label: string; value: string }) {

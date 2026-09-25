@@ -1,4 +1,4 @@
-import { filterParams, NO_FILTERS } from "../app/lib/auditFilters";
+import { filterParams, NO_FILTERS, pivotFromQuery } from "../app/lib/auditFilters";
 
 test("no filters send no parameters", () => {
     expect(filterParams(NO_FILTERS).toString()).toBe("");
@@ -15,6 +15,7 @@ test("every filter reaches the query, so the export matches what is on screen", 
         resource: "entity",
         user: "alice",
         ip: "2001:db8::1",
+        session: "sid-1",
         from: "2026-09-22T00:00",
         to: "2026-09-23T00:00",
         assistantOnly: false,
@@ -24,6 +25,7 @@ test("every filter reaches the query, so the export matches what is on screen", 
         resource_type: "entity",
         username: "alice",
         ip_address: "2001:db8::1",
+        session_id: "sid-1",
         from_date: "2026-09-22T00:00",
         to_date: "2026-09-23T00:00",
     });
@@ -36,4 +38,15 @@ test("assistant-only overrides action and resource but keeps the address", () =>
         resource_type: "assistant_action",
         ip_address: "203.0.113.7",
     });
+});
+
+test("a session filter is sent as session_id", () => {
+    expect(Object.fromEntries(filterParams({ ...NO_FILTERS, session: "sid-1" }))).toEqual({ session_id: "sid-1" });
+});
+
+test("a link can open the page on a session or an address, and nothing else", () => {
+    expect(pivotFromQuery("?session_id=sid-1")).toEqual({ session: "sid-1" });
+    expect(pivotFromQuery("?ip_address=203.0.113.7&session_id=%20")).toEqual({ ip: "203.0.113.7" });
+    expect(pivotFromQuery("?action=DELETE&username=alice")).toEqual({});
+    expect(pivotFromQuery("")).toEqual({});
 });

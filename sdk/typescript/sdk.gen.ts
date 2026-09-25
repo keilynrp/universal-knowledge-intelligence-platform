@@ -955,10 +955,11 @@ export const getAuditLogExport = <ThrowOnError extends boolean = false>(options?
 /**
  * Audit Stats
  *
- * Summary counters over the audit log, or over one client address.
+ * Summary counters over the audit log, or over one address and/or session.
  *
- * With `ip_address` every counter is scoped to that address, so an incident
- * can size what came from it in one request before paging through the rows.
+ * With `ip_address` or `session_id` every counter is scoped to it, so an
+ * incident can size what came from an address or a session in one request
+ * before paging through the rows.
  */
 export const getAuditLogStats = <ThrowOnError extends boolean = false>(options?: Options<GetAuditLogStatsData, ThrowOnError>): RequestResult<GetAuditLogStatsResponses, GetAuditLogStatsErrors, ThrowOnError> => (options?.client ?? client).get<GetAuditLogStatsResponses, GetAuditLogStatsErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],

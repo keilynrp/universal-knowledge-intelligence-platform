@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useLanguage } from "../contexts/LanguageContext";
 import { Badge, Button, ErrorBanner, type ToastVariant } from "./ui";
 import { apiFetch } from "@/lib/api";
@@ -32,16 +33,23 @@ export type SessionItem = {
  * phone in the middle of an incident that is the wrong button to make easy.
  * Every destructive action asks for confirmation inline rather than through
  * `confirm()`, which is easy to dismiss by accident on a touch screen.
+ *
+ * With `showActivity`, each session links to the audit log filtered by it, so
+ * "this device is not mine" is one tap from "this is what it did". Only for
+ * callers who can read the audit log (admins); for anyone else it would be a
+ * link to a 403.
  */
 export default function SessionList({
     endpoint,
     scope,
     username,
+    showActivity = false,
     toast,
 }: {
     endpoint: string;
     scope: "self" | "admin";
     username?: string;
+    showActivity?: boolean;
     toast: (msg: string, v?: ToastVariant) => void;
 }) {
     const { t, language } = useLanguage();
@@ -154,6 +162,14 @@ export default function SessionList({
                                         </p>
                                         {item.current && scope === "self" && (
                                             <p className="text-xs text-[var(--ukip-muted)]">{t("sessions.current_hint")}</p>
+                                        )}
+                                        {showActivity && (
+                                            <Link
+                                                href={`/audit-log?${new URLSearchParams({ session_id: item.sid })}`}
+                                                className="ukip-focus inline-block text-xs font-semibold text-[var(--ukip-primary)] underline-offset-2 hover:underline"
+                                            >
+                                                {t("sessions.activity")}
+                                            </Link>
                                         )}
                                     </div>
                                     {!item.current && confirming !== item.id && (

@@ -18,6 +18,7 @@ def _get_kwargs(
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
     ip_address: None | str | Unset = UNSET,
+    session_id: None | str | Unset = UNSET,
     skip: int | Unset = 0,
     limit: int | Unset = 50,
 ) -> dict[str, Any]:
@@ -69,6 +70,13 @@ def _get_kwargs(
     else:
         json_ip_address = ip_address
     params["ip_address"] = json_ip_address
+
+    json_session_id: None | str | Unset
+    if isinstance(session_id, Unset):
+        json_session_id = UNSET
+    else:
+        json_session_id = session_id
+    params["session_id"] = json_session_id
 
     params["skip"] = skip
 
@@ -123,6 +131,7 @@ def sync_detailed(
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
     ip_address: None | str | Unset = UNSET,
+    session_id: None | str | Unset = UNSET,
     skip: int | Unset = 0,
     limit: int | Unset = 50,
 ) -> Response[Any | HTTPValidationError]:
@@ -138,6 +147,8 @@ def sync_detailed(
         to_date (datetime.datetime | None | Unset):
         ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
             matching.
+        session_id (None | str | Unset): Exact session id (the `sid` a token names), as shown in
+            the sessions list.
         skip (int | Unset):  Default: 0.
         limit (int | Unset):  Default: 50.
 
@@ -156,6 +167,7 @@ def sync_detailed(
         from_date=from_date,
         to_date=to_date,
         ip_address=ip_address,
+        session_id=session_id,
         skip=skip,
         limit=limit,
     )
@@ -176,6 +188,7 @@ def sync(
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
     ip_address: None | str | Unset = UNSET,
+    session_id: None | str | Unset = UNSET,
     skip: int | Unset = 0,
     limit: int | Unset = 50,
 ) -> Any | HTTPValidationError | None:
@@ -191,6 +204,8 @@ def sync(
         to_date (datetime.datetime | None | Unset):
         ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
             matching.
+        session_id (None | str | Unset): Exact session id (the `sid` a token names), as shown in
+            the sessions list.
         skip (int | Unset):  Default: 0.
         limit (int | Unset):  Default: 50.
 
@@ -210,6 +225,7 @@ def sync(
         from_date=from_date,
         to_date=to_date,
         ip_address=ip_address,
+        session_id=session_id,
         skip=skip,
         limit=limit,
     ).parsed
@@ -224,6 +240,7 @@ async def asyncio_detailed(
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
     ip_address: None | str | Unset = UNSET,
+    session_id: None | str | Unset = UNSET,
     skip: int | Unset = 0,
     limit: int | Unset = 50,
 ) -> Response[Any | HTTPValidationError]:
@@ -239,6 +256,8 @@ async def asyncio_detailed(
         to_date (datetime.datetime | None | Unset):
         ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
             matching.
+        session_id (None | str | Unset): Exact session id (the `sid` a token names), as shown in
+            the sessions list.
         skip (int | Unset):  Default: 0.
         limit (int | Unset):  Default: 50.
 
@@ -257,6 +276,7 @@ async def asyncio_detailed(
         from_date=from_date,
         to_date=to_date,
         ip_address=ip_address,
+        session_id=session_id,
         skip=skip,
         limit=limit,
     )
@@ -275,6 +295,7 @@ async def asyncio(
     from_date: datetime.datetime | None | Unset = UNSET,
     to_date: datetime.datetime | None | Unset = UNSET,
     ip_address: None | str | Unset = UNSET,
+    session_id: None | str | Unset = UNSET,
     skip: int | Unset = 0,
     limit: int | Unset = 50,
 ) -> Any | HTTPValidationError | None:
@@ -290,6 +311,8 @@ async def asyncio(
         to_date (datetime.datetime | None | Unset):
         ip_address (None | str | Unset): Exact client address, IPv4 or IPv6. Normalised before
             matching.
+        session_id (None | str | Unset): Exact session id (the `sid` a token names), as shown in
+            the sessions list.
         skip (int | Unset):  Default: 0.
         limit (int | Unset):  Default: 50.
 
@@ -310,6 +333,7 @@ async def asyncio(
             from_date=from_date,
             to_date=to_date,
             ip_address=ip_address,
+            session_id=session_id,
             skip=skip,
             limit=limit,
         )

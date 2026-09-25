@@ -315,6 +315,7 @@ function SessionsSlider({
             endpoint={isMe ? "/auth/sessions" : `/users/${user.id}/sessions`}
             scope={isMe ? "self" : "admin"}
             username={user.username}
+            showActivity
             toast={toast}
           />
         </div>
