@@ -34,16 +34,16 @@ section is sized to ship as one PR, in order; later sections depend on 1.
 
 ## 3. Principal on audit rows
 
-- [ ] 3.1 Migration: `audit_logs.session_id String(64)` (indexed),
+- [x] 3.1 Migration: `audit_logs.session_id String(64)` (indexed),
       `audit_logs.api_key_id Integer` (no FK). Model updated; upgrade and
       downgrade checked on SQLite; pg covered by CI's migration rehearsal.
-- [ ] 3.2 Test first: an API-key `POST` writes a row with `user_id` and
+- [x] 3.2 Test first: an API-key `POST` writes a row with `user_id` and
       `api_key_id` (today both are empty); a `PUT` with a revoked token writes a
       row with no identity.
-- [ ] 3.3 `AuditMiddleware`: take identity from the principal; delete
+- [x] 3.3 `AuditMiddleware`: take identity from the principal; delete
       `_decode_username`; resolve `username` from `user_id` for existing
       readers.
-- [ ] 3.4 Test: deleting a key leaves its rows and `api_key_id` intact.
+- [x] 3.4 Test: deleting a key leaves its rows and `api_key_id` intact.
 
 ## 4. Read audit by class (closes #375)
 
