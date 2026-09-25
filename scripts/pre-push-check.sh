@@ -37,6 +37,8 @@ PYTHON_CHANGED=()
 TS_CHANGED=()
 BACKEND_TESTS_CHANGED=()
 PY_SOURCE_CHANGED=()
+DEPS_CHANGED=()
+METRICS_INPUTS_CHANGED=()
 
 for f in "${CHANGED[@]}"; do
   case "$f" in
@@ -46,6 +48,17 @@ for f in "${CHANGED[@]}"; do
   case "$f" in
     backend/tests/test_*.py) BACKEND_TESTS_CHANGED+=("$f");;
     *.py)                    PY_SOURCE_CHANGED+=("$f");;
+  esac
+  # A dependency bump changes what every backend test runs against without
+  # touching a single .py file. #397 (networkx 3.7, cachetools 7.2.0) was
+  # pushed with no local test run at all because of that.
+  case "$f" in
+    requirements.txt|requirements.lock) DEPS_CHANGED+=("$f");;
+  esac
+  # Everything scripts/generate_repo_metrics.py derives from or writes to.
+  case "$f" in
+    backend/*|frontend/*|sdk/openapi.json|Dockerfile.backend|README.md|docs/generated/repo_metrics.json|scripts/generate_repo_metrics.py)
+      METRICS_INPUTS_CHANGED+=("$f");;
   esac
 done
 
@@ -192,6 +205,58 @@ if [ ${#TS_CHANGED[@]} -gt 0 ]; then
   echo
 fi
 
+# 3d. Generated repository metrics (BLOCKING in CI: repo-metrics-drift).
+# Test counts, API operations and runtime versions in README.md are generated;
+# adding a test file without regenerating them failed CI on #383 after every
+# local gate had passed. It costs ~3 minutes (it collects the backend suite), so
+# it runs only when one of its inputs changed, and is cached by content like the
+# test gates.
+if [ ${#METRICS_INPUTS_CHANGED[@]} -gt 0 ]; then
+  METRICS_KEY="$(gate_key repo-metrics backend frontend sdk/openapi.json Dockerfile.backend README.md docs/generated/repo_metrics.json scripts/generate_repo_metrics.py)"
+  if gate_hit "$METRICS_KEY"; then
+    echo "▶ repo metrics — SKIPPED (these inputs already matched)"
+  else
+    echo "▶ scripts/generate_repo_metrics.py --check…"
+    if "$PY" scripts/generate_repo_metrics.py --check; then
+      gate_record "$METRICS_KEY"
+    else
+      echo "  Fix: $PY scripts/generate_repo_metrics.py, then commit README.md and docs/generated/repo_metrics.json"
+      EXIT=1
+    fi
+  fi
+  echo
+fi
+
+# venv_matches_lock → exit 0 when every installed package that
+# requirements.lock pins is installed at exactly that version.
+#
+# The suite runs in the local venv, and a venv is only as current as the last
+# `pip install`. After #397 bumped two pins, the shared venv still had the old
+# versions, so every later push would have tested what production no longer
+# runs, silently. Packages the lock pins but the venv lacks are not flagged:
+# the lock carries entries the image no longer installs, and absence cannot
+# produce a wrong version.
+venv_matches_lock() {
+  "$PY" - <<'PYEOF'
+import importlib.metadata as md, re, sys
+
+def norm(name):
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+pins = {}
+with open("requirements.lock", encoding="utf-8") as fh:
+    for line in fh:
+        m = re.match(r"^([A-Za-z0-9_.\-]+)==([^\s;#]+)", line)
+        if m:
+            pins[norm(m.group(1))] = m.group(2)
+installed = {norm(d.metadata["Name"]): d.version for d in md.distributions()}
+wrong = sorted((n, installed[n], v) for n, v in pins.items() if n in installed and installed[n] != v)
+for name, have, want in wrong:
+    print(f"  {name}: installed {have}, lock pins {want}")
+sys.exit(1 if wrong else 0)
+PYEOF
+}
+
 # 4. Backend tests.
 #
 # Which branch runs is decided by whether SOURCE changed, not by whether a test
@@ -203,16 +268,21 @@ fi
 #
 # Source changed, with or without tests: run everything. The full suite already
 # includes whatever test files were touched, so there is no scoped run to add.
-if [ ${#PY_SOURCE_CHANGED[@]} -eq 0 ] && [ ${#BACKEND_TESTS_CHANGED[@]} -gt 0 ]; then
+if [ ${#PY_SOURCE_CHANGED[@]} -eq 0 ] && [ ${#DEPS_CHANGED[@]} -eq 0 ] && [ ${#BACKEND_TESTS_CHANGED[@]} -gt 0 ]; then
   # Only test files changed — nothing else can have broken.
   echo "▶ pytest (scoped: only test files changed): ${BACKEND_TESTS_CHANGED[*]}"
   "$PY" -m pytest -x -q "${BACKEND_TESTS_CHANGED[@]}" || EXIT=1
   echo
-elif [ ${#PYTHON_CHANGED[@]} -gt 0 ]; then
+elif [ ${#PYTHON_CHANGED[@]} -gt 0 ] || [ ${#DEPS_CHANGED[@]} -gt 0 ]; then
   # conftest.py sits at the repo root and requirements pin the interpreter's
   # libraries, so both decide the outcome as much as backend/ itself does.
   PYTEST_KEY="$(gate_key backend-full backend conftest.py requirements.txt requirements.lock)"
-  if gate_hit "$PYTEST_KEY"; then
+  if ! venv_matches_lock; then
+    echo "▶ pytest backend/tests — NOT RUN: $PY does not match requirements.lock (above)."
+    echo "  The suite would test versions that do not ship. Fix:"
+    echo "    $PY -m pip install -r requirements.txt -c requirements.lock"
+    EXIT=1
+  elif gate_hit "$PYTEST_KEY"; then
     echo "▶ pytest backend/tests — SKIPPED (this backend/ tree already passed the full suite)"
   else
     # Parallel when pytest-xdist is installed. The suite is CPU-bound and
