@@ -47,23 +47,30 @@ section is sized to ship as one PR, in order; later sections depend on 1.
 
 ## 4. Read audit by class (closes #375)
 
-- [ ] 4.1 `backend/read_audit.py`: `EXPORT_ROUTES`, `EXPORT_EXCLUSIONS` (each
+- [x] 4.1 `backend/read_audit.py`: `EXPORT_ROUTES`, `EXPORT_EXCLUSIONS` (each
       with a reason) and `read_audit_class(method, route, query, principal)`.
       Unit tests cover the full rule table in design.md, including the
       thresholds (`skip=0&limit=500` → none, `skip=1` → READ, `limit=501` →
       READ).
-- [ ] 4.2 Route-coverage test: every `GET` route with `export`, `download` or
+- [x] 4.2 Route-coverage test: every `GET` route with `export`, `download` or
       `csv` in its template, or a streaming file response, is in
       `EXPORT_ROUTES` or `EXPORT_EXCLUSIONS`. Populate the table from the
       current app until it passes, and review each entry.
-- [ ] 4.3 `AuditMiddleware`: write `READ`/`EXPORT` rows for classified reads,
+- [x] 4.3 `AuditMiddleware`: write `READ`/`EXPORT` rows for classified reads,
       with `details = {limit, skip, query_keys}`. Record `401`/`403` when a
       principal exists.
-- [ ] 4.4 Test: `?q=jane%20doe&skip=50` stores `query_keys` and `skip` only;
+- [x] 4.4 Test: `?q=jane%20doe&skip=50` stores `query_keys` and `skip` only;
       the search value appears nowhere in the row.
-- [ ] 4.5 Test: `GET /audit-log/export` records its own execution.
-- [ ] 4.6 Measure: the added latency of one audited read in the test client,
-      recorded in the PR.
+- [x] 4.5 Test: `GET /audit-log/export` records its own execution.
+- [x] 4.6 Measure: the added latency of one audited read in the test client,
+      recorded in the PR. About 20–30 ms median on SQLite, measured while a
+      full parallel suite ran on the same machine, so an upper bound: one user
+      lookup and one insert.
+- [x] 4.7 Found while wiring it: a read refused by API-key scope has no
+      principal (phase 1 records it only after every check), so it is not a
+      READ row. It is already audited as `api_key.scope_violation`. A read
+      refused by role (`require_role`) does have one and is recorded with its
+      `403`.
 
 ## 5. Pivot on a session
 
@@ -78,11 +85,12 @@ section is sized to ship as one PR, in order; later sections depend on 1.
 
 ## 6. Close the loop
 
-- [ ] 6.1 Plan §7: what `audit_logs` now covers, and the residual (reads
+- [x] 6.1 Plan §7: what `audit_logs` now covers, and the residual (reads
       outside the four classes are in the request log only, which vanishes
       with the container unless captured first).
-- [ ] 6.2 Plan §11: close gap 9 (reads not audited) with what remains of it
-      stated. Gap 10 (request log identity) was closed in section 2's PR,
+- [x] 6.2 Plan §11: close gap 9 (reads not audited) with what remains of it
+      stated. Done in section 4's PR, which closes #375, together with §7
+      (task 6.1). Gap 10 (request log identity) was closed in section 2's PR,
       which is the one that closes #376. Gap 3 (no central
       log retention) stays open and now matters more: the request log is
       attributable but still ephemeral.
