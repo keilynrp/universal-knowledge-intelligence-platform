@@ -274,22 +274,52 @@
             "title": "Name",
             "type": "string"
           },
+          "pushover_token": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pushover Token"
+          },
+          "pushover_user": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pushover User"
+          },
           "type": {
             "default": "slack",
-            "pattern": "^(slack|teams|discord|webhook)$",
+            "pattern": "^(slack|teams|discord|webhook|pushover)$",
             "title": "Type",
             "type": "string"
           },
           "webhook_url": {
-            "maxLength": 2000,
-            "minLength": 10,
-            "title": "Webhook Url",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 10,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Url"
           }
         },
         "required": [
-          "name",
-          "webhook_url"
+          "name"
         ],
         "title": "AlertChannelCreate",
         "type": "object"
@@ -334,10 +364,34 @@
             ],
             "title": "Name"
           },
+          "pushover_token": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pushover Token"
+          },
+          "pushover_user": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pushover User"
+          },
           "type": {
             "anyOf": [
               {
-                "pattern": "^(slack|teams|discord|webhook)$",
+                "pattern": "^(slack|teams|discord|webhook|pushover)$",
                 "type": "string"
               },
               {

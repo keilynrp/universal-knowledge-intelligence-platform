@@ -135,6 +135,11 @@ services:
       UKIP_OPS_MONITOR_ENABLED: ${UKIP_OPS_MONITOR_ENABLED:-1}
       UKIP_OPS_MONITOR_INTERVAL_SECONDS: ${UKIP_OPS_MONITOR_INTERVAL_SECONDS:-300}
       UKIP_OPS_MONITOR_REMIND_HOURS: ${UKIP_OPS_MONITOR_REMIND_HOURS:-6}
+      # #377: a Healthchecks.io ping URL. The monitor pings it every cycle (and
+      # /fail when the evaluation raises); if the pings stop, Healthchecks.io
+      # pages on its own. It is a capability: set it in Dokploy, never commit it.
+      # Empty disables the heartbeat.
+      UKIP_OPS_HEARTBEAT_URL: ${UKIP_OPS_HEARTBEAT_URL:-}
       # Provider-neutral backup assurance metadata only. Backup payload and
       # storage credentials remain in Dokploy/provider-owned configuration.
       UKIP_BACKUP_MONITOR_ENABLED: ${UKIP_BACKUP_MONITOR_ENABLED:-1}

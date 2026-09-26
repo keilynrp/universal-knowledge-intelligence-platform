@@ -16,6 +16,16 @@ and sends ``ops.check_failed`` on a state change, not on every tick:
 Every alert is also logged at WARNING, so it reaches the container log when no
 alert channel is subscribed (which ``ops_alerting`` reports on its own).
 
+Each alert carries a ``severity`` (#377, owner decisions on the issue): ``page``
+when a check in ``PAGE_CHECKS`` becomes critical, which a Pushover channel
+delivers at emergency priority, breaking through Do Not Disturb and repeating
+until acknowledged; ``urgent`` for ``URGENT_CHECKS``; ``info`` otherwise. It pages
+once per incident: again only when the set of critical paging checks grows.
+
+In-app paging cannot report its own death, so every cycle also pings
+``UKIP_OPS_HEARTBEAT_URL`` (a Healthchecks.io check), and ``/fail`` when the
+evaluation raised. If the pings stop, Healthchecks.io pages on its own.
+
 State lives in memory. A restart while unhealthy therefore alerts once more;
 that is deliberate — a deploy that does not fix the problem should say so.
 Production runs one uvicorn process, like the other in-process schedulers.
@@ -27,6 +37,7 @@ import logging
 import os
 import threading
 import time
+import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -52,6 +63,51 @@ class Observation:
     status: str
     failing: frozenset[str]
     alerted_at: datetime | None
+    critical: frozenset[str] = frozenset()
+
+
+# Who gets woken up (#377, owner decision): the checks whose critical state means
+# production is unusable, SEV1 in the incident response plan §3. Changing this
+# set changes who is paged at 03:00, so it is pinned by a test.
+PAGE_CHECKS = frozenset({"database", "migrations"})
+# SEV2 in plan §3 ("same working day"): prominent, but not a reason to wake anyone.
+URGENT_CHECKS = frozenset({"backup_freshness", "secrets"})
+
+HEARTBEAT_URL_ENV = "UKIP_OPS_HEARTBEAT_URL"
+HEARTBEAT_TIMEOUT_SECONDS = 5
+
+
+def severity(critical: frozenset[str], previous: Observation | None) -> str:
+    """How loudly to deliver this alert. Pure, so the policy is testable.
+
+    ``page`` only when a paging check is critical that was not before: an
+    emergency page repeats until acknowledged, so paging again on every
+    reminder would stack pages, not escalate.
+    """
+    paging_now = critical & PAGE_CHECKS
+    paging_before = previous.critical & PAGE_CHECKS if previous else frozenset()
+    if paging_now - paging_before:
+        return "page"
+    if critical & URGENT_CHECKS:
+        return "urgent"
+    return "info"
+
+
+def send_heartbeat(evaluated: bool, url: str | None = None) -> None:
+    """Tell the dead man's switch the monitor is alive; ``/fail`` if the evaluation raised.
+
+    Never raises and never logs the URL: it is a capability that marks the
+    check up or down.
+    """
+    url = (url if url is not None else os.environ.get(HEARTBEAT_URL_ENV, "")).strip()
+    if not url:
+        return
+    target = url.rstrip("/") + ("" if evaluated else "/fail")
+    try:
+        with urllib.request.urlopen(target, timeout=HEARTBEAT_TIMEOUT_SECONDS):
+            pass
+    except Exception:  # noqa: BLE001 — an unreachable heartbeat service must never cost a cycle
+        logger.warning("[ops-monitor] heartbeat ping failed")
 
 
 def _int_env(name: str, default: int, minimum: int) -> int:
@@ -171,6 +227,10 @@ def _failing_checks(report: dict) -> frozenset[str]:
     )
 
 
+def _critical_checks(report: dict) -> frozenset[str]:
+    return frozenset(c["id"] for c in report["checks"] if c["status"] == "critical")
+
+
 def _message(kind: str, report: dict, failing: frozenset[str]) -> str:
     if kind == "recovered":
         return "Operational checks recovered: all checks are ok again"
@@ -233,6 +293,7 @@ def run_once(
     run_checks: Callable[[Any], dict] | None = None,
     dispatch: Callable[..., None] | None = None,
     ingest_evidence: Callable[..., Any] | None = None,
+    heartbeat: Callable[[bool], None] | None = None,
 ) -> str | None:
     """Evaluate the checks once and alert if the state calls for it. Returns the alert kind."""
     from backend import backup_evidence, ops_checks
@@ -253,9 +314,11 @@ def run_once(
         except Exception:  # noqa: BLE001, S110 — the session may already be unusable
             pass
 
+    evaluated = True
     try:
         report = (run_checks or ops_checks.run_operational_checks)(db)
     except Exception as exc:  # becomes a critical observation, and is logged
+        evaluated = False
         logger.exception("[ops-monitor] operational checks raised")
         try:
             db.rollback()
@@ -263,6 +326,7 @@ def run_once(
             pass
         report = _failed_evaluation_report(exc, now)
     failing = _failing_checks(report)
+    critical = _critical_checks(report)
     previous = _memory["last"]
     kind = alert_kind(previous, report["status"], failing, now, remind_after)
 
@@ -281,6 +345,7 @@ def run_once(
                 "failing_checks": _labels(failing),
                 "critical_checks": report["summary"].get("critical", 0),
                 "warning_checks": report["summary"].get("warning", 0),
+                "severity": "info" if kind == "recovered" else severity(critical, previous),
             },
         )
         _update(last_alert_kind=kind, last_alert_at=now)
@@ -288,8 +353,9 @@ def run_once(
     alerted_at = (
         now if kind is not None else (previous.alerted_at if previous else None)
     )
-    _memory["last"] = Observation(report["status"], failing, alerted_at)
+    _memory["last"] = Observation(report["status"], failing, alerted_at, critical)
     _update(last_run_at=now, last_status=report["status"])
+    (heartbeat or send_heartbeat)(evaluated)
     return kind
 
 

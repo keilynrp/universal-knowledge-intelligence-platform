@@ -83,16 +83,21 @@ What actually reaches a human today:
 | Source | What it catches | How it reaches someone |
 |---|---|---|
 | Scheduled detection (#368) | Database, migrations, schedulers, alerting, secrets, backup freshness | `ops.check_failed` to Slack within 5 minutes of a state change, plus a reminder every 6 h while it lasts; also the container log |
+| Paging (#377) | `database` or `migrations` critical: production unusable, SEV1 | Pushover **emergency**: breaks through Do Not Disturb and repeats every minute until acknowledged, once per incident. `backup_freshness` or `secrets` critical (SEV2) go at high priority and respect quiet hours. Slack gets the same alert prefixed `[PAGE]`/`[URGENT]` |
+| Dead man's switch (#377) | The monitor itself stopping: VPS, container or monitor thread down | The monitor pings Healthchecks.io every cycle (`/fail` if the evaluation raises); when the pings stop, Healthchecks.io pages through Pushover |
 | `GET /health` | Service up, schema drift, bootstrap state | Polled by the operator; **nothing pages on it** |
 | `GET /ops/checks` | The full check suite on demand | Operator, admin credential |
 | Backup assurance | Stale, missing or invalid backups; provider unreachable | Feeds the checks above |
-| `audit_logs` | Who did what, over HTTP | Read after the fact |
+| `audit_logs` | Every mutation, and the reads that matter (exports, audit-log reads, API-key reads, bulk reads), each with its session or key (§7) | Read after the fact |
 | GitHub security gates | Vulnerable dependencies, secrets in commits, CodeQL findings | Pull request checks and email |
 | Dokploy | Deploy failures, container restarts | Its own UI |
 | Customer report | Everything nobody instrumented | Email |
 
-**Known detection gaps.** No paging outside Slack, so a SEV1 at 03:00 waits for
-someone to look at their phone. No central log retention: container logs are
+**Known detection gaps.** Paging exists in code (#377) but pages nobody until
+the Pushover channel and the Healthchecks.io check are set up and each has been
+tested on the phone ([PAGING_RUNBOOK.md](PAGING_RUNBOOK.md)); until then a SEV1 at 03:00 still waits
+for someone to look at Slack. Only two checks page, and nothing detects
+unauthorized access on its own (gap 6). No central log retention: container logs are
 ephemeral and disappear with the container, which is why capturing them is the
 first evidence step below. Error telemetry (Sentry) is available but off by
 default. Nothing watches for anomalous login or access patterns.
@@ -313,6 +318,11 @@ Recorded here so nobody discovers them mid-incident:
 2. **No paging** (#377). Alerts reach Slack and the container log; nothing
    wakes anyone up. Measured in the 2026-09-22 tabletop: **6 h 22 min** from
    exposure to detection, overnight, and the report came from a third party.
+   **In code since 2026-09-26** (§4): Pushover emergency pages for `database`
+   and `migrations` critical, and a Healthchecks.io dead man's switch for the
+   monitor itself. It stays open until both are installed and have woken the
+   phone in a test. What remains after that is narrower: one person receives
+   every page (gap 1), and only availability pages, not access (gap 6).
 3. **No central log retention.** Container logs are ephemeral, so early capture
    is the only way to keep them — and since reads are unaudited, they are the
    **only** record that a read happened at all.

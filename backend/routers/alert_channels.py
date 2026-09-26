@@ -9,20 +9,32 @@ Endpoints:
   PUT    /alert-channels/{id}           — update
   DELETE /alert-channels/{id}           — delete
   POST   /alert-channels/{id}/test      — send a test alert
+
+Pushover (#377) takes an application token and a user key instead of a URL.
+Both are stored as one JSON object, Fernet-encrypted into ``webhook_url`` like
+a webhook URL, and are never returned. Its test sends a real emergency page
+that expires on its own after a minute: a paging path is proven on the phone.
 """
+
+# ruff: noqa: B008 — every endpoint below uses FastAPI's own recommended
+# `Depends(...)`/`Query(...)` dependency-injection idiom in an argument default,
+# which is exactly what B008 ("no function call as a default") exists to catch
+# in ordinary code. Same justification, and same file-level waiver, as
+# backend/routers/backup_ops.py.
+
 import json
 import logging
+import re
 from datetime import datetime, timezone
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from backend import models
 from backend.auth import require_role
 from backend.database import get_db
-from backend.notifications.alert_sender import ALL_EVENTS, ALL_EVENT_IDS, fire_alert
+from backend.notifications.alert_sender import ALL_EVENT_IDS, ALL_EVENTS, fire_alert
 from backend.tenant_access import (
     get_scoped_record,
     persisted_org_id,
@@ -34,7 +46,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["alert-channels"])
 
-_VALID_TYPES = {"slack", "teams", "discord", "webhook"}
+_VALID_TYPES = {"slack", "teams", "discord", "webhook", "pushover"}
+_TYPE_PATTERN = "^(slack|teams|discord|webhook|pushover)$"
+#: Pushover issues 30-character alphanumeric application tokens and user keys.
+_PUSHOVER_KEY = re.compile(r"^[A-Za-z0-9]{30}$")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -43,8 +58,20 @@ def _encrypt_url(url: str) -> str:
     try:
         from backend.encryption import encrypt_value
         return encrypt_value(url)
-    except Exception:
+    except Exception:  # noqa: BLE001 — without a configured key the value is stored as given, as before
         return url
+
+
+def _pushover_destination(token: str | None, user: str | None) -> str:
+    """The encrypted destination of a Pushover channel, or a 422 if a key is missing or malformed."""
+    if not token or not user:
+        raise HTTPException(status_code=422, detail="Pushover needs pushover_token and pushover_user")
+    if not _PUSHOVER_KEY.match(token) or not _PUSHOVER_KEY.match(user):
+        raise HTTPException(
+            status_code=422,
+            detail="Pushover token and user key are 30 letters and digits, as Pushover issues them",
+        )
+    return _encrypt_url(json.dumps({"token": token, "user": user}))
 
 
 def _serialize(c: models.AlertChannel) -> dict:
@@ -65,18 +92,28 @@ def _serialize(c: models.AlertChannel) -> dict:
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class AlertChannelCreate(BaseModel):
-    name:        str       = Field(min_length=1, max_length=200)
-    type:        str       = Field(default="slack", pattern="^(slack|teams|discord|webhook)$")
-    webhook_url: str       = Field(min_length=10, max_length=2000)
-    events:      List[str] = Field(default_factory=list)
+    name:            str        = Field(min_length=1, max_length=200)
+    type:            str        = Field(default="slack", pattern=_TYPE_PATTERN)
+    webhook_url:     str | None = Field(default=None, min_length=10, max_length=2000)
+    pushover_token:  str | None = Field(default=None, max_length=64)
+    pushover_user:   str | None = Field(default=None, max_length=64)
+    events:          list[str]  = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _destination_matches_type(self):
+        if self.type != "pushover" and not self.webhook_url:
+            raise ValueError("webhook_url is required for this channel type")
+        return self
 
 
 class AlertChannelUpdate(BaseModel):
-    name:        Optional[str]       = Field(default=None, min_length=1, max_length=200)
-    type:        Optional[str]       = Field(default=None, pattern="^(slack|teams|discord|webhook)$")
-    webhook_url: Optional[str]       = Field(default=None, min_length=10, max_length=2000)
-    events:      Optional[List[str]] = None
-    is_active:   Optional[bool]      = None
+    name:           str | None       = Field(default=None, min_length=1, max_length=200)
+    type:           str | None       = Field(default=None, pattern=_TYPE_PATTERN)
+    webhook_url:    str | None       = Field(default=None, min_length=10, max_length=2000)
+    pushover_token: str | None       = Field(default=None, max_length=64)
+    pushover_user:  str | None       = Field(default=None, max_length=64)
+    events:         list[str] | None = None
+    is_active:      bool | None      = None
 
 
 # ── Event catalogue ───────────────────────────────────────────────────────────
@@ -101,11 +138,16 @@ def create_alert_channel(
             detail=f"Unknown events: {invalid_events}. Valid: {sorted(ALL_EVENT_IDS)}",
         )
     org_id = resolve_request_org_id(db, current_user)
+    destination = (
+        _pushover_destination(payload.pushover_token, payload.pushover_user)
+        if payload.type == "pushover"
+        else _encrypt_url(payload.webhook_url)
+    )
     ch = models.AlertChannel(
         org_id=persisted_org_id(org_id),
         name=payload.name.strip(),
         type=payload.type,
-        webhook_url=_encrypt_url(payload.webhook_url),
+        webhook_url=destination,
         events=json.dumps(payload.events),
         is_active=True,
         total_fired=0,
@@ -157,10 +199,15 @@ def update_alert_channel(
         raise HTTPException(status_code=404, detail="Alert channel not found")
     if payload.name is not None:
         ch.name = payload.name.strip()
-    if payload.type is not None:
-        ch.type = payload.type
-    if payload.webhook_url is not None:
+    new_type = payload.type if payload.type is not None else ch.type
+    if new_type == "pushover":
+        if payload.pushover_token is not None or payload.pushover_user is not None or ch.type != "pushover":
+            ch.webhook_url = _pushover_destination(payload.pushover_token, payload.pushover_user)
+    elif payload.webhook_url is not None:
         ch.webhook_url = _encrypt_url(payload.webhook_url)
+    elif ch.type == "pushover":
+        raise HTTPException(status_code=422, detail="webhook_url is required for this channel type")
+    ch.type = new_type
     if payload.events is not None:
         invalid = [e for e in payload.events if e not in ALL_EVENT_IDS]
         if invalid:
@@ -199,11 +246,16 @@ def test_alert_channel(
     ch = get_scoped_record(db, models.AlertChannel, channel_id, org_id)
     if not ch:
         raise HTTPException(status_code=404, detail="Alert channel not found")
+    details = {"channel": ch.name, "type": ch.type, "status": "This is a test message"}
+    if ch.type == "pushover":
+        # A real emergency page with a one-minute expiry: the test proves the
+        # phone breaks through Do Not Disturb, not only that the API answered.
+        details["severity"] = "test"
     ok = fire_alert(
         channel_type=ch.type,
         webhook_url_encrypted=ch.webhook_url,
         event="test",
         message="UKIP Alert Channel Test",
-        details={"channel": ch.name, "type": ch.type, "status": "This is a test message"},
+        details=details,
     )
     return {"success": ok, "channel_id": channel_id, "channel_name": ch.name}
