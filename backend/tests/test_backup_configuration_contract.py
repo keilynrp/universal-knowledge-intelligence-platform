@@ -10,6 +10,7 @@ REQUIRED_ENV = {
     "UKIP_BACKUP_PROVIDER_REACHABLE",
     "UKIP_BACKUP_PROVIDER_REACHABLE_AT",
     "UKIP_BACKUP_PROVIDER_REACHABILITY_FILE",
+    "UKIP_BACKUP_EVIDENCE_DIR",
     "UKIP_BACKUP_RPO_HOURS",
     "UKIP_BACKUP_CRITICAL_AFTER_HOURS",
 }
@@ -93,3 +94,22 @@ def test_the_reachability_probe_carries_no_credential():
     assert "EnvironmentFile" in probe
     # It writes the document atomically: a half-written file must never be read.
     assert "mv -f" in probe
+
+
+def test_the_evidence_recorder_carries_no_credential_and_writes_atomically():
+    # #370. Same contract as the probe: the read-only List+Get credential comes
+    # from the systemd EnvironmentFile, and a half-written evidence document
+    # must never be ingested.
+    recorder = (ROOT / "scripts" / "ukip-backup-evidence-recorder.sh").read_text(encoding="utf-8")
+
+    assert "AKIA" not in recorder
+    assert re.search(r"AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)\s*=\s*\S", recorder) is None
+    assert "EnvironmentFile" in recorder
+    assert "mv -f" in recorder
+
+
+def test_evidence_documents_arrive_on_the_read_only_signal_mount():
+    compose = (ROOT / "docker-compose.prod.yml").read_text(encoding="utf-8")
+
+    assert "UKIP_BACKUP_EVIDENCE_DIR: ${UKIP_BACKUP_EVIDENCE_DIR:-/run/ukip-signals/backup-evidence}" in compose
+    assert "${UKIP_BACKUP_SIGNAL_DIR:-/var/lib/ukip/signals}:/run/ukip-signals:ro" in compose

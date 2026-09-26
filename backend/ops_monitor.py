@@ -232,12 +232,27 @@ def run_once(
     remind_after: timedelta | None = None,
     run_checks: Callable[[Any], dict] | None = None,
     dispatch: Callable[..., None] | None = None,
+    ingest_evidence: Callable[..., Any] | None = None,
 ) -> str | None:
     """Evaluate the checks once and alert if the state calls for it. Returns the alert kind."""
-    from backend import ops_checks
+    from backend import backup_evidence, ops_checks
 
     now = now or datetime.now(timezone.utc)
     remind_after = remind_after or load_config().remind_after
+
+    # Record whatever backup evidence the host left since the last cycle
+    # (#370) before judging freshness, so a backup recorded now counts now.
+    # Ingestion never raises for a bad document; this guard is for the rest
+    # (a database error), which must not cost the cycle its checks.
+    try:
+        (ingest_evidence or backup_evidence.ingest_backup_evidence)(db, now=now)
+    except Exception:  # evidence ingestion must never stop the monitor
+        logger.exception("[ops-monitor] backup evidence ingestion failed")
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001, S110 — the session may already be unusable
+            pass
+
     try:
         report = (run_checks or ops_checks.run_operational_checks)(db)
     except Exception as exc:  # becomes a critical observation, and is logged

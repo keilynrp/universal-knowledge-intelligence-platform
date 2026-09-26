@@ -108,6 +108,15 @@ no volume backup is not thereby unhealthy.
 The immutable `operator` field is derived from the authenticated UKIP identity.
 Any provider-reported actor belongs only in clearly labeled non-secret evidence.
 
+**Automatic recording (#370).** Once the evidence recorder (§5c) is installed,
+every scheduled backup is recorded without anyone posting it: the recorder
+measures the stored object on the host, and the ops monitor records it as a
+`backup` event with operator `system:backup-recorder`. Recording by hand, as
+above, remains the fallback: when the recorder is not installed, when it is
+down, or for a cycle it could not measure. Both paths record the same backup
+only once; the monitor recognises a manual record of the same object even when
+it carries a longer key path. Restore drills are always recorded by a person.
+
 ## 5. Verify Freshness
 
 1. Check `GET /ops/backups/status?environment=production`.
@@ -166,14 +175,13 @@ daily workflow cannot honestly provide. See
 for the audit that produced this design and for the residual risks this gap
 represents.
 
-Automated application-side evidence ingestion (recording the observed object
-as a `backup` event via `POST /ops/backups/events`) is deferred until a
-least-privilege credential/path exists — every route under `/ops`, including
-the read-only status endpoint, currently requires `admin` scope
-(`backend/api_key_scopes.py`), which is too broad to store in a GitHub-hosted
-scheduled workflow. Until that narrower mechanism exists, evidence ingestion
-into `backup_assurance_events` is a manual or trusted-service operator step
-(section 4 above); see §13 below.
+This workflow does not record evidence, and never will: every route under
+`/ops` requires `admin` scope (`backend/api_key_scopes.py`), which is too broad
+to store in a GitHub-hosted scheduled workflow. Evidence is recorded on the
+production host instead, by the recorder in §5c, which needs no application
+credential at all. This workflow keeps its list-only identity and remains an
+independent observation: when freshness goes critical, it still tells "no
+backup exists" apart from "the recorder stopped".
 
 Until the required secrets exist, every run of this workflow fails fast with
 a clear, non-secret error rather than silently no-op'ing.
@@ -285,6 +293,95 @@ curl -s -H "Authorization: Bearer $TOKEN" https://<api-host>/ops/backups/status
 20 minutes and the source must become `stale_file_assertion` with the reason
 back — that check is what proves the signal is measured rather than asserted.
 
+### 5c. Backup Evidence Recorder (#370)
+
+Scheduled detection judges freshness against *recorded* evidence, and
+recording was manual, so `backup_freshness` went `critical` every day nobody
+recorded the cycle while the backups themselves were fine.
+`scripts/ukip-backup-evidence-recorder.sh` records them on the production
+host. For the newest object of each scope (`.sql.gz` is a database dump,
+`.tar` a volume archive), it:
+
+- downloads the stored bytes once into a private temporary directory;
+- checks it received exactly the size the listing reports, and otherwise writes
+  nothing, so a network error is never recorded as a failed backup;
+- computes SHA-256 over those bytes (never the ETag) and runs `gzip -t` on
+  dumps;
+- writes one evidence document into `/var/lib/ukip/signals/backup-evidence/`.
+
+The backend mounts that directory read-only, and each ops-monitor cycle records
+new documents as `backup` events with operator `system:backup-recorder`. A dump
+that fails `gzip -t` is recorded as `failed`. **No application credential is
+involved** (owner decision on #370). The only credential is a storage one on
+the host, and the trust boundary is root on that host, which already holds the
+database.
+
+1. Create a **read-only** storage credential with `ListBucket` and `GetObject`
+   on the backup prefix only: no write, no delete, nothing outside the prefix.
+   It is separate from the probe's list-only credential.
+2. Put it in `/etc/ukip/backup-evidence.env` (root-owned, mode 600), with the
+   same variables as the probe's file: `AWS_ACCESS_KEY_ID`,
+   `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `S3_BACKUP_ENDPOINT`,
+   `S3_BACKUP_BUCKET`, `S3_BACKUP_PREFIX`. Set `UKIP_BACKUP_ENVIRONMENT` if it
+   is not `production`; it must match the backend's, or every document is
+   rejected as `other_environment`.
+3. Install the script and the units:
+
+```bash
+install -o root -g root -m 0755 scripts/ukip-backup-evidence-recorder.sh /usr/local/bin/
+```
+
+```ini
+# /etc/systemd/system/ukip-backup-evidence.service
+[Unit]
+Description=UKIP backup evidence recorder
+After=docker.service
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/ukip/backup-evidence.env
+ExecStart=/usr/local/bin/ukip-backup-evidence-recorder.sh
+```
+
+```ini
+# /etc/systemd/system/ukip-backup-evidence.timer
+[Unit]
+Description=Record UKIP backup evidence hourly
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=5min
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+
+```bash
+systemctl daemon-reload && systemctl enable --now ukip-backup-evidence.timer
+```
+
+Hourly is a matter of latency, not correctness: both the recorder and the
+backend are idempotent, so a 03:00 backup is recorded within the hour and never
+twice. The recorder prunes its documents after 14 days, the window the backend
+accepts.
+
+**Verify** (no secrets in any output):
+
+```bash
+systemctl start ukip-backup-evidence.service && journalctl -u ukip-backup-evidence.service -n 5
+ls /var/lib/ukip/signals/backup-evidence/
+curl -s -H "Authorization: Bearer $TOKEN" "https://<api-host>/ops/backups?environment=production&limit=3"
+```
+
+The journal shows one `recorded` or `already_recorded` line per scope. Within
+one ops-monitor interval, the newest event in the list carries operator
+`system:backup-recorder` and `integrity_ref` `sha256:…`. The next day,
+`backup_freshness` must stay `ok` without anyone recording by hand: that is
+what closes #370.
+
+A rejected document is logged by the backend as
+`[backup-evidence] <file> rejected: <reason>` and skipped, and the next cycle
+tries it again. `other_environment`, `too_old` and `invalid_sha256` point at
+the recorder's configuration, not at the backup.
+
 ## 6. Prepare an Isolated Restore Drill
 
 Every drill requires an isolated restore environment with a separate network,
@@ -384,6 +481,15 @@ first isolated restore drill. Attach or reference:
 - failures, risks, and corrective actions;
 - operator and independent approver decisions.
 
+A cycle recorded by the evidence recorder (§5c) is a backup cycle of equal
+weight for freshness (owner decision on #370): it meets the same standard as a
+manual record, SHA-256 over the stored bytes and `gzip -t` on the dump, and its
+event names `system:backup-recorder` as operator, so it is never mistaken for
+a person's attestation. In the dossier, cite its event id and evidence document
+name where a manual cycle cites a provider job id. ER-BCP-001 maturity does not
+change with it: that depends on the restore drill, which a person runs and
+records.
+
 Record a `restore_drill` event only after validation is complete. Use `passed`
 only when every required check and objective passes; use `passed_with_risk` or
 `failed` when the evidence supports those outcomes. Approval of this repository
@@ -448,20 +554,15 @@ collected. None of these have been executed by this change.
    `workflow_dispatch` and confirming it passes the first guard step.
    Rollback: delete the secrets; the workflow fails closed at the same guard
    step it fails at today.
-4. **Evidence ingestion into `backup_assurance_events` remains manual or
-   trusted-service, by design, until a least-privilege credential exists** —
-   `backend/api_key_scopes.py` classifies every route under `/ops` (including
-   the read-only `GET /ops/backups/status`) as requiring `admin` scope; there
-   is no narrower role today. Storing an admin-scoped UKIP API key in a
-   GitHub-hosted scheduled workflow was assessed on strategic review as too
-   broad a trust boundary for "record backup evidence", so
-   `backup-freshness.yml` deliberately holds no UKIP application credential
-   and does not POST to `POST /ops/backups/events`. Until a narrower
-   evidence-ingestion scope/credential is designed (a bounded follow-up, not
-   part of this change), record each completed or failed provider job via
-   section 4 above using a trusted operator identity or a trusted colocated
-   service — never a GitHub Actions secret. Rollback: none required; this is
-   the current, intended fail-closed state, not a temporary gap to revert.
+4. **Install the backup evidence recorder (§5c)** (#370). Evidence ingestion
+   no longer waits for a least-privilege API credential, because it uses none:
+   the owner chose a host-side recorder writing into the read-only signals
+   directory over a narrow API scope, which would have added a network-exposed
+   credential. What remains is operator work: create the `ListBucket` +
+   `GetObject` credential, install the timer, and confirm the first automatic
+   cycle and one day of `ok` freshness without manual recording. Until then,
+   record each cycle by hand (section 4), as before. Rollback: disable the
+   timer; nothing else changes.
 5. **Install the provider reachability probe (§5b)** — the repository now
    ships the mechanism, but it must be installed on the production host. Until
    it is, `provider_reachable` correctly reports `false` and
