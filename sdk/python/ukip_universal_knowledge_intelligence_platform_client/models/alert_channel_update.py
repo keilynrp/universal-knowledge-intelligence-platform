@@ -18,6 +18,8 @@ class AlertChannelUpdate:
         events (list[str] | None | Unset):
         is_active (bool | None | Unset):
         name (None | str | Unset):
+        pushover_token (None | str | Unset):
+        pushover_user (None | str | Unset):
         type_ (None | str | Unset):
         webhook_url (None | str | Unset):
     """
@@ -25,6 +27,8 @@ class AlertChannelUpdate:
     events: list[str] | None | Unset = UNSET
     is_active: bool | None | Unset = UNSET
     name: None | str | Unset = UNSET
+    pushover_token: None | str | Unset = UNSET
+    pushover_user: None | str | Unset = UNSET
     type_: None | str | Unset = UNSET
     webhook_url: None | str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
@@ -51,6 +55,18 @@ class AlertChannelUpdate:
         else:
             name = self.name
 
+        pushover_token: None | str | Unset
+        if isinstance(self.pushover_token, Unset):
+            pushover_token = UNSET
+        else:
+            pushover_token = self.pushover_token
+
+        pushover_user: None | str | Unset
+        if isinstance(self.pushover_user, Unset):
+            pushover_user = UNSET
+        else:
+            pushover_user = self.pushover_user
+
         type_: None | str | Unset
         if isinstance(self.type_, Unset):
             type_ = UNSET
@@ -72,6 +88,10 @@ class AlertChannelUpdate:
             field_dict["is_active"] = is_active
         if name is not UNSET:
             field_dict["name"] = name
+        if pushover_token is not UNSET:
+            field_dict["pushover_token"] = pushover_token
+        if pushover_user is not UNSET:
+            field_dict["pushover_user"] = pushover_user
         if type_ is not UNSET:
             field_dict["type"] = type_
         if webhook_url is not UNSET:
@@ -118,6 +138,24 @@ class AlertChannelUpdate:
 
         name = _parse_name(d.pop("name", UNSET))
 
+        def _parse_pushover_token(data: object) -> None | str | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(None | str | Unset, data)
+
+        pushover_token = _parse_pushover_token(d.pop("pushover_token", UNSET))
+
+        def _parse_pushover_user(data: object) -> None | str | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(None | str | Unset, data)
+
+        pushover_user = _parse_pushover_user(d.pop("pushover_user", UNSET))
+
         def _parse_type_(data: object) -> None | str | Unset:
             if data is None:
                 return data
@@ -140,6 +178,8 @@ class AlertChannelUpdate:
             events=events,
             is_active=is_active,
             name=name,
+            pushover_token=pushover_token,
+            pushover_user=pushover_user,
             type_=type_,
             webhook_url=webhook_url,
         )

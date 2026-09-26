@@ -149,13 +149,21 @@ export type AlertChannelCreate = {
      */
     name: string;
     /**
+     * Pushover Token
+     */
+    pushover_token?: string | null;
+    /**
+     * Pushover User
+     */
+    pushover_user?: string | null;
+    /**
      * Type
      */
     type?: string;
     /**
      * Webhook Url
      */
-    webhook_url: string;
+    webhook_url?: string | null;
 };
 
 /**
@@ -174,6 +182,14 @@ export type AlertChannelUpdate = {
      * Name
      */
     name?: string | null;
+    /**
+     * Pushover Token
+     */
+    pushover_token?: string | null;
+    /**
+     * Pushover User
+     */
+    pushover_user?: string | null;
     /**
      * Type
      */

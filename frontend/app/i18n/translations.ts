@@ -2,6 +2,10 @@ export type Language = 'en' | 'es';
 
 export const translations = {
     en: {
+        'page.settings_alerts.pushover_token': 'Pushover application token',
+        'page.settings_alerts.pushover_user': 'Pushover user key',
+        'page.settings_alerts.keep_existing': 'Leave both blank to keep the existing keys',
+        'page.settings_alerts.pushover_hint': 'Critical database or migration failures page this phone at emergency priority: it breaks through Do Not Disturb and repeats until acknowledged. Test sends a real emergency that stops after a minute; try it with the phone in Do Not Disturb.',
         // Backend: persisted localized messages (issue 269) — resolved at
         // read time from a stored key + params, never rendered at write
         // time. See backend/i18n/message_ref.py.
@@ -3946,6 +3950,10 @@ export const translations = {
         'dashboard_showcase.high_severity': 'High',
     },
     es: {
+        'page.settings_alerts.pushover_token': 'Token de la aplicación de Pushover',
+        'page.settings_alerts.pushover_user': 'Clave de usuario de Pushover',
+        'page.settings_alerts.keep_existing': 'Déjalos vacíos para conservar las claves actuales',
+        'page.settings_alerts.pushover_hint': 'Un fallo crítico de la base de datos o de las migraciones avisa a este móvil con prioridad de emergencia: atraviesa No molestar y se repite hasta que lo confirmas. Probar envía una emergencia real que se detiene al minuto; pruébalo con el móvil en No molestar.',
         // Backend: persisted localized messages (issue 269) — resolved at
         // read time from a stored key + params, never rendered at write
         // time. See backend/i18n/message_ref.py.

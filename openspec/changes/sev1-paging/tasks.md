@@ -5,49 +5,57 @@ TDD throughout. Sections 1–3 are backend and can ship as one PR; 4 is the UI;
 
 ## 1. Pushover channel
 
-- [ ] 1.1 `pushover` in `_VALID_TYPES` and the create/update patterns; the
+- [x] 1.1 `pushover` in `_VALID_TYPES` and the create/update patterns; the
       destination is `{"token", "user"}` JSON, validated (both present,
       30-character alphanumeric) and Fernet-encrypted into `webhook_url`.
       Tests: missing key → 422; neither value in any response.
-- [ ] 1.2 `alert_sender`: Pushover builder and form-encoded delivery, priority
+- [x] 1.2 `alert_sender`: Pushover builder and form-encoded delivery, priority
       from `details["severity"]` (2 with `retry=60&expire=3600`, 1, 0), message
       truncated to 1024 characters, never raises. Tests with a stubbed
       `urlopen`: fields, priorities, truncation, a timeout returns False.
-- [ ] 1.3 The test action sends priority 2 with `retry=30&expire=60` for
+- [x] 1.3 The test action sends priority 2 with `retry=30&expire=60` for
       Pushover channels.
 
 ## 2. Severity and page-once
 
-- [ ] 2.1 `PAGE_CHECKS`, `URGENT_CHECKS` and a pure `severity(report, previous)`
+- [x] 2.1 `PAGE_CHECKS`, `URGENT_CHECKS` and a pure `severity(report, previous)`
       in `ops_monitor.py`, pinned by a test to the owner's decision.
-- [ ] 2.2 `Observation` gains the critical-check set; `page` only when critical
+- [x] 2.2 `Observation` gains the critical-check set; `page` only when critical
       `PAGE_CHECKS` grows. Tests: database down → page; reminder → info;
       migrations joins → page again; only backups critical → urgent; recovery
       → info.
-- [ ] 2.3 The severity goes into the dispatched details, and non-Pushover
+- [x] 2.3 The severity goes into the dispatched details, and non-Pushover
       builders prefix `[PAGE]`/`[URGENT]`.
 
 ## 3. Heartbeat
 
-- [ ] 3.1 `UKIP_OPS_HEARTBEAT_URL`: ping after every cycle, `/fail` when the
+- [x] 3.1 `UKIP_OPS_HEARTBEAT_URL`: ping after every cycle, `/fail` when the
       evaluation raised, 5 s timeout, never raises, never logs the URL.
       Declared in `docker-compose.prod.yml`, `.env.dokploy.example` and
       `.env.example`, and held by a configuration test.
-- [ ] 3.2 Tests: ok and critical both ping the base URL; a raised evaluation
+- [x] 3.2 Tests: ok and critical both ping the base URL; a raised evaluation
       pings `/fail`; a timeout does not break the cycle; the URL never appears
       in captured logs.
 
 ## 4. UI
 
-- [ ] 4.1 The alert channel form offers Pushover with two fields (application
+- [x] 4.1 The alert channel form offers Pushover with two fields (application
       token, user key) instead of a URL, and explains that "Test" sends a real
       emergency page.
 
+## Notes from implementation
+
+- 5.2 became its own runbook, `docs/operating/PAGING_RUNBOOK.md`, linked from
+  plan §4: paging has two independent halves to set up and test, and neither
+  belongs in the backup runbook.
+- Plan §11 gap 2 is marked "in code", not closed: it closes with 5.3, when
+  both paths have woken the phone.
+
 ## 5. Docs and operator actions
 
-- [ ] 5.1 Plan §4: how paging works and what each severity does. §11 gap 2:
+- [x] 5.1 Plan §4: how paging works and what each severity does. §11 gap 2:
       closed with what remains (no second person, no anomaly detection).
-- [ ] 5.2 Runbook: create the Pushover application, add the channel subscribed
+- [x] 5.2 Runbook: create the Pushover application, add the channel subscribed
       to `ops.check_failed`, create the Healthchecks.io check (period = monitor
       interval, grace = 2 intervals, Pushover integration at emergency), set
       `UKIP_OPS_HEARTBEAT_URL`.
