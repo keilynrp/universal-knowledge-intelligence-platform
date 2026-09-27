@@ -1,7 +1,7 @@
 """
 Route-coverage guard for API key scope classification.
 
-Spec: openspec/changes/enforce-api-key-scopes/specs/api-key-scope-enforcement/spec.md
+Spec: openspec/specs/api-key-scope-enforcement/spec.md
   - "Every route resolves to a scope"
 
 Two distinct jobs here:

@@ -92,7 +92,7 @@ name changes once and breaks whoever adopted the first cut.
 - [x] 5.2 Frontend suite (the `/developer` page changed): ESLint, `tsc`, vitest 358/358.
 - [x] 5.3 Confirm the drift gate passes on a clean tree: `generate-sdk.mjs --check`
       and `generate-sdk-clients.sh --check` both OK.
-- [ ] 5.4 PR.
+- [x] 5.4 PR: #404 (the `/developer` page and verification; earlier groups landed before it).
 
 ## 6. Deliberately deferred
 

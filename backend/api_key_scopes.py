@@ -5,7 +5,7 @@ Pure logic: no database, no FastAPI, no request object. Every classification is
 a function of ``(method, route_template)``, which makes the whole truth table
 unit-testable without a client.
 
-Design: openspec/changes/enforce-api-key-scopes/design.md
+Design: openspec/changes/archive/2026-09-27-enforce-api-key-scopes/design.md
 
 The rule set is ordered, and the order is the security property:
 
@@ -20,7 +20,7 @@ mutating route demands a write key rather than none.
 """
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 READ = "read"
 WRITE = "write"
