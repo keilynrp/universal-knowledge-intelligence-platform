@@ -10,18 +10,15 @@ Coverage map (tasks.md §6):
   6.5  GET /enrichment/sources/stats?domain_id=science filters correctly
   6.6  NULL enrichment_failure_reason handled gracefully in stats
 """
-import time
-from unittest.mock import patch, MagicMock
 
 import pytest
 
 from backend import models
 from backend.circuit_breaker import CircuitBreaker, CircuitState
 from backend.enrichment_worker import (
-    EnrichmentFailureReason,
     _CB_REGISTRY,
+    EnrichmentFailureReason,
 )
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -89,26 +86,28 @@ class TestCircuitBreakerSuccessCount:
         assert cb.failure_count == 0  # success resets failure_count
         assert cb.success_count == 3  # 2 earlier + 1 recovery success
 
-    def test_success_count_resets_on_half_open_to_closed_transition(self):
-        """When a circuit recovers from HALF_OPEN, success_count resets to 0 then becomes 1."""
+    def test_success_count_resets_on_half_open_to_closed_transition(self, monkeypatch):
+        """When a circuit recovers from HALF_OPEN, success_count resets to 0 then becomes 1.
+
+        The breaker reads ``time.monotonic``; the test drives that clock instead
+        of sleeping. With a real 10 ms recovery timeout, a loaded machine let
+        the breaker reach HALF_OPEN on its own before the OPEN assertion ran,
+        which failed a pre-push run of the full suite (2026-09-26).
+        """
+        clock = [1000.0]
+        monkeypatch.setattr("backend.circuit_breaker.time.monotonic", lambda: clock[0])
+
         cb = CircuitBreaker("test-sc-recover", failure_threshold=1, recovery_timeout=0.01)
-        # Trip the circuit
         with pytest.raises(ConnectionError):
-            cb.call(_fail)
+            cb.call(_fail)  # trip
         assert cb.state == CircuitState.OPEN
 
-        # Accumulate some successes manually on a fresh CB to verify reset
-        cb2 = CircuitBreaker("test-sc2", failure_threshold=1, recovery_timeout=0.01)
-        with pytest.raises(ConnectionError):
-            cb2.call(_fail)  # trip
-        # Wait for recovery timeout
-        time.sleep(0.02)
-        # Verify HALF_OPEN probe succeeds and resets success_count before counting new success
-        assert cb2.state == CircuitState.HALF_OPEN
-        cb2.call(_ok)  # probe succeeds
-        assert cb2.state == CircuitState.CLOSED
+        clock[0] += 0.02  # past the recovery timeout, deterministically
+        assert cb.state == CircuitState.HALF_OPEN
+        cb.call(_ok)  # probe succeeds
+        assert cb.state == CircuitState.CLOSED
         # success_count was reset to 0 then incremented to 1
-        assert cb2.success_count == 1
+        assert cb.success_count == 1
 
 
 # ── 6.2 EnrichmentFailureReason constants ─────────────────────────────────────
