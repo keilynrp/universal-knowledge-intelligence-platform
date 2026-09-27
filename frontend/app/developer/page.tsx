@@ -328,15 +328,15 @@ export default function DeveloperPortalPage() {
             ))}
           </div>
         </div>
-        <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+        <p className="mb-4 text-sm text-[var(--ukip-muted)]">
           Typed clients generated from the OpenAPI spec and checked in CI against every API change.
           They send one credential as a Bearer token: a JWT from Step 1 or a{" "}
-          <code className="rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-gray-800">ukip_</code> API key.{" "}
+          <code className="rounded border border-[var(--ukip-border)] px-1 py-0.5 text-xs">ukip_</code> API key.{" "}
           <a
             href={SDK_README_URL}
             target="_blank"
             rel="noreferrer"
-            className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+            className="font-medium text-[var(--ukip-primary)] hover:underline"
           >
             SDK guide: scopes, stability, regeneration →
           </a>
@@ -348,7 +348,7 @@ export default function DeveloperPortalPage() {
             href={`${REPO_URL}/tree/main/${SDK_SNIPPETS[activeSDK].dir}`}
             target="_blank"
             rel="noreferrer"
-            className="inline-block text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+            className="inline-block text-xs font-medium text-[var(--ukip-primary)] hover:underline"
           >
             Browse {SDK_SNIPPETS[activeSDK].dir} on GitHub →
           </a>
