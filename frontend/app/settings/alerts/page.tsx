@@ -35,6 +35,12 @@ const TYPE_LABELS: Record<string, string> = {
   teams:   "Microsoft Teams",
   discord: "Discord",
   webhook: "Generic Webhook",
+  pushover: "Pushover",
+};
+
+// Only the type picker needs to say what Pushover is for; the list badge stays short.
+const TYPE_PICKER_LABELS: Record<string, string> = {
+  ...TYPE_LABELS,
   pushover: "Pushover (pages a phone)",
 };
 
@@ -344,7 +350,7 @@ export default function AlertsPage() {
                       onClick={() => setForm((f) => ({ ...f, type: t }))}
                       className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${form.type === t ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300" : "border-gray-200 text-gray-600 hover:border-blue-300 dark:border-gray-700 dark:text-gray-400"}`}
                     >
-                      {TYPE_LABELS[t]}
+                      {TYPE_PICKER_LABELS[t]}
                     </button>
                   ))}
                 </div>
