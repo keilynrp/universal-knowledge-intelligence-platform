@@ -1,7 +1,7 @@
 """
 Unit tests for API key scope derivation — pure logic, no DB, no FastAPI.
 
-Spec: openspec/changes/enforce-api-key-scopes/specs/api-key-scope-enforcement/spec.md
+Spec: openspec/specs/api-key-scope-enforcement/spec.md
   - "Required scope is derived from method and route"
   - "Scopes form an escalating hierarchy"
 """
@@ -9,11 +9,11 @@ import pytest
 
 from backend.api_key_scopes import (
     ADMIN,
-    READ,
-    WRITE,
     ADMIN_EXEMPT_PATHS,
     ADMIN_PATHS,
+    READ,
     READ_OVERRIDES,
+    WRITE,
     satisfies,
     scope_required,
 )

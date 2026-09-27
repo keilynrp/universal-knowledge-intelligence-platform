@@ -1,7 +1,7 @@
 """
 Operation IDs are the public SDK surface.
 
-Spec: openspec/changes/generate-openapi-clients/specs/generated-api-clients/spec.md
+Spec: openspec/specs/generated-api-clients/spec.md
   - "Operation identifiers are a stable public interface"
 
 Generated clients turn each operationId into a method name. FastAPI's default
@@ -38,13 +38,13 @@ class TestRenameIndependence:
         first = FastAPI(generate_unique_id_function=operation_id_for)
 
         @first.get("/widgets/{widget_id}", tags=["widgets"])
-        def read_widget(widget_id: int):  # noqa: ARG001
+        def read_widget(widget_id: int):
             return {}
 
         second = FastAPI(generate_unique_id_function=operation_id_for)
 
         @second.get("/widgets/{widget_id}", tags=["widgets"])
-        def fetch_one_widget_renamed(widget_id: int):  # noqa: ARG001
+        def fetch_one_widget_renamed(widget_id: int):
             return {}
 
         assert _ids(first) == _ids(second)
@@ -97,7 +97,7 @@ class TestIdShape:
         app = FastAPI(generate_unique_id_function=operation_id_for)
 
         @app.delete("/api-keys/{key_id}", tags=["api-keys"])
-        def h(key_id: int):  # noqa: ARG001
+        def h(key_id: int):
             return {}
 
         assert _ids(app)[("DELETE", "/api-keys/{key_id}")] == "delete_api_keys_by_key_id"
@@ -106,7 +106,7 @@ class TestIdShape:
         app = FastAPI(generate_unique_id_function=operation_id_for)
 
         @app.get("/a/{x}/b/{y}", tags=["t"])
-        def h(x: int, y: int):  # noqa: ARG001
+        def h(x: int, y: int):
             return {}
 
         assert _ids(app)[("GET", "/a/{x}/b/{y}")] == "get_a_by_x_b_by_y"

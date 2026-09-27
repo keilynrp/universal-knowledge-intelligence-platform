@@ -1,7 +1,7 @@
 """
 End-to-end enforcement of API key scopes.
 
-Spec: openspec/changes/enforce-api-key-scopes/specs/api-key-scope-enforcement/spec.md
+Spec: openspec/specs/api-key-scope-enforcement/spec.md
   - "API key scopes are authorization-bearing"
   - "Scope restricts but never elevates privilege"
   - "Enforcement is gated by a rollout flag with a warn mode"
