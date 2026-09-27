@@ -106,41 +106,44 @@ curl "${API_BASE}/entities?limit=20" \\
 
 // ── SDK snippets ───────────────────────────────────────────────────────────────
 
+// The generated clients live in the repo's sdk/ tree and are not published to
+// npm or PyPI; sdk/README.md is the full guide (scopes, stability, regeneration).
+const REPO_URL = "https://github.com/keilynrp/universal-knowledge-intelligence-platform";
+const SDK_README_URL = `${REPO_URL}/blob/main/sdk/README.md`;
+
 const SDK_SNIPPETS = [
   {
     lang: "Python",
-    code: `import requests
+    dir: "sdk/python",
+    install: `pip install "git+${REPO_URL}.git#subdirectory=sdk/python"`,
+    code: `from ukip_universal_knowledge_intelligence_platform_client import AuthenticatedClient
+from ukip_universal_knowledge_intelligence_platform_client.api.entities import get_entities
 
-BASE = "${API_BASE}"
+client = AuthenticatedClient(
+    base_url="${API_BASE}",
+    token=token,  # a JWT from /auth/token or a ukip_ API key
+)
 
-# 1 — authenticate
-token = requests.post(
-    f"{BASE}/auth/token",
-    data={"username": "admin", "password": "changeit"},
-).json()["access_token"]
-
-headers = {"Authorization": f"Bearer {token}"}
-
-# 2 — fetch entities
-entities = requests.get(f"{BASE}/entities", headers=headers).json()
+entities = get_entities.sync(client=client)
 print(entities)`,
   },
   {
     lang: "TypeScript",
-    code: `const BASE = "${API_BASE}";
+    dir: "sdk/typescript",
+    install: `# TypeScript source with no runtime dependencies: copy the folder into your project
+git clone --depth 1 ${REPO_URL}.git ukip
+cp -r ukip/sdk/typescript ./ukip-sdk`,
+    code: `import { getEntities } from "./ukip-sdk";
+import { client } from "./ukip-sdk/client.gen";
 
-// 1 — authenticate
-const form = new URLSearchParams({ username: "admin", password: "changeit" });
-const { access_token } = await fetch(\`\${BASE}/auth/token\`, {
-  method: "POST",
-  body: form,
-}).then((r) => r.json());
+client.setConfig({
+  baseUrl: "${API_BASE}",
+  headers: { Authorization: \`Bearer \${token}\` }, // a JWT or a ukip_ API key
+});
 
-const headers = { Authorization: \`Bearer \${access_token}\` };
-
-// 2 — fetch entities
-const entities = await fetch(\`\${BASE}/entities\`, { headers }).then((r) => r.json());
-console.log(entities);`,
+const { data, error } = await getEntities();
+if (error !== undefined) throw error; // a 403 naming a scope: the key is too narrow
+console.log(data);`,
   },
 ];
 
@@ -295,7 +298,7 @@ export default function DeveloperPortalPage() {
         <h2 className="mb-4 text-base font-semibold text-gray-900 dark:text-white">Quick Start (cURL)</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           {QUICKSTART.map((qs) => (
-            <div key={qs.step} className="space-y-2">
+            <div key={qs.step} className="min-w-0 space-y-2">
               <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">
                 Step {qs.step} — {qs.title}
               </p>
@@ -307,8 +310,8 @@ export default function DeveloperPortalPage() {
 
       {/* ── SDK snippets ── */}
       <div>
-        <div className="mb-4 flex items-center gap-3">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">Client SDK Examples</h2>
+        <div className="mb-2 flex flex-wrap items-center gap-3">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-white">Client SDKs</h2>
           <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-gray-700 dark:bg-gray-800">
             {SDK_SNIPPETS.map((s, i) => (
               <button
@@ -325,7 +328,31 @@ export default function DeveloperPortalPage() {
             ))}
           </div>
         </div>
-        <CodeBlock code={SDK_SNIPPETS[activeSDK].code} label={SDK_SNIPPETS[activeSDK].lang} />
+        <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+          Typed clients generated from the OpenAPI spec and checked in CI against every API change.
+          They send one credential as a Bearer token: a JWT from Step 1 or a{" "}
+          <code className="rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-gray-800">ukip_</code> API key.{" "}
+          <a
+            href={SDK_README_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+          >
+            SDK guide: scopes, stability, regeneration →
+          </a>
+        </p>
+        <div className="space-y-3">
+          <CodeBlock code={SDK_SNIPPETS[activeSDK].install} label="Install" />
+          <CodeBlock code={SDK_SNIPPETS[activeSDK].code} label={SDK_SNIPPETS[activeSDK].lang} />
+          <a
+            href={`${REPO_URL}/tree/main/${SDK_SNIPPETS[activeSDK].dir}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-block text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+          >
+            Browse {SDK_SNIPPETS[activeSDK].dir} on GitHub →
+          </a>
+        </div>
       </div>
 
       {/* ── Tag groups ── */}

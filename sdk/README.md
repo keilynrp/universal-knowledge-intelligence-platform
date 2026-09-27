@@ -21,15 +21,21 @@ or local path.
 
 ### TypeScript
 
+`sdk/typescript` is TypeScript source with no `package.json` and no runtime
+dependencies (the fetch client is generated inline), so it is vendored rather
+than installed:
+
 ```bash
-# local path (monorepo / vendored checkout)
-npm install ./sdk/typescript
-# or by git ref
-npm install "git+https://github.com/keilynrp/universal-knowledge-intelligence-platform.git#main&path:sdk/typescript"
+git clone --depth 1 https://github.com/keilynrp/universal-knowledge-intelligence-platform.git ukip
+cp -r ukip/sdk/typescript ./ukip-sdk
 ```
 
+The shared `client` is not re-exported from the index; import it from
+`client.gen`:
+
 ```ts
-import { client, getEntities } from "./sdk/typescript";
+import { getEntities } from "./ukip-sdk";
+import { client } from "./ukip-sdk/client.gen";
 
 client.setConfig({
   baseUrl: "https://api.ukip.inbounduxd.com",

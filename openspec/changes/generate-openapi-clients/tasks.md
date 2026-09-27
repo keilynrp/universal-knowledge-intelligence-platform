@@ -72,16 +72,26 @@ name changes once and breaks whoever adopted the first cut.
       scopes" section.
 - [x] 4.3 State plainly which surface carries a stability commitment and which is
       generated wholesale — "Stability" + "What is here today" sections.
-- [ ] 4.4 `/developer` page: link the clients next to the curl quickstart.
+- [x] 4.4 `/developer` page: link the clients next to the curl quickstart.
+      "Client SDKs" now shows the generated clients (install + usage per
+      language, links to `sdk/README.md` and each client's folder) instead of
+      hand-written `requests`/`fetch` calls. Both snippets verified: the TS one
+      typechecks against a vendored copy of `sdk/typescript`, the Python one
+      imports from a clean install of `sdk/python`. The TS instructions in
+      `sdk/README.md` were wrong and are fixed: there is no `package.json` to
+      `npm install`, and `client` is exported from `client.gen`, not the index.
 - [x] 4.5 `docs/API.md` cross-reference — "Generated SDK clients" section links
       to sdk/README.md and the regeneration script.
 
 ## 5. Verification
 
-- [ ] 5.1 Full backend suite — 0.1 changes `openapi.json`, and tests that assert
-      on the schema or on `/openapi.json` may break.
-- [ ] 5.2 Frontend suite (the `/developer` page changed).
-- [ ] 5.3 Confirm the drift gate passes on a clean tree.
+- [x] 5.1 Full backend suite — 0.1 changes `openapi.json`, and tests that assert
+      on the schema or on `/openapi.json` may break. Operation IDs (0.1) landed
+      earlier with the suite green; the `/developer` change touches no backend
+      code, and its backend tree is main's, whose full suite passed CI in #403.
+- [x] 5.2 Frontend suite (the `/developer` page changed): ESLint, `tsc`, vitest 358/358.
+- [x] 5.3 Confirm the drift gate passes on a clean tree: `generate-sdk.mjs --check`
+      and `generate-sdk-clients.sh --check` both OK.
 - [ ] 5.4 PR.
 
 ## 6. Deliberately deferred
