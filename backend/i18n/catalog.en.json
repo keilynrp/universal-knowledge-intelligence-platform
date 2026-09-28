@@ -94,6 +94,7 @@
   "auth.login.slide.universities.metric_label": "Institutional coverage",
   "auth.login.slide.universities.title": "Turn academic production into institutional intelligence.",
   "auth.login.sso": "Continue with SSO",
+  "auth.login.sso_error": "The SSO sign-in link expired or was already used. Try again.",
   "auth.login.sso_with_provider": "Continue with {provider}",
   "auth.login.submit": "Enter {platform}",
   "auth.login.subtitle": "Sign in to your account",

@@ -450,6 +450,7 @@ _TABLES_TO_CLEAN = [
     "field_correspondence_rules",
     "mapping_suggestions",
     "password_reset_tokens",
+    "sso_login_codes",
     "source_profiles",
     "user_dashboards",
     "user_sessions",

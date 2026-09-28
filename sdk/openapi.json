@@ -8061,6 +8061,21 @@
         "title": "SourceStatsResponse",
         "type": "object"
       },
+      "SsoCodeExchange": {
+        "properties": {
+          "code": {
+            "maxLength": 256,
+            "minLength": 32,
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "SsoCodeExchange",
+        "type": "object"
+      },
       "StoreConnectionCreate": {
         "properties": {
           "access_token": {
@@ -28981,6 +28996,47 @@
           }
         },
         "summary": "Sso Callback",
+        "tags": [
+          "auth",
+          "sso"
+        ]
+      }
+    },
+    "/sso/exchange": {
+      "post": {
+        "description": "Spend the code from the SSO redirect for a token pair, once.",
+        "operationId": "post_sso_exchange",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SsoCodeExchange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sso Exchange",
         "tags": [
           "auth",
           "sso"

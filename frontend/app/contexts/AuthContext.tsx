@@ -21,6 +21,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   hydrated: boolean;
   login: (username: string, password: string) => Promise<void>;
+  loginWithSsoCode: (code: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
   updateAvatarUrl: (url: string | null) => void;
@@ -114,6 +115,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.dispatchEvent(new Event(AUTH_EVENT));
   }, []);
 
+  // The SSO callback redirects with a single-use code, never a token (issue 408).
+  const loginWithSsoCode = useCallback(async (code: string) => {
+    const res = await fetch(`${API_BASE}/sso/exchange`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    });
+    if (!res.ok) {
+      throw new Error("Invalid or expired SSO code");
+    }
+    const data = await res.json();
+    localStorage.setItem("ukip_token", data.access_token);
+    window.dispatchEvent(new Event(AUTH_EVENT));
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem("ukip_token");
     setUser(null);
@@ -123,7 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const resolvedUser = token ? user : null;
 
   return (
-    <AuthContext.Provider value={{ token, user: resolvedUser, isAuthenticated: !!token, hydrated, login, logout, refreshUser, updateAvatarUrl }}>
+    <AuthContext.Provider value={{ token, user: resolvedUser, isAuthenticated: !!token, hydrated, login, loginWithSsoCode, logout, refreshUser, updateAvatarUrl }}>
       {children}
     </AuthContext.Provider>
   );

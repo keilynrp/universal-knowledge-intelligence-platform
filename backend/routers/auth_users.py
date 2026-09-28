@@ -89,6 +89,18 @@ def _password_reset_token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+_SSO_CODE_TTL = timedelta(seconds=60)
+
+
+def _sso_code_hash(code: str) -> str:
+    return hashlib.sha256(code.encode("utf-8")).hexdigest()
+
+
+def _utcnow_naive() -> datetime:
+    """UTC without tzinfo: how `DateTime` columns store it on both databases."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def _reset_link(request: Request, token: str) -> str:
     frontend_url = os.environ.get("FRONTEND_URL", "").rstrip("/")
     if not frontend_url:
@@ -479,12 +491,54 @@ async def sso_callback(request: Request, db: Session = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is deactivated")
 
-    # Generate JWT
-    _sso_tokens = issue_tokens(db, user, request)
-    access_token = _sso_tokens["access_token"]
-    refresh_token = _sso_tokens["refresh_token"]
+    # No token goes in the redirect (#408): a URL ends up in browser history, in
+    # Referer and in proxy access logs. The browser gets a code that is spent on
+    # first use and dies in a minute; the session starts when it is exchanged.
+    code = secrets.token_urlsafe(32)
+    db.add(models.SsoLoginCode(
+        user_id=user.id,
+        code_hash=_sso_code_hash(code),
+        expires_at=_utcnow_naive() + _SSO_CODE_TTL,
+    ))
+    db.commit()
     frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
-    return RedirectResponse(url=f"{frontend_url}/login?token={access_token}&refresh={refresh_token}")
+    return RedirectResponse(url=f"{frontend_url}/login?sso_code={code}")
+
+
+class SsoCodeExchange(BaseModel):
+    code: str = Field(..., min_length=32, max_length=256)
+
+
+@router.post("/sso/exchange", tags=["sso"])
+@limiter.limit("20/minute")
+def sso_exchange(
+    request: Request,
+    payload: SsoCodeExchange,
+    db: Session = Depends(get_db),
+):
+    """Spend the code from the SSO redirect for a token pair, once."""
+    now = _utcnow_naive()
+    code_hash = _sso_code_hash(payload.code)
+    # One conditional UPDATE, so two exchanges racing for the same code cannot
+    # both see it unspent.
+    claimed = (
+        db.query(models.SsoLoginCode)
+        .filter(
+            models.SsoLoginCode.code_hash == code_hash,
+            models.SsoLoginCode.used_at.is_(None),
+            models.SsoLoginCode.expires_at > now,
+        )
+        .update({models.SsoLoginCode.used_at: now}, synchronize_session=False)
+    )
+    db.commit()
+    if claimed != 1:
+        raise HTTPException(status_code=400, detail="Invalid or expired SSO code")
+
+    sso_code = db.query(models.SsoLoginCode).filter_by(code_hash=code_hash).one()
+    user = db.get(models.User, sso_code.user_id)
+    if not user or not user.is_active:
+        raise HTTPException(status_code=400, detail="Invalid or expired SSO code")
+    return issue_tokens(db, user, request)
 
 
 # ── User Management (RBAC) ────────────────────────────────────────────────────
