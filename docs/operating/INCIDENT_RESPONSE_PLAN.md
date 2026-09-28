@@ -110,6 +110,11 @@ default. Nothing watches for anomalous login or access patterns.
 2. Assign a severity from §3. When in doubt, go higher.
 3. Start a timeline file (§7). Every later step appends to it, with UTC times.
 4. For SEV1 and SEV2, note the moment the clock started for notification (§8).
+5. **Freeze merges to `main` until the container logs are captured (§7).**
+   Every push to `main` deploys (`.github/workflows/docker.yml`), and the
+   deploy replaces the backend container with one built from that commit,
+   taking the old container's log with it. That includes a fix you are about
+   to merge, and a docs-only change. Capture first, then merge.
 
 ### 5.2 Assess
 
@@ -200,6 +205,10 @@ containment destroys state. Minimum set:
 
 1. **Container logs**, first, because they vanish with the container:
    `docker logs <container> > incident-<id>-backend.log`
+   They reach back only to the last deploy, and every merge to `main` is one
+   (§5.1 step 5). Check the container's start time (`docker ps`, `CREATED`)
+   against the incident window: if the container is younger than the window,
+   the earlier lines are already gone, and the timeline should say so.
    Every authenticated request line carries `user_id` and either `session_id`
    or `api_key_id` (#376), so the lines a suspect session produced can be
    selected by that session, and that session can be revoked on its own

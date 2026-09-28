@@ -6,13 +6,18 @@ has chosen the shipper. Group 4 is operator work, and it is what closes gap 3.
 
 ## 0. Before anything is built
 
-- [ ] 0.1 Plan §7 step 1 and §5.1: during an incident, nothing is merged to
+- [x] 0.1 Plan §7 step 1 and §5.1: during an incident, nothing is merged to
       `main` until the logs are captured, because a merge deploys and a deploy
       recreates the container. Say it where a responder with a fix in hand
-      will read it.
-- [ ] 0.2 Open the prerequisite issue: the SSO callback stops putting tokens
+      will read it. §5.1 step 5 freezes merges; §7 step 1 says the log reaches
+      back only to the last deploy and how to tell from the container's age.
+      Confirmed in `docker.yml`: every push to `main` runs `deploy`, docs-only
+      merges included.
+- [x] 0.2 Open the prerequisite issue: the SSO callback stops putting tokens
       in the redirect URL (single-use, short-lived code exchanged by `POST`).
-      The Traefik access log (4.4) waits for it; nothing else does.
+      The Traefik access log (4.4) waits for it; nothing else does. **#408.**
+      It also found that the frontend never reads the `refresh` token it is
+      sent, and that the password-reset link carries its token in the query.
 - [ ] 0.3 Open the issue for the client address, if the query in design open
       question 2 shows a proxy's address in `audit_logs.ip_address`.
 - [ ] 0.4 Owner answers to design open questions 3 (who reads) and 4 (embed
@@ -66,7 +71,7 @@ has chosen the shipper. Group 4 is operator work, and it is what closes gap 3.
 - [ ] 4.2 Create both principals from the policy documents.
 - [ ] 4.3 Install the shipper and the Docker daemon limits; create its
       Healthchecks.io check with the Pushover integration at emergency.
-- [ ] 4.4 After the SSO prerequisite ships: enable the Traefik access log in
+- [ ] 4.4 After the SSO prerequisite (#408) ships: enable the Traefik access log in
       Dokploy from the reviewed copy.
 - [ ] 4.5 Prove it: make a request, redeploy the backend, and find that
       request's line in CloudWatch and, after the hour closes, in S3. Stop the
