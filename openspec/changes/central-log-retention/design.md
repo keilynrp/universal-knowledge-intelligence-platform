@@ -124,8 +124,12 @@ mitigation until the shipper runs, and a cheap one.
    `audit_logs.ip_address` (and the pivot from #384) all hold a proxy's
    address. Check before relying on either:
    `SELECT ip_address, count(*) FROM audit_logs WHERE created_at > now() - interval '7 days' GROUP BY 1 ORDER BY 2 DESC LIMIT 5;`
-   The Traefik log carries the real address either way, which is one reason it
-   is in scope. The application fix is a separate issue (see proposal,
+   The Traefik log is closer to the client, which is one reason it is in scope,
+   but it is not the client either: Cloudflare proxies the origin
+   (`docs/legal/SUBPROCESSOR_REGISTER.md`), so Traefik sees Cloudflare's edge
+   address unless it trusts `CF-Connecting-IP` / `X-Forwarded-For` from
+   Cloudflare's published ranges only. Task 2.2 must configure that, and 4.5
+   must check that a known request shows its real address. The application fix is a separate issue (see proposal,
    non-goals).
 3. **Who reads.** The design assumes the operator alone holds
    `ukip-log-reader`. Confirm, and whether it is assumed through the existing
