@@ -335,3 +335,15 @@ them and the generator rejected the file. Fixed by emitting the literal with
   Decided with the product owner: **close #209 on the defect it reported, and make the disclosure honest** about what remains English (option A + C). A follow-up issue covers full Spanish reports.
 - [x] 9.3 **The original bug is gone: the English report contains zero Spanish lines.** Measured on the rendered artefact, not on source.
 - [x] 9.4 Comment posted on #209, plus a follow-up issue for full Spanish reports and one for the 15 strings in modules that persist their text.
+
+## 10. At archive (2026-09-27)
+
+- [x] 10.1 `backend-locale-resolution`'s last requirement was rewritten before
+      publishing, because the follow-up to 9.2 moved the boundary it described.
+      It said prose composed from data stays English; #268 then put the counted
+      takeaways in the catalog (#288, one sentence per count so Spanish can
+      inflect the verb) and closed the remaining gaps (#314), which also
+      narrowed `report.disclosure.analysis_language`. The requirement is now
+      "Only text the system authors is localised", and names what stays
+      English exactly as that disclosure does: analyzer prose, provider-supplied
+      names, and four Excel sheets' headings and metric labels.
