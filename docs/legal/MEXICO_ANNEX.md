@@ -67,10 +67,12 @@ Art. 19 requires the responsable (and by extension the encargado) to establish
 and maintain administrative, technical, and physical security measures. The
 implemented measures and their evidence are documented in
 [PRIVACY_CONTROLS_OVERVIEW.md](PRIVACY_CONTROLS_OVERVIEW.md), including an
-honest register of measures not yet in place (the corrective actions from the
-first incident-response exercise of 2026-09-22 — read auditing, attributable
-request logs and a paging path — external pentest, data residency, a passing
-restore drill).
+honest register of measures not yet in place. Of the corrective actions from
+the first incident-response exercise of 2026-09-22, read auditing (#375) and
+attributable request logs (#376) are in place; a paging path is implemented
+(#377) and awaits its installation and test on the operator's phone. Still
+open: retention of request logs beyond the container, an external pentest,
+data residency, and a passing restore drill.
 
 ## 7. Data minimization note
 

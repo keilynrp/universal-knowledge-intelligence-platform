@@ -98,5 +98,5 @@ section is sized to ship as one PR, in order; later sections depend on 1.
       not say so yet. Close it in section 1's PR rather than waiting for this
       one.
 - [ ] 6.4 After 30 days in production: report `READ`/`EXPORT` row volume, so
-      the owner can decide the open questions in design.md (retention, class 4
+      the owner can decide the open questions in design.md (retention, class 6
       breadth).

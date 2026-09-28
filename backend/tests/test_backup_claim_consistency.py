@@ -114,7 +114,18 @@ def test_next_gate_requires_a_passing_drill():
     assert expected_gate in _read("docs/product/ENTERPRISE_CONTROL_REGISTER.md")
 
 
-def test_subprocessor_register_keeps_provider_and_region_placeholders():
+def test_subprocessor_register_names_the_backup_provider_only_with_evidence():
+    # The register used to keep "[OPERATOR TO FILL]" here, because no provider
+    # had been provisioned and nothing in the repo could attest one. The
+    # ER-BCP-001 evidence (owner-approved 2026-09-21) now does, so the row may
+    # name the provider and region, but only by citing that evidence, and only
+    # with the values the evidence records.
     register = _read("docs/legal/SUBPROCESSOR_REGISTER.md")
-    assert "[OPERATOR TO FILL: S3 backup provider]" in register
-    assert "[OPERATOR TO FILL: backup storage region]" in register
+    evidence_name = "ER-BCP-001-READINESS-EVIDENCE-2026-09-21.md"
+    evidence = _read(f"docs/operating/{evidence_name}")
+    row = next(line for line in register.splitlines() if "backups for the RPO 24h" in line)
+
+    assert evidence_name in row
+    assert "S3" in row and "AWS S3" in evidence
+    region = re.search(r"`(us-[a-z]+-\d)`", row)
+    assert region and f"`{region.group(1)}`" in evidence

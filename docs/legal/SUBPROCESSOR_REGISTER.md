@@ -16,7 +16,9 @@ customer enables the corresponding feature.
 | `[OPERATOR TO FILL: VPS/hosting provider name]` | Hosting of the production VPS (Dokploy, FastAPI backend, Next.js frontend, Rust engine (optional acceleration component, disabled when ENGINE_GRPC_URL is not configured), PostgreSQL, ChromaDB, Redis) | All customer data processed by the platform | `[OPERATOR TO FILL: region]` | Active — core infrastructure |
 | Cloudflare | DNS and TLS reverse proxy in front of the origin | Traffic metadata (IP addresses, request headers); payloads transit encrypted through the proxy | Global edge network | Active — core infrastructure |
 | GitHub / GHCR (Microsoft) | Source code hosting, CI/CD, container image registry | Source code and container images only — **no customer data** | United States (global) | Active — development infrastructure |
-| `[OPERATOR TO FILL: S3 backup provider]` | Off-site storage of encrypted PostgreSQL and `ukip_static_data` backups for the RPO 24h / RTO 4h recovery objective | Encrypted database backups plus customer branding and persistent static uploads from `ukip_static_data` | `[OPERATOR TO FILL: backup storage region]` | Pending — provider and region not yet provisioned |
+| Amazon Web Services (S3) | Off-site storage of encrypted PostgreSQL and `ukip_static_data` backups for the RPO 24h / RTO 4h recovery objective | Encrypted database backups plus customer branding and persistent static uploads from `ukip_static_data` | United States (`us-east-2`) | Active — backups (SSE-S3, TLS-only bucket policy, Object Lock `GOVERNANCE`; see [ER-BCP-001 evidence](../operating/ER-BCP-001-READINESS-EVIDENCE-2026-09-21.md)) |
+| Pushover | Pages the on-call operator's phone for SEV1/SEV2 operational alerts (#377) | Operational alert text only: check names, status and counts. **No customer data** while the channel is subscribed to `ops.check_failed` alone, as the [paging runbook](../operating/PAGING_RUNBOOK.md) sets it up; subscribing it to workspace events (imports, reports) would send their summaries too | `[OPERATOR TO FILL: provider region]` | Active once configured — operational alerting |
+| Healthchecks.io | Dead man's switch: pages through Pushover when the ops monitor stops pinging (#377) | A ping (and the sending host's IP address) every monitor cycle. **No customer data** | `[OPERATOR TO FILL: provider region]` | Active once configured — operational alerting |
 | Sentry | Error telemetry for the backend | Error events and stack traces; may incidentally include request metadata | United States / EU (per DSN configuration) | **Optional — flag-gated, default OFF** (`SENTRY_ENABLED`, default false; see `backend/telemetry.py`) |
 | OpenAI | LLM features (AI enrichment / RAG answering) when the customer configures an OpenAI integration | Text snippets submitted to LLM features (may include research-entity data the customer chooses to process) | United States | **Optional — default OFF**; engaged only if the customer creates and activates an AI integration |
 
@@ -36,7 +38,7 @@ Notes:
 
 | Item | Value |
 |------|-------|
-| Last reviewed | 2026-06-11 |
+| Last reviewed | 2026-09-28 |
 | Review cadence | Quarterly |
 | Change-notice process | Customers are notified in writing before a sub-processor is added or replaced, with an objection window per Section 8 of [DPA_BASELINE.md](DPA_BASELINE.md). Changes are recorded in this file's git history. |
 
@@ -45,3 +47,4 @@ Notes:
 | Date | Change |
 |------|--------|
 | 2026-06-11 | Initial register created (EPIC-020, Task 12). |
+| 2026-09-28 | S3 row filled from the ER-BCP-001 evidence (AWS S3, `us-east-2`, active). Pushover and Healthchecks.io added for operational paging (#377); they receive no customer data, so, like GitHub, their addition needs no advance customer notice. |

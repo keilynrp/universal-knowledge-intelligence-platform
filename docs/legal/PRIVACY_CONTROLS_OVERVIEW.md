@@ -17,7 +17,7 @@ prefer an honest register over an impressive one.
 | Credential encryption at rest | Fernet (AES-128-CBC + HMAC-SHA256) wrapped in MultiFernet for zero-downtime key rotation | `backend/encryption.py` |
 | Encryption in transit | TLS via Cloudflare (edge) + Traefik (origin) | Dokploy deployment configuration |
 | Authentication & authorization | JWT + RBAC (super_admin/admin/editor/viewer); account lockout 5 attempts / 15 min | `backend/auth.py`; per-endpoint `require_role` dependencies |
-| Audit logging | Audit log + `DataLifecycleEvent` evidence on export/delete operations | `GET /admin/data-lifecycle/events` (admin-only) |
+| Audit logging | Every mutation, and the reads that matter (exports, reads of the audit log, API-key reads, bulk reads), each naming the user and the session or API key behind it; `DataLifecycleEvent` evidence on export/delete operations; request log lines carry the same identity | #375, #376; `GET /audit-log` (filter by `session_id`, `ip_address`); `GET /admin/data-lifecycle/events` (admin-only) |
 | DSAR export (access/portability) | Org-scoped portable JSON export with audit evidence | EPIC-016 Slice 2 (PR #41); `POST /admin/data-lifecycle/export` |
 | Right to erasure | Cascade deletion across DB + ChromaDB with confirmation echo + audit evidence | EPIC-016 Slice 3 (PR #42, hardened by #44); `POST /admin/data-lifecycle/delete` |
 | Retention policies | Configurable per-org retention + purge mechanism (operator-triggered) | EPIC-016 Slice 4 (PR #43); `docs/operating/DATA_LIFECYCLE_POLICY.md` |
@@ -31,7 +31,7 @@ prefer an honest register over an impressive one.
 
 | Open item | Tracking ID | Status |
 |-----------|-------------|--------|
-| Incident response capability (incl. breach-notification SLA backing) | ER-IR-001 | Partial — the plan is published, its authority and 72-hour notification commitment were decided on 2026-09-22, and it was first exercised on 2026-09-22. That exercise showed read access is not recorded and nothing pages, so scope may need reconstruction from backups and detection can be slow; corrective actions are open |
+| Incident response capability (incl. breach-notification SLA backing) | ER-IR-001 | Partial — the plan is published, its authority and 72-hour notification commitment were decided on 2026-09-22, and it was first exercised on 2026-09-22. Of that exercise's corrective actions, read auditing and attributable request logs are in place (#375, #376); paging is implemented but not yet installed and tested (#377); request logs are still not retained beyond the container (plan §11 gap 3, `central-log-retention`) |
 | External penetration test | ER-ASSURE-001 | Open — no third-party assessment report available yet |
 | Data residency commitments | ER-DEP-001 | Open — residency follows hosting region; no contractual commitment defined |
 | A passing isolated restore drill | US-073 / ER-BCP-001 | Pending — provider configured and two backup cycles evidenced; the first isolated restore drill (2026-09-21) is recorded as failed and its dossier was approved on 2026-09-21; a passing drill remains |

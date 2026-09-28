@@ -39,7 +39,10 @@ has chosen the shipper. Group 4 is operator work, and it is what closes gap 3.
       successful delivery. Credentials only from the environment file,
       never in the repo.
 - [ ] 2.2 Traefik access-log configuration: JSON, query strings dropped on
-      every router, request headers other than `User-Agent` dropped.
+      every router, request headers other than `User-Agent` dropped, and the
+      client address taken from `CF-Connecting-IP` / `X-Forwarded-For` only
+      when the request comes from Cloudflare's published ranges (design, open
+      question 2).
 - [ ] 2.3 Configuration test: parses both files and fails if query strings or
       the `Authorization` header are kept, if a source or sink is missing, or
       if the heartbeat is not tied to delivery.
