@@ -38,12 +38,17 @@ Email the backend sends SHALL take its subject and body text from the catalog in
 - **WHEN** a password-reset email is sent
 - **THEN** its subject comes from the catalog in the resolved language, not a Spanish literal
 
-### Requirement: Generated analysis text and provider data are not localised
-Prose the system composes from data, and values supplied by external providers, SHALL remain in English regardless of the resolved language. This boundary SHALL be stated to the reader rather than left to be discovered.
+### Requirement: Only text the system authors is localised
+Text the system authors (section titles, labels, empty states, and takeaways that state a finding, including those inflected on a count) SHALL come from the catalog in the resolved language. Prose produced by analyzer services, values supplied by external providers, and the column headings and metric labels of the Excel export's Summary, Entities, Harmonization and Methodology sheets SHALL remain in English regardless of the resolved language. This boundary SHALL be stated to the reader rather than left to be discovered.
 
-#### Scenario: A Spanish report contains a finding
-- **WHEN** a report is generated in Spanish and a section states a finding composed from data
-- **THEN** the finding text is English, and this is expected rather than a defect
+#### Scenario: A Spanish report states a counted finding
+- **WHEN** a report is generated in Spanish and a section's takeaway is composed from a count in the data
+- **THEN** the takeaway is the catalog's Spanish sentence for that count, inflected as Spanish requires
+- **AND** the interpolated values are unchanged
+
+#### Scenario: Analyzer prose stays English
+- **WHEN** a Spanish report includes prose produced by an analyzer service
+- **THEN** that prose is English, and this is expected rather than a defect
 
 #### Scenario: A Spanish report names a concept
 - **WHEN** a Spanish report cites a concept sourced from OpenAlex
@@ -51,4 +56,4 @@ Prose the system composes from data, and values supplied by external providers, 
 
 #### Scenario: The limitation is disclosed
 - **WHEN** an artefact is generated in a language other than English
-- **THEN** it states that analysis text and source-derived names remain in English, so a reader is not left to interpret the mixture as an error
+- **THEN** it states which text remains English (analyzer prose, provider-supplied names, and the Excel sheets named above), so a reader is not left to interpret the mixture as an error
