@@ -3,8 +3,8 @@
 > **Closes:** incident response plan §11 gap 3 (no central log retention).
 > **Owner decisions (2026-09-27):** 30 days searchable, 1 year as immutable
 > evidence; the Traefik access log is included.
-> **Prerequisite:** the SSO callback stops putting tokens in the redirect URL
-> (separate issue, task 0.2). Until it ships, the proxy log is not turned on.
+> **Prerequisite:** #408, the SSO callback stops putting tokens in the redirect
+> URL. Until it ships, the proxy log is not turned on.
 
 ## Why
 
