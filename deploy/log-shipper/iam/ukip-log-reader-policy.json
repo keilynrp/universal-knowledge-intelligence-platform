@@ -1,0 +1,73 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "QueryTheTwoLogGroups",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogStreams",
+        "logs:FilterLogEvents",
+        "logs:GetLogEvents",
+        "logs:StartQuery"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-east-2:${AWS_ACCOUNT_ID}:log-group:/ukip/prod/backend:*",
+        "arn:aws:logs:us-east-2:${AWS_ACCOUNT_ID}:log-group:/ukip/prod/traefik:*"
+      ]
+    },
+    {
+      "Sid": "ReadQueryResults",
+      "Effect": "Allow",
+      "Action": [
+        "logs:GetQueryResults",
+        "logs:StopQuery"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ListTheArchive",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::${LOG_ARCHIVE_BUCKET}",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "logs/*"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "ReadTheArchive",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject"
+      ],
+      "Resource": "arn:aws:s3:::${LOG_ARCHIVE_BUCKET}/logs/*"
+    },
+    {
+      "Sid": "ReadingNeverChangesTheRecord",
+      "Effect": "Deny",
+      "Action": [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DeleteLogGroup",
+        "logs:DeleteLogStream",
+        "logs:DeleteRetentionPolicy",
+        "logs:PutRetentionPolicy",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion",
+        "s3:PutObjectRetention",
+        "s3:PutObjectLegalHold",
+        "s3:BypassGovernanceRetention",
+        "s3:PutBucketObjectLockConfiguration",
+        "s3:PutLifecycleConfiguration",
+        "s3:PutBucketPolicy"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

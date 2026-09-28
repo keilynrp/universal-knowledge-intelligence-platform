@@ -1,0 +1,50 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AppendToTheTwoLogGroups",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogStream",
+        "logs:DescribeLogStreams",
+        "logs:PutLogEvents"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-east-2:${AWS_ACCOUNT_ID}:log-group:/ukip/prod/backend:*",
+        "arn:aws:logs:us-east-2:${AWS_ACCOUNT_ID}:log-group:/ukip/prod/traefik:*"
+      ]
+    },
+    {
+      "Sid": "WriteNewArchiveObjects",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::${LOG_ARCHIVE_BUCKET}/logs/*"
+    },
+    {
+      "Sid": "NeverReadRemoveOrRetimeWhatWasShipped",
+      "Effect": "Deny",
+      "Action": [
+        "logs:DeleteLogGroup",
+        "logs:DeleteLogStream",
+        "logs:DeleteRetentionPolicy",
+        "logs:PutRetentionPolicy",
+        "logs:GetLogEvents",
+        "logs:FilterLogEvents",
+        "logs:StartQuery",
+        "s3:GetObject",
+        "s3:GetObjectVersion",
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion",
+        "s3:PutObjectRetention",
+        "s3:PutObjectLegalHold",
+        "s3:BypassGovernanceRetention",
+        "s3:PutBucketObjectLockConfiguration",
+        "s3:PutLifecycleConfiguration",
+        "s3:PutBucketPolicy"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
