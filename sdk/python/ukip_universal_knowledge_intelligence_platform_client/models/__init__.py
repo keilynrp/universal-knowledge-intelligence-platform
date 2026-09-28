@@ -238,6 +238,7 @@ from .source_health_response import SourceHealthResponse
 from .source_stats_entry import SourceStatsEntry
 from .source_stats_entry_failure_reasons import SourceStatsEntryFailureReasons
 from .source_stats_response import SourceStatsResponse
+from .sso_code_exchange import SsoCodeExchange
 from .store_connection_create import StoreConnectionCreate
 from .store_connection_create_platform import StoreConnectionCreatePlatform
 from .store_connection_create_sync_direction import StoreConnectionCreateSyncDirection
@@ -493,6 +494,7 @@ __all__ = (
     "SourceStatsEntry",
     "SourceStatsEntryFailureReasons",
     "SourceStatsResponse",
+    "SsoCodeExchange",
     "StoreConnectionCreate",
     "StoreConnectionCreatePlatform",
     "StoreConnectionCreateSyncDirection",

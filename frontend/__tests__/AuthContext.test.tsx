@@ -104,6 +104,65 @@ describe("AuthContext", () => {
     expect((caughtError as Error).message).toBe("Invalid credentials");
   });
 
+  it("loginWithSsoCode spends the code with a POST and stores the token", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: "sso-tok", refresh_token: "r", token_type: "bearer" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 1, username: "admin", role: "super_admin", email: null, is_active: true }),
+      });
+
+    function SsoConsumer() {
+      const { loginWithSsoCode, isAuthenticated } = useAuth();
+      return (
+        <div>
+          <span data-testid="auth">{isAuthenticated ? "yes" : "no"}</span>
+          <button onClick={() => loginWithSsoCode("the-code")}>Exchange</button>
+        </div>
+      );
+    }
+
+    render(<AuthProvider><SsoConsumer /></AuthProvider>);
+    await act(async () => {
+      await userEvent.click(screen.getByRole("button", { name: "Exchange" }));
+    });
+
+    await waitFor(() => expect(screen.getByTestId("auth").textContent).toBe("yes"));
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(String(url)).toMatch(/\/sso\/exchange$/);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual({ code: "the-code" });
+    expect(localStorage.getItem("ukip_token")).toBe("sso-tok");
+  });
+
+  it("loginWithSsoCode throws and stores nothing when the code is refused", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false });
+    let caughtError: Error | null = null;
+
+    function SsoConsumer() {
+      const { loginWithSsoCode } = useAuth();
+      return (
+        <button onClick={async () => {
+          try { await loginWithSsoCode("spent-code"); }
+          catch (e) { caughtError = e as Error; }
+        }}>
+          Exchange
+        </button>
+      );
+    }
+
+    render(<AuthProvider><SsoConsumer /></AuthProvider>);
+    await act(async () => {
+      await userEvent.click(screen.getByRole("button", { name: "Exchange" }));
+    });
+
+    expect(caughtError).not.toBeNull();
+    expect(localStorage.getItem("ukip_token")).toBeNull();
+  });
+
   it("logout clears token and user", async () => {
     // Seed a token
     mockFetch

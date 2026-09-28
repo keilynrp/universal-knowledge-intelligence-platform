@@ -327,6 +327,23 @@ class PasswordResetToken(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class SsoLoginCode(Base):
+    """A single-use code the SSO callback puts in its redirect instead of tokens (#408).
+
+    Only the hash is stored. The session and its tokens are created when the
+    browser exchanges the code, so the redirect URL carries nothing that
+    authenticates on its own once the code is spent or expired.
+    """
+    __tablename__ = "sso_login_codes"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    code_hash  = Column(String(64), unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False, index=True)  # naive UTC
+    used_at    = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 # ── Authority Resolution Layer ──────────────────────────────────────────────
 
 class AuthorityRecord(Base):

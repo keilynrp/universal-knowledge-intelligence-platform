@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "measured_at": "2026-09-27T23:27:02Z",
+  "measured_at": "2026-09-28T04:51:06Z",
   "source_ref": "cf85e8f136a4bd226285008b8c73d786c90fbea9",
   "ruff": {
     "tool_version": "0.16.4",
@@ -11,7 +11,7 @@
     "tool_version": "10.10.0",
     "command": "npx eslint --format json (frontend/, default project scope, npm-ci-locked version)",
     "error_count": 0,
-    "warning_count": 3
+    "warning_count": 1
   },
   "policy": {
     "comparison": "exact_match_required",

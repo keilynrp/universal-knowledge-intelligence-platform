@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "../contexts/AuthContext";
 import { useBranding } from "../contexts/BrandingContext";
@@ -16,7 +16,7 @@ type PublicSsoSettings = {
 };
 
 function LoginPageContent() {
-  const { login, isAuthenticated } = useAuth();
+  const { login, loginWithSsoCode, isAuthenticated } = useAuth();
   const { branding } = useBranding();
   const { t } = useLanguage();
   const router = useRouter();
@@ -30,6 +30,8 @@ function LoginPageContent() {
   const [loading, setLoading] = useState(false);
   const [resetMode, setResetMode] = useState<"login" | "request" | "confirm">("login");
   const [showPassword, setShowPassword] = useState(false);
+  // A code is spent on first use; Strict Mode runs effects twice in development.
+  const ssoExchangeStarted = useRef(false);
   const [activeSlide, setActiveSlide] = useState(0);
   const [ssoSettings, setSsoSettings] = useState<PublicSsoSettings | null>(null);
 
@@ -79,18 +81,21 @@ function LoginPageContent() {
   );
   const ssoProviderLabel = ssoSettings?.sso_provider_label || "SSO";
 
-  // Handle SSO redirect token
+  // Handle the SSO redirect: exchange its single-use code for a session (issue 408)
   useEffect(() => {
-    const token = searchParams.get("token");
-    if (token) {
-      localStorage.setItem("ukip_token", token);
-      // Wait a moment for context to catch up or just reload
-      window.location.href = "/";
+    const ssoCode = searchParams.get("sso_code");
+    if (ssoCode && !ssoExchangeStarted.current) {
+      ssoExchangeStarted.current = true;
+      // Drop the code from the address bar and history before spending it.
+      window.history.replaceState(null, "", "/login");
+      loginWithSsoCode(ssoCode)
+        .then(() => router.push("/"))
+        .catch(() => setError(t("auth.login.sso_error")));
     }
     if (searchParams.get("reset_token")) {
       setResetMode("confirm");
     }
-  }, [searchParams]);
+  }, [searchParams, loginWithSsoCode, router, t]);
 
   // Already authenticated → go straight to dashboard
   useEffect(() => {
@@ -212,6 +217,9 @@ function LoginPageContent() {
             {showSsoButton && (
               <>
                 <button
+                  // A full-page navigation on purpose: the backend answers with a
+                  // redirect to the identity provider, which router.push cannot follow.
+                  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
                   onClick={() => window.location.href = `${API_BASE}/sso/login`}
                   className="ukip-focus flex h-12 w-full items-center justify-center gap-3 rounded-full border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:border-violet-200 hover:bg-violet-50 dark:border-white/10 dark:bg-white/5 dark:text-[var(--ukip-text)] dark:hover:bg-violet-500/10"
                 >

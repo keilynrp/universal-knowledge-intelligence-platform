@@ -19,10 +19,10 @@
 ![Rust](https://img.shields.io/badge/Rust-gRPC_Engine-000000?logo=rust&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 <!-- BEGIN GENERATED REPOSITORY METRICS: badge-tests -->
-![Tests](https://img.shields.io/badge/Tests-4371_collected-28A745?logo=pytest&logoColor=white)
+![Tests](https://img.shields.io/badge/Tests-4379_collected-28A745?logo=pytest&logoColor=white)
 <!-- END GENERATED REPOSITORY METRICS: badge-tests -->
 <!-- BEGIN GENERATED REPOSITORY METRICS: badge-api-operations -->
-![API Operations](https://img.shields.io/badge/API_Operations-426-blue)
+![API Operations](https://img.shields.io/badge/API_Operations-427-blue)
 <!-- END GENERATED REPOSITORY METRICS: badge-api-operations -->
 
 UKIP is a research intelligence platform for ingesting, normalizing, enriching, reconciling, exploring, and reporting on knowledge datasets. It is built around a governed semantic canonical layer: source data is profiled, mapped into canonical entities, resolved against authority registries, enriched with evidence, and surfaced through dashboards, graph analytics, and executive reports.
@@ -79,7 +79,7 @@ backend/                 FastAPI API server
   domains/               3 configurable schemas: default, science, healthcare
   scripts/               maintenance + backfills (nif_bayes, work_type, retrospective) + job worker/scheduler entrypoints
 <!-- BEGIN GENERATED REPOSITORY METRICS: tree-backend-tests -->
-  tests/                 330 test files, 4371 tests
+  tests/                 331 test files, 4379 tests
 <!-- END GENERATED REPOSITORY METRICS: tree-backend-tests -->
 frontend/                Next.js 16 App Router
   app/                   65 pages, 90+ components, 8 context providers
@@ -147,7 +147,7 @@ UKIP manages major product and implementation decisions as architecture decision
 | Analytics | pandas, DuckDB, PyArrow, NumPy, SciPy |
 | Background Jobs | Durable PostgreSQL lease queue (broker-free, at-least-once) with worker/scheduler processes |
 <!-- BEGIN GENERATED REPOSITORY METRICS: techstack-testing -->
-| Testing | pytest (4371 tests collected), Vitest (307 tests), Playwright |
+| Testing | pytest (4379 tests collected), Vitest (312 tests), Playwright |
 <!-- END GENERATED REPOSITORY METRICS: techstack-testing -->
 | Deployment | Docker Compose, GHCR images, Dokploy-oriented production compose |
 | Monitoring | Sentry (opt-in), structured logging |
@@ -284,7 +284,7 @@ cd frontend && npx tsc --noEmit
 ```
 
 <!-- BEGIN GENERATED REPOSITORY METRICS: summary-test-stats -->
-**Current test stats:** 4371 backend tests collected across 330 test files. Frontend: 307 Vitest tests.
+**Current test stats:** 4379 backend tests collected across 331 test files. Frontend: 312 Vitest tests.
 <!-- END GENERATED REPOSITORY METRICS: summary-test-stats -->
 
 ---

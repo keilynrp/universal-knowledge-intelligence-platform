@@ -4332,6 +4332,16 @@ export type SourceStatsResponse = {
 };
 
 /**
+ * SsoCodeExchange
+ */
+export type SsoCodeExchange = {
+    /**
+     * Code
+     */
+    code: string;
+};
+
+/**
  * StoreConnectionCreate
  */
 export type StoreConnectionCreate = {
@@ -15353,6 +15363,29 @@ export type GetSsoCallbackData = {
 };
 
 export type GetSsoCallbackResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type PostSsoExchangeData = {
+    body: SsoCodeExchange;
+    path?: never;
+    query?: never;
+    url: '/sso/exchange';
+};
+
+export type PostSsoExchangeErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PostSsoExchangeError = PostSsoExchangeErrors[keyof PostSsoExchangeErrors];
+
+export type PostSsoExchangeResponses = {
     /**
      * Successful Response
      */

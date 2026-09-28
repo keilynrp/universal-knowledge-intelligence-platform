@@ -94,6 +94,7 @@
   "auth.login.slide.universities.metric_label": "Cobertura institucional",
   "auth.login.slide.universities.title": "Convierte producción académica en inteligencia institucional.",
   "auth.login.sso": "Continuar con SSO",
+  "auth.login.sso_error": "El enlace de inicio de sesión SSO caducó o ya se usó. Inténtalo de nuevo.",
   "auth.login.sso_with_provider": "Continuar con {provider}",
   "auth.login.submit": "Entrar a {platform}",
   "auth.login.subtitle": "Inicia sesión en tu cuenta",
