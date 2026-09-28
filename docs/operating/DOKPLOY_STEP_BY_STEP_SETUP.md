@@ -180,6 +180,34 @@ HTTPS:    enabled
 Despues de cambios de dominio, redeploya la aplicacion Compose para que Dokploy
 regenere la configuracion de Traefik.
 
+### 7.1 IP real del cliente detras de Cloudflare (#413)
+
+Cloudflare esta delante del origen, asi que Traefik recibe cada peticion desde
+una IP de Cloudflare. Por defecto Traefik descarta el `X-Forwarded-For` que
+manda Cloudflare y lo sustituye por esa IP, y el backend nunca ve al cliente:
+el audit log, el log de peticiones y los rate limits quedan atados al proxy.
+
+1. En Dokploy, abre la configuracion de Traefik (`traefik.yml`) y agrega a cada
+   entry point publico (normalmente `web` y `websecure`) el bloque
+   `forwardedHeaders` de [`deploy/traefik/forwarded-headers.yml`](../../deploy/traefik/forwarded-headers.yml).
+   Solo rangos de Cloudflare: nunca redes internas.
+2. Reinicia Traefik.
+3. Verifica desde tu propia conexion: abre la pagina del **Audit Log** en UKIP
+   (leer el audit log queda auditado, #375; el login no, porque `/auth/` no se
+   audita) y luego, en la terminal de **ukip-backend** (una sola linea):
+
+   ```bash
+   python -c "import backend.database as d; from sqlalchemy import text; c=d.SessionLocal(); print(c.execute(text(\"SELECT ip_address FROM audit_logs ORDER BY id DESC LIMIT 3\")).all()); c.close()"
+   ```
+
+   Tiene que aparecer tu IP publica (la que muestra, por ejemplo,
+   `https://ifconfig.me`), no una `10.x`, `172.x` ni una de Cloudflare.
+
+El backend ya confia en esos saltos por si solo: `docker/trusted-proxies.txt`
+lista las redes internas y los rangos de Cloudflare, y el entrypoint se la pasa
+a uvicorn. Si Cloudflare publica rangos nuevos, actualiza ese archivo y
+`deploy/traefik/forwarded-headers.yml` juntos (un test exige que coincidan).
+
 ## 8. Ejecutar migracion inicial
 
 Antes de abrir trafico a usuarios, ejecuta una vez:

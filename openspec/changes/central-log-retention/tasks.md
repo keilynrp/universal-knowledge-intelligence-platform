@@ -18,8 +18,10 @@ has chosen the shipper. Group 4 is operator work, and it is what closes gap 3.
       The Traefik access log (4.4) waits for it; nothing else does. **#408.**
       It also found that the frontend never reads the `refresh` token it is
       sent, and that the password-reset link carries its token in the query.
-- [ ] 0.3 Open the issue for the client address, if the query in design open
-      question 2 shows a proxy's address in `audit_logs.ip_address`.
+- [x] 0.3 Open the issue for the client address, if the query in design open
+      question 2 shows a proxy's address in `audit_logs.ip_address`. It did:
+      15 rows in 7 days (2026-09-28), 2 distinct addresses, all private.
+      **#413**, which also found every rate limit keyed on that one address.
 - [ ] 0.4 Owner answers to design open questions 3 (who reads) and 4 (embed
       tokens), recorded in design.md.
 

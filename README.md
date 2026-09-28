@@ -19,7 +19,7 @@
 ![Rust](https://img.shields.io/badge/Rust-gRPC_Engine-000000?logo=rust&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 <!-- BEGIN GENERATED REPOSITORY METRICS: badge-tests -->
-![Tests](https://img.shields.io/badge/Tests-4390_collected-28A745?logo=pytest&logoColor=white)
+![Tests](https://img.shields.io/badge/Tests-4403_collected-28A745?logo=pytest&logoColor=white)
 <!-- END GENERATED REPOSITORY METRICS: badge-tests -->
 <!-- BEGIN GENERATED REPOSITORY METRICS: badge-api-operations -->
 ![API Operations](https://img.shields.io/badge/API_Operations-427-blue)
@@ -79,7 +79,7 @@ backend/                 FastAPI API server
   domains/               3 configurable schemas: default, science, healthcare
   scripts/               maintenance + backfills (nif_bayes, work_type, retrospective) + job worker/scheduler entrypoints
 <!-- BEGIN GENERATED REPOSITORY METRICS: tree-backend-tests -->
-  tests/                 332 test files, 4390 tests
+  tests/                 333 test files, 4403 tests
 <!-- END GENERATED REPOSITORY METRICS: tree-backend-tests -->
 frontend/                Next.js 16 App Router
   app/                   65 pages, 90+ components, 8 context providers
@@ -147,7 +147,7 @@ UKIP manages major product and implementation decisions as architecture decision
 | Analytics | pandas, DuckDB, PyArrow, NumPy, SciPy |
 | Background Jobs | Durable PostgreSQL lease queue (broker-free, at-least-once) with worker/scheduler processes |
 <!-- BEGIN GENERATED REPOSITORY METRICS: techstack-testing -->
-| Testing | pytest (4390 tests collected), Vitest (312 tests), Playwright |
+| Testing | pytest (4403 tests collected), Vitest (312 tests), Playwright |
 <!-- END GENERATED REPOSITORY METRICS: techstack-testing -->
 | Deployment | Docker Compose, GHCR images, Dokploy-oriented production compose |
 | Monitoring | Sentry (opt-in), structured logging |
@@ -284,7 +284,7 @@ cd frontend && npx tsc --noEmit
 ```
 
 <!-- BEGIN GENERATED REPOSITORY METRICS: summary-test-stats -->
-**Current test stats:** 4390 backend tests collected across 332 test files. Frontend: 312 Vitest tests.
+**Current test stats:** 4403 backend tests collected across 333 test files. Frontend: 312 Vitest tests.
 <!-- END GENERATED REPOSITORY METRICS: summary-test-stats -->
 
 ---

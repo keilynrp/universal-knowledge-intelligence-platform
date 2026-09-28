@@ -77,4 +77,10 @@ fi
 # One-time text normalization (fixes mojibake + inline HTML in existing entities)
 python -m backend.scripts.normalize_imported_text || true
 
-exec uvicorn backend.main:app --host 0.0.0.0 --port "${PORT:-8000}"
+# The backend's peer is always a proxy (Cloudflare, Traefik, the Next.js
+# rewrite), so the client address comes from X-Forwarded-For, trusted only from
+# the networks in docker/trusted-proxies.txt (#413).
+FORWARDED_ALLOW_IPS="${FORWARDED_ALLOW_IPS:-$(python -m backend.trusted_proxies)}"
+export FORWARDED_ALLOW_IPS
+
+exec uvicorn backend.main:app --host 0.0.0.0 --port "${PORT:-8000}" --forwarded-allow-ips "$FORWARDED_ALLOW_IPS"
