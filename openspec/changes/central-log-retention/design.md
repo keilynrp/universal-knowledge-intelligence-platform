@@ -66,8 +66,12 @@ bucket already uses.
 Retention multiplies whatever a line leaks by a year.
 
 - **Traefik:** the access log records the request path. It is configured to
-  drop the query string on every router, not only the one known today to carry
-  tokens, so a future URL with a capability is not kept either.
+  drop every query parameter (`accessLog.fields.queryParameters.defaultMode:
+  drop`) on every router, not only the one known today to carry tokens, so a
+  future URL with a capability is not kept either. Headers default to `drop`;
+  only `User-Agent` and `CF-Connecting-IP` are kept. `queryParameters` is a
+  recent Traefik option, so enabling the log waits on checking Dokploy's
+  Traefik version (task 4.4).
 - **The SSO callback** (`backend/routers/auth_users.py`) redirects to
   `/login?token=<access>&refresh=<refresh>`. The refresh token is valid for 7
   days. Dropping query strings keeps it out of the log, but it still lands in

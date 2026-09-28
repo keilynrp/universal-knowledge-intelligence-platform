@@ -38,17 +38,33 @@ has chosen the shipper. Group 4 is operator work, and it is what closes gap 3.
       archive, gzip, hourly objects), a disk buffer, and a heartbeat after
       successful delivery. Credentials only from the environment file,
       never in the repo.
-- [ ] 2.2 Traefik access-log configuration: JSON, query strings dropped on
+- [x] 2.2 Traefik access-log configuration: JSON, query strings dropped on
       every router, request headers other than `User-Agent` dropped, and the
       client address taken from `CF-Connecting-IP` / `X-Forwarded-For` only
       when the request comes from Cloudflare's published ranges (design, open
-      question 2).
+      question 2). `deploy/traefik/access-log.yml`: `queryParameters` and
+      headers default to `drop`; only `User-Agent` and `CF-Connecting-IP` are
+      kept. Traefik's own client field is the connecting address, so the
+      Cloudflare rule is applied when reading: the header counts only when
+      `ClientHost` is in Cloudflare's ranges (stated in the file, and for the
+      runbook in 3.1).
 - [ ] 2.3 Configuration test: parses both files and fails if query strings or
       the `Authorization` header are kept, if a source or sink is missing, or
-      if the heartbeat is not tied to delivery.
-- [ ] 2.4 IAM policy documents for `ukip-log-shipper` (append and put only) and
+      if the heartbeat is not tied to delivery. **Traefik half done**
+      (`backend/tests/test_log_retention_config.py`); the shipper half waits
+      for 1.1.
+- [x] 2.4 IAM policy documents for `ukip-log-shipper` (append and put only) and
       `ukip-log-reader` (query and get only), and a test that the shipper
       policy grants no `Get*`, `Delete*`, `Put*Retention*` or bypass action.
+      `deploy/log-shipper/iam/`. Each also carries an explicit `Deny` for
+      reading or tampering (shipper) and for writing or tampering (reader), so a
+      broader policy attached later cannot quietly restore them. The reader
+      lists the bucket only under `logs/`. The shipper keeps
+      `logs:DescribeLogStreams` (metadata, not log content) because common
+      shippers call it; 1.1 confirms or removes it. The tests fail on each of
+      six deliberate bad edits (query kept, `Authorization` kept, shipper
+      `GetObject`, shipper resource `*`, reader `DeleteObject`, reader listing
+      the whole bucket).
 - [ ] 2.5 systemd unit, restart on failure, running as a dedicated user that
       can read the two log sources and nothing else it does not need.
 
@@ -75,7 +91,13 @@ has chosen the shipper. Group 4 is operator work, and it is what closes gap 3.
 - [ ] 4.3 Install the shipper and the Docker daemon limits; create its
       Healthchecks.io check with the Pushover integration at emergency.
 - [ ] 4.4 After the SSO prerequisite (#408) ships: enable the Traefik access log in
-      Dokploy from the reviewed copy.
+      Dokploy from the reviewed copy. First check that Dokploy's Traefik
+      (`traefik version` in its container) supports
+      `accessLog.fields.queryParameters`, a recent option; on a version without
+      it, do not enable the log, upgrade first. Then request
+      `/login?probe=do-not-keep` and confirm its line shows neither the query
+      nor any `Cookie`/`Authorization`, and that `CF-Connecting-IP` is your
+      own address.
 - [ ] 4.5 Prove it: make a request, redeploy the backend, and find that
       request's line in CloudWatch and, after the hour closes, in S3. Stop the
       shipper and confirm the page arrives. Record both in the tabletop

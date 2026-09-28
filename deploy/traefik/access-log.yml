@@ -1,0 +1,37 @@
+# Reviewed copy of the `accessLog` block for Dokploy's Traefik static
+# configuration (openspec change central-log-retention, task 2.2).
+#
+# Dokploy owns Traefik's configuration: paste this block into it from the
+# Dokploy UI (Traefik → traefik.yml) and restart Traefik. This file is the
+# reviewed source; backend/tests/test_log_retention_config.py fails if it is
+# edited to keep anything it must not.
+#
+# DO NOT enable it before #408 is deployed and a real SSO sign-in has been
+# checked: until then the SSO redirect carried tokens in its URL.
+#
+# What is kept, and why:
+#   - No query string, on any router. Whatever a URL carries (a sign-in code, a
+#     reset token, a future capability) is not kept for a year.
+#   - No request header except User-Agent and CF-Connecting-IP. Cookies and
+#     Authorization never reach the log.
+#   - ClientHost is the address that connected to Traefik, which is Cloudflare's
+#     edge for proxied traffic. CF-Connecting-IP is the client's address as
+#     Cloudflare saw it. Believe the header only when ClientHost is inside
+#     Cloudflare's published ranges: a request that reached the origin directly
+#     can set the header to anything.
+#
+# Output goes to Traefik's stdout, where the log shipper reads it from Docker.
+
+accessLog:
+  format: json
+  fields:
+    defaultMode: keep
+    names:
+      ClientUsername: drop
+    headers:
+      defaultMode: drop
+      names:
+        User-Agent: keep
+        CF-Connecting-IP: keep
+    queryParameters:
+      defaultMode: drop
