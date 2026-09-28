@@ -339,6 +339,14 @@ Recorded here so nobody discovers them mid-incident:
    in a multi-tenant incident.
 8. **Backup evidence ingestion is manual** (#370), so a stale-backup alert may
    mean "nobody recorded it" rather than "no backup exists". Check both.
+   **In code since 2026-09-27** (#401): an hourly recorder on the host lists the
+   newest backup of each scope, checks the download's size and digest, and
+   writes evidence that the ops monitor ingests before judging freshness, with
+   no application credential. It stays open until the recorder is installed
+   with its read-only credential and a first automatic cycle has kept
+   `backup_freshness` `ok` for a day without manual recording
+   ([BACKUP_RESTORE_RUNBOOK.md §5c](BACKUP_RESTORE_RUNBOOK.md)). Until then,
+   check both.
 9. ~~**Reads are not audited**~~ **Closed 2026-09-24** (#375). Exports, reads
    of the audit log, API-key reads and bulk reads are audited with the session
    or key behind them (§7). What remains is by design: an ordinary first-page
@@ -354,8 +362,9 @@ Recorded here so nobody discovers them mid-incident:
     (#378, #384). The list, the CSV export and the counters all take
     `ip_address`, and every address in the audit-log timeline pivots to
     everything that came from it. What remains is the reach of the audit log
-    itself: an address that only read shows nothing there until reads are
-    audited (gap 9).
+    itself: an address that only made ordinary reads, outside the audited
+    classes (gap 9), shows nothing there, and is traceable only through the
+    request log while it survives (gap 3).
 
 ## 12. Maintenance
 
