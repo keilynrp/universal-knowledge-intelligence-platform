@@ -32,8 +32,11 @@ repeats the pattern the owner already accepted for backup evidence (#370): a
 host service with its own narrow credential, installed from files reviewed in
 this repo.
 
-It reads the Docker log files as they are written and keeps its read position
-on disk. A deploy that recreates `ukip-backend` loses only what the shipper had
+It reads `ukip-backend`'s Docker log file and Traefik's access-log file
+(`/etc/dokploy/traefik/dynamic/access.log`, which Dokploy already writes for its
+"Requests" view) as they are written, and keeps its read position on disk.
+Traefik's log stays in that file rather than moving to stdout, so Dokploy's
+view keeps working. A deploy that recreates `ukip-backend` loses only what the shipper had
 not yet read, which is seconds, not the time since the last merge.
 
 ## Decision 2: two tiers, two stores
