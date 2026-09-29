@@ -59,6 +59,16 @@ TDD throughout. Sections 1–3 are backend and can ship as one PR; 4 is the UI;
       to `ops.check_failed`, create the Healthchecks.io check (period = monitor
       interval, grace = 2 intervals, Pushover integration at emergency), set
       `UKIP_OPS_HEARTBEAT_URL`.
-- [ ] 5.3 **Operator:** test the channel with the phone in Do Not Disturb and
+- [x] 5.3 **Operator:** test the channel with the phone in Do Not Disturb and
       confirm it rings; stop the backend container and confirm Healthchecks.io
       pages; record both in the tabletop follow-up. Then close #377.
+      Both paths woke the operator's phone on 2026-09-29: the Pushover
+      channel's test at 21:36 UTC rang through Do Not Disturb, repeated
+      and was acknowledged; with the monitor switched off
+      (`UKIP_OPS_MONITOR_ENABLED=0`, the app kept serving),
+      Healthchecks.io paged after 15 minutes (5-minute period plus
+      10-minute grace), again through Do Not Disturb (reported 22:29 UTC).
+      Re-enabling the monitor brought the check back up within one cycle.
+      The heartbeat test switched the monitor off instead of stopping the
+      container: the same silence reaches Healthchecks.io, and the app stayed
+      up. Recorded in `INCIDENT_TABLETOP_2026-09-22.md`.
