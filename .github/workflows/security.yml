@@ -48,7 +48,7 @@ jobs:
         # --no-deps: requirements.lock is a flat freeze (no hashes); pip
         # resolver is disabled via --disable-pip so no network lookup needed.
         #
-        # Five entries, down from 33 at gate introduction. The old list
+        # Six entries, down from 33 at gate introduction. The old list
         # deferred most of its entries to "the upgrade sprint"; #202 was
         # that sprint, and the resulting versions reached or passed every
         # fix version the baseline recorded, so 31 flags were suppressing
@@ -63,6 +63,10 @@ jobs:
         # CVE-2026-45830/45831/45833), pip-audit's own canonical ID *is* the
         # CVE — the PyPA advisory DB has no PYSEC entry for them yet — so
         # these three are pip-audit's real output, not an alias regression.
+        # CVE-2026-49265 (oauthlib, 2026-09-29) arrives only through
+        # chromadb -> kubernetes -> requests-oauthlib, none of which the
+        # backend image installs, and it sits in oauthlib's OAuth *server*
+        # PKCE check, which UKIP never runs (its SSO is an Authlib client).
         # See docs/operating/SECURITY_GATES.md §7e for full disposition.
         run: >-
           pip-audit -r requirements.lock --disable-pip --no-deps
@@ -71,6 +75,7 @@ jobs:
           --ignore-vuln CVE-2026-45830
           --ignore-vuln CVE-2026-45831
           --ignore-vuln CVE-2026-45833
+          --ignore-vuln CVE-2026-49265
 
   # ── Frontend dependency audit (blocking; allowlist via wrapper) ─────────
   npm-audit:

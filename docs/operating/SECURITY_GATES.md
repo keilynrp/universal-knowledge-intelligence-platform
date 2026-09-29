@@ -312,7 +312,7 @@ per-advisory disposition.
 
 ### 7e. pip-audit baseline (`--ignore-vuln` flags in `.github/workflows/security.yml`)
 
-**5 vulnerability IDs ignored** (down from 33 at gate introduction). Owner:
+**6 vulnerability IDs ignored** (down from 33 at gate introduction). Owner:
 platform owner. SLA: next dependency-upgrade window (review by 2026-09-30).
 
 The previous baseline deferred most entries to "the upgrade sprint", noting in
@@ -347,6 +347,35 @@ re-verified by running the tool rather than assumed.
 | CVE-2026-45830 | chromadb==1.5.2 | none published | 2026-09-30 |
 | CVE-2026-45831 | chromadb==1.5.2 | none published | 2026-09-30 |
 | CVE-2026-45833 | chromadb==1.5.2 | none published | 2026-09-30 |
+| CVE-2026-49265 | oauthlib==3.3.1 | 4.0.0 (major) | 2026-10-31 |
+
+**2026-09-29 review: oauthlib, CVE-2026-49265 (GHSA-xpv3-w29h-x7cv).** A
+timing side channel in `oauthlib`'s PKCE `code_verifier` comparison
+(`oauth2/rfc6749/grant_types/authorization_code.py`, CWE-208), fixed in 4.0.0.
+It turned every PR red on the day it was published. Ignored, for two
+independent reasons:
+
+1. **Not shipped.** `oauthlib` is lock-only, reached only through
+   `chromadb` -> `kubernetes` -> `requests-oauthlib`. A `pip install --dry-run
+   --report -r requirements.txt -c requirements.lock` on 2026-09-29 resolved 97
+   packages without `oauthlib`, `requests-oauthlib`, `kubernetes` or
+   `chromadb` (run on Python 3.12; the image uses 3.13).
+2. **Not reachable.** The flaw is in the authorization *server* verifying a
+   PKCE verifier. UKIP issues no OAuth authorization codes; its SSO is an
+   OAuth *client* built on Authlib, and nothing in `backend/` imports
+   `oauthlib`.
+
+The fix is a major version under a transitive dependency of a package the
+image does not install, so it waits for `requests-oauthlib`/`kubernetes` to
+accept 4.x rather than being forced into the lock. Review by 2026-10-31.
+
+Re-verified with pip-audit 2.10.1: without ignores it reports the rows above;
+with all six flags, `No known vulnerabilities found, 8 ignored`. It also shows
+drift for the next review (2026-09-30): pip-audit now emits the three chromadb
+findings as `PYSEC-2026-3813/3814/3815`, not the CVE IDs the flags use. The
+flags still hold them, matched through aliases, which is exactly the silent
+failure mode described above; switching those three flags to the canonical
+IDs belongs to that review.
 
 Note that `chromadb` is a lock-only entry: it constrains dev installs but is not
 among the packages the backend image installs (`pip install -r requirements.txt
