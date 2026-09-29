@@ -94,10 +94,9 @@ What actually reaches a human today:
 | Dokploy | Deploy failures, container restarts | Its own UI |
 | Customer report | Everything nobody instrumented | Email |
 
-**Known detection gaps.** Paging exists in code (#377) but pages nobody until
-the Pushover channel and the Healthchecks.io check are set up and each has been
-tested on the phone ([PAGING_RUNBOOK.md](PAGING_RUNBOOK.md)); until then a SEV1 at 03:00 still waits
-for someone to look at Slack. Only two checks page, and nothing detects
+**Known detection gaps.** Paging is live since 2026-09-29, and both paths have
+woken the phone in a test ([PAGING_RUNBOOK.md](PAGING_RUNBOOK.md)). One person
+receives every page (gap 1). Only two checks page, and nothing detects
 unauthorized access on its own (gap 6). No central log retention: the backend's
 container log is ephemeral and disappears with the container, which is why
 capturing it is the first evidence step below; Traefik's access log survives
@@ -338,14 +337,14 @@ Recorded here so nobody discovers them mid-incident:
    Accepted by the owner on 2026-09-22 as what the current team can commit to,
    and revisited when funding and staffing allow a second responder. It is also
    why the notification commitment is 72 hours rather than 24.
-2. **No paging** (#377). Alerts reach Slack and the container log; nothing
-   wakes anyone up. Measured in the 2026-09-22 tabletop: **6 h 22 min** from
-   exposure to detection, overnight, and the report came from a third party.
-   **In code since 2026-09-26** (§4): Pushover emergency pages for `database`
-   and `migrations` critical, and a Healthchecks.io dead man's switch for the
-   monitor itself. It stays open until both are installed and have woken the
-   phone in a test. What remains after that is narrower: one person receives
-   every page (gap 1), and only availability pages, not access (gap 6).
+2. ~~**No paging** (#377).~~ **Closed 2026-09-29.** The 2026-09-22 tabletop
+   measured **6 h 22 min** from exposure to detection, overnight, reported by a
+   third party. Now `database` and `migrations` critical page through Pushover
+   at emergency priority, and a Healthchecks.io dead man's switch pages when
+   the monitor itself goes silent (§4). Both woke the phone through Do Not
+   Disturb in a test (INCIDENT_TABLETOP_2026-09-22.md, corrective action
+   status). What remains is narrower: one person receives every page (gap 1),
+   and only availability pages, not access (gap 6).
 3. **No central log retention.** The backend's container log is ephemeral, so
    early capture is the only way to keep it, and for ordinary reads outside the
    audited classes (gap 9) it is the only record that the read happened at all.

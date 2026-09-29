@@ -68,9 +68,9 @@ and maintain administrative, technical, and physical security measures. The
 implemented measures and their evidence are documented in
 [PRIVACY_CONTROLS_OVERVIEW.md](PRIVACY_CONTROLS_OVERVIEW.md), including an
 honest register of measures not yet in place. Of the corrective actions from
-the first incident-response exercise of 2026-09-22, read auditing (#375) and
-attributable request logs (#376) are in place; a paging path is implemented
-(#377) and awaits its installation and test on the operator's phone. Still
+the first incident-response exercise of 2026-09-22, read auditing (#375),
+attributable request logs (#376) and a paging path (#377, tested on the
+operator's phone on 2026-09-29) are in place. Still
 open: retention of request logs beyond the container, an external pentest,
 data residency, and a passing restore drill.
 

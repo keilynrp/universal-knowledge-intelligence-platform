@@ -31,7 +31,7 @@ prefer an honest register over an impressive one.
 
 | Open item | Tracking ID | Status |
 |-----------|-------------|--------|
-| Incident response capability (incl. breach-notification SLA backing) | ER-IR-001 | Partial — the plan is published, its authority and 72-hour notification commitment were decided on 2026-09-22, and it was first exercised on 2026-09-22. Of that exercise's corrective actions, read auditing and attributable request logs are in place (#375, #376); paging is implemented but not yet installed and tested (#377); request logs are still not retained beyond the container (plan §11 gap 3, `central-log-retention`) |
+| Incident response capability (incl. breach-notification SLA backing) | ER-IR-001 | Partial — the plan is published, its authority and 72-hour notification commitment were decided on 2026-09-22, and it was first exercised on 2026-09-22. Of that exercise's corrective actions, read auditing, attributable request logs and a paging path are in place and tested (#375, #376, #377); request logs are still not retained beyond the container (plan §11 gap 3, `central-log-retention`) |
 | External penetration test | ER-ASSURE-001 | Open — no third-party assessment report available yet |
 | Data residency commitments | ER-DEP-001 | Open — residency follows hosting region; no contractual commitment defined |
 | A passing isolated restore drill | US-073 / ER-BCP-001 | Pending — provider configured and two backup cycles evidenced; the first isolated restore drill (2026-09-21) is recorded as failed and its dossier was approved on 2026-09-21; a passing drill remains |

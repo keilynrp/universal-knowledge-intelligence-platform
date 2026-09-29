@@ -100,10 +100,10 @@ Added after the exercise; the record above is left as it was written.
 | Gap | Status |
 |---|---|
 | Per-session revocation (#368 phase C.3) | **Closed 2026-09-23.** Tokens carry a `sid` naming their session, every request resolves the user through it, and a session can be revoked alone — including the operator's own, which deactivation refuses. Plan §5.3 |
-| Reads are not audited (#375) | Open |
-| Request log has no identity (#376) | Open |
-| Nothing pages (#377) | Open |
-| No `ip_address` filter on the audit log (#378) | Open |
+| Reads are not audited (#375) | **Closed 2026-09-24** (#395). Exports, audit-log reads, API-key reads and bulk reads are audited with their session or key. Ordinary first-page reads are not, by design (plan §7) |
+| Request log has no identity (#376) | **Closed 2026-09-24** (#387). Each authenticated line names the user and the session or API key. Its `client_ip` names the client only since 2026-09-29 (#413) |
+| Nothing pages (#377) | **Closed 2026-09-29.** Both paths woke the operator's phone on 2026-09-29: the Pushover channel's test at 21:36 UTC rang through Do Not Disturb, repeated and was acknowledged; with the monitor switched off (`UKIP_OPS_MONITOR_ENABLED=0`, the app kept serving), Healthchecks.io paged after 15 minutes (5-minute period plus 10-minute grace), again through Do Not Disturb (reported 22:29 UTC). Re-enabling the monitor brought the check back up within one cycle. |
+| No `ip_address` filter on the audit log (#378) | **Closed 2026-09-24** (#384). The addresses it filters on are the client's only from 2026-09-29 03:57 UTC (#413); earlier rows carry a proxy's |
 | Blast radius undeterminable (ER-BCP-001 residual risk 1) | Open |
 
 ## What was verified to work
