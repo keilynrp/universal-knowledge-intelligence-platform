@@ -73,7 +73,7 @@ operating documentation, except where explicitly marked otherwise.
 |---------|----------------|----------|
 | Tenant isolation | `org_id` scoping enforced across API routers, gap analysis, agentic registry, and ChromaDB vector retrieval; legacy-data sentinel for pre-migration rows | EPIC-012, PRs #30/#33/#35/#36/#37; regression suites incl. `backend/tests/test_issue31_gap_analyzer_org_scope.py`, `backend/tests/test_issue32_agentic_tenant_context.py` |
 | Encryption at rest (credentials) | Third-party store and AI-integration credentials encrypted with Fernet (AES-128-CBC + HMAC-SHA256), wrapped in MultiFernet for zero-downtime key rotation | `backend/encryption.py` |
-| Encryption in transit | TLS termination at Cloudflare (edge) and Traefik (origin) | Deployment configuration (Dokploy) |
+| Encryption in transit | TLS termination at Traefik on the VPS, with Let's Encrypt certificates; no CDN or proxy in front | Deployment configuration (Dokploy); `deploy/traefik/entrypoints.yml` |
 | Authentication | JWT-based authentication; account lockout after 5 failed attempts for 15 minutes | `backend/auth.py` |
 | Authorization | Role-based access control: super_admin / admin / editor / viewer, enforced per endpoint | `backend/auth.py` (`require_role`), router dependencies |
 | Audit logging | Audit log of security-relevant actions; data-lifecycle operations record `DataLifecycleEvent` audit evidence | `GET /admin/data-lifecycle/events`; audit log module |

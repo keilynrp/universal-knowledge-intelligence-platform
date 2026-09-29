@@ -180,33 +180,55 @@ HTTPS:    enabled
 Despues de cambios de dominio, redeploya la aplicacion Compose para que Dokploy
 regenere la configuracion de Traefik.
 
-### 7.1 IP real del cliente detras de Cloudflare (#413)
+### 7.1 IP real del cliente (#413)
 
-Cloudflare esta delante del origen, asi que Traefik recibe cada peticion desde
-una IP de Cloudflare. Por defecto Traefik descarta el `X-Forwarded-For` que
-manda Cloudflare y lo sustituye por esa IP, y el backend nunca ve al cliente:
-el audit log, el log de peticiones y los rate limits quedan atados al proxy.
+Traefik es el borde: el DNS apunta directo al VPS, sin CDN ni proxy delante
+(comprobado el 2026-09-29: servidores DNS de Namecheap). Por eso:
 
-1. En Dokploy, abre la configuracion de Traefik (`traefik.yml`) y agrega a cada
-   entry point publico (normalmente `web` y `websecure`) el bloque
-   `forwardedHeaders` de [`deploy/traefik/forwarded-headers.yml`](../../deploy/traefik/forwarded-headers.yml).
-   Solo rangos de Cloudflare: nunca redes internas.
-2. Reinicia Traefik.
-3. Verifica desde tu propia conexion: abre la pagina del **Audit Log** en UKIP
-   (leer el audit log queda auditado, #375; el login no, porque `/auth/` no se
-   audita) y luego, en la terminal de **ukip-backend** (una sola linea):
+- **Traefik no lleva `forwardedHeaders`** en sus entry points
+  ([`deploy/traefik/entrypoints.yml`](../../deploy/traefik/entrypoints.yml)).
+  Asi descarta cualquier `X-Forwarded-For` que llegue de internet y pone en su
+  lugar la IP que se conecto, que es la del cliente. Agregar `trustedIPs` (o
+  `insecure: true`) dejaria que cualquiera enviando desde esos rangos eligiera
+  la IP con la que queda registrado.
+- **El backend confia en esa cabecera solo desde las redes internas de Docker**
+  (`docker/trusted-proxies.txt`), que el entrypoint le pasa a uvicorn.
 
-   ```bash
-   python -c "import backend.database as d; from sqlalchemy import text; c=d.SessionLocal(); print(c.execute(text(\"SELECT ip_address FROM audit_logs ORDER BY id DESC LIMIT 3\")).all()); c.close()"
-   ```
+Verificacion: abre la pagina del **Audit Log** en UKIP (leerlo queda auditado,
+#375; el login no, porque `/auth/` no se audita) y luego, en la terminal de
+**ukip-backend** (una sola linea):
 
-   Tiene que aparecer tu IP publica (la que muestra, por ejemplo,
-   `https://ifconfig.me`), no una `10.x`, `172.x` ni una de Cloudflare.
+```bash
+python -c "import backend.database as d; from sqlalchemy import text; c=d.SessionLocal(); print(c.execute(text(\"SELECT ip_address FROM audit_logs ORDER BY id DESC LIMIT 3\")).all()); c.close()"
+```
 
-El backend ya confia en esos saltos por si solo: `docker/trusted-proxies.txt`
-lista las redes internas y los rangos de Cloudflare, y el entrypoint se la pasa
-a uvicorn. Si Cloudflare publica rangos nuevos, actualiza ese archivo y
-`deploy/traefik/forwarded-headers.yml` juntos (un test exige que coincidan).
+Tiene que aparecer tu IP publica (la que muestra `https://ifconfig.me`), no una
+`10.x`, `172.x` ni `192.168.x`. Comprobado el 2026-09-29.
+
+Si algun dia se pone un CDN o proxy delante (por ejemplo Cloudflare con la nube
+naranja), sus rangos van en `docker/trusted-proxies.txt` **y** en
+`forwardedHeaders.trustedIPs` de Traefik, a la vez, y los tests de
+`backend/tests/test_client_ip_behind_proxies.py` hay que revisarlos.
+
+### 7.2 Mantener Traefik al dia
+
+Dokploy fija la version de Traefik al instalarse y **nunca la actualiza**, ni
+al actualizar Dokploy. Produccion corria 3.6.7 (enero de 2026) hasta el
+2026-09-29, 18 versiones de parche por detras; ahora corre **3.6.25**.
+
+Revisala cada trimestre, o cuando Traefik publique un aviso de seguridad:
+
+1. Version actual: `docker exec dokploy-traefik traefik version`.
+2. Ultima publicada de la misma rama **en Docker Hub** (no en el changelog: la
+   3.6.26 aparecia en el changelog sin imagen publicada):
+   `https://hub.docker.com/r/library/traefik/tags?name=v3.6`.
+3. Actualiza con el procedimiento de Dokploy: copia de seguridad de
+   `/etc/dokploy/traefik`, `docker pull`, y recrear `dokploy-traefik` con los
+   mismos volumenes y puertos (80/tcp, 443/tcp, 443/udp) y conectarlo a
+   `dokploy-network`. Todo encadenado con `&&`, para que un `pull` fallido no
+   borre el contenedor actual.
+4. Verifica: version, la app y la API por HTTPS, `docker logs dokploy-traefik
+   --tail 30`, y la IP del paso 7.1.
 
 ## 8. Ejecutar migracion inicial
 

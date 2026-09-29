@@ -41,15 +41,11 @@ has chosen the shipper. Group 4 is operator work, and it is what closes gap 3.
       successful delivery. Credentials only from the environment file,
       never in the repo.
 - [x] 2.2 Traefik access-log configuration: JSON, query strings dropped on
-      every router, request headers other than `User-Agent` dropped, and the
-      client address taken from `CF-Connecting-IP` / `X-Forwarded-For` only
-      when the request comes from Cloudflare's published ranges (design, open
-      question 2). `deploy/traefik/access-log.yml`: `queryParameters` and
-      headers default to `drop`; only `User-Agent` and `CF-Connecting-IP` are
-      kept. Traefik's own client field is the connecting address, so the
-      Cloudflare rule is applied when reading: the header counts only when
-      `ClientHost` is in Cloudflare's ranges (stated in the file, and for the
-      runbook in 3.1).
+      every router, request headers other than `User-Agent` dropped.
+      `deploy/traefik/access-log.yml`. Traefik is the edge (no CDN in front,
+      checked 2026-09-29), so `ClientHost` is the client and no forwarded
+      header is kept or trusted; an earlier version kept `CF-Connecting-IP`
+      on the wrong belief that Cloudflare proxied the origin.
 - [ ] 2.3 Configuration test: parses both files and fails if query strings or
       the `Authorization` header are kept, if a source or sink is missing, or
       if the heartbeat is not tied to delivery. **Traefik half done**
@@ -92,22 +88,23 @@ has chosen the shipper. Group 4 is operator work, and it is what closes gap 3.
 - [ ] 4.2 Create both principals from the policy documents.
 - [ ] 4.3 Install the shipper and the Docker daemon limits; create its
       Healthchecks.io check with the Pushover integration at emergency.
-- [ ] 4.4 Correct Traefik's access log, which is already on (Dokploy's default,
-      found 2026-09-28: every request over 10 ms, query strings kept, to
-      `/etc/dokploy/traefik/dynamic/access.log`).
-      1. Check that Dokploy's Traefik (`traefik version` in its container)
-         supports `accessLog.fields.queryParameters`, a recent option. If not,
-         upgrade Traefik first: without it the reviewed block cannot drop query
-         strings.
-      2. Replace the `accessLog` block in Dokploy's `traefik.yml` with the
-         reviewed copy (same file, every request, no query strings, only
-         `User-Agent` and `CF-Connecting-IP` headers) and restart Traefik.
-      3. Request `/login?probe=do-not-keep` and confirm its line shows neither
-         the query nor any `Cookie`/`Authorization`, and that
-         `CF-Connecting-IP` is your own address.
-      4. Truncate the old lines (`: > access.log`), which hold query strings
-         from before. The reset tokens in them are spent or expired; the file
-         should still not keep them.
+- [x] 4.4 Correct Traefik's access log, which was already on (Dokploy's default:
+      only requests over 10 ms, query strings kept, to
+      `/etc/dokploy/traefik/dynamic/access.log`). Done 2026-09-29:
+      1. Traefik was 3.6.7, without `queryParameters` (added in 3.6.19).
+         Upgraded to 3.6.25 by recreating `dokploy-traefik` with the same
+         volumes and ports, after a backup of `/etc/dokploy/traefik`. 3.6.26
+         was in the changelog but not on Docker Hub; the first attempt failed
+         at `docker pull` and, chained with `&&`, touched nothing.
+      2. Replaced the `accessLog` block with the reviewed copy.
+      3. Probe `/login?probe=do-not-keep&token=fake-secret-value` with a
+         marked User-Agent and a cookie: logged as `"RequestPath":"/login"`,
+         no cookie, `ClientHost` the operator's own address; 0 lines anywhere
+         in the file with `probe=`, `fake-secret` or the cookie. It took
+         6.6 ms, so the old 10 ms filter would have dropped it.
+      4. Truncated the old lines and sent Traefik `USR1`; it resumed writing
+         at the start of the file (124 lines after 110 requests, first byte
+         `{`).
 - [ ] 4.5 Prove it: make a request, redeploy the backend, and find that
       request's line in CloudWatch and, after the hour closes, in S3. Stop the
       shipper and confirm the page arrives. Record both in the tabletop

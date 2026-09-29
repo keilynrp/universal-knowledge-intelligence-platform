@@ -14,7 +14,6 @@ customer enables the corresponding feature.
 | Name | Purpose | Data categories | Location | Status |
 |------|---------|-----------------|----------|--------|
 | `[OPERATOR TO FILL: VPS/hosting provider name]` | Hosting of the production VPS (Dokploy, FastAPI backend, Next.js frontend, Rust engine (optional acceleration component, disabled when ENGINE_GRPC_URL is not configured), PostgreSQL, ChromaDB, Redis) | All customer data processed by the platform | `[OPERATOR TO FILL: region]` | Active — core infrastructure |
-| Cloudflare | DNS and TLS reverse proxy in front of the origin | Traffic metadata (IP addresses, request headers); payloads transit encrypted through the proxy | Global edge network | Active — core infrastructure |
 | GitHub / GHCR (Microsoft) | Source code hosting, CI/CD, container image registry | Source code and container images only — **no customer data** | United States (global) | Active — development infrastructure |
 | Amazon Web Services (S3) | Off-site storage of encrypted PostgreSQL and `ukip_static_data` backups for the RPO 24h / RTO 4h recovery objective | Encrypted database backups plus customer branding and persistent static uploads from `ukip_static_data` | United States (`us-east-2`) | Active — backups (SSE-S3, TLS-only bucket policy, Object Lock `GOVERNANCE`; see [ER-BCP-001 evidence](../operating/ER-BCP-001-READINESS-EVIDENCE-2026-09-21.md)) |
 | Pushover | Pages the on-call operator's phone for SEV1/SEV2 operational alerts (#377) | Operational alert text only: check names, status and counts. **No customer data** while the channel is subscribed to `ops.check_failed` alone, as the [paging runbook](../operating/PAGING_RUNBOOK.md) sets it up; subscribing it to workspace events (imports, reports) would send their summaries too | `[OPERATOR TO FILL: provider region]` | Active once configured — operational alerting |
@@ -30,6 +29,11 @@ Notes:
   and receives public records back; they do not process customer data on the
   operator's behalf. They are documented as recipients in
   [ROPA.md](ROPA.md) activity 2 for transparency.
+- DNS for the platform's domains is served by the domain registrar's nameservers
+  (Namecheap), with records pointing straight at the VPS: no CDN or reverse
+  proxy sits in front of the origin, and TLS terminates at Traefik on the VPS.
+  DNS resolution carries no customer data, so the registrar is not a
+  sub-processor.
 - No entry in this register is invented: provider-specific values the
   engineering team cannot attest to are left as `[OPERATOR TO FILL]`.
 - **Provider configured and two scheduled backup cycles evidenced; the first isolated restore drill (2026-09-21) restored the backup within RTO but failed two required checks (RPO of the chosen recovery point, tenant isolation) and is recorded as failed; the owner approved the readiness dossier on 2026-09-21.**
@@ -38,7 +42,7 @@ Notes:
 
 | Item | Value |
 |------|-------|
-| Last reviewed | 2026-09-28 |
+| Last reviewed | 2026-09-29 |
 | Review cadence | Quarterly |
 | Change-notice process | Customers are notified in writing before a sub-processor is added or replaced, with an objection window per Section 8 of [DPA_BASELINE.md](DPA_BASELINE.md). Changes are recorded in this file's git history. |
 
@@ -47,4 +51,5 @@ Notes:
 | Date | Change |
 |------|--------|
 | 2026-06-11 | Initial register created (EPIC-020, Task 12). |
+| 2026-09-29 | Cloudflare removed: it was listed from the template as "DNS and TLS reverse proxy in front of the origin", but the platform's domains resolve through the registrar's nameservers (Namecheap) straight to the VPS, and a production request log showed the client connecting to Traefik directly. It never received customer traffic. |
 | 2026-09-28 | S3 row filled from the ER-BCP-001 evidence (AWS S3, `us-east-2`, active). Pushover and Healthchecks.io added for operational paging (#377); they receive no customer data, so, like GitHub, their addition needs no advance customer notice. |

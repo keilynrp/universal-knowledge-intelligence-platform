@@ -15,7 +15,7 @@ prefer an honest register over an impressive one.
 |---------|----------------|------------------|
 | Tenant isolation | `org_id` enforced across API routers, gap analysis, agentic registry, and ChromaDB vector retrieval | EPIC-012; PRs #30, #33, #35, #36, #37; regression suites incl. `backend/tests/test_issue31_gap_analyzer_org_scope.py`, `backend/tests/test_issue32_agentic_tenant_context.py` |
 | Credential encryption at rest | Fernet (AES-128-CBC + HMAC-SHA256) wrapped in MultiFernet for zero-downtime key rotation | `backend/encryption.py` |
-| Encryption in transit | TLS via Cloudflare (edge) + Traefik (origin) | Dokploy deployment configuration |
+| Encryption in transit | TLS terminated by Traefik on the VPS, with Let's Encrypt certificates; no CDN or proxy in front | Dokploy deployment configuration; `deploy/traefik/entrypoints.yml` |
 | Authentication & authorization | JWT + RBAC (super_admin/admin/editor/viewer); account lockout 5 attempts / 15 min | `backend/auth.py`; per-endpoint `require_role` dependencies |
 | Audit logging | Every mutation, and the reads that matter (exports, reads of the audit log, API-key reads, bulk reads), each naming the user and the session or API key behind it; `DataLifecycleEvent` evidence on export/delete operations; request log lines carry the same identity | #375, #376; `GET /audit-log` (filter by `session_id`, `ip_address`); `GET /admin/data-lifecycle/events` (admin-only) |
 | DSAR export (access/portability) | Org-scoped portable JSON export with audit evidence | EPIC-016 Slice 2 (PR #41); `POST /admin/data-lifecycle/export` |

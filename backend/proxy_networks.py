@@ -1,7 +1,7 @@
 """The hops allowed to set X-Forwarded-For for the backend (#413).
 
-Behind Cloudflare, Traefik and the Next.js rewrite, the backend's TCP peer is
-always a proxy, so ``request.client.host`` named a proxy for every request:
+Behind Traefik and the Next.js rewrite, the backend's TCP peer is always a
+proxy, so ``request.client.host`` named a proxy for every request:
 the audit log's ``ip_address``, the request log's ``client_ip`` and every rate
 limit were keyed on one or two private addresses. uvicorn can take the client
 from ``X-Forwarded-For`` instead, trusting it only from the networks listed in

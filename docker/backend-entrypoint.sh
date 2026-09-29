@@ -77,9 +77,9 @@ fi
 # One-time text normalization (fixes mojibake + inline HTML in existing entities)
 python -m backend.scripts.normalize_imported_text || true
 
-# The backend's peer is always a proxy (Cloudflare, Traefik, the Next.js
-# rewrite), so the client address comes from X-Forwarded-For, trusted only from
-# the networks in docker/trusted-proxies.txt (#413).
+# The backend's peer is always a proxy (Traefik, the Next.js rewrite), so the
+# client address comes from X-Forwarded-For, trusted only from the internal
+# networks in docker/trusted-proxies.txt (#413).
 FORWARDED_ALLOW_IPS="${FORWARDED_ALLOW_IPS:-$(python -m backend.proxy_networks)}"
 export FORWARDED_ALLOW_IPS
 
