@@ -75,6 +75,16 @@ class TestTraefikAccessLog:
     def test_it_is_json(self, access_log):
         assert access_log["format"] == "json"
 
+    def test_it_stays_in_the_file_dokploy_reads(self, access_log):
+        # Dokploy's "Requests" view reads this file; moving the log to stdout
+        # would break it, and the shipper follows the same file.
+        assert access_log["filePath"] == "/etc/dokploy/traefik/dynamic/access.log"
+
+    def test_every_request_is_logged(self, access_log):
+        # Dokploy's default keeps only requests over 10 ms or retried; a fast
+        # request is still an access.
+        assert not access_log.get("filters")
+
     def test_no_query_parameter_is_kept(self, access_log):
         query = access_log["fields"]["queryParameters"]
         assert query["defaultMode"] == "drop"

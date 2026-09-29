@@ -92,14 +92,22 @@ has chosen the shipper. Group 4 is operator work, and it is what closes gap 3.
 - [ ] 4.2 Create both principals from the policy documents.
 - [ ] 4.3 Install the shipper and the Docker daemon limits; create its
       Healthchecks.io check with the Pushover integration at emergency.
-- [ ] 4.4 After the SSO prerequisite (#408) ships: enable the Traefik access log in
-      Dokploy from the reviewed copy. First check that Dokploy's Traefik
-      (`traefik version` in its container) supports
-      `accessLog.fields.queryParameters`, a recent option; on a version without
-      it, do not enable the log, upgrade first. Then request
-      `/login?probe=do-not-keep` and confirm its line shows neither the query
-      nor any `Cookie`/`Authorization`, and that `CF-Connecting-IP` is your
-      own address.
+- [ ] 4.4 Correct Traefik's access log, which is already on (Dokploy's default,
+      found 2026-09-28: every request over 10 ms, query strings kept, to
+      `/etc/dokploy/traefik/dynamic/access.log`).
+      1. Check that Dokploy's Traefik (`traefik version` in its container)
+         supports `accessLog.fields.queryParameters`, a recent option. If not,
+         upgrade Traefik first: without it the reviewed block cannot drop query
+         strings.
+      2. Replace the `accessLog` block in Dokploy's `traefik.yml` with the
+         reviewed copy (same file, every request, no query strings, only
+         `User-Agent` and `CF-Connecting-IP` headers) and restart Traefik.
+      3. Request `/login?probe=do-not-keep` and confirm its line shows neither
+         the query nor any `Cookie`/`Authorization`, and that
+         `CF-Connecting-IP` is your own address.
+      4. Truncate the old lines (`: > access.log`), which hold query strings
+         from before. The reset tokens in them are spent or expired; the file
+         should still not keep them.
 - [ ] 4.5 Prove it: make a request, redeploy the backend, and find that
       request's line in CloudWatch and, after the hour closes, in S3. Stop the
       shipper and confirm the page arrives. Record both in the tabletop

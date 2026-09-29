@@ -1,17 +1,29 @@
 # Reviewed copy of the `accessLog` block for Dokploy's Traefik static
-# configuration (openspec change central-log-retention, task 2.2).
+# configuration (openspec change central-log-retention, task 4.4).
 #
-# Dokploy owns Traefik's configuration: paste this block into it from the
-# Dokploy UI (Traefik → traefik.yml) and restart Traefik. This file is the
-# reviewed source; backend/tests/test_log_retention_config.py fails if it is
-# edited to keep anything it must not.
+# Dokploy already turns the access log on, for its "Requests" view, with:
 #
-# DO NOT enable it before #408 is deployed and a real SSO sign-in has been
-# checked: until then the SSO redirect carried tokens in its URL.
+#   accessLog:
+#     filePath: /etc/dokploy/traefik/dynamic/access.log
+#     format: json
+#     bufferingSize: 100
+#     filters: { retryAttempts: true, minDuration: 10ms }
 #
-# What is kept, and why:
-#   - No query string, on any router. Whatever a URL carries (a sign-in code, a
-#     reset token, a future capability) is not kept for a year.
+# That keeps every query string, and logs only requests slower than 10 ms or
+# retried. Replace that block with the one below, from the Dokploy UI
+# (Traefik → traefik.yml), then restart Traefik. The file, the format and the
+# buffering stay as Dokploy set them, so its "Requests" view keeps working.
+# If Dokploy's UI ever rewrites this block (for example when toggling
+# "Requests"), check it again against this copy.
+#
+# backend/tests/test_log_retention_config.py fails if this file is edited to
+# keep anything it must not.
+#
+# What changes, and why:
+#   - No filters: every request is logged, not only the slow ones. A fast
+#     request is still an access.
+#   - No query string, on any router. Whatever a URL carries (a reset token, a
+#     sign-in code, a future capability) is not kept.
 #   - No request header except User-Agent and CF-Connecting-IP. Cookies and
 #     Authorization never reach the log.
 #   - ClientHost is the address that connected to Traefik, which is Cloudflare's
@@ -20,10 +32,13 @@
 #     Cloudflare's published ranges: a request that reached the origin directly
 #     can set the header to anything.
 #
-# Output goes to Traefik's stdout, where the log shipper reads it from Docker.
+# accessLog.fields.queryParameters is a recent Traefik option: check that
+# Dokploy's Traefik supports it before applying this (task 4.4, step 1).
 
 accessLog:
+  filePath: /etc/dokploy/traefik/dynamic/access.log
   format: json
+  bufferingSize: 100
   fields:
     defaultMode: keep
     names:

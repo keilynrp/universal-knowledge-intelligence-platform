@@ -22,26 +22,32 @@ which on an ordinary day is hours. The first tabletop took 6 h 22 min to
 detect. A merge in that window, including a responder deploying a fix before
 capturing, and §7 step 1 returns an empty file.
 
-The access log of Traefik is not on at all. It is the only place that sees
-requests refused before authentication (scans, credential stuffing, 401s) and,
-behind two proxies, probably the only place that sees the client's real
-address (see design, open question 2).
+The access log of Traefik is the only place that sees requests refused before
+authentication (scans, credential stuffing, 401s). **Correction (2026-09-28):**
+this proposal first said it was not on at all. Dokploy's own configuration
+turns it on, for its "Requests" view: JSON, to
+`/etc/dokploy/traefik/dynamic/access.log` on the host, with no size or age
+limit, filtered to requests slower than 10 ms or retried, and **keeping query
+strings**. So it is partial, unbounded, and already stores what this change
+must not keep for a year (reset tokens in `?reset_token=`, for example).
 
 ## What Changes
 
 - **A log shipper on the host**, installed like the backup evidence recorder
   (#370): a systemd service with its own write-only AWS credential and no
-  application credential. It follows the Docker log files of `ukip-backend`
-  and of Dokploy's Traefik as they are written, so a container recreated by a
-  deploy no longer takes unread lines with it.
+  application credential. It follows the Docker log file of `ukip-backend`
+  and Traefik's access-log file as they are written, so a container recreated
+  by a deploy no longer takes unread lines with it.
 - **Two tiers of retention:**
   - **30 days in CloudWatch Logs**, searchable during an investigation, and the
     base any later anomaly detection (gap 6) would build on.
   - **1 year in a new S3 bucket with Object Lock in `GOVERNANCE` mode**,
     compressed, as evidence nobody with an ordinary credential can alter or
     delete.
-- **The Traefik access log is enabled, in JSON, without query strings** on any
-  router, so no URL that carries a capability is kept for a year.
+- **Traefik's existing access log is corrected**, in the file Dokploy's
+  "Requests" view reads: every request instead of only slow ones, and no query
+  string on any router, so no URL that carries a capability is kept for a
+  year.
 - **Shipping has a heartbeat.** A shipper that stops is silent by nature; it
   pings its own Healthchecks.io check, which pages through the integration set
   up for #377.
