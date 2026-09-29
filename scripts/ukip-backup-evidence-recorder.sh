@@ -13,9 +13,16 @@
 # Credentials come from the systemd EnvironmentFile (root-owned, mode 600),
 # never from this file. Required environment:
 #   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY  read-only: ListBucket + GetObject
-#                                              on the backup prefix only
+#                                              on the backup prefixes only
 #   AWS_DEFAULT_REGION                         bucket region
-#   S3_BACKUP_ENDPOINT, S3_BACKUP_BUCKET, S3_BACKUP_PREFIX
+#   S3_BACKUP_ENDPOINT, S3_BACKUP_BUCKET
+#   S3_BACKUP_PREFIX       the folder both scopes live under, or instead:
+#   S3_BACKUP_PREFIX_DATABASE, S3_BACKUP_PREFIX_VOLUME
+#                          one folder per scope, each overriding the shared
+#                          one. Dokploy writes database dumps under the
+#                          database service's folder and volume archives
+#                          under the compose app's, which no single prefix
+#                          reaches.
 # Optional:
 #   UKIP_EVIDENCE_OUT_DIR   default /var/lib/ukip/signals/backup-evidence
 #   UKIP_BACKUP_ENVIRONMENT default production (must match the backend's)
@@ -39,7 +46,11 @@ RECORDER="ukip-backup-evidence-recorder/1"
 KEEP_DAYS=14
 : "${S3_BACKUP_ENDPOINT:?S3_BACKUP_ENDPOINT is required}"
 : "${S3_BACKUP_BUCKET:?S3_BACKUP_BUCKET is required}"
-: "${S3_BACKUP_PREFIX:?S3_BACKUP_PREFIX is required}"
+: "${S3_BACKUP_PREFIX:=}"
+DATABASE_PREFIX=${S3_BACKUP_PREFIX_DATABASE:-$S3_BACKUP_PREFIX}
+VOLUME_PREFIX=${S3_BACKUP_PREFIX_VOLUME:-$S3_BACKUP_PREFIX}
+: "${DATABASE_PREFIX:?S3_BACKUP_PREFIX_DATABASE (or S3_BACKUP_PREFIX) is required}"
+: "${VOLUME_PREFIX:?S3_BACKUP_PREFIX_VOLUME (or S3_BACKUP_PREFIX) is required}"
 
 RUNNER=${UKIP_AWS_RUNNER:-auto}
 if [ "$RUNNER" = "auto" ]; then
@@ -65,14 +76,14 @@ aws_cli() {
   fi
 }
 
-# newest <suffix> → "key<TAB>size<TAB>last_modified", or nothing when there is none.
-# The CLI paginates the whole listing before applying --query.
+# newest <prefix> <suffix> → "key<TAB>size<TAB>last_modified", or nothing when
+# there is none. The CLI paginates the whole listing before applying --query.
 newest() {
   aws_cli s3api list-objects-v2 \
     --endpoint-url "$S3_BACKUP_ENDPOINT" \
     --bucket "$S3_BACKUP_BUCKET" \
-    --prefix "$S3_BACKUP_PREFIX" \
-    --query "reverse(sort_by(Contents[?ends_with(Key, '$1')], &LastModified))[0].[Key, Size, LastModified]" \
+    --prefix "$1" \
+    --query "reverse(sort_by(Contents[?ends_with(Key, '$2')], &LastModified))[0].[Key, Size, LastModified]" \
     --output text
 }
 
@@ -85,8 +96,8 @@ chmod 0755 "$OUT_DIR"
 failures=0
 
 record() {
-  local scope=$1 suffix=$2 line key size last_modified relative doc_name doc tmp sha actual gzip_ok observed_at
-  if ! line=$(newest "$suffix"); then
+  local scope=$1 suffix=$2 prefix=$3 line key size last_modified relative doc_name doc tmp sha actual gzip_ok observed_at
+  if ! line=$(newest "$prefix" "$suffix"); then
     echo "scope=$scope listing_failed" >&2
     return 1
   fi
@@ -96,7 +107,7 @@ record() {
   fi
   IFS=$'\t' read -r key size last_modified <<<"$line"
 
-  relative=${key#"$S3_BACKUP_PREFIX"}
+  relative=${key#"$prefix"}
   # The key goes into JSON by printf; refuse anything that would need escaping
   # rather than write a document the backend would have to guess about.
   case "$relative" in
@@ -141,8 +152,8 @@ record() {
   echo "scope=$scope backup_id=$relative size=$size gzip_ok=$gzip_ok recorded"
 }
 
-record database .sql.gz || failures=$((failures + 1))
-record volume .tar || failures=$((failures + 1))
+record database .sql.gz "$DATABASE_PREFIX" || failures=$((failures + 1))
+record volume .tar "$VOLUME_PREFIX" || failures=$((failures + 1))
 
 # The backend accepts documents up to 14 days old; keep no more than that.
 find "$OUT_DIR" -maxdepth 1 -type f -name '*.json' -mtime +"$KEEP_DAYS" -delete

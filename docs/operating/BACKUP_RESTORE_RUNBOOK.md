@@ -316,15 +316,52 @@ involved** (owner decision on #370). The only credential is a storage one on
 the host, and the trust boundary is root on that host, which already holds the
 database.
 
-1. Create a **read-only** storage credential with `ListBucket` and `GetObject`
-   on the backup prefix only: no write, no delete, nothing outside the prefix.
-   It is separate from the probe's list-only credential.
-2. Put it in `/etc/ukip/backup-evidence.env` (root-owned, mode 600), with the
-   same variables as the probe's file: `AWS_ACCESS_KEY_ID`,
-   `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `S3_BACKUP_ENDPOINT`,
-   `S3_BACKUP_BUCKET`, `S3_BACKUP_PREFIX`. Set `UKIP_BACKUP_ENVIRONMENT` if it
-   is not `production`; it must match the backend's, or every document is
-   rejected as `other_environment`.
+**Where the backups are.** Dokploy writes each scope under its own top-level
+folder (production, checked 2026-09-29): database dumps under the database
+service's folder (`ukip-dbukip-eqmmhw/pg/`), volume archives under the compose
+app's (`ukip-universal-knowledgeiintelligence-platform-danmq1_ukip-backend/static/`).
+No single prefix reaches both, so the recorder takes one per scope. The probe's
+`S3_BACKUP_PREFIX` covers the database folder only.
+
+1. Create a **read-only** storage credential: `ListBucket` limited to the two
+   folders and `GetObject` on them, nothing else. It is separate from the
+   probe's list-only credential. As an IAM policy (bucket name from
+   `/etc/ukip/backup-probe.env`):
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Sid": "ListTheTwoBackupFolders",
+         "Effect": "Allow",
+         "Action": "s3:ListBucket",
+         "Resource": "arn:aws:s3:::<bucket>",
+         "Condition": {"StringLike": {"s3:prefix": [
+           "ukip-dbukip-eqmmhw/pg/*",
+           "ukip-universal-knowledgeiintelligence-platform-danmq1_ukip-backend/static/*"
+         ]}}
+       },
+       {
+         "Sid": "ReadTheBackups",
+         "Effect": "Allow",
+         "Action": "s3:GetObject",
+         "Resource": [
+           "arn:aws:s3:::<bucket>/ukip-dbukip-eqmmhw/pg/*",
+           "arn:aws:s3:::<bucket>/ukip-universal-knowledgeiintelligence-platform-danmq1_ukip-backend/static/*"
+         ]
+       }
+     ]
+   }
+   ```
+
+2. Put it in `/etc/ukip/backup-evidence.env` (root-owned, mode 600):
+   `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`,
+   `S3_BACKUP_ENDPOINT`, `S3_BACKUP_BUCKET`, and either `S3_BACKUP_PREFIX`
+   (both scopes under one folder) or, as in production,
+   `S3_BACKUP_PREFIX_DATABASE` and `S3_BACKUP_PREFIX_VOLUME`. Set
+   `UKIP_BACKUP_ENVIRONMENT` if it is not `production`; it must match the
+   backend's, or every document is rejected as `other_environment`.
 3. Install the script and the units:
 
 ```bash
