@@ -72,9 +72,8 @@ Retention multiplies whatever a line leaks by a year.
   drop every query parameter (`accessLog.fields.queryParameters.defaultMode:
   drop`) on every router, not only the one known today to carry tokens, so a
   future URL with a capability is not kept either. Headers default to `drop`;
-  only `User-Agent` and `CF-Connecting-IP` are kept. `queryParameters` is a
-  recent Traefik option, so enabling the log waits on checking Dokploy's
-  Traefik version (task 4.4).
+  only `User-Agent` is kept. `queryParameters` needs Traefik 3.6.19 or later;
+  production runs 3.6.25 since 2026-09-29 (task 4.4).
 - **The SSO callback** (`backend/routers/auth_users.py`) redirects to
   `/login?token=<access>&refresh=<refresh>`. The refresh token is valid for 7
   days. Dropping query strings keeps it out of the log, but it still lands in
@@ -131,13 +130,14 @@ mitigation until the shipper runs, and a cheap one.
    `audit_logs.ip_address` (and the pivot from #384) all hold a proxy's
    address. Check before relying on either:
    `SELECT ip_address, count(*) FROM audit_logs WHERE created_at > now() - interval '7 days' GROUP BY 1 ORDER BY 2 DESC LIMIT 5;`
-   The Traefik log is closer to the client, which is one reason it is in scope,
-   but it is not the client either: Cloudflare proxies the origin
-   (`docs/legal/SUBPROCESSOR_REGISTER.md`), so Traefik sees Cloudflare's edge
-   address unless it trusts `CF-Connecting-IP` / `X-Forwarded-For` from
-   Cloudflare's published ranges only. Task 2.2 must configure that, and 4.5
-   must check that a known request shows its real address. The application fix is a separate issue (see proposal,
-   non-goals).
+   **Resolved (2026-09-28/29).** The query showed 15 rows, 2 addresses, all
+   private; #413 fixed it (uvicorn trusts X-Forwarded-For from the internal
+   networks only). An earlier version of this question assumed Cloudflare
+   proxied the origin, from the subprocessor register; it does not. DNS points
+   straight at the VPS, Traefik is the edge and records the client as
+   `ClientHost`, and neither Traefik nor the backend trusts any public range.
+   Verified in production: the audit log and a probe line in Traefik's log
+   both show the operator's own public address.
 3. **Who reads.** The design assumes the operator alone holds
    `ukip-log-reader`. Confirm, and whether it is assumed through the existing
    AWS account's SSO or an access key.

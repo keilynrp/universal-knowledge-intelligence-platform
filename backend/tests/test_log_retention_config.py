@@ -90,11 +90,11 @@ class TestTraefikAccessLog:
         assert query["defaultMode"] == "drop"
         assert not query.get("names"), "no query parameter may be kept by name"
 
-    def test_headers_are_dropped_except_the_two_it_needs(self, access_log):
+    def test_headers_are_dropped_except_user_agent(self, access_log):
         headers = access_log["fields"]["headers"]
         assert headers["defaultMode"] == "drop"
         kept = {name.lower() for name, mode in headers.get("names", {}).items() if mode != "drop"}
-        assert kept <= {"user-agent", "cf-connecting-ip"}
+        assert kept <= {"user-agent"}
         assert not kept & {"authorization", "cookie", "x-api-key"}
 
     def test_basic_auth_user_names_are_dropped(self, access_log):

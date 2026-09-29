@@ -24,16 +24,13 @@
 #     request is still an access.
 #   - No query string, on any router. Whatever a URL carries (a reset token, a
 #     sign-in code, a future capability) is not kept.
-#   - No request header except User-Agent and CF-Connecting-IP. Cookies and
-#     Authorization never reach the log.
-#   - ClientHost is the address that connected to Traefik, which is Cloudflare's
-#     edge for proxied traffic. CF-Connecting-IP is the client's address as
-#     Cloudflare saw it. Believe the header only when ClientHost is inside
-#     Cloudflare's published ranges: a request that reached the origin directly
-#     can set the header to anything.
+#   - No request header except User-Agent. Cookies and Authorization never
+#     reach the log.
+#   - ClientHost is the client: Traefik is the edge, with no CDN or proxy in
+#     front (checked 2026-09-29), so the address that connected is theirs.
 #
-# accessLog.fields.queryParameters is a recent Traefik option: check that
-# Dokploy's Traefik supports it before applying this (task 4.4, step 1).
+# accessLog.fields.queryParameters needs Traefik >= 3.6.19; production runs
+# 3.6.25 since 2026-09-29 (task 4.4).
 
 accessLog:
   filePath: /etc/dokploy/traefik/dynamic/access.log
@@ -47,6 +44,5 @@ accessLog:
       defaultMode: drop
       names:
         User-Agent: keep
-        CF-Connecting-IP: keep
     queryParameters:
       defaultMode: drop

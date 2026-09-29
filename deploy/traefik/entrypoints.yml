@@ -1,0 +1,25 @@
+# Reviewed copy of the `entryPoints` block of Dokploy's Traefik static
+# configuration, as production runs it (checked 2026-09-29).
+#
+# Traefik is the edge of the host: DNS points straight at the VPS, with no CDN
+# or proxy in front. So the entry points carry no `forwardedHeaders`: Traefik
+# must not trust an X-Forwarded-For that arrives from the internet, and by
+# default it replaces it with the address that connected, which is the client.
+# The backend then trusts that header from Traefik's internal network only
+# (docker/trusted-proxies.txt, #413).
+#
+# Adding `forwardedHeaders.trustedIPs` (or `insecure: true`) here would let
+# anyone sending from the trusted ranges choose the address the audit log,
+# the request log and the rate limits record for them.
+# backend/tests/test_client_ip_behind_proxies.py fails if either appears.
+
+entryPoints:
+  web:
+    address: :80
+  websecure:
+    address: :443
+    http3:
+      advertisedPort: 443
+    http:
+      tls:
+        certResolver: letsencrypt
