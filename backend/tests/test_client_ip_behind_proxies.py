@@ -27,7 +27,7 @@ from slowapi.util import get_remote_address
 from starlette.requests import Request
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from backend.trusted_proxies import TRUSTED_PROXIES_FILE, trusted_proxies
+from backend.proxy_networks import PROXY_NETWORKS_FILE, proxy_networks
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -52,7 +52,7 @@ def _client_seen(peer: str, forwarded_for: str | None) -> str:
         "client": (peer, 40000), "server": ("backend", 8000), "scheme": "http",
         "query_string": b"",
     }
-    middleware = ProxyHeadersMiddleware(app, trusted_hosts=trusted_proxies())
+    middleware = ProxyHeadersMiddleware(app, trusted_hosts=proxy_networks())
     asyncio.run(middleware(scope, None, None))
     return seen["host"]
 
@@ -106,26 +106,26 @@ class TestRateLimitsArePerClient:
 
 class TestTheList:
     def test_it_never_trusts_everyone(self):
-        assert "*" not in TRUSTED_PROXIES_FILE.read_text(encoding="utf-8").split()
-        assert "0.0.0.0/0" not in trusted_proxies()
-        assert "::/0" not in trusted_proxies()
+        assert "*" not in PROXY_NETWORKS_FILE.read_text(encoding="utf-8").split()
+        assert "0.0.0.0/0" not in proxy_networks()
+        assert "::/0" not in proxy_networks()
 
     def test_a_malformed_entry_fails_loudly(self, tmp_path):
         bad = tmp_path / "trusted.txt"
         bad.write_text("10.0.0.0/8\n10.0.0.300/32\n", encoding="utf-8")
         with pytest.raises(ValueError):
-            trusted_proxies(bad)
+            proxy_networks(bad)
 
     def test_the_entrypoint_passes_it_to_uvicorn(self):
         entrypoint = (ROOT / "docker/backend-entrypoint.sh").read_text(encoding="utf-8")
-        assert "python -m backend.trusted_proxies" in entrypoint
+        assert "python -m backend.proxy_networks" in entrypoint
         assert '--forwarded-allow-ips "$FORWARDED_ALLOW_IPS"' in entrypoint
 
     def test_traefik_trusts_exactly_cloudflare(self):
         internal = [ipaddress.ip_network(n) for n in ("127.0.0.0/8", "10.0.0.0/8",
                     "172.16.0.0/12", "192.168.0.0/16", "::1/128", "fc00::/7")]
         cloudflare = {
-            n for n in trusted_proxies()
+            n for n in proxy_networks()
             if not any(ipaddress.ip_network(n).subnet_of(i) for i in internal
                        if ipaddress.ip_network(n).version == i.version)
         }
