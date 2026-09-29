@@ -6,7 +6,7 @@
 # choose the recorded client; a request whose own peer is outside these
 # networks has its header ignored altogether.
 #
-# One network per line; `#` starts a comment. backend/trusted_proxies.py reads
+# One network per line; `#` starts a comment. backend/proxy_networks.py reads
 # and validates this file, and docker/backend-entrypoint.sh passes it to
 # uvicorn. FORWARDED_ALLOW_IPS in the environment overrides it.
 
