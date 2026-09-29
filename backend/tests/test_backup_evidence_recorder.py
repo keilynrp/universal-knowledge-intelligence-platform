@@ -199,3 +199,80 @@ def test_no_credential_or_key_path_reaches_the_output(tmp_path):
     assert "AKIAEXAMPLE" not in everything
     assert "bucket" not in json.dumps(_documents(env)), "documents carry no bucket name"
     assert PREFIX not in json.dumps(_documents(env)), "documents carry no prefix"
+
+
+# Production keeps each scope in its own top-level folder (checked 2026-09-29):
+# dumps under the database service's folder, volume archives under the compose
+# app's. One shared prefix cannot reach both, so each scope may have its own.
+DB_PREFIX = "ukip-dbukip-eqmmhw/pg/"
+VOL_PREFIX = "ukip-app-danmq1_ukip-backend/static/"
+SPLIT_DB_KEY = f"{DB_PREFIX}2026-09-25T03-00-00-076Z.sql.gz"
+SPLIT_VOL_KEY = f"{VOL_PREFIX}ukip_static_data-2026-09-25T03-05-00-066Z.tar"
+
+
+def _split_setup(tmp_path):
+    env = _setup(tmp_path, db_bytes=None)
+    objects = Path(env["STUB_OBJECTS"])
+    (objects / Path(SPLIT_DB_KEY).name).write_bytes(DUMP)
+    (objects / Path(SPLIT_VOL_KEY).name).write_bytes(ARCHIVE)
+    del env["S3_BACKUP_PREFIX"]
+    env.update({
+        "S3_BACKUP_PREFIX_DATABASE": DB_PREFIX,
+        "S3_BACKUP_PREFIX_VOLUME": VOL_PREFIX,
+        "STUB_DB_LISTING": f"{SPLIT_DB_KEY}\\t{len(DUMP)}\\t{_stamp(60)}",
+        "STUB_VOL_LISTING": f"{SPLIT_VOL_KEY}\\t{len(ARCHIVE)}\\t{_stamp(55)}",
+    })
+    return env
+
+
+def _listings(env) -> list[str]:
+    log = Path(env["STUB_LOG"]).read_text(encoding="utf-8").splitlines()
+    return [line for line in log if line.startswith("s3api list-objects-v2")]
+
+
+def test_each_scope_is_listed_under_its_own_prefix(tmp_path):
+    env = _split_setup(tmp_path)
+
+    completed = _run(env)
+
+    assert completed.returncode == 0, completed.stderr
+    listings = _listings(env)
+    db_listing = next(line for line in listings if ".sql.gz" in line)
+    vol_listing = next(line for line in listings if ".tar" in line)
+    assert f"--prefix {DB_PREFIX} " in db_listing
+    assert f"--prefix {VOL_PREFIX} " in vol_listing
+
+
+def test_split_prefixes_record_both_scopes_relative_to_their_own_prefix(tmp_path):
+    env = _split_setup(tmp_path)
+
+    assert _run(env).returncode == 0
+    docs = _documents(env)
+    ids = {doc["scope"]: doc["backup_id"] for doc in docs.values()}
+    assert ids == {
+        "database": "2026-09-25T03-00-00-076Z.sql.gz",
+        "volume": "ukip_static_data-2026-09-25T03-05-00-066Z.tar",
+    }
+    for document in docs.values():
+        assert isinstance(_parse(document), EvidenceDocument)
+        assert DB_PREFIX not in json.dumps(document) and VOL_PREFIX not in json.dumps(document)
+
+
+def test_a_scope_without_any_prefix_is_refused(tmp_path):
+    env = _split_setup(tmp_path)
+    del env["S3_BACKUP_PREFIX_VOLUME"]
+
+    completed = _run(env)
+
+    assert completed.returncode != 0
+    assert "S3_BACKUP_PREFIX_VOLUME" in completed.stderr
+    assert _documents(env) == {}
+
+
+def test_the_shared_prefix_still_covers_both_scopes(tmp_path):
+    # Installations that keep both scopes under one folder need no change.
+    env = _setup(tmp_path, db_bytes=DUMP, vol_bytes=ARCHIVE)
+
+    assert _run(env).returncode == 0
+    for listing in _listings(env):
+        assert f"--prefix {PREFIX} " in listing

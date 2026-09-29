@@ -61,11 +61,18 @@ Section 4 is operator work and is what actually turns the automation on.
 
 ## 4. Operator actions (not code)
 
-- [ ] 4.0 Check how the manual cycles recorded `backup_id` in production
+- [x] 4.0 Check how the manual cycles recorded `backup_id` in production
       (`GET /ops/backups?environment=production`): full key or relative to
       the prefix. Suffix matching covers both; this confirms it.
+      Checked 2026-09-29: full keys from the bucket root, e.g.
+      `ukip-dbukip-eqmmhw/pg/2026-09-22T03-00-00-217Z.sql.gz`. It also showed
+      the two scopes in different top-level folders (volumes under
+      `…-danmq1_ukip-backend/static/`), which one `S3_BACKUP_PREFIX` could
+      not reach: the recorder now takes `S3_BACKUP_PREFIX_DATABASE` and
+      `S3_BACKUP_PREFIX_VOLUME`, with the shared prefix as the fallback.
+      The last manually recorded cycle was 2026-09-22.
 - [ ] 4.1 Create the read-only credential: `ListBucket` + `GetObject` on the
-      backup prefix only.
+      two backup folders only (policy in the runbook, §5c).
 - [ ] 4.2 Install the recorder and its timer on the production host.
 - [ ] 4.3 Confirm the first automatic cycle appears in `GET /ops/backups` with
       operator `system:backup-recorder`, and that `backup_freshness` stays `ok`
