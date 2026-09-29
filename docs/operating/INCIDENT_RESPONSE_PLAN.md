@@ -89,6 +89,7 @@ What actually reaches a human today:
 | `GET /ops/checks` | The full check suite on demand | Operator, admin credential |
 | Backup assurance | Stale, missing or invalid backups; provider unreachable | Feeds the checks above |
 | `audit_logs` | Every mutation, and the reads that matter (exports, audit-log reads, API-key reads, bulk reads), each with its session or key (§7) | Read after the fact |
+| Traefik access log | Every request that reached the host, refused ones included, with the client's address (§7) | Read after the fact, on the host |
 | GitHub security gates | Vulnerable dependencies, secrets in commits, CodeQL findings | Pull request checks and email |
 | Dokploy | Deploy failures, container restarts | Its own UI |
 | Customer report | Everything nobody instrumented | Email |
@@ -97,9 +98,10 @@ What actually reaches a human today:
 the Pushover channel and the Healthchecks.io check are set up and each has been
 tested on the phone ([PAGING_RUNBOOK.md](PAGING_RUNBOOK.md)); until then a SEV1 at 03:00 still waits
 for someone to look at Slack. Only two checks page, and nothing detects
-unauthorized access on its own (gap 6). No central log retention: container logs are
-ephemeral and disappear with the container, which is why capturing them is the
-first evidence step below. Error telemetry (Sentry) is available but off by
+unauthorized access on its own (gap 6). No central log retention: the backend's
+container log is ephemeral and disappears with the container, which is why
+capturing it is the first evidence step below; Traefik's access log survives
+deploys but not the host (gap 3). Error telemetry (Sentry) is available but off by
 default. Nothing watches for anomalous login or access patterns.
 
 ## 5. Response steps
@@ -213,12 +215,24 @@ containment destroys state. Minimum set:
    or `api_key_id` (#376), so the lines a suspect session produced can be
    selected by that session, and that session can be revoked on its own
    (§5.3). Anonymous and refused requests carry no identity fields at all.
+   **Traefik's access log** is the second capture, and the only record of
+   requests refused before authentication (scans, credential stuffing):
+   `cp /etc/dokploy/traefik/dynamic/access.log incident-<id>-traefik.log`
+   on the host. Since 2026-09-29 it has every request (it used to drop those
+   under 10 ms), no query strings and no cookies, and `ClientHost` is the
+   client, because Traefik is the edge with nothing in front. It is a file on
+   the host, so it survives deploys, but it is not copied anywhere, and
+   nothing in Traefik's configuration limits its size or age (gap 3).
 2. **Database evidence**, which survives by design:
    - `audit_logs` — every mutation, and the reads that matter (#375): exports
      (`EXPORT`), reads of the audit log itself, every read made with an API
      key, and bulk reads, meaning any page past the first or more than 500 rows
      (`READ`). Each row names the user and the session or API key that
      authentication accepted; filter with `session_id` or `ip_address`.
+     **Addresses before 2026-09-29 03:57 UTC name a proxy, not the client**
+     (#413): every row until then carries an internal Docker address such as
+     `10.0.1.11`. For events before that moment, attribute by user and session,
+     never by address.
      Retained indefinitely by policy and no longer deleted by a workspace reset
      (#372). **Reads outside those classes are not in it**: a single first page
      of an ordinary list leaves no row. For those, the request log (item 1) is
@@ -332,9 +346,17 @@ Recorded here so nobody discovers them mid-incident:
    monitor itself. It stays open until both are installed and have woken the
    phone in a test. What remains after that is narrower: one person receives
    every page (gap 1), and only availability pages, not access (gap 6).
-3. **No central log retention.** Container logs are ephemeral, so early capture
-   is the only way to keep them — and since reads are unaudited, they are the
-   **only** record that a read happened at all.
+3. **No central log retention.** The backend's container log is ephemeral, so
+   early capture is the only way to keep it, and for ordinary reads outside the
+   audited classes (gap 9) it is the only record that the read happened at all.
+   **In progress** (`central-log-retention`): Traefik's access log was
+   corrected on 2026-09-29 (every request, no query strings or cookies, the
+   client's real address) and lives in a file on the host that survives
+   deploys, but it is not copied off the host, and nothing in Traefik's
+   configuration rotates it.
+   Shipping both logs off the host with 30 days searchable and 1 year under
+   Object Lock is designed, not built. Until then, capture first, and freeze
+   merges during an incident (§5.1 step 5).
 4. ~~**No per-session revocation.**~~ **Closed 2026-09-23** (#368 phase C.3).
    Tokens now name their session and a session can be revoked on its own,
    including one belonging to the operator's own account. See §5.3. What
@@ -366,14 +388,17 @@ Recorded here so nobody discovers them mid-incident:
     that authentication accepted. What remains is where the log lives: it is
     still the container's, and still vanishes with it (gap 3), so a read
     outside the audited classes is attributable only if the log was captured
-    first.
+    first. Its `client_ip` is the client's address only since 2026-09-29
+    (#413); before that it was a proxy's.
 11. ~~**`GET /audit-log` cannot filter by `ip_address`**~~ **Closed 2026-09-24**
     (#378, #384). The list, the CSV export and the counters all take
     `ip_address`, and every address in the audit-log timeline pivots to
     everything that came from it. What remains is the reach of the audit log
     itself: an address that only made ordinary reads, outside the audited
     classes (gap 9), shows nothing there, and is traceable only through the
-    request log while it survives (gap 3).
+    request log while it survives (gap 3). The pivot only means something for
+    rows from 2026-09-29 03:57 UTC on: before #413, every row carried a proxy's
+    address.
 
 ## 12. Maintenance
 
