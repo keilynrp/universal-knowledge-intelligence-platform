@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.security import OAuth2PasswordRequestForm
-from jose import JWTError
+from jwt import PyJWTError as JWTError
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session

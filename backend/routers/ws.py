@@ -63,7 +63,7 @@ def _resolve_user(token: str, db: Session) -> models.User | None:
     Validate a JWT or ukip_ API key against *db*.
     Returns the active User on success, None otherwise.
     """
-    from jose import JWTError
+    from jwt import PyJWTError as JWTError
 
     from backend.auth import _decode_token
 

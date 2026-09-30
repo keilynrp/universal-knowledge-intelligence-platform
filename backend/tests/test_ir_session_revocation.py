@@ -11,8 +11,8 @@ touching anyone else's session, and without rotating a key.
 """
 import os
 
+import jwt
 import pytest
-from jose import jwt
 from starlette.websockets import WebSocketDisconnect
 
 from backend import models

@@ -37,7 +37,6 @@ distro==1.9.0
 docutils==0.22.4
 duckdb==1.5.5
 durationpy==0.10
-ecdsa==0.19.2
 et_xmlfile==2.0.0
 Faker==40.8.0
 fakeredis==2.38.0
@@ -101,13 +100,13 @@ posthog==5.4.0
 protobuf==6.33.6
 psycopg2-binary==2.9.12
 pyarrow==25.0.0
-pyasn1==0.6.4
 pybase64==1.4.3
 pycparser==3.0
 pydantic==2.13.4
 pydantic_core==2.46.4
 pydyf==0.12.1
 Pygments==2.20.0
+PyJWT==2.15.1
 PyMySQL==1.2.0
 pyparsing==3.3.2
 pyphen==0.17.2
@@ -117,7 +116,6 @@ pytest-asyncio==1.4.0
 pytest==9.1.1
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
-python-jose==3.5.0
 python-Levenshtein==0.27.3
 python-louvain==0.16
 python-multipart==0.0.32
@@ -132,7 +130,6 @@ requests==2.34.2
 rich==14.3.3
 roman-numerals==4.1.0
 rpds-py==0.30.0
-rsa==4.9.1
 scipy==1.18.0
 sentry-sdk==2.66.1
 setuptools==83.0.0
