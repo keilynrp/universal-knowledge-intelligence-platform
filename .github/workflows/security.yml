@@ -59,10 +59,10 @@ jobs:
         # could do two flags' worth of work without anyone noticing: an
         # alias that stops matching fails silently, and a flag that matches
         # nothing looks identical to a flag that is still holding something
-        # back. For chromadb's three 2026-08-24 GHSA advisories (aliased to
-        # CVE-2026-45830/45831/45833), pip-audit's own canonical ID *is* the
-        # CVE — the PyPA advisory DB has no PYSEC entry for them yet — so
-        # these three are pip-audit's real output, not an alias regression.
+        # back. chromadb's three 2026-08-24 advisories were first emitted as
+        # CVE-2026-45830/45831/45833, before the PyPA DB had PYSEC entries;
+        # since then pip-audit emits PYSEC-2026-3813/3815/3814, so the flags
+        # were matching through aliases. Switched at the 2026-09-30 review.
         # CVE-2026-49265 (oauthlib, 2026-09-29) arrives only through
         # chromadb -> kubernetes -> requests-oauthlib, none of which the
         # backend image installs, and it sits in oauthlib's OAuth *server*
@@ -72,9 +72,9 @@ jobs:
           pip-audit -r requirements.lock --disable-pip --no-deps
           --ignore-vuln PYSEC-2026-311
           --ignore-vuln PYSEC-2026-1325
-          --ignore-vuln CVE-2026-45830
-          --ignore-vuln CVE-2026-45831
-          --ignore-vuln CVE-2026-45833
+          --ignore-vuln PYSEC-2026-3813
+          --ignore-vuln PYSEC-2026-3814
+          --ignore-vuln PYSEC-2026-3815
           --ignore-vuln CVE-2026-49265
 
   # ── Frontend dependency audit (blocking; allowlist via wrapper) ─────────
