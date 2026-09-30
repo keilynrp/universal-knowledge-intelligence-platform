@@ -17,9 +17,10 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import bcrypt as _bcrypt
+import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+from jwt import PyJWTError as JWTError
 from sqlalchemy.orm import Session
 
 from backend import models
@@ -57,7 +58,7 @@ RETIRING_SECRET_KEYS = _parse_secret_keys(os.environ.get("JWT_SECRET_KEYS_RETIRI
 def _decode_token(token: str) -> dict:
     """Decode a JWT, verifying against the primary key then each retiring key.
 
-    Raises jose.JWTError if no configured key validates the token. This is the
+    Raises jwt.PyJWTError if no configured key validates the token. This is the
     single decode path for ALL JWT verification sites.
     """
     keys = [SECRET_KEY, *RETIRING_SECRET_KEYS]

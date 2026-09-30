@@ -1,8 +1,9 @@
 # backend/tests/test_epic017_jwt.py
 import importlib
 
+import jwt
 import pytest
-from jose import JWTError, jwt
+from jwt import PyJWTError as JWTError
 
 pytestmark = pytest.mark.security
 

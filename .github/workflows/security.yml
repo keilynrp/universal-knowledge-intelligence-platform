@@ -48,7 +48,7 @@ jobs:
         # --no-deps: requirements.lock is a flat freeze (no hashes); pip
         # resolver is disabled via --disable-pip so no network lookup needed.
         #
-        # Six entries, down from 33 at gate introduction. The old list
+        # Five entries, down from 33 at gate introduction. The old list
         # deferred most of its entries to "the upgrade sprint"; #202 was
         # that sprint, and the resulting versions reached or passed every
         # fix version the baseline recorded, so 31 flags were suppressing
@@ -71,7 +71,6 @@ jobs:
         run: >-
           pip-audit -r requirements.lock --disable-pip --no-deps
           --ignore-vuln PYSEC-2026-311
-          --ignore-vuln PYSEC-2026-1325
           --ignore-vuln PYSEC-2026-3813
           --ignore-vuln PYSEC-2026-3814
           --ignore-vuln PYSEC-2026-3815

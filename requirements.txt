@@ -23,7 +23,9 @@ requests
 numpy
 scipy
 # ── Sprint 1: Security ──────────────────────────────────────
-python-jose[cryptography]
+# PyJWT, not python-jose: UKIP signs HS256 only, and python-jose pulled in
+# ecdsa, rsa and pyasn1, one with an advisory no version fixes (#422).
+PyJWT
 bcrypt
 cryptography
 # ── Sprint 6: Rate limiting ──────────────────────────────────

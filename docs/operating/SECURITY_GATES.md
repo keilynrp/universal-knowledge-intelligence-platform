@@ -312,7 +312,7 @@ per-advisory disposition.
 
 ### 7e. pip-audit baseline (`--ignore-vuln` flags in `.github/workflows/security.yml`)
 
-**6 vulnerability IDs ignored** (down from 33 at gate introduction). Owner:
+**5 vulnerability IDs ignored** (down from 33 at gate introduction). Owner:
 platform owner. SLA: reviewed quarterly, or sooner when an entry's review date
 comes first (last review 2026-09-30; next by 2026-12-31).
 
@@ -344,11 +344,17 @@ re-verified by running the tool rather than assumed.
 | ID | Package (pinned) | Fix version if known | Review date |
 | --- | --- | --- | --- |
 | PYSEC-2026-311 | chromadb==1.5.2 | none published (1.5.9 still affected) | 2026-12-31 |
-| PYSEC-2026-1325 | ecdsa==0.19.2 | none, by upstream policy | 2026-12-31 |
 | PYSEC-2026-3813 (CVE-2026-45830) | chromadb==1.5.2 | none published (1.5.9 still affected) | 2026-12-31 |
 | PYSEC-2026-3815 (CVE-2026-45831) | chromadb==1.5.2 | none published (1.5.9 still affected) | 2026-12-31 |
 | PYSEC-2026-3814 (CVE-2026-45833) | chromadb==1.5.2 | none published (1.5.9 still affected) | 2026-12-31 |
 | CVE-2026-49265 | oauthlib==3.3.1 | 4.0.0 (major) | 2026-10-31 |
+
+**2026-09-30: PYSEC-2026-1325 (ecdsa) removed, not ignored.** `python-jose`
+was replaced by PyJWT (#422), and `ecdsa`, `rsa` and `pyasn1`, which only
+`python-jose` required, left `requirements.lock` and the image. With the
+flag gone, pip-audit reports `No known vulnerabilities found, 6 ignored`
+(the four chromadb and one oauthlib IDs, two of them matched twice). The
+review note below is kept as the record of why the entry existed.
 
 **2026-09-30 review (the baseline's due date).** Every entry re-checked with
 pip-audit 2.10.1, OSV.dev and PyPI:

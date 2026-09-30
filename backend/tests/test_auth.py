@@ -4,8 +4,8 @@ Tests for backend/auth.py — JWT creation, validation, and login endpoint.
 import os
 from datetime import timedelta
 
+import jwt
 import pytest
-from jose import jwt
 
 # Ensure env vars are set before import (conftest.py handles this,
 # but be explicit for isolated runs)
