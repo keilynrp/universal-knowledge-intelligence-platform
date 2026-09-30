@@ -313,7 +313,8 @@ per-advisory disposition.
 ### 7e. pip-audit baseline (`--ignore-vuln` flags in `.github/workflows/security.yml`)
 
 **6 vulnerability IDs ignored** (down from 33 at gate introduction). Owner:
-platform owner. SLA: next dependency-upgrade window (review by 2026-09-30).
+platform owner. SLA: reviewed quarterly, or sooner when an entry's review date
+comes first (last review 2026-09-30; next by 2026-12-31).
 
 The previous baseline deferred most entries to "the upgrade sprint", noting in
 particular that the starlette CVEs needed a major 0.52 -> 1.x bump. That bump
@@ -342,12 +343,37 @@ re-verified by running the tool rather than assumed.
 
 | ID | Package (pinned) | Fix version if known | Review date |
 | --- | --- | --- | --- |
-| PYSEC-2026-311 | chromadb==1.5.2 | none published | 2026-09-30 |
-| PYSEC-2026-1325 | ecdsa==0.19.2 | none published | 2026-09-30 |
-| CVE-2026-45830 | chromadb==1.5.2 | none published | 2026-09-30 |
-| CVE-2026-45831 | chromadb==1.5.2 | none published | 2026-09-30 |
-| CVE-2026-45833 | chromadb==1.5.2 | none published | 2026-09-30 |
+| PYSEC-2026-311 | chromadb==1.5.2 | none published (1.5.9 still affected) | 2026-12-31 |
+| PYSEC-2026-1325 | ecdsa==0.19.2 | none, by upstream policy | 2026-12-31 |
+| PYSEC-2026-3813 (CVE-2026-45830) | chromadb==1.5.2 | none published (1.5.9 still affected) | 2026-12-31 |
+| PYSEC-2026-3815 (CVE-2026-45831) | chromadb==1.5.2 | none published (1.5.9 still affected) | 2026-12-31 |
+| PYSEC-2026-3814 (CVE-2026-45833) | chromadb==1.5.2 | none published (1.5.9 still affected) | 2026-12-31 |
 | CVE-2026-49265 | oauthlib==3.3.1 | 4.0.0 (major) | 2026-10-31 |
+
+**2026-09-30 review (the baseline's due date).** Every entry re-checked with
+pip-audit 2.10.1, OSV.dev and PyPI:
+
+- **Canonical IDs.** pip-audit now emits the three 2026-08-24 chromadb
+  advisories as `PYSEC-2026-3813` (CVE-2026-45830), `PYSEC-2026-3815`
+  (CVE-2026-45831) and `PYSEC-2026-3814` (CVE-2026-45833). The CVE flags were
+  still holding them, but only through aliases, the failure mode this section
+  warns about; the flags now use the PYSEC IDs. With them, the audit reports
+  `No known vulnerabilities found, 8 ignored`, the same as before the switch.
+- **chromadb.** The latest release, 1.5.9, is still inside all four advisories'
+  affected range (`last_affected: 1.5.9`), so no upgrade helps. Still lock-only:
+  a dry-run install of `requirements.txt` with the lock on 2026-09-29 resolved
+  97 packages without it.
+- **ecdsa: shipped, not reachable.** This entry had a row but no written
+  disposition. `ecdsa` 0.19.2 *is* in the backend image, pulled in by
+  `python-jose` 3.5.0. PYSEC-2026-1325 (CVE-2024-23342, GHSA-wj6h-64fc-37mp) is
+  the Minerva timing attack on ECDSA signing, affecting every version; the
+  maintainers do not fix side channels in pure-Python code. UKIP never signs or
+  verifies with an EC key: JWTs are HS256 (`backend/auth.py`, `ALGORITHM`),
+  `jwt.decode` pins `algorithms=[ALGORITHM]` so an ES* token is refused, and
+  nothing in `backend/` imports `ecdsa`. Removing it for good means replacing
+  `python-jose` (for example with PyJWT); that is a dependency change worth its
+  own issue, not a baseline edit.
+- **oauthlib** (below): unchanged, review by 2026-10-31.
 
 **2026-09-29 review: oauthlib, CVE-2026-49265 (GHSA-xpv3-w29h-x7cv).** A
 timing side channel in `oauthlib`'s PKCE `code_verifier` comparison
